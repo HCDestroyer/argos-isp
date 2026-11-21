@@ -65,6 +65,16 @@ export const PERMISOS = {
         'Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)',
     'servicios.cancelar_plan_temporal':
         'Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)',
+    'servicios.generar_codigo_identificacion':
+        'Generar el código de un solo uso con el que el cliente se identifica en el portal (vale 15 min de fábrica)',
+    'promociones_velocidad.ver': 'Ver las promociones de velocidad y a qué servicios se asignaron',
+    'promociones_velocidad.crear':
+        'Crear promociones de velocidad (multiplicador o plan destino, por días o franja horaria)',
+    'promociones_velocidad.asignar': 'Asignar una promoción de velocidad a servicios',
+    'promociones_velocidad.quitar': 'Quitar una promoción de velocidad de un servicio',
+    'promociones_velocidad.cancelar': 'Cancelar una promoción de velocidad (vuelve la velocidad del plan)',
+    'ajustes_operacion.ver': 'Ver los ajustes de operación (retiro, código de corte, caídas, falla general…)',
+    'ajustes_operacion.editar': 'Cambiar los ajustes de operación, globales o por empresa',
     'servicios.agregar_adicional':
         'Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado',
     'servicios.editar_adicional':
@@ -137,6 +147,11 @@ export const PERMISOS = {
     'sesiones.desconectar': 'Desconectar sesiones PPPoE',
     'red.ver': 'Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)',
     'ip.resolver': 'Resolver una IP a su servicio',
+    'ip.buscar_historial':
+        'Buscar quién tenía una IP en una fecha y hora pasada (servicio, cliente y sesión); cada consulta queda auditada',
+    'incidentes_red.leer': 'Ver las fallas generales de red (incidentes) y los servicios afectados',
+    'incidentes_red.abrir': 'Abrir a mano un incidente de falla general (con motivo)',
+    'incidentes_red.cerrar': 'Cerrar un incidente de falla general',
 
     'plantillas.ver': 'Ver plantillas de facturación',
     'plantillas.crear': 'Crear plantillas de facturación',
@@ -512,6 +527,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'lealtad.canjear',
             'inventario.ver',
             'prospectos.registrar',
+            // decisión del PM 19: el código para identificarse en el portal
+            'servicios.generar_codigo_identificacion',
         ],
     },
     soporte: {
@@ -574,6 +591,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'notificaciones.ver',
             'servicios.programar_plan_temporal',
             'servicios.cancelar_plan_temporal',
+            'servicios.generar_codigo_identificacion',
+            'promociones_velocidad.ver',
+            'promociones_velocidad.asignar',
+            'promociones_velocidad.quitar',
+            'incidentes_red.leer',
             'lealtad.ver',
             'lealtad.canjear',
             'sorteos.ver',
@@ -640,6 +662,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'sesiones.desconectar',
             'red.ver',
             'ip.resolver',
+            'incidentes_red.leer',
+            'incidentes_red.abrir',
+            'incidentes_red.cerrar',
             'inventario.ver',
             'inventario.consumir',
             'inventario.trasladar',
@@ -759,6 +784,6 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
     },
     lectura: {
         descripcion: 'Solo lectura',
-        permisos: [...lectura, 'clientes.estado_cuenta'],
+        permisos: [...lectura, 'clientes.estado_cuenta', 'incidentes_red.leer'],
     },
 }

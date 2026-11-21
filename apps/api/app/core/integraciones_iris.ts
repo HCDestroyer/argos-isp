@@ -76,6 +76,8 @@ export const PERMISOS_IRIS_CONTRATO = [
     'clientes.registrar_identidad',
     'servicios.completar_datos',
     'servicios.cambiar_titular',
+    // falla general de red (contrato 0.13.0): servicios afectados por páginas
+    'incidentes_red.leer',
 ] as const
 
 /** Permisos que el contrato 0.12.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */

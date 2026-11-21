@@ -98,6 +98,7 @@ import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import adicionales from '#start/routes/adicionales'
+import operacionPm from '#start/routes/operacion_pm'
 import iris from '#start/routes/iris'
 import contactos from '#start/routes/contactos'
 import instalacionIris from '#start/routes/instalacion_iris'
@@ -1023,13 +1024,26 @@ const servicios: Ruta[] = [
         'Quitar límite de velocidad (desde limitado, queda activo)',
         (entrada, ctx) => new QuitarLimiteServicio().execute(entrada, ctx.contextoAccion()),
     ),
-    accionServicio(
-        'retirar',
-        'serviciosRetirar',
-        'servicios.retirar',
-        'Retirar servicio (libera IPs)',
-        (entrada, ctx) => new RetirarServicio().execute(entrada, ctx.contextoAccion()),
-    ),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/retirar',
+        operacion: 'serviciosRetirar',
+        resumen: 'Retirar servicio (libera IPs)',
+        descripcion:
+            'De fábrica (ajuste `retiro.orden_iris`) pide a Iris la orden de retiro y deja los equipos en comodato ' +
+            '«por recuperar» (`recuperar_equipo: true` en `servicio.estado_cambiado`). Con `equipo_entregado: true` ' +
+            '(el equipo ya se entregó) o el ajuste apagado, no. Cierra las promociones de velocidad del servicio.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.retirar',
+        cuerpo: v.retirarServicioValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Servicio después de la acción', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new RetirarServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/servicios/:id/eliminable',
@@ -1611,6 +1625,7 @@ export default [
     ...servicios,
     ...instalacionIris,
     ...adicionales,
+    ...operacionPm,
     ...bitacora,
     ...ip,
     ...integraciones,

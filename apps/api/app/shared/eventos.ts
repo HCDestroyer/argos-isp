@@ -315,6 +315,14 @@ export interface CatalogoEventos {
          * Notify no avisa al cliente: Iris le explica en la conversación. Ausente en los demás.
          */
         origen?: 'iris'
+        /**
+         * Solo con `a: 'retirado'` (decisión del PM 17, aditivo): si se piden la orden de retiro a Iris y
+         * los equipos «por recuperar». false con la casilla «el equipo ya se entregó» o con el ajuste
+         * global `retiro.orden_iris` apagado.
+         */
+        recuperar_equipo?: boolean
+        /** Solo con `a: 'retirado'`: el usuario marcó «el equipo ya se entregó» */
+        equipo_entregado?: boolean
     }
     /**
      * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
@@ -628,6 +636,44 @@ export interface CatalogoEventos {
         /** Sesiones contadas por `causa_fin` (`Lost-Carrier`, `User-Request`, …) */
         causas: Record<string, number>
     }
+    /**
+     * Falla general de red (decisión del PM 31, contrato Iris 0.13.0): muchos servicios del mismo
+     * `alcance` cayeron a la vez. Uno por empresa afectada con el mismo `incidente_id`; cada uno lleva
+     * solo los servicios de esa empresa (`ids` hasta 5000; el resto por `GET /incidentes-red/:id/servicios`).
+     * Nunca nombres ni direcciones.
+     */
+    'red.falla_general_abierta': PayloadFallaGeneral
+    /** El incidente se cerró (los servicios volvieron o se cerró a mano); `hasta` lleno. */
+    'red.falla_general_cerrada': PayloadFallaGeneral
+    /**
+     * Promoción de velocidad (decisión del PM 18): empezó un tramo (días completos o franja horaria) y el
+     * servicio tiene la velocidad de la promoción. `coa` no lo consume: la API ya pidió el CoA con
+     * `sesion.velocidad_solicitada`; RouterOS recalcula la cola del servicio. `cambia_precio` sin valores.
+     */
+    'servicio.promocion_velocidad_iniciada': PayloadTramoPromocion
+    /** Terminó el tramo (fin, cancelación, se quitó del servicio o retiro): vuelve la velocidad del plan. */
+    'servicio.promocion_velocidad_terminada': PayloadTramoPromocion & { motivo: string }
+    /** Se creó, asignó, quitó o canceló una promoción de velocidad (catálogo; sin cambios de red). */
+    'promocion_velocidad.cambiada': {
+        promocion_id: number
+        empresa_id: number
+        accion: 'creada' | 'asignada' | 'quitada' | 'cancelada'
+        servicios: number[]
+    }
+    /**
+     * Ajustes de operación (`ajustes_operacion.editar`): `empresa_id` null = globales; solo los nombres
+     * de las claves (`retiro.orden_iris`, `caidas.umbral`…), nunca valores.
+     */
+    'operacion.config_cambiada': { empresa_id: number | null; claves: string[] }
+    /** Se generó un código para identificarse en el portal (decisión del PM 19). Nunca el código. */
+    'servicio.codigo_identificacion_emitido': { servicio_id: number; empresa_id: number; expira_en: string }
+    /**
+     * Se pidió recuperar la contraseña del panel y existe el usuario (decisión del PM 22). Nunca el
+     * token ni el correo. Solo para la bitácora y alertas; el correo ya salió al confirmar.
+     */
+    'usuario.recuperacion_solicitada': { usuario_id: number }
+    /** La contraseña se cambió con un enlace de recuperación: sus sesiones se cerraron. */
+    'usuario.contrasena_restablecida': { usuario_id: number; sesiones_cerradas: number }
     /** Desconexión manual pedida desde el panel o la API; la ejecuta `coa` (Disconnect-Request). */
     'sesion.desconexion_solicitada': {
         sesion_id: number
@@ -1522,6 +1568,30 @@ export interface PayloadPagoDeclaracionAnulado extends Omit<
     motivo: string
 }
 
+/** `red.falla_general_abierta` / `red.falla_general_cerrada` (contrato Iris 0.13.0). */
+export interface PayloadFallaGeneral {
+    incidente_id: number
+    empresa_id: number
+    alcance: 'router' | 'olt' | 'pon' | 'zona'
+    alcance_id: number
+    /** `cantidad` = afectados de esta empresa; `ids` hasta 5000 (el resto por la API) */
+    servicios_afectados: { cantidad: number; ids: number[] }
+    origen: 'automatico' | 'manual'
+    desde: string
+    hasta: string | null
+}
+
+/** `servicio.promocion_velocidad_iniciada` / `_terminada`. */
+export interface PayloadTramoPromocion {
+    servicio_id: number
+    empresa_id: number
+    promocion_id: number
+    tramo_id: number
+    inicio: string
+    fin: string
+    cambia_precio: boolean
+}
+
 export type NombreEvento = keyof CatalogoEventos
 export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
 
@@ -1655,6 +1725,15 @@ export const EVENTOS = [
     'horus.estado_seguridad_cambiado',
     'horus.router_estado_cambiado',
     'horus.servicio_infra_cambiado',
+    'red.falla_general_abierta',
+    'red.falla_general_cerrada',
+    'servicio.promocion_velocidad_iniciada',
+    'servicio.promocion_velocidad_terminada',
+    'promocion_velocidad.cambiada',
+    'operacion.config_cambiada',
+    'servicio.codigo_identificacion_emitido',
+    'usuario.recuperacion_solicitada',
+    'usuario.contrasena_restablecida',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>

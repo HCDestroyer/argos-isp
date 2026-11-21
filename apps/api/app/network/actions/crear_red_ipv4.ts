@@ -14,6 +14,7 @@ export interface EntradaCrearRedIpv4 {
     rango_fin?: string | null
     dns_primario?: string | null
     dns_secundario?: string | null
+    publica?: boolean
 }
 
 /**
@@ -51,6 +52,7 @@ export default class CrearRedIpv4 extends DomainAction<EntradaCrearRedIpv4, RedI
                 rango_fin: input.rango_fin ?? null,
                 dns_primario: input.dns_primario ?? null,
                 dns_secundario: input.dns_secundario ?? null,
+                publica: input.publica ?? false,
             })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('red_ipv4', fila!.id)

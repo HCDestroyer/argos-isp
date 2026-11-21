@@ -48,6 +48,9 @@
       "name": "compras"
     },
     {
+      "name": "configuracion"
+    },
+    {
       "name": "documentos"
     },
     {
@@ -103,6 +106,9 @@
     },
     {
       "name": "promesas"
+    },
+    {
+      "name": "promociones"
     },
     {
       "name": "qos"
@@ -1013,6 +1019,14 @@
                     "examples": [
                       "150.00"
                     ]
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "ip_publica"
+                    ],
+                    "description": "`ip_publica` (decisión del PM 30): asignarlo da al servicio una IP de una red pública del router. Por defecto `general`. No se cambia después"
                   }
                 },
                 "required": [
@@ -1738,6 +1752,190 @@
           }
         },
         "x-permiso": "adicionales.desactivar_motivo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ajustes-operacion": {
+      "get": {
+        "operationId": "ajustesOperacionVer",
+        "summary": "Ajustes de operación (globales o de una empresa) con su valor efectivo",
+        "description": "Claves: `retiro.orden_iris`, `codigo_corte.vigencia_min`, `auth.recuperar_contrasena`, `ip_historial.retencion_dias`, `caidas.*` y `falla_general.*`, con su valor de fábrica y límites.",
+        "tags": [
+          "configuracion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Sin ella, los globales",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesOperacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ajustes_operacion.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ajustes_operacion.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "ajustesOperacionEditar",
+        "summary": "Cambiar ajustes de operación",
+        "description": "Globales (sin `empresa_id`, requiere alcance global) o de una empresa (solo las claves que lo admiten). `null` borra el valor guardado. 422 por clave si el valor no cumple sus límites. Emite `operacion.config_cambiada` con los nombres de las claves.",
+        "tags": [
+          "configuracion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "null/ausente = globales"
+                  },
+                  "valores": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "description": "clave → valor (`retiro.orden_iris`, `codigo_corte.vigencia_min`, `caidas.umbral`…); null vuelve al global o de fábrica"
+                  }
+                },
+                "required": [
+                  "valores"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ajustes después del cambio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesOperacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ajustes_operacion.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ajustes_operacion.editar",
         "x-implementado": true
       }
     },
@@ -3561,6 +3759,163 @@
           },
           "403": {
             "description": "CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/auth/opciones": {
+      "get": {
+        "operationId": "authOpciones",
+        "summary": "Qué muestra la pantalla de login (decisión del PM 22)",
+        "description": "Pública: si se puede recuperar la contraseña por correo y si Iris y Horus están conectados (sus botones). Sin datos de nadie.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Opciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpcionesLogin"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/auth/recuperar-contrasena": {
+      "post": {
+        "operationId": "authRecuperarContrasena",
+        "summary": "Pedir el enlace para cambiar la contraseña",
+        "description": "Siempre 202 con la misma respuesta, exista o no el correo. Manda un enlace de un solo uso que vence a los `RECUPERAR_CONTRASENA_VIGENCIA_MIN` (30) minutos. Límite por IP y por correo (429 `demasiadas_solicitudes`). 404 `recuperacion_apagada` si el admin la apagó.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Pedido aceptado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecuperacionAceptada"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/auth/restablecer-contrasena": {
+      "post": {
+        "operationId": "authRestablecerContrasena",
+        "summary": "Cambiar la contraseña con el enlace de recuperación",
+        "description": "El token vale una vez (422 `enlace_invalido` si no existe, se usó o venció). Cierra todas las sesiones del usuario; después se entra con la contraseña nueva.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 200
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "token",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contraseña cambiada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContrasenaRestablecida"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29534,6 +29889,562 @@
         "x-implementado": true
       }
     },
+    "/api/v1/incidentes-red": {
+      "get": {
+        "operationId": "incidentesRedListar",
+        "summary": "Fallas generales de red (incidentes), del más reciente al más viejo",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abierto",
+                "cerrado"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de incidentes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IncidenteRed"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.leer",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.leer",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "incidentesRedAbrir",
+        "summary": "Abrir a mano un incidente de falla general",
+        "description": "Con motivo obligatorio; queda el actor. Afectados: los servicios activos o limitados del alcance; hay que tener acceso a todas sus empresas (403). 409 `incidente_abierto`. Emite `red.falla_general_abierta` uno por empresa.",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "alcance": {
+                    "type": "string",
+                    "enum": [
+                      "router",
+                      "olt",
+                      "pon",
+                      "zona"
+                    ]
+                  },
+                  "alcance_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "alcance",
+                  "alcance_id",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Incidente abierto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidenteRed"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/incidentes-red/{incidenteId}": {
+      "get": {
+        "operationId": "incidentesRedVer",
+        "summary": "Ver un incidente de falla general",
+        "description": "404 si no tiene servicios de las empresas del alcance.",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incidenteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incidente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidenteRed"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.leer",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.leer",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/incidentes-red/{incidenteId}/cerrar": {
+      "post": {
+        "operationId": "incidentesRedCerrar",
+        "summary": "Cerrar un incidente de falla general",
+        "description": "Emite `red.falla_general_cerrada` uno por empresa. 422 `incidente_cerrado`.",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incidenteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Incidente cerrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidenteRed"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.cerrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.cerrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/incidentes-red/{incidenteId}/servicios": {
+      "get": {
+        "operationId": "incidentesRedServicios",
+        "summary": "Servicios afectados por el incidente (solo ids, por páginas)",
+        "description": "Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera del alcance.",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incidenteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Hasta 1000",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los servicios de esa empresa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaIdsServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.leer",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.leer",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/horus": {
       "get": {
         "operationId": "horusConectorVer",
@@ -39872,6 +40783,101 @@
           }
         },
         "x-permiso": "inventario.resolver_garantia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ip-historial": {
+      "get": {
+        "operationId": "ipHistorial",
+        "summary": "Quién tenía una IP en una fecha y hora (decisión del PM 28)",
+        "description": "IPv4 o IPv6 (dentro de un /64 de enlace o un prefijo delegado). Busca en las sesiones PPPoE y en el historial de asignaciones; devuelve servicio, cliente y sesión. Cada consulta queda auditada. 422 `fuera_de_retencion` más atrás de `ip_historial.retencion_dias` (730) y `fecha_futura`.",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "query",
+            "required": true,
+            "description": "IPv4 o IPv6",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "en",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultados (vacío si nadie la tenía)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorialIp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ip.buscar_historial",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ip.buscar_historial",
         "x-implementado": true
       }
     },
@@ -58203,6 +59209,10 @@
                     ],
                     "description": "residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea"
                   },
+                  "incluye_ip_publica": {
+                    "description": "El plan trae una IP pública (decisión del PM 30): al crear el servicio o pasarlo a este plan se le asigna una de una red `publica` del router; al salir del plan vuelve a una privada",
+                    "type": "boolean"
+                  },
                   "global": {
                     "type": "boolean"
                   },
@@ -58484,6 +59494,9 @@
                       "empresarial",
                       "dedicado"
                     ]
+                  },
+                  "incluye_ip_publica": {
+                    "type": "boolean"
                   },
                   "global": {
                     "type": "boolean"
@@ -67725,6 +68738,939 @@
         "x-implementado": true
       }
     },
+    "/api/v1/promociones-velocidad": {
+      "get": {
+        "operationId": "promocionesVelocidadListar",
+        "summary": "Promociones de velocidad (decisión del PM 18)",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activa",
+                "cancelada"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de promociones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PromocionVelocidad"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "promocionesVelocidadCrear",
+        "summary": "Crear una promoción de velocidad (y asignarla a servicios)",
+        "description": "`multiplicador` (x2) o `plan_destino`; `dias` (todo el periodo) o `franja` (cada día de `franja_inicio` a `franja_fin`, hora de Guatemala, con `dias_semana` opcional). Se aplica por CoA de velocidad sin cortar la sesión; el precio no cambia salvo `precio`. 422 `promocion_estrategia_incompatible` (el router controla la velocidad por plan: PCQ o árbol, o PPPoE sin RADIUS), `promocion_supera_capacidad`, `promocion_solapada`, `servicio_de_otra_empresa`.",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "tipo_velocidad": {
+                    "type": "string",
+                    "enum": [
+                      "multiplicador",
+                      "plan_destino"
+                    ],
+                    "description": "`multiplicador` (x2 duplica la velocidad del plan) o `plan_destino` (su velocidad)"
+                  },
+                  "multiplicador": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 1.01,
+                    "maximum": 10
+                  },
+                  "plan_destino_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "dias",
+                      "franja"
+                    ],
+                    "description": "`dias`: todo el periodo; `franja`: cada día de `franja_inicio` a `franja_fin`"
+                  },
+                  "inicio": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fin": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "franja_inicio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    "description": "HH:MM, hora de Guatemala"
+                  },
+                  "franja_fin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    "description": "HH:MM; si es menor o igual que el inicio, termina al día siguiente"
+                  },
+                  "dias_semana": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 7
+                    },
+                    "minItems": 1,
+                    "maxItems": 7,
+                    "uniqueItems": true,
+                    "description": "1 = lunes … 7 = domingo; sin ellos, todos los días (solo con `franja`)"
+                  },
+                  "precio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Precio mensual mientras dure; sin él no cambia el precio",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 500,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "tipo_velocidad",
+                  "modo",
+                  "inicio",
+                  "fin"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Promoción creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromocionVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/promociones-velocidad/{id}": {
+      "get": {
+        "operationId": "promocionesVelocidadVer",
+        "summary": "Ver una promoción de velocidad",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Promoción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromocionVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/promociones-velocidad/{id}/cancelar": {
+      "post": {
+        "operationId": "promocionesVelocidadCancelar",
+        "summary": "Cancelar la promoción (todos sus servicios vuelven a la velocidad del plan)",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promoción cancelada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromocionVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.cancelar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.cancelar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/promociones-velocidad/{id}/servicios": {
+      "get": {
+        "operationId": "promocionesVelocidadServicios",
+        "summary": "Servicios con la promoción (vigentes y quitados)",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de asignaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PromocionServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "promocionesVelocidadAsignar",
+        "summary": "Asignar la promoción a servicios (todo o nada)",
+        "description": "Si el tramo de ahora ya empezó, la velocidad sube en la misma petición. Un servicio que ya la tiene queda igual. 422 como al crear; `promocion_cerrada` si está cancelada o terminó.",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "servicio_ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promoción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromocionVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.asignar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.asignar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/promociones-velocidad/{id}/servicios/{servicioId}/quitar": {
+      "post": {
+        "operationId": "promocionesVelocidadQuitar",
+        "summary": "Quitar la promoción de un servicio (vuelve la velocidad del plan)",
+        "tags": [
+          "promociones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promoción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromocionVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promociones_velocidad.quitar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promociones_velocidad.quitar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/proveedores": {
       "get": {
         "operationId": "proveedoresListar",
@@ -69696,6 +71642,121 @@
         "x-implementado": true
       }
     },
+    "/api/v1/red/caidas-repetidas": {
+      "get": {
+        "operationId": "redCaidasRepetidas",
+        "summary": "Alertas de caídas repetidas (decisión del PM 31)",
+        "description": "Cada `servicio.caidas_repetidas` emitido, del más reciente al más viejo (umbral por empresa en los ajustes `caidas.*`, 3 en 60 min de fábrica).",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de alertas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CaidaRepetida"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sesiones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sesiones.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/red/control-velocidad/matriz": {
       "get": {
         "operationId": "redControlVelocidadMatriz",
@@ -70080,6 +72141,10 @@
                       "null"
                     ],
                     "format": "ipv4"
+                  },
+                  "publica": {
+                    "description": "Red de IPs públicas (decisión del PM 30): la asignación automática no la usa; solo el adicional «IP pública» y los planes que la incluyen. Por defecto false",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -72549,6 +74614,8 @@
                         "adicionales.desactivar_motivo",
                         "adicionales.editar",
                         "adicionales.ver",
+                        "ajustes_operacion.editar",
+                        "ajustes_operacion.ver",
                         "anuncios.administrar",
                         "anuncios.ver",
                         "apariencia.editar",
@@ -72666,6 +74733,9 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "incidentes_red.abrir",
+                        "incidentes_red.cerrar",
+                        "incidentes_red.leer",
                         "inventario.abrir_conteo",
                         "inventario.adjuntar_documento_traslado",
                         "inventario.ajustar",
@@ -72692,6 +74762,7 @@
                         "inventario.trasladar",
                         "inventario.ver",
                         "inventario.ver_unidad",
+                        "ip.buscar_historial",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.editar",
@@ -72757,6 +74828,11 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "promociones_velocidad.asignar",
+                        "promociones_velocidad.cancelar",
+                        "promociones_velocidad.crear",
+                        "promociones_velocidad.quitar",
+                        "promociones_velocidad.ver",
                         "prospectos.registrar",
                         "proveedores.editar",
                         "proveedores.ver",
@@ -72803,6 +74879,7 @@
                         "servicios.editar",
                         "servicios.editar_adicional",
                         "servicios.eliminar",
+                        "servicios.generar_codigo_identificacion",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
@@ -72968,6 +75045,8 @@
                         "adicionales.desactivar_motivo",
                         "adicionales.editar",
                         "adicionales.ver",
+                        "ajustes_operacion.editar",
+                        "ajustes_operacion.ver",
                         "anuncios.administrar",
                         "anuncios.ver",
                         "apariencia.editar",
@@ -73085,6 +75164,9 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "incidentes_red.abrir",
+                        "incidentes_red.cerrar",
+                        "incidentes_red.leer",
                         "inventario.abrir_conteo",
                         "inventario.adjuntar_documento_traslado",
                         "inventario.ajustar",
@@ -73111,6 +75193,7 @@
                         "inventario.trasladar",
                         "inventario.ver",
                         "inventario.ver_unidad",
+                        "ip.buscar_historial",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.editar",
@@ -73176,6 +75259,11 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "promociones_velocidad.asignar",
+                        "promociones_velocidad.cancelar",
+                        "promociones_velocidad.crear",
+                        "promociones_velocidad.quitar",
+                        "promociones_velocidad.ver",
                         "prospectos.registrar",
                         "proveedores.editar",
                         "proveedores.ver",
@@ -73222,6 +75310,7 @@
                         "servicios.editar",
                         "servicios.editar_adicional",
                         "servicios.eliminar",
+                        "servicios.generar_codigo_identificacion",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
@@ -76675,6 +78764,10 @@
                       "null"
                     ],
                     "format": "ipv4"
+                  },
+                  "publica": {
+                    "description": "Red de IPs públicas (decisión del PM 30): la asignación automática no la usa; solo el adicional «IP pública» y los planes que la incluyen. Por defecto false",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -81393,6 +83486,139 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/caidas-repetidas": {
+      "get": {
+        "operationId": "serviciosCaidasRepetidas",
+        "summary": "Alertas de caídas repetidas del servicio",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de alertas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CaidaRepetida"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/cambiar-empresa": {
       "post": {
         "operationId": "serviciosCambiarEmpresa",
@@ -81893,6 +84119,79 @@
           }
         },
         "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/codigo-identificacion": {
+      "post": {
+        "operationId": "serviciosGenerarCodigoIdentificacion",
+        "summary": "Generar el código de un solo uso para identificarse en el portal",
+        "description": "Decisión del PM 19: 6 dígitos que se dictan al cliente cuando el portal no lo reconoce. Vale `codigo_corte.vigencia_min` minutos (15 de fábrica, 5 a 60, por empresa o global) y anula el anterior. El código solo viene en esta respuesta.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Código generado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodigoIdentificacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.generar_codigo_identificacion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.generar_codigo_identificacion",
         "x-implementado": true
       }
     },
@@ -84694,6 +86993,139 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/promociones-velocidad": {
+      "get": {
+        "operationId": "serviciosPromocionesVelocidad",
+        "summary": "Promociones de velocidad del servicio (con el tramo en curso)",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de asignaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PromocionServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/quitar-limite": {
       "post": {
         "operationId": "serviciosQuitarLimite",
@@ -85083,6 +87515,7 @@
       "post": {
         "operationId": "serviciosRetirar",
         "summary": "Retirar servicio (libera IPs)",
+        "description": "De fábrica (ajuste `retiro.orden_iris`) pide a Iris la orden de retiro y deja los equipos en comodato «por recuperar» (`recuperar_equipo: true` en `servicio.estado_cambiado`). Con `equipo_entregado: true` (el equipo ya se entregó) o el ajuste apagado, no. Cierra las promociones de velocidad del servicio.",
         "tags": [
           "servicios"
         ],
@@ -85127,6 +87560,10 @@
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 500
+                  },
+                  "equipo_entregado": {
+                    "description": "El equipo en comodato ya se entregó: no se pide la orden de retiro a Iris ni queda «por recuperar». Por defecto false",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -86929,6 +89366,8 @@
                             "adicionales.desactivar_motivo",
                             "adicionales.editar",
                             "adicionales.ver",
+                            "ajustes_operacion.editar",
+                            "ajustes_operacion.ver",
                             "anuncios.administrar",
                             "anuncios.ver",
                             "apariencia.editar",
@@ -87046,6 +89485,9 @@
                             "horus.probar",
                             "horus.revocar_token",
                             "horus.ver",
+                            "incidentes_red.abrir",
+                            "incidentes_red.cerrar",
+                            "incidentes_red.leer",
                             "inventario.abrir_conteo",
                             "inventario.adjuntar_documento_traslado",
                             "inventario.ajustar",
@@ -87072,6 +89514,7 @@
                             "inventario.trasladar",
                             "inventario.ver",
                             "inventario.ver_unidad",
+                            "ip.buscar_historial",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.editar",
@@ -87137,6 +89580,11 @@
                             "promesas.crear",
                             "promesas.rechazar",
                             "promesas.ver",
+                            "promociones_velocidad.asignar",
+                            "promociones_velocidad.cancelar",
+                            "promociones_velocidad.crear",
+                            "promociones_velocidad.quitar",
+                            "promociones_velocidad.ver",
                             "prospectos.registrar",
                             "proveedores.editar",
                             "proveedores.ver",
@@ -87183,6 +89631,7 @@
                             "servicios.editar",
                             "servicios.editar_adicional",
                             "servicios.eliminar",
+                            "servicios.generar_codigo_identificacion",
                             "servicios.limitar",
                             "servicios.programar_plan_temporal",
                             "servicios.quitar_adicional",
@@ -89589,6 +92038,14 @@
             ],
             "description": "Sugerencia para asignarlo cobrado"
           },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "general",
+              "ip_publica"
+            ],
+            "description": "ip_publica (decisión del PM 30): al asignarlo el servicio recibe una IP de una red pública del router y la devuelve al quitarlo o retirar el servicio"
+          },
           "activo": {
             "type": "boolean",
             "description": "Desactivado: no se asigna ni lo traen los planes"
@@ -89819,6 +92276,13 @@
             ],
             "description": "Texto de la baja, o retiro, cambio_plan, cambio_empresa"
           },
+          "ip_publica": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo con un adicional de tipo ip_publica: la IP pública que se le asignó al servicio"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -89943,6 +92407,101 @@
           },
           "saldo": {
             "type": "integer"
+          }
+        }
+      },
+      "AjustesOperacion": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "efectivo",
+          "global",
+          "empresa",
+          "fabrica",
+          "definiciones"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "efectivo": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Valor efectivo de cada clave (empresa → global → fábrica)"
+          },
+          "global": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Valores guardados como globales"
+          },
+          "empresa": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Valores guardados para la empresa"
+          },
+          "fabrica": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Valores de fábrica"
+          },
+          "definiciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "tipo",
+                "por_empresa",
+                "descripcion",
+                "min",
+                "max",
+                "opciones"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "booleano",
+                    "entero",
+                    "opcion"
+                  ]
+                },
+                "por_empresa": {
+                  "type": "boolean"
+                },
+                "descripcion": {
+                  "type": "string"
+                },
+                "min": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "max": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "opciones": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -94277,6 +96836,70 @@
           }
         }
       },
+      "CaidaRepetida": {
+        "type": "object",
+        "required": [
+          "id",
+          "servicio_id",
+          "empresa_id",
+          "cliente_id",
+          "sesion_id",
+          "desde",
+          "hasta",
+          "sesiones",
+          "umbral",
+          "ventana_minutos",
+          "causas",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sesion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sesiones": {
+            "type": "integer"
+          },
+          "umbral": {
+            "type": "integer"
+          },
+          "ventana_minutos": {
+            "type": "integer"
+          },
+          "causas": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Caja": {
         "type": "object",
         "required": [
@@ -96951,6 +99574,33 @@
             ],
             "format": "date-time",
             "description": "Hasta cuándo el código cerrado sigue sirviendo en /corte («ya tienes servicio»): cierre + PORTAL_CODIGO_CORTE_GRACIA_MIN. null si sigue abierto (resuelve mientras esté suspendido) o si nunca hubo"
+          }
+        }
+      },
+      "CodigoIdentificacion": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "codigo",
+          "expira_en",
+          "vigencia_min"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "codigo": {
+            "type": "string",
+            "pattern": "^\\d{6}$",
+            "description": "Solo en esta respuesta; un solo uso"
+          },
+          "expira_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vigencia_min": {
+            "type": "integer"
           }
         }
       },
@@ -100532,6 +103182,22 @@
                 }
               }
             }
+          }
+        }
+      },
+      "ContrasenaRestablecida": {
+        "type": "object",
+        "required": [
+          "usuario_id",
+          "sesiones_cerradas"
+        ],
+        "properties": {
+          "usuario_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sesiones_cerradas": {
+            "type": "integer"
           }
         }
       },
@@ -108714,6 +111380,142 @@
           }
         }
       },
+      "HistorialIp": {
+        "type": "object",
+        "required": [
+          "ip",
+          "en",
+          "retencion_dias",
+          "resultados"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retencion_dias": {
+            "type": "integer"
+          },
+          "resultados": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fuente",
+                "servicio_id",
+                "cliente_id",
+                "cliente_nombre",
+                "cliente_codigo",
+                "empresa_id",
+                "user_ppp",
+                "prefijo",
+                "desde",
+                "hasta",
+                "sesion"
+              ],
+              "properties": {
+                "fuente": {
+                  "type": "string",
+                  "enum": [
+                    "sesion",
+                    "asignacion"
+                  ]
+                },
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cliente_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cliente_nombre": {
+                  "type": "string"
+                },
+                "cliente_codigo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "user_ppp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "prefijo": {
+                  "type": "string"
+                },
+                "desde": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "hasta": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "sesion": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "id",
+                    "nas_ip",
+                    "acct_session_id",
+                    "inicio",
+                    "fin",
+                    "causa_fin"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "nas_ip": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "acct_session_id": {
+                      "type": "string"
+                    },
+                    "inicio": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "fin": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "causa_fin": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "HistorialParametroFiscal": {
         "type": "object",
         "required": [
@@ -109277,6 +112079,110 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ImpuestoFiscal"
+            }
+          }
+        }
+      },
+      "IncidenteRed": {
+        "type": "object",
+        "required": [
+          "id",
+          "alcance",
+          "alcance_id",
+          "estado",
+          "origen",
+          "motivo",
+          "abierto_por",
+          "cerrado_por",
+          "motivo_cierre",
+          "desde",
+          "hasta",
+          "base",
+          "servicios_afectados",
+          "empresas"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "alcance": {
+            "type": "string",
+            "enum": [
+              "router",
+              "olt",
+              "pon",
+              "zona"
+            ]
+          },
+          "alcance_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "abierto",
+              "cerrado"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "automatico",
+              "manual"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo_cierre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "base": {
+            "type": "integer",
+            "description": "Servicios activos o limitados del alcance al abrir"
+          },
+          "servicios_afectados": {
+            "type": "integer",
+            "description": "Afectados de las empresas visibles"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -112517,6 +115423,8 @@
           "adicionales.desactivar_motivo",
           "adicionales.editar",
           "adicionales.ver",
+          "ajustes_operacion.editar",
+          "ajustes_operacion.ver",
           "anuncios.administrar",
           "anuncios.ver",
           "apariencia.editar",
@@ -112634,6 +115542,9 @@
           "horus.probar",
           "horus.revocar_token",
           "horus.ver",
+          "incidentes_red.abrir",
+          "incidentes_red.cerrar",
+          "incidentes_red.leer",
           "inventario.abrir_conteo",
           "inventario.adjuntar_documento_traslado",
           "inventario.ajustar",
@@ -112660,6 +115571,7 @@
           "inventario.trasladar",
           "inventario.ver",
           "inventario.ver_unidad",
+          "ip.buscar_historial",
           "ip.resolver",
           "ipv6.crear",
           "ipv6.editar",
@@ -112725,6 +115637,11 @@
           "promesas.crear",
           "promesas.rechazar",
           "promesas.ver",
+          "promociones_velocidad.asignar",
+          "promociones_velocidad.cancelar",
+          "promociones_velocidad.crear",
+          "promociones_velocidad.quitar",
+          "promociones_velocidad.ver",
           "prospectos.registrar",
           "proveedores.editar",
           "proveedores.ver",
@@ -112771,6 +115688,7 @@
           "servicios.editar",
           "servicios.editar_adicional",
           "servicios.eliminar",
+          "servicios.generar_codigo_identificacion",
           "servicios.limitar",
           "servicios.programar_plan_temporal",
           "servicios.quitar_adicional",
@@ -112828,6 +115746,8 @@
           "Desactivar un motivo de cortesía (no se borra)",
           "Editar servicios adicionales del catálogo",
           "Ver el catálogo de servicios adicionales y los motivos de cortesía",
+          "Cambiar los ajustes de operación, globales o por empresa",
+          "Ver los ajustes de operación (retiro, código de corte, caídas, falla general…)",
           "Crear, editar, publicar y archivar los anuncios del portal y la página de corte; solo admin",
           "Ver los anuncios del portal y sus métricas (vistas y clics)",
           "Cambiar el tema, el modo predeterminado, el nombre de la marca y el eslogan",
@@ -112945,6 +115865,9 @@
           "Probar la conexión con Horus Flow con la configuración guardada",
           "Revocar el token de una integración",
           "Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)",
+          "Abrir a mano un incidente de falla general (con motivo)",
+          "Cerrar un incidente de falla general",
+          "Ver las fallas generales de red (incidentes) y los servicios afectados",
           "Abrir un conteo físico de una bodega",
           "Adjuntar el papel firmado (foto o escaneo) de una orden recibida en papel",
           "Ajustar existencias a mano (con motivo)",
@@ -112971,6 +115894,7 @@
           "Trasladar existencias entre bodegas o técnicos",
           "Ver productos, bodegas, existencias y el kardex",
           "Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor",
+          "Buscar quién tenía una IP en una fecha y hora pasada (servicio, cliente y sesión); cada consulta queda auditada",
           "Resolver una IP a su servicio",
           "Crear bloques y pools IPv6",
           "Editar bloques y pools IPv6",
@@ -113036,6 +115960,11 @@
           "Crear promesas de pago",
           "Rechazar promesas pendientes de aprobación",
           "Ver promesas de pago",
+          "Asignar una promoción de velocidad a servicios",
+          "Cancelar una promoción de velocidad (vuelve la velocidad del plan)",
+          "Crear promociones de velocidad (multiplicador o plan destino, por días o franja horaria)",
+          "Quitar una promoción de velocidad de un servicio",
+          "Ver las promociones de velocidad y a qué servicios se asignaron",
           "Registrar en Iris a alguien interesado en un servicio y ver los prospectos registrados desde Argos (contrato Iris 0.10.0 §3.6)",
           "Crear y editar proveedores",
           "Ver proveedores",
@@ -113082,6 +116011,7 @@
           "Editar servicios (plan, router, IPs, datos)",
           "Editar un adicional de un servicio (modalidad, identificador, credencial, precio)",
           "Eliminar un servicio que nunca se usó (sin facturas, pagos, sesiones ni otro historial); solo admin",
+          "Generar el código de un solo uso con el que el cliente se identifica en el portal (vale 15 min de fábrica)",
           "Limitar la velocidad de servicios",
           "Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)",
           "Dar de baja un adicional de un servicio (con fecha; no se borra)",
@@ -113578,6 +116508,28 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OpcionesLogin": {
+        "type": "object",
+        "required": [
+          "recuperar_contrasena",
+          "iris",
+          "horus"
+        ],
+        "properties": {
+          "recuperar_contrasena": {
+            "type": "boolean",
+            "description": "Mostrar «¿Olvidaste tu contraseña?»"
+          },
+          "iris": {
+            "type": "boolean",
+            "description": "Iris conectado: mostrar «Entrar con Iris»"
+          },
+          "horus": {
+            "type": "boolean",
+            "description": "Horus conectado: mostrar «Entrar con Horus»"
           }
         }
       },
@@ -114249,6 +117201,28 @@
           },
           "resumen": {
             "$ref": "#/components/schemas/ResumenComprobantes"
+          }
+        }
+      },
+      "PaginaIdsServicio": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -115989,6 +118963,10 @@
             },
             "description": "Routers con implementación propia del plan; con `global` vale en todos (A40)"
           },
+          "incluye_ip_publica": {
+            "type": "boolean",
+            "description": "Trae una IP pública de una red `publica` del router (decisión del PM 30)"
+          },
           "global": {
             "type": "boolean"
           },
@@ -116234,6 +119212,10 @@
               "minimum": 1
             },
             "description": "Routers con implementación propia del plan (A40)"
+          },
+          "incluye_ip_publica": {
+            "type": "boolean",
+            "description": "Trae una IP pública de una red `publica` del router (decisión del PM 30)"
           }
         }
       },
@@ -120147,6 +123129,270 @@
           }
         }
       },
+      "PromocionServicio": {
+        "type": "object",
+        "required": [
+          "id",
+          "promocion_id",
+          "promocion_nombre",
+          "servicio_id",
+          "empresa_id",
+          "estado",
+          "agregada_por",
+          "quitada_en",
+          "motivo",
+          "created_at",
+          "tramo_abierto"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "promocion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "promocion_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "quitada"
+            ]
+          },
+          "agregada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "quitada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tramo_abierto": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "inicio",
+              "fin"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "inicio": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "fin": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Tramo en curso: la velocidad de la promoción está aplicada"
+          }
+        }
+      },
+      "PromocionVelocidad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "descripcion",
+          "tipo_velocidad",
+          "multiplicador",
+          "plan_destino_id",
+          "plan_destino_nombre",
+          "modo",
+          "inicio",
+          "fin",
+          "franja_inicio",
+          "franja_fin",
+          "dias_semana",
+          "precio",
+          "estado",
+          "motivo_cancelacion",
+          "cancelada_en",
+          "creado_por",
+          "servicios",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tipo_velocidad": {
+            "type": "string",
+            "enum": [
+              "multiplicador",
+              "plan_destino"
+            ]
+          },
+          "multiplicador": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Con `multiplicador`, p. ej. \"2.00\""
+          },
+          "plan_destino_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan_destino_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "dias",
+              "franja"
+            ]
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "franja_inicio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "HH:MM, hora de Guatemala"
+          },
+          "franja_fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "HH:MM, hora de Guatemala"
+          },
+          "dias_semana": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "description": "1 = lunes"
+          },
+          "precio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Precio mensual mientras dure; null = no cambia"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activa",
+              "cancelada"
+            ]
+          },
+          "motivo_cancelacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancelada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "servicios": {
+            "type": "integer",
+            "description": "Servicios con la promoción asignada"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ProspectoIris": {
         "type": "object",
         "required": [
@@ -121185,6 +124431,18 @@
           }
         }
       },
+      "RecuperacionAceptada": {
+        "type": "object",
+        "required": [
+          "aceptada"
+        ],
+        "properties": {
+          "aceptada": {
+            "type": "boolean",
+            "description": "Siempre true, exista o no el correo"
+          }
+        }
+      },
       "RedAccesoRouter": {
         "type": "object",
         "required": [
@@ -121347,6 +124605,10 @@
               "string",
               "null"
             ]
+          },
+          "publica": {
+            "type": "boolean",
+            "description": "Red de IPs públicas (decisión del PM 30): solo la usan el adicional «IP pública» y los planes que la incluyen"
           },
           "ocupacion": {
             "$ref": "#/components/schemas/OcupacionPool"
@@ -127923,6 +131185,8 @@
               "adicionales.desactivar_motivo",
               "adicionales.editar",
               "adicionales.ver",
+              "ajustes_operacion.editar",
+              "ajustes_operacion.ver",
               "anuncios.administrar",
               "anuncios.ver",
               "apariencia.editar",
@@ -128040,6 +131304,9 @@
               "horus.probar",
               "horus.revocar_token",
               "horus.ver",
+              "incidentes_red.abrir",
+              "incidentes_red.cerrar",
+              "incidentes_red.leer",
               "inventario.abrir_conteo",
               "inventario.adjuntar_documento_traslado",
               "inventario.ajustar",
@@ -128066,6 +131333,7 @@
               "inventario.trasladar",
               "inventario.ver",
               "inventario.ver_unidad",
+              "ip.buscar_historial",
               "ip.resolver",
               "ipv6.crear",
               "ipv6.editar",
@@ -128131,6 +131399,11 @@
               "promesas.crear",
               "promesas.rechazar",
               "promesas.ver",
+              "promociones_velocidad.asignar",
+              "promociones_velocidad.cancelar",
+              "promociones_velocidad.crear",
+              "promociones_velocidad.quitar",
+              "promociones_velocidad.ver",
               "prospectos.registrar",
               "proveedores.editar",
               "proveedores.ver",
@@ -128177,6 +131450,7 @@
               "servicios.editar",
               "servicios.editar_adicional",
               "servicios.eliminar",
+              "servicios.generar_codigo_identificacion",
               "servicios.limitar",
               "servicios.programar_plan_temporal",
               "servicios.quitar_adicional",
@@ -128259,6 +131533,7 @@
               "promesas.crear",
               "promesas.ver",
               "prospectos.registrar",
+              "servicios.generar_codigo_identificacion",
               "servicios.ver",
               "zonas.ver"
             ]
@@ -128284,6 +131559,7 @@
               "documentos.ver",
               "facturas.emitir_cargo_unico",
               "facturas.ver",
+              "incidentes_red.leer",
               "inventario.ver",
               "ip.resolver",
               "ipv6.ver",
@@ -128296,6 +131572,9 @@
               "plantillas.ver",
               "promesas.crear",
               "promesas.ver",
+              "promociones_velocidad.asignar",
+              "promociones_velocidad.quitar",
+              "promociones_velocidad.ver",
               "prospectos.registrar",
               "red.ver",
               "red_acceso.ver",
@@ -128312,6 +131591,7 @@
               "servicios.desconectar",
               "servicios.editar",
               "servicios.editar_adicional",
+              "servicios.generar_codigo_identificacion",
               "servicios.limitar",
               "servicios.programar_plan_temporal",
               "servicios.quitar_adicional",
@@ -128336,6 +131616,9 @@
               "adicionales.ver",
               "clientes.registrar_identidad",
               "clientes.ver",
+              "incidentes_red.abrir",
+              "incidentes_red.cerrar",
+              "incidentes_red.leer",
               "inventario.asignar_comodato",
               "inventario.cancelar_traslado",
               "inventario.consumir",
@@ -128553,6 +131836,7 @@
             "permisos": [
               "activos.ver",
               "adicionales.ver",
+              "ajustes_operacion.ver",
               "anuncios.ver",
               "apariencia.ver",
               "bancos.ver",
@@ -128572,6 +131856,7 @@
               "fel.ver",
               "fiscal.ver",
               "horus.ver",
+              "incidentes_red.leer",
               "inventario.ver",
               "ipv6.ver",
               "iris.ver",
@@ -128584,6 +131869,7 @@
               "plantillas.ver",
               "portal_corte.ver",
               "promesas.ver",
+              "promociones_velocidad.ver",
               "proveedores.ver",
               "qos.ver",
               "red.ver",

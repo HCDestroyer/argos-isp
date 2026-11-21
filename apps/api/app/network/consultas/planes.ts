@@ -36,6 +36,8 @@ export interface PlanVista {
      * Un cambio de plan de un pendiente solo va a otro plan del mismo modo.
      */
     modo: 'residencial' | 'empresarial'
+    /** trae una IP pública de una red `publica` del router (decisión del PM 30) */
+    incluye_ip_publica: boolean
     /** routers con implementación propia (`planes_routers`); con `global` vale en todos (A40) */
     routers: number[]
     global: boolean
@@ -92,6 +94,7 @@ const COLUMNAS_PLAN_SIMPLES = [
     'dual_stack',
     'tamano_prefijo_delegado',
     'tipo',
+    'incluye_ip_publica',
     'global',
     'activo',
     'version',

@@ -55,8 +55,11 @@ const OPCIONALES: Record<string, string[]> = {
     // `via_token_id` (10 nov, Iris 0.7.0 A23, actuación vinculada)
     AccionAuditoria: ['iris_actor', 'iris_conversacion', 'via_token_id'],
     // `modo` y `routers` (21 nov, Iris 0.10.0 A40): la API siempre los envía; hasta las fixtures
-    Plan: ['warnings', 'modo', 'routers'],
-    PlanEfectivo: ['modo', 'routers'],
+    // `incluye_ip_publica` (21 nov, decisión del PM 30): igual, hasta las fixtures
+    Plan: ['warnings', 'modo', 'routers', 'incluye_ip_publica'],
+    PlanEfectivo: ['modo', 'routers', 'incluye_ip_publica'],
+    // `ip_publica` (21 nov, decisión del PM 30): igual, hasta las fixtures
+    AdicionalServicio: ['ip_publica'],
     // `csrf` solo con la sesión del panel por cookie
     Me: ['csrf'],
     // nuevos el 28 oct (`zona_id`, editar router), el 29 oct (`serial`, `unido_a_id`, routers
