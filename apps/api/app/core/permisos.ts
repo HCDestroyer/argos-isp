@@ -351,6 +351,9 @@ export const PERMISOS = {
         'Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor',
     'sistema.ver_registro':
         'Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos',
+    'sistema.ver_almacenamiento':
+        'Ver qué se almacena y cuánto espacio ocupa: carpetas de archivos, base de datos, Redis y discos',
+    'sistema.recalcular_almacenamiento': 'Recalcular el almacenamiento a pedido (solo lee y suma; no borra nada)',
     'apariencia.ver': 'Ver la apariencia de la instalación (tema, marca y archivos del inicio de sesión)',
     'apariencia.editar': 'Cambiar el tema, el modo predeterminado, el nombre de la marca y el eslogan',
     'apariencia.subir_logo_login': 'Subir el logo del inicio de sesión del panel y del portal',
