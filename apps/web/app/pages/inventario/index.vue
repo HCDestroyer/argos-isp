@@ -282,7 +282,7 @@ function alHacer() {
                             <span
                                 class="font-semibold tabular-nums"
                                 :class="row.original.bajo ? 'text-error' : 'text-highlighted'"
-                            >{{ formatearCantidad(row.original.cantidad.toString(), row.original.serie ? null : row.original.unidad) }}</span>
+                            >{{ formatearCantidad(row.original.cantidad.toString(), row.original.serie || row.original.unidad === 'unidad' ? null : row.original.unidad) }}</span>
                         </template>
                         <template #costo-cell="{ row }">
                             <span class="tabular-nums text-muted">{{ costoPromedio(row.original) }}</span>

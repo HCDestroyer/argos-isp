@@ -98,8 +98,8 @@ function origen(u: UnidadInventarioDetalle): string {
         return 'En revisión en su bodega'
     }
     const de = ultimo.de === 'en_comodato' || ultimo.de === 'por_recuperar' ? 'Devuelto' : 'Volvió'
-    const motivo = (ultimo.motivo ?? '').replace(/^cambio_equipo · /, '')
-    return [ultimo.servicio_id ? `${de} del servicio #${ultimo.servicio_id}` : de, motivo && !motivo.includes('_') ? `«${motivo}»` : null, formatearFechaCorta(ultimo.fecha)].filter(Boolean).join(' · ')
+    const detalle = (ultimo.motivo ?? '').split(' · ').slice(1).join(' · ')
+    return [ultimo.servicio_id ? `${de} del servicio #${ultimo.servicio_id}` : de, detalle ? `«${detalle}»` : motivoEnPalabras(ultimo.motivo), formatearFechaCorta(ultimo.fecha)].filter(Boolean).join(' · ')
 }
 
 function garantiaDe(u: UnidadInventarioDetalle): string {

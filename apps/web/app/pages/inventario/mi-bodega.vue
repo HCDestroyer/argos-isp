@@ -50,11 +50,18 @@ async function cargar() {
     hayMasKardex.value = (resultado.ok ? resultado.data.kardex?.length ?? 0 : 0) >= 50
 }
 
+const route = useRoute()
 onMounted(() => {
-    void cargar()
     if (alcanceGlobal.value) {
         void cargarTecnicos()
     }
+    const pedido = Number(route.query.tecnico)
+    if (alcanceGlobal.value && Number.isInteger(pedido) && pedido > 0) {
+        // `?tecnico=<usuario_id>`: la bodega de ese técnico (el watch la carga).
+        tecnicoId.value = pedido
+        return
+    }
+    void cargar()
 })
 watch(tecnicoId, () => {
     empresaElegida.value = undefined

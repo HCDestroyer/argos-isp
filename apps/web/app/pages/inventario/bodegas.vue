@@ -57,7 +57,17 @@ onMounted(() => {
     void cargarExistencias()
 })
 
-const visibles = computed(() => bodegas.value
+/** Si la API no lista la bodega virtual de tránsito, su tarjeta se arma con las órdenes en camino. */
+const TRANSITO_VIRTUAL = 0
+const conTransito = computed<Bodega[]>(() => {
+    if (bodegas.value.some(b => esBodegaTransito(b)) || !bodegas.value.length) {
+        return bodegas.value
+    }
+    const base = bodegas.value[0]!
+    return [...bodegas.value, { ...base, id: TRANSITO_VIRTUAL, nombre: 'En tránsito', tipo: 'transito' as Bodega['tipo'], usuario_id: null, usuario_nombre: null, activo: true }]
+})
+
+const visibles = computed(() => conTransito.value
     .filter(b => verInactivas.value || b.activo)
     .sort((a, b) => Number(esBodegaTransito(a)) - Number(esBodegaTransito(b)) || Number(b.tipo === 'bodega') - Number(a.tipo === 'bodega')))
 
@@ -106,6 +116,13 @@ function tono(b: Bodega): string {
     return b.tipo === 'tecnico' || b.tipo === 'cuadrilla' ? 'tono-exito' : esBodegaTransito(b) ? 'tono-2' : 'tono-marca'
 }
 
+function valorDe(b: Bodega): Decimal {
+    if (b.id === TRANSITO_VIRTUAL) {
+        return enCamino.value.reduce((t, o) => t.plus(o.costo_total), new Decimal(0))
+    }
+    return resumen.value.get(b.id)?.valor ?? new Decimal(0)
+}
+
 function caminoA(b: Bodega): OrdenTraslado[] {
     return enCamino.value.filter(o => o.bodega_destino_id === b.id)
 }
@@ -118,7 +135,7 @@ function detalle(b: Bodega): string {
     if (!r) {
         return 'Sin existencias'
     }
-    return `${formatearCantidad(r.articulos.toString())} artículos · ${formatearCantidad(r.equipos.toString())} equipos`
+    return `${formatearCantidad(r.articulos.toString())} ${r.articulos.equals(1) ? 'artículo' : 'artículos'} · ${formatearCantidad(r.equipos.toString())} ${r.equipos.equals(1) ? 'equipo' : 'equipos'}`
 }
 
 /* Tarjeta: ⋯ */
@@ -291,7 +308,7 @@ const MOTIVOS_RECHAZO: Record<string, string> = {
                         />
                     </template>
                     <template v-else>
-                        <span class="text-[1.375rem] font-bold tabular-nums text-highlighted">{{ formatearQuetzales((resumen.get(b.id)?.valor ?? new Decimal(0)).toFixed(2)) }}</span>
+                        <span class="text-[1.375rem] font-bold tabular-nums text-highlighted">{{ formatearQuetzales(valorDe(b).toFixed(2)) }}</span>
                         <span class="text-sm text-muted">{{ detalle(b) }}</span>
                     </template>
                     <div class="flex flex-wrap gap-1.5">

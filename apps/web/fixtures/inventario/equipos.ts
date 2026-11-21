@@ -58,7 +58,7 @@ export function equiposIniciales(): EquiposFixtures {
                 cambio('2026-09-12T16:00:00.000Z', 'disponible', 'en_comodato', 'asignacion_comodato', retirado),
                 cambio('2026-11-02T16:00:00.000Z', 'en_comodato', 'por_recuperar', 'servicio_retirado', retirado),
             ],
-            7: [cambio('2026-11-10T18:00:00.000Z', 'en_comodato', 'revision', 'cambio_equipo · «no enciende»', 1, 'OT-1288')],
+            7: [cambio('2026-11-10T18:00:00.000Z', 'en_comodato', 'revision', 'cambio_equipo · no enciende', 1, 'OT-1288')],
             8: [
                 cambio('2026-11-05T15:00:00.000Z', 'en_comodato', 'revision', 'cambio_equipo · wifi intermitente', 2, 'OT-1270'),
                 cambio('2026-11-12T15:00:00.000Z', 'revision', 'garantia', 'enviada_garantia'),

@@ -181,7 +181,7 @@ const activa = computed({
         </div>
 
         <div class="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
-            <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
                 <UTabs
                     v-model="activa"
                     :items="pestanas"

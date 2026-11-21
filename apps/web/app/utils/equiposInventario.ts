@@ -181,6 +181,31 @@ export interface EventoUnidad {
     tono: 'tono-exito' | 'tono-aviso' | 'tono-error' | 'tono-marca'
 }
 
+/** Motivos (códigos de la API) en palabras; lo que no se conoce se muestra tal cual. */
+const MOTIVOS_ESTADO: Record<string, string> = {
+    asignacion_comodato: 'comodato asignado',
+    devolucion_comodato: 'devuelto a bodega',
+    servicio_retirado: 'servicio retirado',
+    servicio_reactivado: 'servicio reactivado',
+    cambio_equipo: 'cambio de equipo',
+    enviada_garantia: 'enviado a garantía',
+    garantia_reparada: 'volvió reparado',
+    garantia_reemplazada: 'cambiado por otro',
+    garantia_rechazada: 'garantía rechazada',
+    declarada_no_recuperada: 'declarado no recuperado',
+    marcada_reparada: 'probado: funciona',
+    baja: 'dado de baja',
+}
+
+export function motivoEnPalabras(motivo: string | null): string | null {
+    if (!motivo) {
+        return null
+    }
+    const [codigo = '', ...resto] = motivo.split(' · ')
+    const texto = MOTIVOS_ESTADO[codigo] ?? codigo.replaceAll('_', ' ')
+    return [texto, ...resto].join(' · ')
+}
+
 const TONO_ESTADO: Partial<Record<EstadoEquipo, EventoUnidad['tono']>> = {
     en_comodato: 'tono-exito',
     disponible: 'tono-marca',
@@ -204,7 +229,7 @@ export function lineaTiempoUnidad(unidad: DetalleApi, nombreTecnico: (id: number
             clave: `estado-${i}`,
             fecha: cambio.fecha,
             titulo: `${ESTADOS_EQUIPO[cambio.de].etiqueta} → ${ESTADOS_EQUIPO[cambio.a].etiqueta}`,
-            detalle: [cambio.motivo, `${servicio}${iris}`.replace(/^ · /, '')].filter(Boolean).join(' · '),
+            detalle: [motivoEnPalabras(cambio.motivo), `${servicio}${iris}`.replace(/^ · /, '')].filter(Boolean).join(' · '),
             icono: ESTADOS_EQUIPO[cambio.a].icono,
             tono: TONO_ESTADO[cambio.a] ?? 'tono-marca',
         })
