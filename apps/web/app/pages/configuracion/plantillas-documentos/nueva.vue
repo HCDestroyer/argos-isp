@@ -21,6 +21,7 @@ const tipoInicial = TIPOS_DOCUMENTO.find(t => t.value === route.query.tipo)?.val
 const copiarInicial = Number(route.query.copiar) || 0
 
 const formulario = useTemplateRef('formulario')
+const idFormulario = useId()
 const estado = reactive<SalidaNuevaPlantilla>({ tipo: tipoInicial, nombre: '', formato: 'carta', copiar_de_id: copiarInicial })
 const enviando = ref(false)
 const problemaCrear = ref<Problem | null>(null)
@@ -96,22 +97,14 @@ async function crear(evento: FormSubmitEvent<SalidaNuevaPlantilla>) {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="plantilla-documento-nueva"
         titulo="Nueva plantilla"
-        icono="i-lucide-file-plus"
+        descripcion="Documento, formato y de cuál copiar el HTML"
+        :volver="`/configuracion/aviso-cobro${estado.tipo === 'aviso_cobro' ? '' : `?tipo=${estado.tipo}`}`"
     >
-        <template #acciones>
-            <UButton
-                label="Plantillas"
-                icon="i-lucide-arrow-left"
-                color="neutral"
-                variant="ghost"
-                :to="`/configuracion/aviso-cobro${estado.tipo === 'aviso_cobro' ? '' : `?tipo=${estado.tipo}`}`"
-            />
-        </template>
-
         <UForm
+            :id="idFormulario"
             ref="formulario"
             :schema="esquemaNuevaPlantilla"
             :state="estado"
@@ -187,22 +180,24 @@ async function crear(evento: FormSubmitEvent<SalidaNuevaPlantilla>) {
                 v-if="problemaCrear && problemaCrear.status !== 422"
                 :problema="problemaCrear"
             />
-
-            <div class="flex flex-wrap gap-2">
-                <UButton
-                    type="submit"
-                    label="Crear plantilla"
-                    icon="i-lucide-check"
-                    :loading="enviando"
-                    data-prueba="crear-plantilla"
-                />
-                <UButton
-                    label="Cancelar"
-                    color="neutral"
-                    variant="ghost"
-                    :to="`/configuracion/aviso-cobro${estado.tipo === 'aviso_cobro' ? '' : `?tipo=${estado.tipo}`}`"
-                />
-            </div>
         </UForm>
-    </PanelPagina>
+
+        <template #pie>
+            <UButton
+                label="Cancelar"
+                color="neutral"
+                variant="ghost"
+                :to="`/configuracion/aviso-cobro${estado.tipo === 'aviso_cobro' ? '' : `?tipo=${estado.tipo}`}`"
+            />
+            <UButton
+                type="submit"
+                :form="idFormulario"
+                label="Crear plantilla"
+                icon="i-lucide-check"
+                :loading="enviando"
+                class="glow-brand"
+                data-prueba="crear-plantilla"
+            />
+        </template>
+    </ConfiguracionMarco>
 </template>

@@ -173,23 +173,19 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="configuracion-inventario"
         titulo="Inventario"
-        icono="i-lucide-package-search"
+        descripcion="Firma al recibir y lectura de compras con IA"
+        volver="/configuracion/portal-corte"
+        empresas
     >
-        <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
-            <UCard>
-                <template #header>
-                    <div class="flex flex-col gap-1">
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Recibir órdenes de traslado
-                        </h2>
-                        <p class="text-xs text-muted">
-                            Con la firma obligatoria se recibe con firma digital en pantalla o en papel. Sin ella, también por aceptación simple.
-                        </p>
-                    </div>
-                </template>
+        <div class="flex w-full max-w-3xl flex-col gap-4">
+            <ConfiguracionBloque
+                titulo="Recibir órdenes de traslado"
+                descripcion="Con la firma obligatoria se recibe con firma digital en pantalla o en papel. Sin ella, también por aceptación simple."
+                icono="i-lucide-pen-line"
+            >
                 <UAlert
                     v-if="firmaPideEmpresa"
                     color="info"
@@ -227,19 +223,14 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
                         :problema="problemaFirma"
                     />
                 </div>
-            </UCard>
+            </ConfiguracionBloque>
 
-            <UCard v-if="puedeIa">
-                <template #header>
-                    <div class="flex flex-col gap-1">
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            IA para facturas de compra
-                        </h2>
-                        <p class="text-xs text-muted">
-                            Lee las facturas en PDF o imagen y propone el borrador. El XML FEL no la necesita. Sin IA, el borrador se captura a mano.
-                        </p>
-                    </div>
-                </template>
+            <ConfiguracionBloque
+                v-if="puedeIa"
+                titulo="IA para facturas de compra"
+                descripcion="Lee las facturas en PDF o imagen y propone el borrador. El XML FEL no la necesita. Sin IA, el borrador se captura a mano."
+                icono="i-lucide-sparkles"
+            >
                 <ProblemaAlerta
                     v-if="problemaIa"
                     :problema="problemaIa"
@@ -349,7 +340,7 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
                         />
                     </div>
                 </UForm>
-            </UCard>
+            </ConfiguracionBloque>
         </div>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

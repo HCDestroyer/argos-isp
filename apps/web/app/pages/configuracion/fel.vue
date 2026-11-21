@@ -11,7 +11,7 @@ import * as z from 'zod'
  */
 definePageMeta({ permiso: 'fel.ver' })
 
-useHead({ title: 'FEL · ArgosIsp' })
+useHead({ title: 'Factura electrónica (FEL) · ArgosIsp' })
 
 const { puede } = usePermisos()
 const toast = useToast()
@@ -201,191 +201,208 @@ onMounted(() => {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="configuracion-fel"
-        titulo="FEL"
-        icono="i-lucide-badge-check"
+        titulo="Empresa y fiscal"
+        descripcion="Los datos legales con los que se factura y se declara"
+        empresas
     >
-        <div class="flex flex-col gap-6">
-            <p class="text-sm text-muted">
-                Factura electrónica en línea de <span class="font-medium text-highlighted">{{ empresa?.nombre_comercial ?? 'la empresa' }}</span>: certificador, credenciales, modo de emisión y contingencia.
-            </p>
+        <UAlert
+            v-if="empresaId === null"
+            color="info"
+            variant="subtle"
+            icon="i-lucide-building-2"
+            title="Elige una empresa"
+            :description="conSelector ? 'La FEL es de cada empresa (NIT): elige una en las pastillas de arriba.' : 'No hay una empresa activa en tu sesión.'"
+            data-prueba="elegir-empresa"
+        />
 
-            <UAlert
-                v-if="empresaId === null"
-                color="info"
-                variant="subtle"
-                icon="i-lucide-building-2"
-                title="Elige una empresa"
-                :description="conSelector ? 'La FEL es de cada empresa (NIT): elige una en el selector de empresa.' : 'No hay una empresa activa en tu sesión.'"
-                data-prueba="elegir-empresa"
+        <template v-else>
+            <USkeleton
+                v-if="cargando && !configuracion"
+                class="h-40 w-full"
+            />
+            <ProblemaAlerta
+                v-else-if="problema"
+                :problema="problema"
+                :reintentar="cargar"
+                :reintentando="cargando"
+                data-prueba="fel-error"
             />
 
-            <template v-else>
-                <USkeleton
-                    v-if="cargando && !configuracion"
-                    class="h-40 w-full"
+            <template v-else-if="configuracion">
+                <UAlert
+                    v-if="configuracion.modo === 'desactivada'"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-shield-off"
+                    title="FEL desactivada"
+                    :description="AVISO_FEL_DESACTIVADA"
+                    data-prueba="fel-desactivada"
                 />
                 <ProblemaAlerta
-                    v-else-if="problema"
-                    :problema="problema"
-                    :reintentar="cargar"
-                    :reintentando="cargando"
-                    data-prueba="fel-error"
+                    v-if="problemaCatalogo"
+                    :problema="problemaCatalogo"
+                    :reintentar="cargarCatalogo"
+                    data-prueba="fel-catalogo-error"
                 />
 
-                <template v-else-if="configuracion">
-                    <UAlert
-                        v-if="configuracion.modo === 'desactivada'"
-                        color="error"
-                        variant="subtle"
-                        icon="i-lucide-shield-off"
-                        title="FEL desactivada"
-                        :description="AVISO_FEL_DESACTIVADA"
-                        data-prueba="fel-desactivada"
-                    />
-                    <UAlert
-                        v-if="configuracion.contingencia_activa"
-                        color="warning"
-                        variant="subtle"
-                        icon="i-lucide-cloud-off"
-                        title="Contingencia activa"
-                        :description="`Desde ${configuracion.contingencia_desde ? formatearFechaHora(configuracion.contingencia_desde) : '—'} · ${configuracion.contingencia_motivo ?? ''}`"
-                    />
-
-                    <UPageCard
-                        title="Certificador y modo"
-                        icon="i-lucide-shield-check"
-                        variant="subtle"
-                    >
-                        <div class="flex flex-wrap items-center gap-2">
-                            <UBadge
-                                :label="MODOS_FEL[configuracion.modo].etiqueta"
-                                :icon="MODOS_FEL[configuracion.modo].icono"
-                                :color="MODOS_FEL[configuracion.modo].color"
-                                variant="subtle"
-                                data-prueba="fel-modo"
-                            />
-                            <UBadge
-                                :label="etiquetaProveedor(configuracion.proveedor, catalogo)"
-                                color="neutral"
-                                variant="outline"
-                            />
-                            <UBadge
-                                :label="AMBIENTES_FEL[configuracion.ambiente]"
-                                :color="configuracion.ambiente === 'produccion' ? 'primary' : 'neutral'"
-                                variant="outline"
-                            />
-                            <span class="text-xs text-muted">
-                                {{ configuracion.version === 0 ? 'Nunca configurada' : `Versión ${configuracion.version}${configuracion.updated_at ? ` · ${formatearFechaHora(configuracion.updated_at)}` : ''}` }}
-                            </span>
-                        </div>
-
-                        <UForm
-                            v-if="puede('fel.configurar')"
-                            :id="idFormulario"
-                            ref="formulario"
-                            :schema="esquema"
-                            :state="estado"
-                            class="mt-4 flex flex-col gap-4"
-                            @submit="guardar"
+                <div class="grid gap-4 xl:grid-cols-2">
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <ConfiguracionBloque
+                            titulo="Certificador"
+                            icono="i-lucide-shield-check"
                         >
-                            <div class="grid gap-4 sm:grid-cols-2">
+                            <ConfiguracionFila etiqueta="Estado">
+                                <UBadge
+                                    :label="MODOS_FEL[configuracion.modo].etiqueta"
+                                    :icon="MODOS_FEL[configuracion.modo].icono"
+                                    :color="MODOS_FEL[configuracion.modo].color"
+                                    variant="subtle"
+                                    data-prueba="fel-modo"
+                                />
+                            </ConfiguracionFila>
+                            <ConfiguracionFila
+                                etiqueta="Proveedor"
+                                :valor="etiquetaProveedor(configuracion.proveedor, catalogo)"
+                            />
+                            <ConfiguracionFila
+                                etiqueta="Ambiente"
+                                :valor="AMBIENTES_FEL[configuracion.ambiente]"
+                            />
+                            <ConfiguracionFila
+                                etiqueta="Versión"
+                                :valor="configuracion.version === 0 ? 'Nunca configurada' : `${configuracion.version}${configuracion.updated_at ? ` · ${formatearFechaHora(configuracion.updated_at)}` : ''}`"
+                            />
+                        </ConfiguracionBloque>
+
+                        <ConfiguracionBloque
+                            v-if="puede('fel.configurar')"
+                            titulo="Cambiar certificador y modo"
+                            icono="i-lucide-sliders-horizontal"
+                        >
+                            <UForm
+                                :id="idFormulario"
+                                ref="formulario"
+                                :schema="esquema"
+                                :state="estado"
+                                class="flex flex-col gap-4 py-2"
+                                @submit="guardar"
+                            >
+                                <div class="grid gap-4 sm:grid-cols-2">
+                                    <UFormField
+                                        label="Ambiente"
+                                        name="ambiente"
+                                        required
+                                    >
+                                        <USelect
+                                            v-model="estado.ambiente"
+                                            :items="itemsAmbiente"
+                                            class="w-full"
+                                            data-prueba="fel-ambiente"
+                                        />
+                                    </UFormField>
+                                    <UFormField
+                                        label="Certificador"
+                                        name="proveedor"
+                                        :required="estado.modo !== 'desactivada'"
+                                    >
+                                        <USelect
+                                            v-model="estado.proveedor"
+                                            :items="itemsProveedor"
+                                            placeholder="Elige el certificador"
+                                            class="w-full"
+                                            data-prueba="fel-proveedor"
+                                        />
+                                    </UFormField>
+                                </div>
                                 <UFormField
-                                    label="Ambiente"
-                                    name="ambiente"
+                                    label="Modo de emisión"
+                                    name="modo"
                                     required
                                 >
-                                    <USelect
-                                        v-model="estado.ambiente"
-                                        :items="itemsAmbiente"
-                                        class="w-full"
-                                        data-prueba="fel-ambiente"
+                                    <URadioGroup
+                                        v-model="estado.modo"
+                                        :items="itemsModo"
+                                        variant="card"
+                                        indicator="start"
+                                        :ui="{ fieldset: 'grid gap-2' }"
+                                        data-prueba="fel-modos"
                                     />
                                 </UFormField>
-                                <UFormField
-                                    label="Certificador"
-                                    name="proveedor"
-                                    :required="estado.modo !== 'desactivada'"
-                                >
-                                    <USelect
-                                        v-model="estado.proveedor"
-                                        :items="itemsProveedor"
-                                        placeholder="Elige el certificador"
-                                        class="w-full"
-                                        data-prueba="fel-proveedor"
-                                    />
-                                </UFormField>
-                            </div>
-                            <UFormField
-                                label="Modo de emisión"
-                                name="modo"
-                                required
-                            >
-                                <URadioGroup
-                                    v-model="estado.modo"
-                                    :items="itemsModo"
-                                    variant="card"
-                                    indicator="start"
-                                    :ui="{ fieldset: 'grid gap-2 lg:grid-cols-3' }"
-                                    data-prueba="fel-modos"
+                                <UAlert
+                                    v-if="avisos !== null"
+                                    color="error"
+                                    variant="subtle"
+                                    icon="i-lucide-receipt-text"
+                                    :title="`${avisos} avisos de cobro sin certificar`"
+                                    :description="problemaGuardar?.detail"
+                                    data-prueba="fel-avisos-por-certificar"
                                 />
-                            </UFormField>
+                                <ProblemaAlerta
+                                    v-else-if="problemaGuardar"
+                                    :problema="problemaGuardar"
+                                    data-prueba="fel-guardar-error"
+                                />
+                            </UForm>
+                        </ConfiguracionBloque>
 
-                            <UAlert
-                                v-if="avisos !== null"
-                                color="error"
-                                variant="subtle"
-                                icon="i-lucide-receipt-text"
-                                :title="`${avisos} avisos de cobro sin certificar`"
-                                :description="problemaGuardar?.detail"
-                                data-prueba="fel-avisos-por-certificar"
-                            />
-                            <ProblemaAlerta
-                                v-else-if="problemaGuardar"
-                                :problema="problemaGuardar"
-                                data-prueba="fel-guardar-error"
-                            />
+                        <ConfiguracionBloque
+                            v-if="puede('plantillas.ver')"
+                            titulo="Qué se certifica"
+                            icono="i-lucide-file-check"
+                        >
+                            <FelCertificarAl :modo="configuracion.modo" />
+                        </ConfiguracionBloque>
+                    </div>
 
-                            <div class="flex flex-wrap justify-end gap-2">
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <ConfiguracionBloque
+                            titulo="Contingencia"
+                            icono="i-lucide-triangle-alert"
+                        >
+                            <div class="flex flex-col gap-3 py-2">
+                                <UAlert
+                                    :color="configuracion.contingencia_activa ? 'warning' : 'success'"
+                                    variant="subtle"
+                                    :icon="configuracion.contingencia_activa ? 'i-lucide-cloud-off' : 'i-lucide-circle-check'"
+                                    :title="configuracion.contingencia_activa ? `En contingencia desde ${configuracion.contingencia_desde ? formatearFechaHora(configuracion.contingencia_desde) : '—'}` : 'Sin contingencia: los documentos se certifican al emitirse.'"
+                                    :description="configuracion.contingencia_motivo ? `${configuracion.contingencia_activa ? 'Motivo' : 'Último motivo'}: ${configuracion.contingencia_motivo}` : undefined"
+                                />
+                                <UBadge
+                                    :label="configuracion.contingencia_activa ? 'Activa' : 'Inactiva'"
+                                    :icon="configuracion.contingencia_activa ? 'i-lucide-cloud-off' : 'i-lucide-cloud'"
+                                    :color="configuracion.contingencia_activa ? 'warning' : 'success'"
+                                    variant="subtle"
+                                    class="sr-only"
+                                    data-prueba="contingencia-estado"
+                                />
+                                <p class="text-xs text-muted">
+                                    Cuando el certificador no responde, las facturas se emiten igual y sus DTE esperan en cola hasta levantarla.
+                                </p>
                                 <UButton
-                                    v-if="cambios"
-                                    label="Descartar"
-                                    color="neutral"
-                                    variant="ghost"
-                                    :disabled="guardando"
-                                    @click="reiniciarFormulario(configuracion)"
-                                />
-                                <UButton
-                                    type="submit"
-                                    label="Guardar"
-                                    icon="i-lucide-save"
-                                    :loading="guardando"
-                                    :disabled="!cambios"
-                                    class="glow-brand"
-                                    data-prueba="fel-guardar"
+                                    v-if="puede('fel.contingencia')"
+                                    :label="configuracion.contingencia_activa ? 'Levantar contingencia' : 'Activar contingencia'"
+                                    :icon="configuracion.contingencia_activa ? 'i-lucide-cloud' : 'i-lucide-cloud-off'"
+                                    :color="configuracion.contingencia_activa ? 'primary' : 'warning'"
+                                    variant="outline"
+                                    class="self-start"
+                                    :disabled="configuracion.modo === 'desactivada'"
+                                    data-prueba="contingencia-abrir"
+                                    @click="contingenciaAbierta = true"
                                 />
                             </div>
-                        </UForm>
-                    </UPageCard>
+                        </ConfiguracionBloque>
 
-                    <ProblemaAlerta
-                        v-if="problemaCatalogo"
-                        :problema="problemaCatalogo"
-                        :reintentar="cargarCatalogo"
-                        data-prueba="fel-catalogo-error"
-                    />
-                    <UPageCard
-                        title="Credenciales"
-                        description="De solo escritura: la API nunca las devuelve. Aquí solo se ve si están guardadas, el usuario y la última prueba."
-                        icon="i-lucide-key-round"
-                        variant="subtle"
-                    >
-                        <div class="grid gap-3 lg:grid-cols-2">
+                        <ConfiguracionBloque
+                            titulo="Credenciales"
+                            icono="i-lucide-key-round"
+                            descripcion="Cifradas y de solo escritura: la API nunca las devuelve. Aquí se ve si están guardadas y su última prueba."
+                        >
                             <div
                                 v-for="ambiente in AMBIENTES"
                                 :key="ambiente"
-                                class="flex flex-col gap-3 rounded-lg border border-default p-3"
+                                class="flex flex-col gap-2 py-3"
                                 :data-credenciales="ambiente"
                             >
                                 <div class="flex flex-wrap items-center justify-between gap-2">
@@ -437,7 +454,7 @@ onMounted(() => {
                                     class="flex flex-wrap gap-2"
                                 >
                                     <UButton
-                                        :label="credencialesDe(ambiente) ? 'Reemplazar' : 'Guardar credenciales'"
+                                        :label="credencialesDe(ambiente) ? 'Cambiar' : 'Guardar credenciales'"
                                         icon="i-lucide-key-round"
                                         color="neutral"
                                         variant="outline"
@@ -459,80 +476,59 @@ onMounted(() => {
                                     />
                                 </div>
                             </div>
-                        </div>
-                    </UPageCard>
+                        </ConfiguracionBloque>
+                    </div>
+                </div>
 
-                    <UPageCard
-                        title="Contingencia"
-                        description="Cuando el certificador no responde: las facturas se emiten igual y sus DTE esperan en cola hasta levantarla. Procedimiento y plazo oficiales: confirmar con contador."
-                        icon="i-lucide-cloud-off"
-                        variant="subtle"
-                    >
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex flex-col gap-1">
-                                <UBadge
-                                    :label="configuracion.contingencia_activa ? 'Activa' : 'Inactiva'"
-                                    :icon="configuracion.contingencia_activa ? 'i-lucide-cloud-off' : 'i-lucide-cloud'"
-                                    :color="configuracion.contingencia_activa ? 'warning' : 'success'"
-                                    variant="subtle"
-                                    class="self-start"
-                                    data-prueba="contingencia-estado"
-                                />
-                                <span
-                                    v-if="configuracion.contingencia_motivo"
-                                    class="text-xs text-muted"
-                                >
-                                    {{ configuracion.contingencia_activa ? 'Motivo' : 'Último motivo' }}: {{ configuracion.contingencia_motivo }}
-                                </span>
-                            </div>
-                            <UButton
-                                v-if="puede('fel.contingencia')"
-                                :label="configuracion.contingencia_activa ? 'Levantar contingencia' : 'Activar contingencia'"
-                                :icon="configuracion.contingencia_activa ? 'i-lucide-cloud' : 'i-lucide-cloud-off'"
-                                :color="configuracion.contingencia_activa ? 'primary' : 'warning'"
-                                variant="outline"
-                                :disabled="configuracion.modo === 'desactivada'"
-                                data-prueba="contingencia-abrir"
-                                @click="contingenciaAbierta = true"
-                            />
-                        </div>
-                    </UPageCard>
+                <FelCredencialesModal
+                    v-if="puede('fel.configurar') && proveedorCredenciales"
+                    v-model:open="credencialesAbiertas"
+                    :empresa-id="empresaId"
+                    :ambiente="ambienteCredenciales"
+                    :proveedor="proveedorCredenciales"
+                    @hecho="alGuardarCredenciales"
+                />
 
-                    <UPageCard
-                        v-if="puede('plantillas.ver')"
-                        title="Momento de certificar"
-                        icon="i-lucide-calendar-check"
-                        variant="subtle"
-                    >
-                        <FelCertificarAl :modo="configuracion.modo" />
-                    </UPageCard>
-
-                    <FelCredencialesModal
-                        v-if="puede('fel.configurar') && proveedorCredenciales"
-                        v-model:open="credencialesAbiertas"
-                        :empresa-id="empresaId"
-                        :ambiente="ambienteCredenciales"
-                        :proveedor="proveedorCredenciales"
-                        @hecho="alGuardarCredenciales"
-                    />
-
-                    <AccionMotivoModal
-                        v-if="puede('fel.contingencia')"
-                        v-model:open="contingenciaAbierta"
-                        :titulo="configuracion.contingencia_activa ? 'Levantar contingencia' : 'Activar contingencia'"
-                        :descripcion="empresa?.nombre_comercial"
-                        :efecto="configuracion.contingencia_activa
-                            ? 'La cola transmite al certificador los DTE que quedaron en contingencia.'
-                            : 'Las facturas nuevas se emiten (asiento y evento) y su DTE queda en contingencia, en cola hasta levantarla.'"
-                        :confirmar="configuracion.contingencia_activa ? 'Levantar' : 'Activar'"
-                        :icono="configuracion.contingencia_activa ? 'i-lucide-cloud' : 'i-lucide-cloud-off'"
-                        :color="configuracion.contingencia_activa ? 'primary' : 'warning'"
-                        placeholder="Ej.: el certificador no responde desde las 8:00"
-                        :ejecutar="cambiarContingencia"
-                        @hecho="alCambiarContingencia"
-                    />
-                </template>
+                <AccionMotivoModal
+                    v-if="puede('fel.contingencia')"
+                    v-model:open="contingenciaAbierta"
+                    :titulo="configuracion.contingencia_activa ? 'Levantar contingencia' : 'Activar contingencia'"
+                    :descripcion="empresa?.nombre_comercial"
+                    :efecto="configuracion.contingencia_activa
+                        ? 'La cola transmite al certificador los DTE que quedaron en contingencia.'
+                        : 'Las facturas nuevas se emiten (asiento y evento) y su DTE queda en contingencia, en cola hasta levantarla.'"
+                    :confirmar="configuracion.contingencia_activa ? 'Levantar' : 'Activar'"
+                    :icono="configuracion.contingencia_activa ? 'i-lucide-cloud' : 'i-lucide-cloud-off'"
+                    :color="configuracion.contingencia_activa ? 'primary' : 'warning'"
+                    placeholder="Ej.: el certificador no responde desde las 8:00"
+                    :ejecutar="cambiarContingencia"
+                    @hecho="alCambiarContingencia"
+                />
             </template>
-        </div>
-    </PanelPagina>
+        </template>
+
+        <template
+            v-if="configuracion && puede('fel.configurar')"
+            #pie
+        >
+            <span class="me-auto text-sm text-muted">Cada empresa tiene su NIT, sus cuentas y su libro. Nada se mezcla entre empresas.</span>
+            <UButton
+                label="Descartar"
+                color="neutral"
+                variant="ghost"
+                :disabled="!cambios || guardando"
+                @click="reiniciarFormulario(configuracion)"
+            />
+            <UButton
+                type="submit"
+                :form="idFormulario"
+                label="Guardar"
+                icon="i-lucide-check"
+                :loading="guardando"
+                :disabled="!cambios"
+                class="glow-brand"
+                data-prueba="fel-guardar"
+            />
+        </template>
+    </ConfiguracionMarco>
 </template>

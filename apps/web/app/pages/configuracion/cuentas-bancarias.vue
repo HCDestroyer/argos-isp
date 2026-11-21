@@ -34,14 +34,23 @@ const editando = shallowRef<CuentaBancaria | null>(null)
 const abierto = ref(false)
 
 const columnas: TableColumn<CuentaBancaria>[] = [
-    { accessorKey: 'alias', header: 'Cuenta' },
+    { accessorKey: 'banco_nombre', header: 'Banco' },
     { accessorKey: 'numero', header: 'Número', meta: SOLO_ANCHO },
-    { accessorKey: 'titular', header: 'Titular y tipo', meta: SOLO_ESCRITORIO },
-    { accessorKey: 'moneda', header: 'Moneda', meta: SOLO_ESCRITORIO },
-    { accessorKey: 'cuenta_codigo', header: 'Subcuenta', meta: SOLO_ESCRITORIO },
-    { accessorKey: 'activa', header: 'Estado' },
+    { accessorKey: 'tipo', header: 'Tipo', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'alias', header: 'Alias', meta: SOLO_ESCRITORIO },
+    { id: 'ofrece', header: 'Se ofrece al cliente', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'activa', header: 'Activa' },
     { id: 'acciones', header: '', meta: { class: { th: 'w-0', td: 'text-right' } } },
 ]
+
+/** Las activas en quetzales son las que el cobro, el portal e Iris ofrecen al cliente. */
+function seOfrece(cuenta: CuentaBancaria): boolean {
+    return cuenta.activa && cuenta.moneda === 'GTQ'
+}
+
+const menuFila = useMenuFila<CuentaBancaria>(cuenta => (puede('cuentas_bancarias.editar')
+    ? [{ etiqueta: 'Editar cuenta', icono: ICONOS.editar, alElegir: () => editar(cuenta) }]
+    : []))
 
 async function cargar() {
     cargando.value = true
@@ -103,75 +112,91 @@ onMounted(() => {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="cuentas-bancarias"
-        titulo="Cuentas bancarias"
-        icono="i-lucide-landmark"
+        titulo="Facturación y cobro"
+        descripcion="Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos"
+        empresas
     >
-        <template #acciones>
-            <UButton
-                v-if="puede('cuentas_bancarias.editar')"
-                label="Nueva cuenta"
-                icon="i-lucide-plus"
-                aria-label="Nueva cuenta"
-                :ui="{ label: 'hidden sm:inline' }"
-                @click="nueva"
+        <template #cabecera>
+            <UTabs
+                v-model="filtro"
+                :items="itemsFiltro"
+                :content="false"
+                size="xs"
+                variant="link"
+                aria-label="Filtrar por estado"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Cuentas propias donde entran depósitos, transferencias, ACH y remesas. Las activas en quetzales aparecen en el cobro y en el portal.
-            </p>
-            <div class="flex flex-wrap items-center gap-2">
-                <UTabs
-                    v-model="filtro"
-                    :items="itemsFiltro"
-                    :content="false"
-                    size="sm"
-                    aria-label="Filtrar por estado"
-                />
-            </div>
-
-            <ProblemaAlerta
-                v-if="problemaBancos && puede('cuentas_bancarias.editar')"
-                :problema="problemaBancos"
-                :reintentar="cargarBancos"
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <UAlert
+                color="primary"
+                variant="subtle"
+                icon="i-lucide-info"
+                description="Estas son las cuentas donde depositan los clientes. Argos es la única fuente: el portal, caja e Iris leen esta lista."
+                class="flex-1"
             />
-
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
+            <UButton
+                v-if="puede('cuentas_bancarias.editar')"
+                label="Agregar cuenta"
+                icon="i-lucide-plus"
+                class="glow-brand self-start sm:self-center"
+                aria-label="Nueva cuenta"
+                @click="nueva"
             />
+        </div>
+
+        <ProblemaAlerta
+            v-if="problemaBancos && puede('cuentas_bancarias.editar')"
+            :problema="problemaBancos"
+            :reintentar="cargarBancos"
+        />
+
+        <ProblemaAlerta
+            v-if="problema"
+            :problema="problema"
+            :reintentar="cargar"
+            :reintentando="cargando"
+        />
+        <UContextMenu
+            v-else
+            :items="menuFila.items.value"
+        >
             <UTable
-                v-else
                 :data="cuentas"
                 :columns="columnas"
                 :loading="cargando"
                 :empty="leidas ? 'No hay cuentas bancarias con este filtro.' : ''"
+                class="-mx-4"
+                @contextmenu="menuFila.alContextmenu"
             >
-                <template #alias-cell="{ row }">
+                <template #banco_nombre-cell="{ row }">
                     <div
-                        class="flex min-w-0 flex-col"
+                        class="flex min-w-0 items-center gap-3"
                         :data-cuenta="row.original.id"
                     >
-                        <span class="font-medium text-highlighted">{{ row.original.banco_nombre }} · {{ row.original.alias }}</span>
-                        <span class="font-mono text-xs text-muted sm:hidden">{{ row.original.numero }} · {{ row.original.moneda }}</span>
+                        <span class="pastilla-icono tono-marca pastilla-tono">
+                            <UIcon
+                                name="i-lucide-landmark"
+                                class="size-4"
+                            />
+                        </span>
+                        <div class="flex min-w-0 flex-col">
+                            <span class="font-semibold text-highlighted">{{ row.original.banco_nombre }}</span>
+                            <span class="text-xs text-muted lg:hidden">{{ row.original.alias }}</span>
+                            <span class="font-mono text-xs text-muted sm:hidden">{{ row.original.numero }} · {{ row.original.moneda }}</span>
+                        </div>
                     </div>
                 </template>
                 <template #numero-cell="{ row }">
-                    <span class="font-mono">{{ row.original.numero }}</span>
+                    <span
+                        class="font-mono"
+                        data-copiar
+                    >{{ row.original.numero }}</span>
                 </template>
-                <template #titular-cell="{ row }">
-                    <div
-                        v-if="row.original.titular || row.original.tipo"
-                        class="flex flex-col"
-                    >
-                        <span>{{ row.original.titular ?? 'Sin titular' }}</span>
-                        <span class="text-xs text-muted">{{ row.original.tipo ? TIPOS_CUENTA_BANCARIA[row.original.tipo] : 'Sin tipo' }}</span>
-                    </div>
+                <template #tipo-cell="{ row }">
+                    <span v-if="row.original.tipo">{{ TIPOS_CUENTA_BANCARIA[row.original.tipo] }} · {{ row.original.moneda }}</span>
                     <UBadge
                         v-else
                         label="Falta titular y tipo"
@@ -182,8 +207,20 @@ onMounted(() => {
                         data-prueba="cuenta-sin-titular"
                     />
                 </template>
-                <template #cuenta_codigo-cell="{ row }">
-                    <span class="font-mono text-muted">{{ row.original.cuenta_codigo }}</span>
+                <template #alias-cell="{ row }">
+                    <div class="flex flex-col">
+                        <span>{{ row.original.alias }}</span>
+                        <span class="font-mono text-xs text-muted">{{ row.original.cuenta_codigo }}</span>
+                    </div>
+                </template>
+                <template #ofrece-cell="{ row }">
+                    <UBadge
+                        :label="seOfrece(row.original) ? 'Sí' : 'No'"
+                        :icon="seOfrece(row.original) ? 'i-lucide-eye' : 'i-lucide-eye-off'"
+                        :color="seOfrece(row.original) ? 'success' : 'neutral'"
+                        variant="subtle"
+                        size="sm"
+                    />
                 </template>
                 <template #activa-cell="{ row }">
                     <UBadge
@@ -194,18 +231,21 @@ onMounted(() => {
                     />
                 </template>
                 <template #acciones-cell="{ row }">
-                    <UButton
+                    <UDropdownMenu
                         v-if="puede('cuentas_bancarias.editar')"
-                        icon="i-lucide-pencil"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        :aria-label="`Editar ${row.original.alias}`"
-                        @click="editar(row.original)"
-                    />
+                        :items="menuFila.itemsDe(row.original)"
+                    >
+                        <UButton
+                            icon="i-lucide-ellipsis"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            :aria-label="`Acciones de ${row.original.alias}`"
+                        />
+                    </UDropdownMenu>
                 </template>
             </UTable>
-        </div>
+        </UContextMenu>
 
         <CuentaBancariaFormulario
             v-if="puede('cuentas_bancarias.editar')"
@@ -215,5 +255,5 @@ onMounted(() => {
             @guardada="alGuardar"
             @recargar="recargarEditada"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

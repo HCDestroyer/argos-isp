@@ -214,7 +214,9 @@ describe('iris · pantalla', () => {
         const vista = await mountSuspended(conApp(PaginaIntegraciones), { route: '/configuracion/integraciones' })
         await esperar(() => expect(vista.find('[data-prueba="estado-tarjeta-iris"]').text()).toBe('Sin conectar'))
         expect(vista.get('[data-prueba="configurar-iris"]').attributes('href')).toBe('/configuracion/integraciones/iris')
-        expect(vista.find('[data-prueba="tarjeta-horus"]').exists()).toBe(true)
+        // Lista y detalle (tablero OperConfigIntegraciones): Horus está en la lista; su panel se abre al elegirlo.
+        expect(vista.find('[data-integracion="horus"]').exists()).toBe(true)
+        expect(vista.find('[data-prueba="tarjeta-horus"]').exists()).toBe(false)
 
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'iris.ver') }
         const sinIris = await mountSuspended(conApp(PaginaIntegraciones), { route: '/configuracion/integraciones' })
@@ -229,7 +231,7 @@ describe('iris · pantalla', () => {
         expect(puede(obtenerSeccion('integraciones').permiso)).toBe(true)
         const vista = await mountSuspended(conApp(PaginaIntegraciones), { route: '/configuracion/integraciones' })
         await esperar(() => expect(vista.find('[data-prueba="estado-tarjeta-iris"]').text()).toBe('Sin conectar'))
-        expect(vista.find('[data-prueba="tarjeta-horus"]').exists()).toBe(false)
+        expect(vista.find('[data-integracion="horus"]').exists()).toBe(false)
 
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['horus.ver', 'iris.ver'].includes(p)) }
         expect(puedeAbrir('/configuracion/integraciones')).toBe(false)
