@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { configIris } from '#integraciones/iris/configuracion'
+import { configIris, conectorAdmite } from '#integraciones/iris/configuracion'
 import { REINTENTOS_S } from '#integraciones/webhooks_salientes'
 import { estadoConectorWhatsapp, type EstadoWhatsapp } from '#notify/whatsapp'
 import { configPara } from '#notify/configuracion'
 import { esTransitorioIris } from '#notify/idempotencia_iris'
+import { enmascararTelefono } from '#notify/contactos'
 
 /**
  * Permisos de contacto por WhatsApp hacia Iris (contrato Iris 0.6.0 §6.4). La acción
@@ -31,9 +33,22 @@ export function claveConsentimiento(
     clienteId: number,
     canal: string,
     ocurridoEn: string,
+    telefono: string | null = null,
 ): string {
-    return `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${ocurridoEn}`
+    // Por número (0.10.0, A42; clave acordada con Iris para el contrato 0.12.1): dos números a la vez
+    // son dos permisos, pero el número nunca va en claro en la clave, solo su huella
+    return telefono
+        ? `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${huellaTelefono(telefono)}:${ocurridoEn}`
+        : `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${ocurridoEn}`
 }
+
+/** Primeros 16 caracteres hexadecimales del sha256 del número en E.164 (clave del permiso por número). */
+export function huellaTelefono(telefono: string): string {
+    return createHash('sha256').update(telefono, 'utf8').digest('hex').slice(0, 16)
+}
+
+/** Contrato desde el que Iris acepta `telefono` en el permiso de contacto (§6.4, A42). */
+export const CONTRATO_CONSENTIMIENTO_POR_NUMERO = '0.10.0'
 
 export interface VistaConsentimiento {
     id: number
@@ -43,6 +58,8 @@ export interface VistaConsentimiento {
     estado: 'acepta' | 'baja'
     origen: 'argos_panel' | 'argos_portal'
     ocurrido_en: string
+    /** número de un contacto (E.164) o null = el permiso del cliente */
+    telefono: string | null
     idempotency_key: string
     /** `pendiente` (en la cola hacia Iris), `enviado` o `fallido` */
     entrega: 'pendiente' | 'enviado' | 'fallido'
@@ -63,6 +80,7 @@ interface FilaConsentimiento {
     estado: 'acepta' | 'baja'
     origen: 'argos_panel' | 'argos_portal'
     ocurrido_en: Date
+    telefono: string | null
     idempotency_key: string
     entrega: 'pendiente' | 'enviado' | 'fallido'
     intentos: number
@@ -80,6 +98,7 @@ const COLUMNAS = [
     'estado',
     'origen',
     'ocurrido_en',
+    'telefono',
     'idempotency_key',
     'entrega',
     'intentos',
@@ -98,6 +117,7 @@ function vista(f: FilaConsentimiento): VistaConsentimiento {
         estado: f.estado,
         origen: f.origen,
         ocurrido_en: new Date(f.ocurrido_en).toISOString(),
+        telefono: f.telefono ?? null,
         idempotency_key: f.idempotency_key,
         entrega: f.entrega,
         intentos: Number(f.intentos),
@@ -122,7 +142,12 @@ export async function verConsentimiento(
 
 /** Cuerpo exacto de `POST /mensajeria/consentimientos` (§6.4, forma de Iris 0.6.1). */
 export function cuerpoConsentimiento(
-    f: Pick<VistaConsentimiento, 'empresa_id' | 'cliente_id' | 'canal' | 'estado' | 'origen' | 'ocurrido_en'>,
+    f: Pick<
+        VistaConsentimiento,
+        'empresa_id' | 'cliente_id' | 'canal' | 'estado' | 'origen' | 'ocurrido_en'
+    > & {
+        telefono?: string | null
+    },
 ) {
     return JSON.stringify({
         empresa_id: f.empresa_id,
@@ -131,6 +156,8 @@ export function cuerpoConsentimiento(
         estado: f.estado,
         origen: f.origen,
         ocurrido_en: f.ocurrido_en,
+        // 0.10.0 (A42, §6.4): el permiso de un número de contacto
+        ...(f.telefono ? { telefono: f.telefono } : {}),
     })
 }
 
@@ -177,10 +204,16 @@ export async function entregarConsentimientosIris(
         resultado.en_espera = pendientes.length
         return resultado
     }
+    // El permiso por número solo sale a un Iris que lo entiende (≥ 0.10.0); si no, espera
+    const porNumero = await conectorAdmite(CONTRATO_CONSENTIMIENTO_POR_NUMERO)
     const url = `${config.urlBase.replace(/\/+$/, '')}/api/v1/mensajeria/consentimientos`
 
     for (const fila of pendientes) {
         const datos = vista(fila)
+        if (datos.telefono && !porNumero) {
+            resultado.en_espera++
+            continue
+        }
         // Toma la fila: otra réplica del worker no la manda a la vez
         const tomada = await db
             .from('notify.consentimientos_iris')
@@ -242,6 +275,8 @@ export async function entregarConsentimientosIris(
             resultado.enviados++
             continue
         }
+        // Si Iris repite el número en su error, no queda en claro ni en la fila ni en el log
+        if (datos.telefono) error = error.replaceAll(datos.telefono, enmascararTelefono(datos.telefono))
         const espera = REINTENTOS_S[intento - 1]
         const definitivo = !reintentable || espera === undefined
         await db

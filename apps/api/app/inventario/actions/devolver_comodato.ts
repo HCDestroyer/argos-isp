@@ -29,6 +29,15 @@ import {
     servicioDe,
     unidadVista,
 } from '#inventario/comodato'
+import {
+    accesoDelTecnico,
+    exigirActorDeCuadrilla,
+    exigirBodegaDelTecnico,
+    fechaKardexDe,
+    idIrisDelActor,
+    momentoDeLaOperacion,
+} from '#inventario/cuadrillas'
+import { fijarActorTecnico } from '#inventario/actor_tecnico'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 
@@ -55,6 +64,9 @@ export interface EntradaDevolverComodato {
     /** la bodega que recibe; o, con `tecnico` (contrato Iris 0.5.0), la del técnico en la empresa del servicio */
     bodega_id?: number | null
     tecnico?: TecnicoExterno | null
+    /** `X-Iris-Actor` (de la cabecera) y la ventana de Iris 0.12.0 */
+    iris_actor?: string | null
+    recibido_en_iris?: string | null
     condicion?: Condicion | null
     en_reparacion?: boolean | null
     fecha?: string | null
@@ -74,8 +86,9 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
         t.fijarEmpresa(empresaId)
         const servicio = await servicioDe(t, input.servicio_id, empresaId)
         let bodegaId = input.bodega_id ?? null
-        if (!bodegaId && input.tecnico) {
-            bodegaId = await bodegaDelTecnico(t.trx, await resolverTecnico(t, input.tecnico), empresaId)
+        if (input.tecnico) {
+            // A47: vuelve primero a la cuadrilla del técnico (si es miembro) y si no a su bodega personal
+            bodegaId = await bodegaDeDevolucion(t, input, empresaId)
         }
         if (!bodegaId) {
             throw new ValidacionFallida([
@@ -93,7 +106,7 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
             campo: 'unidad_id',
         })
         exigirEnComodatoDe(unidad!, servicio.id)
-        const fecha = await fechaDeComodato(t, unidad!.id, input.fecha)
+        const fecha = await fechaDeComodato(t, unidad!.id, fechaKardexDe(input))
         const activoId = unidad!.activo_id!
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ACTIVO, activoId])
         await new DepreciarActivos().execute(
@@ -220,4 +233,37 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
         })
         return unidadVista(unidad!.id, t)
     }
+}
+
+/**
+ * Bodega que recibe la devolución pedida por un técnico (A47 §3.9): la indicada (su personal o una
+ * cuadrilla de la que es miembro: 403 `no_es_miembro`) o, sin ella, primero su cuadrilla y después la
+ * personal. Sobre una cuadrilla exige el actor y lo fija en el movimiento.
+ */
+async function bodegaDeDevolucion(
+    t: Transaccion,
+    input: EntradaDevolverComodato,
+    empresaId: number,
+): Promise<number> {
+    const usuarioId = await resolverTecnico(t, input.tecnico!)
+    const momento = momentoDeLaOperacion(input)
+    const acceso = await accesoDelTecnico(t.trx, usuarioId, empresaId, momento.instante)
+    let bodegaId: number
+    if (input.bodega_id) {
+        await exigirBodegaDelTecnico(t, input.bodega_id, acceso, empresaId)
+        bodegaId = input.bodega_id
+    } else if (acceso.bodegas.length > 0) {
+        bodegaId = acceso.bodegas[0]!
+    } else {
+        bodegaId = await bodegaDelTecnico(t.trx, usuarioId, empresaId)
+    }
+    let actor: string | null = null
+    if (acceso.cuadrillas.includes(bodegaId)) actor = await exigirActorDeCuadrilla(t, bodegaId, input, acceso)
+    const idIris = idIrisDelActor(input.iris_actor)
+    fijarActorTecnico(t, {
+        actor: actor ?? (idIris ? `usuario:${idIris}` : null),
+        usuarioId,
+        ocurridoEn: momento.ocurridoEn,
+    })
+    return bodegaId
 }

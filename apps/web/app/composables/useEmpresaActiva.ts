@@ -51,6 +51,8 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/fiscal/establecimientos',
     '/api/v1/fiscal/obligaciones',
     '/api/v1/fiscal/tablero',
+    '/api/v1/inventario/cobros-equipo',
+    '/api/v1/inventario/cobros-equipo/pendientes-declarar',
     '/api/v1/inventario/conteos',
     '/api/v1/inventario/existencias',
     '/api/v1/inventario/mi-bodega',

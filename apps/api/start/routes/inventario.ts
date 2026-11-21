@@ -19,6 +19,7 @@ import {
     ConteoInventario,
     ConteoInventarioDetalle,
     InventarioValorizado,
+    MiembrosCuadrilla,
     EquipoServicio,
     Existencia,
     MovimientoInventario,
@@ -26,20 +27,25 @@ import {
     ProductosLote,
     TrasladoInventario,
     Unidad,
-    UnidadConHistorial,
+    UnidadDetalle,
+    UnidadEquipoIris,
 } from '#inventario/esquemas'
 import { lista } from '#shared/openapi/esquemas'
 import { exigirServicio } from '#core/acceso_empresa'
-import { empresaDeUnidad, historialUnidad, listarUnidades } from '#inventario/unidades'
+import { empresaDeUnidad, listarUnidades } from '#inventario/unidades'
 import { equiposDelServicio, equiposPorRecuperar, unidadParaComodato } from '#inventario/comodato'
 import AsignarComodato from '#inventario/actions/asignar_comodato'
 import DevolverComodato from '#inventario/actions/devolver_comodato'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
 import { alcanceGlobal, listarBodegas, verBodega } from '#inventario/bodegas'
-import { Prohibido } from '#shared/errores'
+import { NoEncontrado, Prohibido, ValidacionFallida } from '#shared/errores'
+import { detalleUnidad, unidadParaIris } from '#inventario/unidad_detalle'
+import { esTokenIris } from '#integraciones/iris/atencion'
+import equiposA48 from '#start/routes/inventario_equipos'
+import { miembrosDeCuadrilla } from '#inventario/cuadrillas'
 import { exigirPermiso } from '#inventario/acceso_http'
-import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
+import { accesoBodegas, exigirActorIrisDeCampo, exigirBodega, irisActorDe } from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
 import CrearProductosLote from '#inventario/actions/crear_productos_lote'
@@ -201,6 +207,42 @@ const bodegas: Ruta[] = [
         },
     }),
     definirRuta({
+        metodo: 'get',
+        ruta: '/bodegas/:id/miembros',
+        operacion: 'bodegasMiembros',
+        resumen: 'Miembros vigentes de una bodega de cuadrilla (aceptados y rechazados) y su jefe',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        descripcion:
+            'Contrato Iris 0.11.0 §3.9 (A47): la membresía llega de Iris (cuadrilla.creada / cuadrilla.actualizada). Un miembro con aceptado = false es un miembro_rechazado (motivo: sin_vinculo, usuario_inexistente, usuario_inactivo, fuera_de_la_empresa, no_es_tecnico). 422 si la bodega no es de cuadrilla.',
+        respuesta: { status: 200, descripcion: 'Miembros de la cuadrilla', esquema: MiembrosCuadrilla },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirBodega(ctx, id)
+            const bodega = await verBodega(id)
+            if (bodega.tipo !== 'cuadrilla') {
+                throw new ValidacionFallida([
+                    { field: 'id', message: 'La bodega no es de cuadrilla', rule: 'no_es_cuadrilla' },
+                ])
+            }
+            const miembros = await miembrosDeCuadrilla(id)
+            return {
+                bodega_id: id,
+                cuadrilla_id_iris: bodega.cuadrilla_id_iris,
+                version: bodega.version,
+                jefe_id: bodega.jefe_id,
+                miembros: miembros.map((m) => ({
+                    iris_usuario_id: m.iris_usuario_id,
+                    usuario_id: m.usuario_id === null ? null : Number(m.usuario_id),
+                    nombre: m.nombre,
+                    aceptado: m.aceptado,
+                    motivo: m.motivo,
+                    desde: m.desde,
+                })),
+            }
+        },
+    }),
+    definirRuta({
         metodo: 'post',
         ruta: '/bodegas',
         operacion: 'bodegasCrear',
@@ -306,11 +348,14 @@ const operaciones: Ruta[] = [
         permiso: 'inventario.consumir',
         cuerpo: v.consumoValidator,
         idempotente: true,
-        descripcion: `Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
+        descripcion: `Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Bodega de cuadrilla (Iris 0.11.0 §3.9, A47): con tecnico y sin bodega_id, cada línea sale primero de sus cuadrillas y después de la personal (409 sin_existencia con bodegas[]: solo las suyas y lo pedido); con bodega_id, solo su personal o una cuadrilla de la que es miembro en fecha (403 no_es_miembro, con fuera_de_membresia en errors[].rule si lo fue), antes de mirar existencias. Sobre una cuadrilla: tecnico por id_externo, X-Iris-Actor: usuario:<id> obligatoria (400 cabecera_iris_requerida) y el mismo miembro que el técnico (403 actor_no_coincide); el movimiento guarda actor_tecnico. Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
         respuesta: { status: 201, descripcion: 'Consumo', esquema: ConsumoInventario },
         handler: async (ctx, { cuerpo }) => {
             await exigirBodegaDeConsumo(ctx, cuerpo)
-            return new ConsumirInventario().execute(cuerpo, ctx.contextoAccion())
+            return new ConsumirInventario().execute(
+                { ...cuerpo, iris_actor: irisActorDe(ctx) },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({
@@ -406,14 +451,51 @@ const unidades: Ruta[] = [
         metodo: 'get',
         ruta: '/inventario/unidades/:id',
         operacion: 'inventarioUnidadVer',
-        resumen: 'Una unidad con su historial en el kardex',
+        resumen: 'Una unidad con su kardex, el historial de su estado, garantías e intentos de recuperación',
         etiqueta: 'inventario',
         permiso: 'inventario.ver',
-        respuesta: { status: 200, descripcion: 'Unidad', esquema: UnidadConHistorial },
-        handler: async (ctx, { params }) => {
+        query: v.verUnidadValidator,
+        descripcion:
+            'Panel: UnidadInventarioDetalle (kardex, historial_estados, garantias, intentos, contactos). Con el token de Iris (contrato 0.12.0 §3.10, M5): exige además inventario.ver_unidad, X-Iris-Actor usuario:<id> (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido) y responde UnidadEquipoIris: serie, MAC, modelo, estado del equipo e historial (fecha, de, a, motivo), sin costos, proveedor ni RMA; servicio_id solo del servicio actual o del de la orden (?servicio_id=). Fuera de las empresas del token: 404. La misma vista, con su esquema, en GET /inventario/unidades/:id/equipo.',
+        respuesta: { status: 200, descripcion: 'Unidad', esquema: UnidadDetalle },
+        handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
+            if (esTokenIris(ctx)) {
+                exigirActorIrisDeCampo(ctx)
+                await exigirPermiso(ctx, 'inventario.ver_unidad')
+                try {
+                    await exigirUnidad(ctx, id)
+                } catch (error) {
+                    if (error instanceof NoEncontrado) throw error
+                    throw new NoEncontrado(`La unidad ${id} no existe`)
+                }
+                return unidadParaIris(id, query.servicio_id ?? null)
+            }
             await exigirUnidad(ctx, id)
-            return historialUnidad(id)
+            return detalleUnidad(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/unidades/:id/equipo',
+        operacion: 'inventarioUnidadEquipo',
+        resumen: 'Una unidad como la ve Iris: serie, MAC, modelo, estado del equipo e historial, sin costos',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver_unidad',
+        query: v.verUnidadValidator,
+        descripcion:
+            'Contrato Iris 0.12.0 §3.10 (M5): sin costos, proveedor ni RMA; servicio_id del historial solo el actual o el de la orden (?servicio_id=). Con el token de Iris exige X-Iris-Actor usuario:<id> (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido). Fuera del alcance: 404.',
+        respuesta: { status: 200, descripcion: 'Unidad', esquema: UnidadEquipoIris },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirActorIrisDeCampo(ctx)
+            try {
+                await exigirUnidad(ctx, id)
+            } catch (error) {
+                if (error instanceof NoEncontrado) throw error
+                throw new NoEncontrado(`La unidad ${id} no existe`)
+            }
+            return unidadParaIris(id, query.servicio_id ?? null)
         },
     }),
     definirRuta({
@@ -504,6 +586,8 @@ const comodato: Ruta[] = [
                     servicio_id: id,
                     origen_tipo: cuerpo.origen_tipo,
                     origen_id: cuerpo.origen_id,
+                    recibido_en_iris: cuerpo.recibido_en_iris,
+                    iris_actor: irisActorDe(ctx),
                 },
                 ctx.contextoAccion(),
             )
@@ -529,7 +613,12 @@ const comodato: Ruta[] = [
                 throw new Prohibido('Solo un usuario con alcance global indica la bodega por el técnico')
             }
             return new DevolverComodato().execute(
-                { ...cuerpo, servicio_id: id, unidad_id: Number(params.unidadId) },
+                {
+                    ...cuerpo,
+                    servicio_id: id,
+                    unidad_id: Number(params.unidadId),
+                    iris_actor: irisActorDe(ctx),
+                },
                 ctx.contextoAccion(),
             )
         },
@@ -547,6 +636,12 @@ const comodato: Ruta[] = [
             'Sin kardex: el activo se da de baja como retiro (pérdida en 5.3.06) y la unidad queda dada de baja. Cobrarlo al cliente es un cargo único aparte. 409 unidad_sin_comodato.',
         respuesta: { status: 200, descripcion: 'Unidad dada de baja', esquema: Unidad },
         handler: async (ctx, { cuerpo, params }) => {
+            // contrato Iris 0.12.0 §3.10 (§10.7 d): la pérdida la declara una persona en Argos, nunca Iris
+            if (esTokenIris(ctx)) {
+                throw new Prohibido(
+                    'Desde Iris 0.12.0 la pérdida la declara una persona en Argos: usa POST /servicios/:id/equipos/:unidad_id/no-recuperado',
+                )
+            }
             const id = Number(params.id)
             await exigirServicio(ctx, id)
             return new DeclararPerdidaComodato().execute(
@@ -674,5 +769,6 @@ export default [
     ...comprasFaseD,
     ...unidades,
     ...comodato,
+    ...equiposA48,
     ...conteos,
 ]

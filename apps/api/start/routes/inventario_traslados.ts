@@ -11,6 +11,8 @@
 */
 import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
+import { irisActorDe } from '#inventario/acceso_http'
+import { esTokenIris } from '#integraciones/iris/atencion'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { pagina } from '#shared/openapi/esquemas'
 import { EmpresaRequerida, empresasDeLaLista } from '#shared/empresa_activa'
@@ -201,7 +203,7 @@ const rutas: Ruta[] = [
         cuerpo: v.recibirTrasladoValidator,
         idempotente: true,
         descripcion:
-            'Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.',
+            'Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Bodega de cuadrilla (Iris 0.11.0 §3.9): la recibe el jefe que tenía la cuadrilla en recibido_en (según su historial) y que sigue siendo miembro; recibido_por y X-Iris-Actor deben ser ese jefe; si no, o sin jefe (el traslado espera), 403 solo_jefe_recibe. Emite inventario.traslado_recibido.',
         respuesta: { status: 200, descripcion: 'Orden de traslado', esquema: OrdenTrasladoDetalle },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
@@ -233,6 +235,8 @@ const rutas: Ruta[] = [
                     firma_sha256: cuerpo.firma?.sha256 ?? null,
                     firma_ip: ctx.request.ip(),
                     registro_global: alcanceGlobal(ctx.alcance),
+                    iris_actor: irisActorDe(ctx),
+                    token_iris: esTokenIris(ctx),
                 },
                 ctx.contextoAccion(),
             )

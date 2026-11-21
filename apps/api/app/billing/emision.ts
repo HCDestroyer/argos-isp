@@ -3,6 +3,7 @@ import type { Transaccion } from '#shared/domain_action'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
+import { extrasIrisFactura } from '#billing/iris_eventos'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { cuentaIngresoDeLinea, totalesDe, type LineaCalculada } from '#billing/facturas'
 import { aplicarAnticipos } from '#billing/cobros'
@@ -299,6 +300,7 @@ export async function contabilizarFactura(t: Transaccion, f: FacturaParaContabil
         cliente_id: f.cliente_id,
         total: f.total,
         vence: f.vence_en,
+        ...(await extrasIrisFactura(t.trx, f.id)),
     })
     await aplicarAnticipos(t, f.cliente_id, f.empresa_id)
 }
