@@ -333,9 +333,21 @@ export const Factura = definirEsquema(
                 ...nulable(id),
                 description: 'Factura original que esta sustituye; null si no es una sustituta',
             },
+            dias_gracia_corte: {
+                ...nulable(entero),
+                description:
+                    'Decisión del PM 21: días de gracia antes del corte que escribió quien emitió este mes pasado; null si no se escribieron',
+            },
+            corte_desde: {
+                ...nulable(fecha),
+                description:
+                    'Desde este día la factura cuenta para limitar o cortar (emisión + dias_gracia_corte); null = desde que vence',
+            },
             ...auditable,
         },
         [
+            'dias_gracia_corte',
+            'corte_desde',
             'sustituida_por',
             'sustituye_a',
             'origen_externo_tipo',

@@ -922,6 +922,10 @@ export const emitirFacturasPeriodoValidator = vine.compile(
                 description:
                     'Total a cobrar (con IVA) de periodos elegidos, si difiere del calculado: exige facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo (422 motivo_requerido); mayor que cero (422 monto_positivo). Igual al calculado = sin edición',
             }),
+        dias_gracia_corte: vine.number().withoutDecimals().range([0, 90]).nullable().optional().meta({
+            description:
+                'Decisión del PM 21: días de gracia antes del corte de los periodos pasados (los que empiezan antes de hoy). Quedan en cada factura (dias_gracia_corte y corte_desde = hoy + días) y evaluarEstadoServicio no las cuenta para limitar ni cortar antes de esa fecha. El vencimiento del documento y la mora no cambian. Sin el dato, como siempre',
+        }),
         tramo_inicial: vine
             .object({
                 modo: vine.enum(['primera_factura', 'cargo_unico'] as const),
