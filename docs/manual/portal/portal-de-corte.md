@@ -13,7 +13,7 @@ En esta pantalla decides a qué dirección mandan los routers a los clientes sus
 - **Ver:** permiso `portal_corte.ver` (roles `admin` y `lectura`).
 - **Guardar:** permiso `portal_corte.configurar` (solo `admin`). Sin él la pantalla dice «Solo lectura» y no muestra los botones.
 
-Está en **Configuración → Portal de corte**.
+Está en **Configuración → Red y portal → Portal de corte**.
 
 ## Qué ves
 
@@ -25,7 +25,7 @@ Está en **Configuración → Portal de corte**.
 - **Al suspender un servicio**, una de dos opciones:
     - «Desconectar la sesión» (recomendado): el equipo del cliente se vuelve a conectar ya suspendido y ve la página de corte de inmediato.
     - «Mantener la sesión y cambiar velocidad (CoA)»: el cliente no se desconecta; el router le cambia el perfil en caliente. Descargas o llamadas ya abiertas pueden seguir hasta que se cierren.
-- **Página de corte de cada empresa**: con `empresas.ver`, el botón «Ver la URL de corte de cada empresa» lleva a **Configuración → Empresas**, donde cada empresa puede usar la página de corte de Argos o una propia.
+- **Página de corte de cada empresa**: con `empresas.ver`, el botón «Ver la URL de corte de cada empresa» lleva a **Configuración → Empresa y fiscal → Empresas**, donde cada empresa puede usar la página de corte de Argos o una propia.
 
 ## Acciones
 

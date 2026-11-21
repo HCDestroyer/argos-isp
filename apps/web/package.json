@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=6144 nuxt typecheck",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "ayuda:indice": "node herramientas/indiceAyuda.mjs"
   },
   "dependencies": {
     "@argosisp/contracts": "workspace:*",

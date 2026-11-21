@@ -71,7 +71,7 @@ test('cambiar el usuario y la contraseña PPPoE', async ({ page }) => {
     await expect(panel).toBeHidden()
 
     // La ficha muestra el usuario nuevo y la contraseña nueva al pedirla (queda en la bitácora).
-    await expect(page.getByText('maria.nueva').first()).toBeVisible()
+    await expect(page.getByText('maria.nueva').filter({ visible: true }).first()).toBeVisible()
     await page.getByRole('button', { name: 'Mostrar' }).click()
     await expect(page.getByText(generada)).toBeVisible()
 })

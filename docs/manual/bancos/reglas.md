@@ -13,7 +13,7 @@ Una regla concilia sola las líneas del extracto que se repiten cada mes: comisi
 - **Ver:** `bancos.ver` (`admin`, `contabilidad`, `lectura`).
 - **Crear y editar:** `bancos.conciliar` (`admin`, `contabilidad`).
 
-Se llega desde **Bancos → Conciliación bancaria → Reglas**.
+Se llega desde **Finanzas → Bancos → Conciliación bancaria → Reglas**.
 
 ## Qué ves
 

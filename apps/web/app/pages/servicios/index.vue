@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
+import { h } from 'vue'
 
 definePageMeta({ permiso: 'servicios.ver' })
 
@@ -127,8 +128,56 @@ const columnas = computed<TableColumn<Servicio>[]>(() => {
         { accessorKey: 'router_id', header: 'Router', meta: SOLO_ESCRITORIO },
         { accessorKey: 'ipv4', header: 'Direcciones', meta: SOLO_ANCHO },
         { accessorKey: 'estado', header: 'Estado' },
+        { id: 'acciones', header: () => h('span', { class: 'sr-only' }, 'Acciones'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } },
     ]
 })
+
+/*
+ * Vista rápida (clic en la fila fuera de los enlaces) y acciones por fila: iconos con tooltip y
+ * menú contextual agrupado (clic derecho). Las acciones de estado viven en la ficha, con su motivo.
+ */
+const vistaAbierta = ref(false)
+const vistaServicio = shallowRef<Servicio | null>(null)
+const toastCopia = useToast()
+
+function abrirVista(servicio: Servicio) {
+    vistaServicio.value = servicio
+    vistaAbierta.value = true
+}
+
+async function copiar(texto: string, que: string) {
+    try {
+        await navigator.clipboard.writeText(texto)
+        toastCopia.add({ title: `${que} copiada`, description: texto, icon: 'i-lucide-copy-check', color: 'success' })
+    }
+    catch {
+        toastCopia.add({ title: `No se pudo copiar la ${que.toLowerCase()}`, description: texto, icon: 'i-lucide-circle-alert', color: 'error' })
+    }
+}
+
+function accionesServicio(servicio: Servicio): AccionFila[] {
+    const acciones: AccionFila[] = [
+        { etiqueta: 'Vista rápida', icono: ICONOS.vistaRapida, alElegir: () => abrirVista(servicio), grupo: 'Ver' },
+        { etiqueta: 'Abrir ficha del servicio', icono: ICONOS.abrir, to: `/servicios/${servicio.id}`, soloMenu: true, grupo: 'Ver' },
+    ]
+    if (enlace(`/clientes/${servicio.cliente_id}`)) {
+        acciones.push({ etiqueta: 'Abrir ficha del cliente', icono: 'i-lucide-user', to: `/clientes/${servicio.cliente_id}`, soloMenu: true, grupo: 'Ver' })
+    }
+    if (puede('pagos.registrar')) {
+        acciones.push({ etiqueta: 'Cobrar al cliente', icono: ICONOS.cobrar, to: `/cobro?cliente=${servicio.cliente_id}`, grupo: 'Cobro' })
+    }
+    if (servicio.ipv4) {
+        const ip = servicio.ipv4
+        acciones.push({ etiqueta: 'Copiar IPv4', icono: ICONOS.copiar, alElegir: () => void copiar(ip, 'IPv4'), soloMenu: true, grupo: 'Red' })
+    }
+    return acciones
+}
+
+const menuFila = useMenuFila(accionesServicio)
+
+function alElegirFila(_evento: Event, fila: { original: Servicio }) {
+    abrirVista(fila.original)
+}
 
 const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || estado.value !== TODOS
@@ -409,110 +458,127 @@ onMounted(async () => {
                     />
                     Seguridad: {{ seguridad.pausa.value }}; se muestra el último dato conocido.
                 </p>
-                <UTable
-                    data-prueba="tabla-servicios"
-                    :data="filasVisibles"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    sticky
-                    class="flex-1"
-                    :ui="{
-                        td: 'py-3',
-                    }"
-                >
-                    <template #user_ppp-cell="{ row }">
-                        <div class="flex min-w-36 flex-col">
-                            <ULink
-                                :to="`/servicios/${row.original.id}`"
-                                class="font-mono text-sm font-medium text-highlighted hover:text-primary"
-                            >
-                                {{ etiquetaServicio(row.original) }}
-                            </ULink>
-                            <span class="text-xs text-muted">
-                                #{{ row.original.id }} · {{ nombrePlan(row.original) }}<template v-if="variasEmpresas"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
-                                <template v-if="!esPppoe(row.original)"> · {{ TIPOS_CONEXION[tipoConexionDe(row.original)].corta }}</template>
-                                <template v-if="row.original.costo_override"> · {{ formatearQuetzales(row.original.costo_override) }} precio especial</template>
-                            </span>
-                            <TipoPlanBadge
-                                :tipo="row.original.plan_tipo"
-                                size="sm"
-                                class="mt-1 self-start"
+                <UContextMenu :items="menuFila.items.value">
+                    <UTable
+                        data-prueba="tabla-servicios"
+                        :data="filasVisibles"
+                        :columns="columnas"
+                        :loading="lista.cargando.value"
+                        sticky
+                        class="flex-1"
+                        data-menu-contextual
+                        @select="alElegirFila"
+                        @contextmenu="menuFila.alContextmenu"
+                    >
+                        <template #acciones-cell="{ row }">
+                            <AccionesFila
+                                :acciones="accionesServicio(row.original)"
+                                :nombre="etiquetaServicio(row.original)"
                             />
-                            <span class="truncate text-xs text-muted sm:hidden">{{ nombreCliente(row.original) }}</span>
-                            <span
-                                v-if="row.original.ipv4"
-                                class="font-mono text-xs text-muted sm:hidden"
-                            >{{ row.original.ipv4 }}</span>
-                        </div>
-                    </template>
+                        </template>
 
-                    <template #cliente_id-cell="{ row }">
-                        <div class="flex min-w-32 flex-col">
-                            <ULink
-                                :to="enlace(`/clientes/${row.original.cliente_id}`)"
-                                class="text-sm text-default hover:text-primary"
-                            >
-                                {{ nombreCliente(row.original) }}
-                            </ULink>
-                            <span
-                                v-if="nombreZona(row.original)"
-                                class="text-xs text-muted"
-                            >{{ nombreZona(row.original) }}</span>
-                        </div>
-                    </template>
+                        <template #user_ppp-cell="{ row }">
+                            <div class="flex min-w-44 items-start gap-3">
+                                <span class="pastilla-icono tono-marca pastilla-tono hidden sm:inline-flex">
+                                    <UIcon
+                                        name="i-lucide-wifi"
+                                        class="size-5"
+                                    />
+                                </span>
+                                <div class="flex min-w-36 flex-col">
+                                    <ULink
+                                        :to="`/servicios/${row.original.id}`"
+                                        class="font-mono text-sm font-semibold text-highlighted hover:text-primary"
+                                    >
+                                        {{ etiquetaServicio(row.original) }}
+                                    </ULink>
+                                    <span class="text-xs text-muted">
+                                        #{{ row.original.id }} · {{ nombrePlan(row.original) }}<template v-if="variasEmpresas"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
+                                        <template v-if="!esPppoe(row.original)"> · {{ TIPOS_CONEXION[tipoConexionDe(row.original)].corta }}</template>
+                                        <template v-if="row.original.costo_override"> · {{ formatearQuetzales(row.original.costo_override) }} precio especial</template>
+                                    </span>
+                                    <TipoPlanBadge
+                                        :tipo="row.original.plan_tipo"
+                                        size="sm"
+                                        class="mt-1 self-start"
+                                    />
+                                    <span class="truncate text-xs text-muted sm:hidden">{{ nombreCliente(row.original) }}</span>
+                                    <span
+                                        v-if="row.original.ipv4"
+                                        class="font-mono text-xs text-muted sm:hidden"
+                                    >{{ row.original.ipv4 }}</span>
+                                </div>
+                            </div>
+                        </template>
 
-                    <template #router_id-cell="{ row }">
-                        <span class="text-sm">{{ nombreRouter(row.original) }}</span>
-                    </template>
+                        <template #cliente_id-cell="{ row }">
+                            <div class="flex min-w-32 flex-col">
+                                <ULink
+                                    :to="enlace(`/clientes/${row.original.cliente_id}`)"
+                                    class="text-sm text-default hover:text-primary"
+                                >
+                                    {{ nombreCliente(row.original) }}
+                                </ULink>
+                                <span
+                                    v-if="nombreZona(row.original)"
+                                    class="text-xs text-muted"
+                                >{{ nombreZona(row.original) }}</span>
+                            </div>
+                        </template>
 
-                    <template #ipv4-cell="{ row }">
-                        <div class="flex flex-col font-mono text-xs">
-                            <span class="text-sm">{{ row.original.ipv4 ?? 'Sin IPv4' }}</span>
-                            <span
-                                v-if="row.original.prefijo_delegado_v6"
-                                class="text-muted"
-                            >{{ row.original.prefijo_delegado_v6 }}</span>
-                        </div>
-                    </template>
+                        <template #router_id-cell="{ row }">
+                            <span class="text-sm">{{ nombreRouter(row.original) }}</span>
+                        </template>
 
-                    <template #estado-cell="{ row }">
-                        <div class="flex flex-wrap items-center gap-1">
-                            <EstadoServicioBadge
-                                :estado="row.original.estado"
-                                size="sm"
+                        <template #ipv4-cell="{ row }">
+                            <div class="flex flex-col font-mono text-xs">
+                                <span class="text-sm">{{ row.original.ipv4 ?? 'Sin IPv4' }}</span>
+                                <span
+                                    v-if="row.original.prefijo_delegado_v6"
+                                    class="text-muted"
+                                >{{ row.original.prefijo_delegado_v6 }}</span>
+                            </div>
+                        </template>
+
+                        <template #estado-cell="{ row }">
+                            <div class="flex flex-wrap items-center gap-1">
+                                <EstadoServicioBadge
+                                    :estado="row.original.estado"
+                                    size="sm"
+                                />
+                                <UBadge
+                                    v-if="row.original.promesa_activa"
+                                    :label="PROMESA_ACTIVA.etiqueta"
+                                    :icon="PROMESA_ACTIVA.icono"
+                                    :color="PROMESA_ACTIVA.color"
+                                    variant="outline"
+                                    size="sm"
+                                />
+                                <SuspensionManualBadge
+                                    :servicio="row.original"
+                                    size="sm"
+                                    con-motivo
+                                />
+                                <SeguridadHorusBadge
+                                    v-if="seguridad.de(row.original.id)"
+                                    :estado="seguridad.de(row.original.id)?.estado ?? null"
+                                    :hallazgos-abiertos="seguridad.de(row.original.id)?.hallazgos"
+                                    :marca="seguridad.de(row.original.id)?.marca"
+                                    size="sm"
+                                />
+                            </div>
+                        </template>
+
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-search-x"
+                                :title="hayFiltros ? 'Ningún servicio coincide' : 'Todavía no hay servicios'"
+                                :description="hayFiltros ? 'Prueba con otro estado, router, plan, zona o búsqueda.' : undefined"
+                                variant="naked"
                             />
-                            <UBadge
-                                v-if="row.original.promesa_activa"
-                                :label="PROMESA_ACTIVA.etiqueta"
-                                :icon="PROMESA_ACTIVA.icono"
-                                :color="PROMESA_ACTIVA.color"
-                                variant="outline"
-                                size="sm"
-                            />
-                            <SuspensionManualBadge
-                                :servicio="row.original"
-                                size="sm"
-                                con-motivo
-                            />
-                            <SeguridadHorusBadge
-                                v-if="seguridad.de(row.original.id)"
-                                :estado="seguridad.de(row.original.id)?.estado ?? null"
-                                :hallazgos-abiertos="seguridad.de(row.original.id)?.hallazgos"
-                                :marca="seguridad.de(row.original.id)?.marca"
-                                size="sm"
-                            />
-                        </div>
-                    </template>
-
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-search-x"
-                            :title="hayFiltros ? 'Ningún servicio coincide' : 'Todavía no hay servicios'"
-                            :description="hayFiltros ? 'Prueba con otro estado, router, plan, zona o búsqueda.' : undefined"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                        </template>
+                    </UTable>
+                </UContextMenu>
 
                 <p
                     v-if="ocultosRetirados"
@@ -532,5 +598,9 @@ onMounted(async () => {
                 />
             </template>
         </div>
+        <ServicioVistaRapida
+            v-model:open="vistaAbierta"
+            :servicio="vistaServicio"
+        />
     </PanelPagina>
 </template>

@@ -18,7 +18,7 @@ Promociones de la empresa que ven tus clientes en el **inicio del portal** y en 
 
 ## Lista de anuncios
 
-Menú **Cobros → Anuncios**.
+Menú **Clientes y lealtad → Anuncios**.
 
 | Columna       | Qué dice                                                                                                                                                                                                                   |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -8,6 +8,7 @@ import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
 import { versionFixture } from './version/rutas'
+import { sistemaInicial, type SistemaFixtures } from './sistema/datos'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
@@ -278,6 +279,8 @@ interface BaseFixtures {
     notasCredito: Schema<'NotaCredito'>[]
     /** `GET /version` (A6): la versión instalada que ve el panel. */
     version: Schema<'VersionInstalada'>
+    /** Salud, registro, almacenamiento, apariencia y accesos rápidos (A6). */
+    sistema: SistemaFixtures
     /* Fase 4 · cobros y bancos (A3, §10.3 y §10.9). */
     proveedoresCobro: Schema<'ProveedorCobro'>[]
     liquidaciones: Schema<'LiquidacionCobro'>[]
@@ -444,6 +447,7 @@ function inicial(): BaseFixtures {
         migracionesAaa: {},
         notasCredito: [],
         version: versionFixture,
+        sistema: sistemaInicial(),
         proveedoresCobro,
         liquidaciones,
         contracargosLiquidados: [],
