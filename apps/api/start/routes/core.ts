@@ -100,6 +100,7 @@ import * as v from '#core/validators'
 import adicionales from '#start/routes/adicionales'
 import iris from '#start/routes/iris'
 import contactos from '#start/routes/contactos'
+import instalacionIris from '#start/routes/instalacion_iris'
 import CrearEmpresa from '#core/actions/crear_empresa'
 import EditarEmpresaGrupo from '#core/actions/editar_empresa'
 import DesactivarEmpresa from '#core/actions/desactivar_empresa'
@@ -1608,6 +1609,7 @@ export default [
     ...clientes,
     ...contactos,
     ...servicios,
+    ...instalacionIris,
     ...adicionales,
     ...bitacora,
     ...ip,

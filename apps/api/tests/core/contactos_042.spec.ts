@@ -342,7 +342,7 @@ test.group('Contactos del cliente (A42)', (group) => {
             persona_cliente_id: null,
             numeros_agregados: 1,
         }
-        const [{ id }] = (await db
+        const [fila] = (await db
             .table('audit.outbox')
             .insert({
                 evento: 'cliente.contactos_cambiados',
@@ -350,6 +350,7 @@ test.group('Contactos del cliente (A42)', (group) => {
                 request_id: randomUUID(),
             })
             .returning('id')) as Array<{ id: number }>
+        const id = fila!.id
         await conectorIris('0.9.0')
         assert.isNull(await registrarEnvioIris({ id, evento: 'cliente.contactos_cambiados', payload }))
         await conectorIris('0.10.0')

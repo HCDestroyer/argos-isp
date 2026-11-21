@@ -332,24 +332,37 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                     routerId === antes.router_id &&
                     asignacionesAntes.ipv4 === null &&
                     plan.dual_stack !== 'v6'))
+        // A38 (Iris 0.10.0): un pendiente sin IP sigue sin IP al editarse (la asigna la activación);
+        // con una reserva o una IP pedida a mano, se reconcilia como siempre
+        const pendienteSinIp =
+            antes.estado === 'pendiente_instalacion' &&
+            asignacionesAntes.ipv4 === null &&
+            asignacionesAntes.prefijo_enlace_v6 === null &&
+            asignacionesAntes.prefijo_delegado_v6 === null &&
+            !ipv4 &&
+            !prefijoEstatico
         // `routers.unir`: las direcciones ya son del router que queda (mismo equipo); no se tocan
-        const asignaciones = mismoEquipo
-            ? asignacionesAntes
-            : await reconciliarAsignaciones(t.trx, {
-                  servicioId: id,
-                  routerId,
-                  plan,
-                  modo,
-                  tipoConexion: tipo,
-                  ipv4: ipv4 ?? undefined,
-                  sinIpv4,
-                  // otro servidor con su red: la IPv4 pasa a esa red (si no se pidió una IP)
-                  redIpv4Id: cambiaServidor && !ipv4 && !sinIpv4 ? servidor?.red_ipv4_id : undefined,
-                  prefijoEstatico,
-                  poolsV6: servidor
-                      ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
-                      : undefined,
-              })
+        const asignaciones =
+            mismoEquipo || pendienteSinIp
+                ? asignacionesAntes
+                : await reconciliarAsignaciones(t.trx, {
+                      servicioId: id,
+                      routerId,
+                      plan,
+                      modo,
+                      tipoConexion: tipo,
+                      ipv4: ipv4 ?? undefined,
+                      sinIpv4,
+                      // otro servidor con su red: la IPv4 pasa a esa red (si no se pidió una IP)
+                      redIpv4Id: cambiaServidor && !ipv4 && !sinIpv4 ? servidor?.red_ipv4_id : undefined,
+                      prefijoEstatico,
+                      poolsV6: servidor
+                          ? {
+                                enlace: servidor.ipv6_pool_enlace_id,
+                                delegacion: servidor.ipv6_pool_delegacion_id,
+                            }
+                          : undefined,
+                  })
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
 

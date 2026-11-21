@@ -85,13 +85,16 @@ export interface EntradaCrearServicio {
     excepciones?: Record<string, unknown>
     /**
      * `activo` (por defecto) o `pendiente_instalacion` (venta desde Iris, `contratos/instalacion.md`):
-     * el pendiente ya tiene credenciales, router, plan e IPs, pero no navega ni factura hasta
-     * `servicios.activar_instalacion`; su `instalado_en` queda en null.
+     * el pendiente ya tiene credenciales, router y plan, pero no navega ni factura hasta
+     * `servicios.activar_instalacion`; su `instalado_en` queda en null. Desde Iris 0.10.0 (A38) no
+     * recibe IPv4 ni prefijos (salvo los pedidos a mano): los asigna la activación o `reservar-ip`.
      */
     estado_inicial?: EstadoInicialServicio
     /** id en un sistema de origen (importador); 409 `externo_duplicado` si ya está vinculado */
     externo?: IdExterno
 }
+
+const SIN_ASIGNACIONES = { ipv4: null, prefijo_enlace_v6: null, prefijo_delegado_v6: null } as const
 
 /** Valida que existan las referencias del cuerpo (422 por campo, no 404). */
 export async function exigirReferencia(t: Transaccion, tabla: string, id: number, campo: string) {
@@ -287,20 +290,32 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         t.fijarEntidad('servicio', id)
         await vincularExterno(t.trx, 'servicio', id, input.externo)
 
-        const asignaciones = await reconciliarAsignaciones(t.trx, {
-            servicioId: id,
-            routerId: input.router_id,
-            plan,
-            modo,
-            tipoConexion: tipo,
-            ipv4: input.ipv4,
-            // sin IP ni red pedidas, la IPv4 sale de la red del servidor PPPoE
-            redIpv4Id: input.red_ipv4_id ?? (input.ipv4 ? undefined : (servidor?.red_ipv4_id ?? undefined)),
-            prefijoEstatico: input.prefijo_delegado_v6,
-            poolsV6: servidor
-                ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
-                : undefined,
-        })
+        // A38 (Iris 0.10.0 §3.4.1): un pendiente no reserva IP; la asigna la activación (o
+        // `reservar-ip` en sitio). Solo una IP o un prefijo pedidos a mano se asignan al crear.
+        const pendiente = input.estado_inicial === 'pendiente_instalacion'
+        const ipPedida = Boolean(input.ipv4 || input.red_ipv4_id || input.prefijo_delegado_v6)
+        const asignaciones =
+            pendiente && !ipPedida
+                ? SIN_ASIGNACIONES
+                : await reconciliarAsignaciones(t.trx, {
+                      servicioId: id,
+                      routerId: input.router_id,
+                      plan,
+                      modo,
+                      tipoConexion: tipo,
+                      ipv4: input.ipv4,
+                      // sin IP ni red pedidas, la IPv4 sale de la red del servidor PPPoE
+                      redIpv4Id:
+                          input.red_ipv4_id ??
+                          (input.ipv4 ? undefined : (servidor?.red_ipv4_id ?? undefined)),
+                      prefijoEstatico: input.prefijo_delegado_v6,
+                      poolsV6: servidor
+                          ? {
+                                enlace: servidor.ipv6_pool_enlace_id,
+                                delegacion: servidor.ipv6_pool_delegacion_id,
+                            }
+                          : undefined,
+                  })
 
         await registrarTramo(t.trx, id, 'alta')
         await guardarExcepciones(t.trx, id, excepciones)
@@ -317,15 +332,17 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             router_id: input.router_id,
             plan_id: input.plan_id,
         })
-        await t.emit('asignacion.cambiada', {
-            servicio_id: id,
-            empresa_id: empresaId,
-            ipv4: asignaciones.ipv4 ? [asignaciones.ipv4] : [],
-            prefijo_enlace_v6: asignaciones.prefijo_enlace_v6,
-            prefijo_delegado_v6: asignaciones.prefijo_delegado_v6,
-            inicio: new Date().toISOString(),
-            fin: null,
-        })
+        if (!pendiente || ipPedida) {
+            await t.emit('asignacion.cambiada', {
+                servicio_id: id,
+                empresa_id: empresaId,
+                ipv4: asignaciones.ipv4 ? [asignaciones.ipv4] : [],
+                prefijo_enlace_v6: asignaciones.prefijo_enlace_v6,
+                prefijo_delegado_v6: asignaciones.prefijo_delegado_v6,
+                inicio: new Date().toISOString(),
+                fin: null,
+            })
+        }
         await reconciliarIncluidos(
             t,
             { id, empresa_id: empresaId, cliente_id: input.cliente_id },

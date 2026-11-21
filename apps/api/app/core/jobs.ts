@@ -8,6 +8,7 @@ import IniciarPlanTemporal from '#core/actions/iniciar_plan_temporal'
 import TerminarPlanTemporal from '#core/actions/terminar_plan_temporal'
 import VencerCanjeIris, { type SalidaVencerCanjeIris } from '#integraciones/iris/actions/vencer_canje_iris'
 import { canjeIrisPorRevisar } from '#integraciones/iris/desconexion'
+import VencerReservaIp, { reservasIpVencidas } from '#core/actions/vencer_reserva_ip'
 
 /**
  * Crons del núcleo (A1) con BullMQ. Los atiende `node ace eventos:relay` (proceso de A1 que ya
@@ -16,6 +17,7 @@ import { canjeIrisPorRevisar } from '#integraciones/iris/desconexion'
  * | Job | Cada | Qué hace |
  * | --- | --- | --- |
  * | `planes_temporales` | 1 min | Termina los planes temporales activos con `fin ≤ ahora` y luego inicia los programados con `inicio ≤ ahora` (todo lo pendiente hasta ahora, nunca "los de hoy") |
+ * | `reservas_ip_vencidas` | 1 h | Contrato Iris 0.10.0 §3.4.1 (A38): libera la IP reservada en sitio de los servicios que siguen pendientes 30 días después (`servicios.vencer_reserva_ip`, uno por servicio) |
  * | `iris_canjes_sin_uso` | 5 min | Contrato Iris 0.6.3: confirma el canje del conector Iris cuyo `atk_` ya se usó y revoca (desconectando el conector) el que lleva 24 h sin uso. Solo llama a `iris.vencer_canje` si hay algo que hacer |
  *
  * Lock: el worker tiene concurrencia 1 y el job toma un advisory lock de Postgres
@@ -30,6 +32,7 @@ export const NOMBRE_COLA_CORE = 'core-cron'
 export const CRONS_CORE = {
     planes_temporales: 60_000,
     iris_canjes_sin_uso: 5 * 60_000,
+    reservas_ip_vencidas: 60 * 60_000,
 } as const
 export type NombreCronCore = keyof typeof CRONS_CORE
 
@@ -136,6 +139,27 @@ export async function procesarCanjesIrisSinUso(
     return new VencerCanjeIris().execute({ ahora }, ctx)
 }
 
+export interface ResultadoReservasIp {
+    liberadas: number[]
+    fallidas: number[]
+}
+
+/** Reservas de IP en sitio vencidas hasta `ahora` (todo lo pendiente, nunca «las de hoy»). */
+export async function procesarReservasIpVencidas(ahora: Date = new Date()): Promise<ResultadoReservasIp> {
+    const ctx = contextoSistema('cron', `core-reservas_ip_vencidas-${ahora.toISOString()}`)
+    const resultado: ResultadoReservasIp = { liberadas: [], fallidas: [] }
+    for (const id of await reservasIpVencidas(ahora)) {
+        try {
+            const salida = await new VencerReservaIp().execute({ id, ahora }, ctx)
+            if (salida.liberada) resultado.liberadas.push(id)
+        } catch (error) {
+            resultado.fallidas.push(id)
+            logger.error({ err: error, servicio_id: id }, 'No se pudo liberar la reserva de IP')
+        }
+    }
+    return resultado
+}
+
 /** Ejecuta un cron del núcleo por nombre con su lock (lo usa el worker; las pruebas lo llaman directo). */
 export async function ejecutarCronCore(
     nombre: 'planes_temporales',
@@ -155,6 +179,8 @@ export async function ejecutarCronCore(nombre: string, ahora: Date = new Date())
             return conLock(nombre, () => procesarPlanesTemporales(ahora))
         case 'iris_canjes_sin_uso':
             return conLock(nombre, () => procesarCanjesIrisSinUso(ahora))
+        case 'reservas_ip_vencidas':
+            return conLock(nombre, () => procesarReservasIpVencidas(ahora))
         default:
             throw new Error(`Cron del núcleo desconocido: ${nombre}`)
     }
