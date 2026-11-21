@@ -17,7 +17,8 @@ async function vencerSesion(page: Page): Promise<void> {
 async function altaAMediasYBloqueo(page: Page, nombre: string) {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
-    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
+    await page.getByRole('link', { name: 'Nuevo cliente' }).first().click()
+    await expect(page).toHaveURL(/\/clientes\/nuevo$/)
     await page.getByLabel('Nombre', { exact: true }).fill(nombre)
     await page.getByLabel('Teléfono').fill('5555-4321')
     await vencerSesion(page)

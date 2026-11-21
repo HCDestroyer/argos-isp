@@ -13,8 +13,8 @@ Solo el panel de ArgosIsp: Iris y Horus conservan su teal; el portal (A5) usa lo
 | `secondary` (`cyan`) | 700 | 300 | Acentos secundarios |
 | `--argos-marca-1` → `--argos-marca-2` | `#4f46e5` → `#06b6d4` | igual | Degradado de marca: logo, filete del menú, bienvenida del inicio, login, tarjeta KPI destacada |
 | `--ax-fondo` | `#f7f8fc` | `#0b0f1a` (azul noche, nunca negro) | Fondo de página |
-| `--ax-borde` | `#e6e8f0` | `#222b40` | Bordes de tarjetas, tablas y separadores |
-| `--ax-panel` | `#f3f4fa` | `#111729` | Panel interno (mini gráficas, métricas, cabecera de tabla) |
+| `--ax-borde` | `#e6e8f0` | `#1e2638` | Bordes de tarjetas, tablas y separadores |
+| `--ax-panel` | `#f3f4fa` | `#0f1523` | Panel interno (mini gráficas, métricas, cabecera de tabla) |
 | `--ax-radio` | 14 px | 14 px | Tarjetas, tablas, pastillas grandes |
 | `--viz-1…5` + `.tono-n` | paleta categórica | paleta categórica | Color de cada métrica (pastilla, mini barras, tendencia); nunca un estado |
 

@@ -315,6 +315,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
             <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     class="justify-center"

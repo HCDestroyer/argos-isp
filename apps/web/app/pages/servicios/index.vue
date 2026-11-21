@@ -158,13 +158,13 @@ async function copiar(texto: string, que: string) {
 function accionesServicio(servicio: Servicio): AccionFila[] {
     const acciones: AccionFila[] = [
         { etiqueta: 'Vista rápida', icono: ICONOS.vistaRapida, alElegir: () => abrirVista(servicio), grupo: 'Ver' },
-        { etiqueta: 'Abrir ficha del servicio', icono: ICONOS.abrir, to: `/servicios/${servicio.id}`, grupo: 'Ver' },
+        { etiqueta: 'Abrir ficha del servicio', icono: ICONOS.abrir, to: `/servicios/${servicio.id}`, soloMenu: true, grupo: 'Ver' },
     ]
     if (enlace(`/clientes/${servicio.cliente_id}`)) {
         acciones.push({ etiqueta: 'Abrir ficha del cliente', icono: 'i-lucide-user', to: `/clientes/${servicio.cliente_id}`, soloMenu: true, grupo: 'Ver' })
     }
     if (puede('pagos.registrar')) {
-        acciones.push({ etiqueta: 'Cobrar al cliente', icono: ICONOS.cobrar, to: `/cobro?cliente=${servicio.cliente_id}`, soloMenu: true, grupo: 'Cobro' })
+        acciones.push({ etiqueta: 'Cobrar al cliente', icono: ICONOS.cobrar, to: `/cobro?cliente=${servicio.cliente_id}`, grupo: 'Cobro' })
     }
     if (servicio.ipv4) {
         const ip = servicio.ipv4

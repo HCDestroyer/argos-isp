@@ -476,6 +476,9 @@ onMounted(cargar)
                 data-prueba="aviso-pendiente-instalacion"
             >
                 <template #description>
+                    <p class="font-semibold">
+                        Siguiente paso: instalar el equipo y pulsar «Activar instalación».
+                    </p>
                     <p>
                         Ya tiene usuario PPPoE, router, plan e IP para configurar el equipo, pero no navega ni factura.
                         La facturación arranca al <strong>activar la instalación</strong>.

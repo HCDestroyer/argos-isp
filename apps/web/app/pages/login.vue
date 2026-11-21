@@ -113,7 +113,7 @@ async function entrarCon(datos: DatosLogin) {
                             Iniciar sesión
                         </h1>
                         <p class="mt-1 text-sm text-muted">
-                            Entra con tu correo y tu contraseña del panel.
+                            Entra con el correo que te dio tu administrador.
                         </p>
                     </div>
 

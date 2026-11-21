@@ -54,7 +54,7 @@
     --ui-bg: #0b0f1a;
     --ui-bg-muted: #0f1424;
     --ui-bg-elevated: #182036;
-    --ui-border: #222b40;
+    --ui-border: #1e2638;
 }
 
 /*
@@ -81,7 +81,7 @@
     --hf-glass: rgb(15 20 36 / 0.62);
     --hf-glass-strong: rgb(15 20 36 / 0.86);
     --hf-glass-edge: rgb(255 255 255 / 0.06);
-    --hf-card: rgb(19 25 42 / 0.86);
+    --hf-card: rgb(18 26 43 / 0.92);
     --hf-aura-1: rgb(99 102 241 / 0.22);
     --hf-aura-2: rgb(6 182 212 / 0.14);
     --hf-glow-brand: rgb(129 140 248 / 0.45);
@@ -106,8 +106,8 @@
 
 .dark {
     --ax-fondo: #0b0f1a;
-    --ax-borde: #222b40;
-    --ax-panel: #111729;
+    --ax-borde: #1e2638;
+    --ax-panel: #0f1523;
     --ax-fila-hover: rgb(129 140 248 / 0.06);
 }
 

@@ -607,6 +607,7 @@ onMounted(async () => {
             <FormularioAcciones>
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="outline"
                     class="justify-center"

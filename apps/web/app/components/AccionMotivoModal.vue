@@ -116,6 +116,7 @@ async function enviar(evento: FormSubmitEvent<DatosMotivo>) {
             <div class="flex w-full justify-end gap-2">
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="outline"
                     :disabled="enviando"
