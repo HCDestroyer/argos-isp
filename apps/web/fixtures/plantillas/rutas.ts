@@ -196,7 +196,7 @@ function crear(solicitud: SolicitudFixture) {
         ciclo: 'dia_fijo',
         dia: null,
         // `VALORES_POR_DEFECTO` de `CrearPlantilla`.
-        prorrateo: true,
+        prorrateo: false,
         dias_gracia: 0,
         facturas_para_limitar: 1,
         facturas_para_cortar: 1,

@@ -86,10 +86,11 @@ Avisos que puedes ver en el detalle:
 
 ### Emitir facturas de un servicio a mano (meses adelantados o meses que faltan)
 
-Normalmente el sistema emite solo la factura de cada mes. Esta acción sirve para dos casos:
+Normalmente el sistema emite solo la factura de cada mes. Esta acción sirve para tres casos:
 
 - **Pago por adelantado:** el cliente quiere dejar pagados los próximos meses desde ya.
 - **Meses que faltan:** el sistema no emitió la factura de un mes que ya pasó (por ejemplo, porque algo falló ese día).
+- **Meses antes del inicio del servicio:** acabas de agregar el servicio, pero el cliente ya lo usaba y hay que cobrarle meses pasados (hasta 24).
 
 - **Permiso:** `facturas.emitir_periodos` (`admin`, `cajero`, `contabilidad`).
 - **Dónde:** en la ficha del servicio, botón «Emitir facturas de periodos». Se abre una pantalla propia (Servicios › el servicio › Emitir facturas de periodos); «Atrás» o «Cancelar» vuelven a la ficha sin emitir nada.
@@ -103,12 +104,19 @@ Normalmente el sistema emite solo la factura de cada mes. Esta acción sirve par
 | **Sin emitir** (ámbar)                | Un mes que ya empezó y todavía no tiene factura. El sistema la emitiría en su próxima corrida. | Sí                                          |
 | **Futuro** (gris)                     | Un mes que aún no empieza. Se puede emitir para cobrarlo por adelantado (hasta 12 meses).      | Sí                                          |
 | **Antes del inicio del cobro** (gris) | Un mes anterior al día en que el servicio empezó a facturarse con su plantilla. Ver más abajo. | Solo con `facturas.emitir_periodo_anterior` |
+| **Antes del inicio del servicio** (gris) | Uno de los 24 meses anteriores al primer mes del servicio. Van plegados: pulsa «Ver 24 periodos antes del inicio del servicio». Ver más abajo. | Solo con `facturas.emitir_periodo_anterior` |
 
-El monto es el mismo que tendría la factura normal: el precio del plan del servicio (o su precio especial), sus cargos fijos y adicionales, y el primer mes proporcional a los días si la plantilla lo indica. Si el cliente tiene **saldo a favor**, cada mes dice cuánto quedaría «cubierto por saldo a favor» (contando que los meses anteriores se emiten primero). Si un mes no se pudo calcular (por ejemplo, el libro está bloqueado), se muestra el motivo y no se puede elegir.
+El monto es **el mes completo**: el precio del plan del servicio (o su precio especial), sus cargos fijos y adicionales. A mano nunca se cobra proporcional a los días, aunque la plantilla tenga «Prorratear el primer periodo» (si un servicio vale Q200, la factura es de Q200). Lo que ya estaba emitido se muestra como se emitió. Si el cliente tiene **saldo a favor**, cada mes dice cuánto quedaría «cubierto por saldo a favor» (contando que los meses anteriores se emiten primero). Si un mes no se pudo calcular (por ejemplo, el libro está bloqueado), se muestra el motivo y no se puede elegir.
 
 **Cómo eliges.** Marca la casilla de cada mes que quieras emitir. Para cobrar por adelantado, usa el atajo **«Adelantar N meses»**: escribe cuántos meses y pulsa el botón; marca los próximos N meses futuros (y desmarca los demás futuros, sin tocar los meses sin emitir que ya marcaste).
 
-Abajo, el **resumen** se actualiza con lo que marcaste: el total, cuánto cubre el saldo a favor disponible y lo que **queda por cobrar**. El **motivo** es opcional (queda guardado en la factura y en la bitácora), salvo para los meses anteriores al inicio del cobro.
+**Cambiar el monto.** Con el permiso `facturas.editar_monto_periodo` (`admin`, `contabilidad`), cada mes marcado muestra su monto en un campo que puedes cambiar (por ejemplo, un precio acordado con el cliente). Debajo aparece «calculado Q…» para que veas la diferencia. Si cambias un monto, el **motivo** es obligatorio. En la factura:
+
+- **Si cobras menos:** la diferencia va como un descuento «Ajuste del monto del periodo» sobre la línea del servicio (con su IVA y su cuenta de descuentos).
+- **Si cobras más:** se agrega una línea «Ajuste del monto del periodo» por la diferencia, como ingreso del servicio de internet.
+- El monto calculado y el cobrado quedan guardados en la factura y en la bitácora.
+
+Abajo, el **resumen** se actualiza con lo que marcaste (con los montos cambiados): el total, cuánto cubre el saldo a favor disponible y lo que **queda por cobrar**. El **motivo** es opcional (queda guardado en la factura y en la bitácora), salvo para los meses anteriores al inicio del servicio o del cobro y cuando cambias un monto.
 
 **Qué pasa al emitir.** Pulsa «Emitir N facturas». El sistema emite las facturas en orden, del mes más antiguo al más nuevo, igual que si las hubiera emitido solo: mismas líneas, mismo asiento en el libro, mismo aviso al cliente y la misma certificación FEL. Si el cliente tiene saldo a favor, se aplica de una vez a esas facturas. Al terminar ves un aviso («3 facturas emitidas, 1 ya existía») y el resultado:
 
@@ -119,7 +127,9 @@ Abajo, el **resumen** se actualiza con lo que marcaste: el total, cuánto cubre 
 
 La lista se vuelve a cargar con los meses ya emitidos.
 
-- Cada factura vence en su fecha normal (inicio del mes más los días de gracia de la plantilla). Una factura de un mes futuro **no cuenta para limitar ni cortar** antes de esa fecha.
+- Los meses futuros y los meses sin emitir vencen en su fecha normal (inicio del mes más los días de gracia de la plantilla). Una factura de un mes futuro **no cuenta para limitar ni cortar** antes de esa fecha.
+- Los meses **antes del inicio del servicio** o **del cobro** vencen **desde hoy**: hoy más los días de gracia de la plantilla. Así el cliente no queda cortado en cuanto los emites; si no paga en ese plazo, se corta como siempre.
+- El asiento y la factura electrónica (FEL) llevan la fecha de hoy, aunque el mes sea pasado.
 - Un mes pasado que emites tarde y cuyo vencimiento ya pasó se marca como vencido en el próximo corte y cuenta para limitar o suspender, como cualquier factura vencida.
 - El precio es el de hoy. Si después cambias el plan, las facturas que ya emitiste por adelantado no cambian.
 - Si algo falla (sin conexión, un error del servidor), la pantalla muestra el error con «Reintentar» y no muestra totales que no pudo leer. Reintentar no duplica facturas.
@@ -134,6 +144,20 @@ Hoy es 19 de noviembre. El cliente tiene un plan de Q150 al mes, ya pagó noviem
 5. Cuando llega diciembre, el sistema ve que esa factura ya existe y no emite otra. El cliente no vuelve a deber hasta marzo.
 
 Puedes hacerlo también al revés: primero emitir los meses y después registrar el pago.
+:::
+
+**Meses antes del inicio del servicio.** Un servicio recién agregado no tiene meses pasados. Si el cliente ya usaba el servicio y hay que cobrarle meses de antes:
+
+- Pulsa «Ver 24 periodos antes del inicio del servicio»: aparecen los 24 meses anteriores al primer mes del servicio, del más antiguo al más nuevo, cada uno por el mes completo y con su vencimiento desde hoy.
+- Se necesitan el mismo permiso y el mismo motivo que para los meses antes del inicio del cobro (abajo).
+
+::: tip Ejemplo: cobrar septiembre y octubre de un servicio agregado en noviembre
+Hoy es 19 de noviembre y agregaste el servicio de Q150 con inicio el 1 de noviembre. El cliente ya lo usaba desde septiembre y la plantilla da 5 días de gracia.
+
+1. En la ficha del servicio pulsas «Emitir facturas de periodos» y luego «Ver 24 periodos antes del inicio del servicio».
+2. Marcas septiembre y octubre. Cada uno dice Q150 y «vence 24/11/2026».
+3. Escribes el motivo («Usaba el servicio desde septiembre») y pulsas «Emitir 2 facturas».
+4. El servicio sigue activo. Si el 24 de noviembre no ha pagado, esas facturas vencen y el corte funciona como siempre.
 :::
 
 **Meses antes del inicio del cobro.** Cuando un servicio que no tenía plantilla la recibe, el sistema solo le factura desde el siguiente mes (nunca hacia atrás). Si de verdad hay que cobrar uno de esos meses anteriores:
@@ -200,6 +224,10 @@ Una factura anulada no vuelve a estar vigente. Nada se borra: la factura y su as
 | «La anulación del DTE de la factura … ya se envió al certificador»            | Espera la respuesta de la SAT.                                                                 |
 | «Se pueden emitir hasta 12 periodos futuros…»                                 | Elige meses más cercanos; los siguientes podrás emitirlos más adelante.                        |
 | «…: anterior a facturar_desde (…); requiere el permiso…»                      | Pide a contabilidad o a un administrador que emita ese mes, con su motivo.                     |
+| «Para emitir un periodo anterior al inicio del servicio hace falta el permiso…» | Pide a contabilidad o a un administrador que emita ese mes, con su motivo.                   |
+| «Solo se pueden emitir hasta 24 periodos antes del inicio del servicio.»        | Solo se cobra hasta dos años hacia atrás.                                                    |
+| «Para cambiar el monto de una factura hace falta el permiso…»                   | Emite con el monto calculado o pide a contabilidad que la emita con el monto acordado.       |
+| «El monto es tan bajo que la rebaja pasa del precio del servicio…»              | Sube el monto: la rebaja no puede ser mayor que el precio del servicio de ese mes.           |
 | «… no es el inicio de un periodo del servicio»                                | Elige los meses de la lista; las fechas deben ser el primer día de cada periodo.               |
 | «No se encontró el asiento de esta factura en el libro diario.»               | Una factura «Por certificar» todavía no tiene asiento. Si no es el caso, avisa a contabilidad. |
 

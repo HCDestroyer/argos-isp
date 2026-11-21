@@ -2,10 +2,12 @@
  * Facturas de periodo a mano (A3, 19 nov; pedido del PM: pago por adelantado y periodos que el cron
  * no emitió). Como `periodos_facturables.ts` y `EmitirFacturasPeriodo` de la API:
  *
- * - `GET /servicios/:id/periodos-facturables?hasta=` (`facturas.ver`): los periodos del servicio
- *   hasta el 12.º futuro con su estado, vencimiento, monto y lo que cubriría el saldo a favor.
+ * - `GET /servicios/:id/periodos-facturables?hasta=` (`facturas.ver`): los 24 periodos anteriores al
+ *   inicio del servicio (`antes_del_inicio`) y los del servicio hasta el 12.º futuro con su estado,
+ *   vencimiento (lo pasado a mano vence desde hoy), monto y lo que cubriría el saldo a favor.
  * - `POST /servicios/:id/facturas-periodo` (`facturas.emitir_periodos`, `Idempotency-Key`):
- *   `{ periodos }` o `{ hasta }`, y `motivo`. Lo ocupado va en `omitidas`, nunca se duplica.
+ *   `{ periodos }` o `{ hasta }`, `motivo` y `montos` (total editado, con
+ *   `facturas.editar_monto_periodo` y motivo). Lo ocupado va en `omitidas`, nunca se duplica.
  *
  * Simplificación de los fixtures: periodos mensuales que empiezan el 1.º (como las facturas de la
  * semilla), sin prorrateo, por el precio mensual del servicio.
@@ -27,6 +29,9 @@ type Errores = NonNullable<Problem['errors']>
 
 /** `MAXIMO_PERIODOS_FUTUROS` de la API. */
 export const MAXIMO_PERIODOS_FUTUROS = 12
+/** `MAXIMO_PERIODOS_ANTERIORES` de la API. */
+export const MAXIMO_PERIODOS_ANTERIORES = 24
+const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
 
 const DETALLE_NO_EMITIBLE: Record<MotivoNoEmitible, string> = {
@@ -52,10 +57,20 @@ function hoy(): string {
     return fechaGuatemala(ahora())
 }
 
-function mesSiguiente(periodo: string): string {
+function mesSiguiente(periodo: string, meses = 1): string {
     const fecha = new Date(`${periodo.slice(0, 7)}-01T00:00:00Z`)
-    fecha.setUTCMonth(fecha.getUTCMonth() + 1)
+    fecha.setUTCMonth(fecha.getUTCMonth() + meses)
     return fecha.toISOString().slice(0, 10)
+}
+
+/** Como `vencimientoDe`: lo pasado a mano nunca vence antes de hoy + gracia. */
+function vencimientoDe(periodo: string, estado: PeriodoFacturable['estado'], dia: string, gracia: number): string {
+    const normal = sumarDias(periodo, gracia)
+    if (estado !== 'antes_del_inicio' && estado !== 'antes_de_facturar_desde') {
+        return normal
+    }
+    const desdeHoy = sumarDias(dia, gracia)
+    return desdeHoy > normal ? desdeHoy : normal
 }
 
 function regla(codigo: string, detalle: string, campo = 'servicio_id'): RespuestaFixture {
@@ -103,13 +118,14 @@ function inicioDe(servicio: Servicio): string {
     return [instalacion, ...ocupados].sort()[0] ?? instalacion
 }
 
-/** Como `periodosDelServicio`: hasta el 12.º futuro, con su estado. */
+/** Como `periodosDelServicio`: los 24 anteriores al inicio y hasta el 12.º futuro, con su estado. */
 function periodosDe(servicio: Servicio, dia: string): PeriodoInterno[] {
     const facturarDesde = bd.facturacionServicios[servicio.id]?.facturar_desde ?? null
     const gracia = diasGracia(servicio)
+    const inicio = inicioDe(servicio)
     const salida: PeriodoInterno[] = []
     let futuros = 0
-    for (let periodo = inicioDe(servicio); futuros < MAXIMO_PERIODOS_FUTUROS; periodo = mesSiguiente(periodo)) {
+    for (let periodo = mesSiguiente(inicio, -MAXIMO_PERIODOS_ANTERIORES); futuros < MAXIMO_PERIODOS_FUTUROS; periodo = mesSiguiente(periodo)) {
         if (periodo > dia) {
             futuros += 1
         }
@@ -117,6 +133,9 @@ function periodosDe(servicio: Servicio, dia: string): PeriodoInterno[] {
         let estado: PeriodoFacturable['estado']
         if (ocupacion) {
             estado = ocupacion.factura ? 'emitida' : 'bonificada'
+        }
+        else if (periodo < inicio) {
+            estado = 'antes_del_inicio'
         }
         else if (periodo > dia) {
             estado = 'futuro'
@@ -127,7 +146,7 @@ function periodosDe(servicio: Servicio, dia: string): PeriodoInterno[] {
         else {
             estado = 'pendiente'
         }
-        salida.push({ periodo, hasta: sumarDias(mesSiguiente(periodo), -1), estado, vence_en: ocupacion?.factura?.vence_en ?? sumarDias(periodo, gracia), ocupacion })
+        salida.push({ periodo, hasta: sumarDias(mesSiguiente(periodo), -1), estado, vence_en: ocupacion?.factura?.vence_en ?? vencimientoDe(periodo, estado, dia, gracia), ocupacion })
     }
     return salida
 }
@@ -179,9 +198,17 @@ function vistaPrevia(solicitud: SolicitudFixture): RespuestaFixture {
     const elegidos = hasta ? todos.filter(p => p.periodo <= hasta) : todos
     const saldo = saldoAFavor(servicio)
     const precio = new Decimal(servicio.precio_mensual ?? '0')
-    // Como la simulación de la API: los libres se emiten en orden y el saldo a favor se aplica de la
-    // más antigua a la más nueva.
+    // Como la simulación de la API: los libres se emiten en orden (los anteriores al inicio al final)
+    // y el saldo a favor se aplica de la más antigua a la más nueva.
     let resto = saldo
+    const cubiertos = new Map<string, Decimal>()
+    for (const p of [...elegidos.filter(e => e.estado !== 'antes_del_inicio'), ...elegidos.filter(e => e.estado === 'antes_del_inicio')]) {
+        if (!p.ocupacion) {
+            const cubre = Decimal.min(resto, precio)
+            resto = resto.minus(cubre)
+            cubiertos.set(p.periodo, cubre)
+        }
+    }
     const periodos: PeriodoFacturable[] = elegidos.map((p) => {
         const factura = p.ocupacion?.factura ?? null
         let monto: string | null
@@ -191,10 +218,8 @@ function vistaPrevia(solicitud: SolicitudFixture): RespuestaFixture {
             pagado = factura ? factura.pagado : '0.00'
         }
         else {
-            const cubre = Decimal.min(resto, precio)
-            resto = resto.minus(cubre)
             monto = dinero(precio)
-            pagado = dinero(cubre)
+            pagado = dinero(cubiertos.get(p.periodo) ?? new Decimal(0))
         }
         return {
             periodo: p.periodo,
@@ -224,6 +249,7 @@ function vistaPrevia(solicitud: SolicitudFixture): RespuestaFixture {
         hoy: dia,
         facturar_desde: bd.facturacionServicios[servicio.id]?.facturar_desde ?? null,
         maximo_futuros: MAXIMO_PERIODOS_FUTUROS,
+        maximo_anteriores: MAXIMO_PERIODOS_ANTERIORES,
         saldo_a_favor: dinero(saldo),
         periodos,
     }
@@ -249,13 +275,12 @@ function aplicarSaldo(servicio: Servicio, factura: Factura): Decimal {
     return aplicado
 }
 
-function crearFactura(servicio: Servicio, p: PeriodoInterno): Factura | null {
+function crearFactura(servicio: Servicio, p: PeriodoInterno, total: Decimal): Factura | null {
     const base = bd.facturas.find(f => !f.cargo_unico) ?? bd.facturas[0]
     if (!base) {
         return null
     }
     const momento = ahora()
-    const total = new Decimal(servicio.precio_mensual ?? '0')
     const subtotal = total.div('1.12').toDecimalPlaces(2)
     const factura: Factura = {
         ...structuredClone(base),
@@ -327,6 +352,20 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
     if (motivo !== null && (motivo.length < 3 || motivo.length > 500)) {
         errores.push({ field: 'motivo', message: 'El motivo va de 3 a 500 caracteres', rule: 'minLength' })
     }
+    const montos = new Map<string, string>()
+    const listaMontos = Array.isArray(cuerpo.montos) ? cuerpo.montos : []
+    for (const [i, m] of listaMontos.entries()) {
+        const fila = (typeof m === 'object' && m !== null ? m : {}) as Record<string, unknown>
+        if (typeof fila.periodo !== 'string' || !FECHA.test(fila.periodo) || typeof fila.monto !== 'string' || !MONTO.test(fila.monto)) {
+            errores.push({ field: `montos.${i}`, message: 'Periodo AAAA-MM-DD y monto con hasta 2 decimales', rule: 'regex' })
+            continue
+        }
+        if (!new Decimal(fila.monto).gt(0)) {
+            errores.push({ field: `montos.${i}.monto`, message: 'El monto debe ser mayor que cero, con hasta 2 decimales', rule: 'monto_positivo' })
+            continue
+        }
+        montos.set(fila.periodo, fila.monto)
+    }
     if (errores.length) {
         return datosInvalidos(errores)
     }
@@ -335,6 +374,7 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
         return regla(noEmitible, DETALLE_NO_EMITIBLE[noEmitible])
     }
     const todos = periodosDe(servicio, hoy())
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
     let elegidos: PeriodoInterno[]
     if (lista) {
         const pedidos = [...new Set(lista.filter((p): p is string => typeof p === 'string'))].sort()
@@ -342,6 +382,10 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
         const fuera = ultimo ? fueraDelMaximo(todos, ultimo, 'periodos') : null
         if (fuera) {
             return fuera
+        }
+        const primero = todos[0]
+        if (primero && pedidos[0] && pedidos[0] < primero.periodo) {
+            return regla('maximo_periodos_anteriores', `Se pueden emitir hasta ${MAXIMO_PERIODOS_ANTERIORES} periodos anteriores al inicio del servicio: el primero empieza el ${primero.periodo}`, 'periodos.0')
         }
         elegidos = []
         for (const pedido of pedidos) {
@@ -351,13 +395,15 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
             }
             elegidos.push(periodo)
         }
-        if (elegidos.some(p => p.estado === 'antes_de_facturar_desde')) {
-            const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+        const anteriores = elegidos.filter(p => p.estado === 'antes_de_facturar_desde' || p.estado === 'antes_del_inicio')
+        if (anteriores.length) {
             if (!usuario?.permisos.includes('facturas.emitir_periodo_anterior')) {
-                return regla('antes_de_facturar_desde', 'Un periodo anterior al inicio de la facturación necesita el permiso facturas.emitir_periodo_anterior', 'periodos')
+                return anteriores.some(p => p.estado === 'antes_del_inicio')
+                    ? regla('antes_del_inicio', 'Un periodo anterior al inicio del servicio necesita el permiso facturas.emitir_periodo_anterior', 'periodos')
+                    : regla('antes_de_facturar_desde', 'Un periodo anterior al inicio de la facturación necesita el permiso facturas.emitir_periodo_anterior', 'periodos')
             }
             if (motivo === null) {
-                return regla('motivo_requerido', 'Explique por qué se emite un periodo anterior al inicio de la facturación', 'motivo')
+                return datosInvalidos([{ field: 'motivo', message: 'Explique por qué se emite un periodo anterior al inicio', rule: 'motivo_requerido' }])
             }
         }
     }
@@ -366,8 +412,23 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
         if (fuera) {
             return fuera
         }
-        // «Todos hasta» nunca toma los anteriores a facturar_desde.
-        elegidos = todos.filter(p => p.periodo <= (hasta ?? '') && p.estado !== 'antes_de_facturar_desde')
+        // «Todos hasta» nunca toma los anteriores al inicio ni a facturar_desde.
+        elegidos = todos.filter(p => p.periodo <= (hasta ?? '') && p.estado !== 'antes_de_facturar_desde' && p.estado !== 'antes_del_inicio')
+    }
+    for (const periodo of montos.keys()) {
+        if (!elegidos.some(p => p.periodo === periodo)) {
+            return datosInvalidos([{ field: 'montos', message: `${periodo} no es uno de los periodos elegidos`, rule: 'periodo_invalido' }])
+        }
+    }
+    const precio = new Decimal(servicio.precio_mensual ?? '0')
+    const editados = elegidos.filter(p => !p.ocupacion && montos.has(p.periodo) && !new Decimal(montos.get(p.periodo)!).equals(precio))
+    if (editados.length) {
+        if (!usuario?.permisos.includes('facturas.editar_monto_periodo')) {
+            return regla('editar_monto_sin_permiso', 'Cambiar el monto calculado requiere el permiso facturas.editar_monto_periodo', 'montos')
+        }
+        if (motivo === null) {
+            return datosInvalidos([{ field: 'motivo', message: 'Explique por qué cambia el monto', rule: 'motivo_requerido' }])
+        }
     }
 
     const respuesta: Schema<'FacturasPeriodoEmitidas'> = { servicio_id: servicio.id, cliente_id: servicio.cliente_id, creadas: [], bonificadas: [], omitidas: [], saldo_a_favor: '0.00' }
@@ -381,11 +442,21 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
             })
             continue
         }
-        const factura = crearFactura(servicio, p)
+        const pedido = montos.get(p.periodo)
+        const factura = crearFactura(servicio, p, pedido ? new Decimal(pedido) : precio)
         if (!factura) {
             return problemaTipado(500, 'error_interno', 'Sin facturas de referencia en los fixtures')
         }
-        respuesta.creadas.push({ periodo: p.periodo, factura_id: factura.id, estado: factura.estado, total: factura.total, pagado: factura.pagado, vence_en: factura.vence_en })
+        respuesta.creadas.push({
+            periodo: p.periodo,
+            factura_id: factura.id,
+            estado: factura.estado,
+            total: factura.total,
+            monto_calculado: dinero(precio),
+            monto_editado: !new Decimal(factura.total).equals(precio),
+            pagado: factura.pagado,
+            vence_en: factura.vence_en,
+        })
     }
     respuesta.saldo_a_favor = dinero(saldoAFavor(servicio))
     registrarAccion(solicitud, 'facturas.emitir_periodos', { tipo: 'servicio', id: servicio.id }, cuerpo)

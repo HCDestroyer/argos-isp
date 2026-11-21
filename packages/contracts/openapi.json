@@ -66899,6 +66899,7 @@
                         "facturas.cargo_sin_costo",
                         "facturas.configurar_conceptos",
                         "facturas.configurar_motivos",
+                        "facturas.editar_monto_periodo",
                         "facturas.emitir_cargo_unico",
                         "facturas.emitir_periodo_anterior",
                         "facturas.emitir_periodos",
@@ -67285,6 +67286,7 @@
                         "facturas.cargo_sin_costo",
                         "facturas.configurar_conceptos",
                         "facturas.configurar_motivos",
+                        "facturas.editar_monto_periodo",
                         "facturas.emitir_cargo_unico",
                         "facturas.emitir_periodo_anterior",
                         "facturas.emitir_periodos",
@@ -76807,7 +76809,7 @@
       "post": {
         "operationId": "serviciosEmitirFacturasPeriodo",
         "summary": "Emitir a mano facturas de periodos del servicio (pago adelantado o periodos no emitidos)",
-        "description": "Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_de_facturar_desde) y motivo (422 motivo_requerido). 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.",
+        "description": "Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Sin prorrateo: cada periodo cobra el precio efectivo completo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior al inicio del servicio (hasta 24; más atrás 422 maximo_periodos_anteriores) o a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_del_inicio o antes_de_facturar_desde) y motivo (422 motivo_requerido); vence desde hoy (hoy + dias_gracia si su vencimiento normal ya pasó). montos: total editado por periodo, con facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo; más que el calculado agrega una línea de ajuste del servicio, menos un descuento sobre la línea del plan (422 monto_editado_invalido si no alcanza); calculado y cobrado quedan en la factura y en la bitácora. 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.",
         "tags": [
           "facturacion"
         ],
@@ -76857,13 +76859,41 @@
                     },
                     "minItems": 1,
                     "maxItems": 60,
-                    "description": "Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta. Los anteriores a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo"
+                    "description": "Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta. Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo"
                   },
                   "hasta": {
                     "type": "string",
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
-                    "description": "Emite todos los periodos no emitidos que empiezan este día o antes, desde facturar_desde (nunca los anteriores). Uno de periodos o hasta"
+                    "description": "Emite todos los periodos no emitidos que empiezan este día o antes, desde facturar_desde (nunca los anteriores al inicio ni a facturar_desde). Uno de periodos o hasta"
+                  },
+                  "montos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "periodo": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                          "format": "date"
+                        },
+                        "monto": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "periodo",
+                        "monto"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 60,
+                    "description": "Total a cobrar (con IVA) de periodos elegidos, si difiere del calculado: exige facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo (422 motivo_requerido); mayor que cero (422 monto_positivo). Igual al calculado = sin edición"
                   },
                   "motivo": {
                     "type": [
@@ -76872,7 +76902,7 @@
                     ],
                     "minLength": 3,
                     "maxLength": 500,
-                    "description": "Por qué se emiten a mano (queda en reglas_snapshot.emision_manual y en la bitácora); obligatorio para un periodo anterior a facturar_desde"
+                    "description": "Por qué se emiten a mano (queda en reglas_snapshot.emision_manual y en la bitácora); obligatorio para un periodo anterior al inicio del servicio o a facturar_desde, y al editar un monto"
                   }
                 },
                 "required": [],
@@ -77253,7 +77283,7 @@
       "get": {
         "operationId": "serviciosPeriodosFacturables",
         "summary": "Vista previa: periodos del servicio (emitidos, pendientes, futuros) con su monto",
-        "description": "Solo lectura. Todos los periodos del servicio desde su primer día facturable hasta el 12.º periodo futuro (o hasta ?hasta=), ascendentes, con estado: emitida (factura_id), bonificada, pendiente (empieza hoy o antes y el cron la emitiría), futuro (pago adelantado) o antes_de_facturar_desde. monto: el total de la factura emitida o el que tendría emitida hoy (se emiten todas las no emitidas en orden en una transacción que se revierte: precio efectivo, prorrateo del primer periodo, conceptos recurrentes, adicionales y descuentos de lealtad); pagado: lo que el saldo a favor cubriría. Retirado, pendiente de instalación o sin plantilla: emitible false, motivo y periodos []. 404 si no existe; 422 maximo_periodos_futuros si hasta va más allá del último futuro permitido.",
+        "description": "Solo lectura. Los 24 periodos completos del ciclo anteriores al inicio del servicio (antes_del_inicio) y todos los del servicio desde su primer día facturable hasta el 12.º periodo futuro (o hasta ?hasta=), ascendentes, con estado: emitida (factura_id), bonificada, pendiente (empieza hoy o antes y el cron la emitiría), futuro (pago adelantado), antes_de_facturar_desde o antes_del_inicio. monto: el total de la factura emitida o el que tendría emitida hoy, sin prorrateo (se emiten todas las no emitidas en orden, las anteriores al inicio al final, en una transacción que se revierte: precio efectivo completo, conceptos recurrentes, adicionales y descuentos de lealtad); pagado: lo que el saldo a favor cubriría. vence_en: el real que tendrá la factura (lo anterior al inicio o a facturar_desde vence desde hoy: hoy + dias_gracia si su vencimiento normal ya pasó). Retirado, pendiente de instalación o sin plantilla: emitible false, motivo y periodos []. 404 si no existe; 422 maximo_periodos_futuros si hasta va más allá del último futuro permitido.",
         "tags": [
           "facturacion"
         ],
@@ -77279,7 +77309,7 @@
             "name": "hasta",
             "in": "query",
             "required": false,
-            "description": "Solo los periodos que empiezan este día o antes; por defecto todos hasta el 12.º periodo futuro (422 maximo_periodos_futuros si va más allá)",
+            "description": "Solo los periodos que empiezan este día o antes (los 24 anteriores al inicio del servicio siempre van); por defecto todos hasta el 12.º periodo futuro (422 maximo_periodos_futuros si va más allá)",
             "schema": {
               "type": "string",
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
@@ -79614,6 +79644,7 @@
                             "facturas.cargo_sin_costo",
                             "facturas.configurar_conceptos",
                             "facturas.configurar_motivos",
+                            "facturas.editar_monto_periodo",
                             "facturas.emitir_cargo_unico",
                             "facturas.emitir_periodo_anterior",
                             "facturas.emitir_periodos",
@@ -99289,6 +99320,8 @@
                 "factura_id",
                 "estado",
                 "total",
+                "monto_calculado",
+                "monto_editado",
                 "pagado",
                 "vence_en"
               ],
@@ -99307,6 +99340,14 @@
                 },
                 "total": {
                   "$ref": "#/components/schemas/Dinero"
+                },
+                "monto_calculado": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Total calculado (precio efectivo completo, conceptos, adicionales y descuentos)"
+                },
+                "monto_editado": {
+                  "type": "boolean",
+                  "description": "El total se cambió a mano (distinto del calculado)"
                 },
                 "pagado": {
                   "$ref": "#/components/schemas/Dinero",
@@ -103202,6 +103243,7 @@
           "facturas.cargo_sin_costo",
           "facturas.configurar_conceptos",
           "facturas.configurar_motivos",
+          "facturas.editar_monto_periodo",
           "facturas.emitir_cargo_unico",
           "facturas.emitir_periodo_anterior",
           "facturas.emitir_periodos",
@@ -103480,8 +103522,9 @@
           "Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)",
           "Administrar el catálogo de conceptos de cargo único por empresa (cuenta de ingreso e IVA)",
           "Administrar el catálogo de motivos de facturas en Q0 por empresa",
+          "Cambiar el total calculado de una factura de periodo emitida a mano, con motivo (junto con facturas.emitir_periodos)",
           "Emitir una factura manual de cargo único (instalación, equipo, visita técnica…) desde el catálogo de conceptos",
-          "Emitir a mano un periodo anterior al facturar_desde del servicio, con motivo (junto con facturas.emitir_periodos)",
+          "Emitir a mano un periodo anterior al inicio del servicio (hasta 24) o a su facturar_desde, con motivo (junto con facturas.emitir_periodos)",
           "Emitir a mano facturas de periodos de un servicio: pago por adelantado (hasta 12 periodos futuros) o periodos que el cron no emitió",
           "Generar facturas",
           "Emitir notas de crédito (parcial o total) sobre el saldo de una factura",
@@ -106037,14 +106080,15 @@
               "bonificada",
               "pendiente",
               "futuro",
-              "antes_de_facturar_desde"
+              "antes_de_facturar_desde",
+              "antes_del_inicio"
             ],
-            "description": "emitida (tiene factura), bonificada (quedó en cero), pendiente (el cron la emitiría hoy), futuro (pago adelantado), antes_de_facturar_desde (solo con facturas.emitir_periodo_anterior y motivo)"
+            "description": "emitida (tiene factura), bonificada (quedó en cero), pendiente (el cron la emitiría hoy), futuro (pago adelantado), antes_de_facturar_desde y antes_del_inicio (anterior al primer periodo del servicio, hasta 24); estos dos, solo con facturas.emitir_periodo_anterior y motivo"
           },
           "vence_en": {
             "type": "string",
             "format": "date",
-            "description": "El de la factura emitida, o periodo + dias_gracia"
+            "description": "El de la factura emitida, o el que tendrá al emitirla hoy: periodo + dias_gracia; antes_del_inicio y antes_de_facturar_desde, nunca antes de hoy + dias_gracia"
           },
           "monto": {
             "anyOf": [
@@ -106055,7 +106099,7 @@
                 "type": "null"
               }
             ],
-            "description": "Total de la factura emitida, o el que tendría emitida hoy (precio efectivo, prorrateo, conceptos, adicionales y descuentos); null si no se pudo calcular (ver error)"
+            "description": "Total de la factura emitida, o el que tendría emitida hoy a mano (precio efectivo completo, sin prorrateo; conceptos, adicionales y descuentos); null si no se pudo calcular (ver error)"
           },
           "pagado": {
             "anyOf": [
@@ -106112,6 +106156,7 @@
           "hoy",
           "facturar_desde",
           "maximo_futuros",
+          "maximo_anteriores",
           "saldo_a_favor",
           "periodos"
         ],
@@ -106170,6 +106215,10 @@
           "maximo_futuros": {
             "type": "integer",
             "description": "Periodos futuros que se pueden emitir (12)"
+          },
+          "maximo_anteriores": {
+            "type": "integer",
+            "description": "Periodos anteriores al inicio del servicio que se pueden emitir (24)"
           },
           "saldo_a_favor": {
             "$ref": "#/components/schemas/Dinero",
@@ -117757,6 +117806,7 @@
               "facturas.cargo_sin_costo",
               "facturas.configurar_conceptos",
               "facturas.configurar_motivos",
+              "facturas.editar_monto_periodo",
               "facturas.emitir_cargo_unico",
               "facturas.emitir_periodo_anterior",
               "facturas.emitir_periodos",
@@ -118166,6 +118216,7 @@
               "facturas.cargo_sin_costo",
               "facturas.configurar_conceptos",
               "facturas.configurar_motivos",
+              "facturas.editar_monto_periodo",
               "facturas.emitir_cargo_unico",
               "facturas.emitir_periodo_anterior",
               "facturas.emitir_periodos",

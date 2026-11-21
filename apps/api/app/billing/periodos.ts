@@ -101,6 +101,30 @@ export function periodosHasta(
     return periodos
 }
 
+/**
+ * Periodos completos del ciclo **anteriores al primer periodo del servicio** (emisión manual de
+ * facturas pasadas, decisión del PM del 21 nov): hasta `maximo` ciclos hacia atrás desde el ciclo que
+ * contiene `inicioServicio`, ascendentes, sin prorrateo (factor 1). Los días entre el inicio de ese
+ * ciclo y `inicioServicio` (primer periodo a mitad de ciclo con `dia_fijo`) no son de ningún periodo
+ * anterior: el primero del servicio empieza en su instalación, como siempre. El cron nunca los usa.
+ */
+export function periodosAntesDelInicio(
+    config: ConfigCiclo,
+    inicioServicio: string,
+    maximo: number,
+): PeriodoFacturable[] {
+    const dia = diaDelCiclo(config, inicioServicio)
+    const salida: PeriodoFacturable[] = []
+    let fin = inicioCicloQueContiene(inicioServicio, dia)
+    for (let i = 0; i < maximo; i += 1) {
+        const inicio = texto(aFecha(fin).minus({ months: 1 }).set({ day: dia }))
+        const dias = diasEntre(inicio, fin)
+        salida.unshift({ periodo: inicio, fin, dias, dias_ciclo: dias, factor: '1' })
+        fin = inicio
+    }
+    return salida
+}
+
 /** Clave única de la factura de un periodo. */
 export function claveFactura(servicioId: number, periodo: string): string {
     return `${servicioId}-${periodo}`

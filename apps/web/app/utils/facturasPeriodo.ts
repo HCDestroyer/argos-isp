@@ -16,6 +16,12 @@ export const ESTADOS_PERIODO: Record<EstadoPeriodoFacturable, PresentacionEstado
     pendiente: { etiqueta: 'Sin emitir', color: 'warning', icono: 'i-lucide-file-clock' },
     futuro: { etiqueta: 'Futuro', color: 'neutral', icono: 'i-lucide-calendar-plus' },
     antes_de_facturar_desde: { etiqueta: 'Antes del inicio del cobro', color: 'neutral', icono: 'i-lucide-history' },
+    antes_del_inicio: { etiqueta: 'Antes del inicio del servicio', color: 'neutral', icono: 'i-lucide-calendar-minus' },
+}
+
+/** Periodo pasado a mano: anterior al inicio del servicio o del cobro (permiso aparte y motivo). */
+export function esPeriodoAnterior(periodo: Pick<Periodo, 'estado'>): boolean {
+    return periodo.estado === 'antes_de_facturar_desde' || periodo.estado === 'antes_del_inicio'
 }
 
 /** Por qué no se le pueden emitir periodos al servicio, en llano. */
@@ -28,8 +34,13 @@ export const MOTIVOS_NO_EMITIBLE: Record<MotivoNoEmitible, string> = {
 /** Errores 422 de la emisión (`errors[0].rule`), en llano. */
 const REGLAS_EMISION: Record<string, string> = {
     antes_de_facturar_desde: 'Para emitir un periodo anterior al inicio del cobro hace falta el permiso «Emitir periodo anterior».',
-    motivo_requerido: 'Escribe el motivo: es obligatorio al emitir un periodo anterior al inicio del cobro.',
+    antes_del_inicio: 'Para emitir un periodo anterior al inicio del servicio hace falta el permiso «Emitir periodo anterior».',
+    motivo_requerido: 'Escribe el motivo: es obligatorio al emitir un periodo anterior o al cambiar un monto.',
     maximo_periodos_futuros: 'Solo se pueden adelantar hasta 12 periodos futuros.',
+    maximo_periodos_anteriores: 'Solo se pueden emitir hasta 24 periodos antes del inicio del servicio.',
+    editar_monto_sin_permiso: 'Para cambiar el monto de una factura hace falta el permiso «Editar monto de periodo».',
+    monto_positivo: 'El monto debe ser mayor que cero, con hasta 2 decimales.',
+    monto_editado_invalido: 'El monto es tan bajo que la rebaja pasa del precio del servicio. Sube el monto o emítela con el calculado.',
     periodo_invalido: 'Uno de los periodos ya no coincide con el servicio. Recarga la lista y vuelve a elegir.',
     periodos_o_hasta: 'Elige al menos un periodo.',
     ...MOTIVOS_NO_EMITIBLE,
@@ -53,7 +64,7 @@ export function problemaEmision(problema: Problem): Problem {
     return llano ? { ...problema, title: 'No se emitieron las facturas', detail: llano } : problema
 }
 
-/** Se puede marcar: pendiente o futuro (y anterior solo con su permiso), con monto calculado. */
+/** Se puede marcar: pendiente o futuro (y los anteriores solo con su permiso), con monto calculado. */
 export function periodoElegible(periodo: Periodo, conAnteriores: boolean): boolean {
     if (periodo.monto === null) {
         return false
@@ -61,7 +72,25 @@ export function periodoElegible(periodo: Periodo, conAnteriores: boolean): boole
     if (periodo.estado === 'pendiente' || periodo.estado === 'futuro') {
         return true
     }
-    return periodo.estado === 'antes_de_facturar_desde' && conAnteriores
+    return esPeriodoAnterior(periodo) && conAnteriores
+}
+
+/** Montos escritos a mano por periodo (texto tal como se escribió). */
+export type MontosEditados = Record<string, string>
+
+const MONTO = /^\d{1,12}(\.\d{1,2})?$/
+
+/**
+ * El monto que se cobrará de un periodo si se escribió uno válido y distinto del calculado; null si
+ * no se editó (vacío o igual). Siempre con `Decimal`, nunca con `number`.
+ */
+export function montoEditado(periodo: Pick<Periodo, 'periodo' | 'monto'>, montos: MontosEditados): string | null {
+    const texto = montos[periodo.periodo]?.trim()
+    if (!texto || !MONTO.test(texto) || periodo.monto === null) {
+        return null
+    }
+    const valor = new Decimal(texto)
+    return valor.equals(periodo.monto) ? null : valor.toFixed(2)
 }
 
 /** Inicios de los próximos `cantidad` periodos futuros que se pueden elegir, en orden. */
@@ -94,12 +123,12 @@ export interface ResumenEmision {
  * Total de lo elegido, lo que cubre el saldo a favor y lo que queda por cobrar. Null si algún
  * elegido no tiene monto: nunca un total calculado sobre datos que faltan.
  */
-export function resumenEmision(periodos: readonly Periodo[], elegidos: readonly string[], saldoAFavor: string): ResumenEmision | null {
+export function resumenEmision(periodos: readonly Periodo[], elegidos: readonly string[], saldoAFavor: string, montos: MontosEditados = {}): ResumenEmision | null {
     const filas = periodos.filter(p => elegidos.includes(p.periodo))
     if (filas.some(p => p.monto === null)) {
         return null
     }
-    const total = filas.reduce((suma, p) => suma.plus(p.monto ?? '0'), new Decimal(0))
+    const total = filas.reduce((suma, p) => suma.plus(montoEditado(p, montos) ?? p.monto ?? '0'), new Decimal(0))
     const cubre = Decimal.min(Decimal.max(new Decimal(saldoAFavor), 0), total)
     return { cantidad: filas.length, total, cubre, porCobrar: total.minus(cubre) }
 }
@@ -118,16 +147,31 @@ export function cubiertoPorSaldo(periodo: Periodo): string | null {
 }
 
 /**
- * Espejo de `emitirFacturasPeriodoValidator` (A3): de 1 a 60 periodos y `motivo` de 3 a 500
- * caracteres, obligatorio si se eligió un periodo anterior al inicio del cobro.
+ * Espejo de `emitirFacturasPeriodoValidator` (A3): de 1 a 60 periodos, montos editados mayores que
+ * cero con hasta 2 decimales, y `motivo` de 3 a 500 caracteres, obligatorio si se eligió un periodo
+ * anterior o se cambió un monto. `periodos` (la vista previa) da el monto calculado de cada uno.
  */
-export function esquemaFacturasPeriodo(conAnterior: boolean) {
+export function esquemaFacturasPeriodo(conAnterior: boolean, periodos: readonly Periodo[] = []) {
     return z.object({
         periodos: z.array(z.string()).min(1, 'Elige al menos un periodo').max(60, 'Hasta 60 periodos a la vez'),
+        montos: z.record(z.string(), z.string()),
         motivo: z.string().trim().max(500, 'Hasta 500 caracteres'),
     }).superRefine((datos, ctx) => {
-        if (conAnterior && datos.motivo.length === 0) {
-            ctx.addIssue({ code: 'custom', path: ['motivo'], message: 'Obligatorio: emites un periodo anterior al inicio del cobro' })
+        let editado = false
+        for (const inicio of datos.periodos) {
+            const texto = datos.montos[inicio]?.trim()
+            if (!texto) {
+                continue
+            }
+            if (!MONTO.test(texto) || !new Decimal(texto).gt(0)) {
+                ctx.addIssue({ code: 'custom', path: ['montos', inicio], message: 'Mayor que cero, con hasta 2 decimales' })
+                continue
+            }
+            const periodo = periodos.find(p => p.periodo === inicio)
+            editado ||= periodo ? montoEditado(periodo, datos.montos) !== null : false
+        }
+        if ((conAnterior || editado) && datos.motivo.length === 0) {
+            ctx.addIssue({ code: 'custom', path: ['motivo'], message: conAnterior ? 'Obligatorio: emites un periodo anterior al inicio' : 'Obligatorio: cambiaste un monto' })
         }
         else if (datos.motivo.length > 0 && datos.motivo.length < 3) {
             ctx.addIssue({ code: 'custom', path: ['motivo'], message: 'Al menos 3 caracteres' })
@@ -137,9 +181,18 @@ export function esquemaFacturasPeriodo(conAnterior: boolean) {
 
 export type DatosFacturasPeriodo = z.output<ReturnType<typeof esquemaFacturasPeriodo>>
 
-/** Cuerpo del POST: los inicios en orden y el motivo solo si se escribió. */
-export function cuerpoFacturasPeriodo(datos: DatosFacturasPeriodo): CuerpoFacturasPeriodo {
-    const cuerpo: CuerpoFacturasPeriodo = { periodos: [...datos.periodos].sort() }
+/** Cuerpo del POST: los inicios en orden, los montos que cambiaron y el motivo solo si se escribió. */
+export function cuerpoFacturasPeriodo(datos: DatosFacturasPeriodo, periodos: readonly Periodo[] = []): CuerpoFacturasPeriodo {
+    const elegidos = [...datos.periodos].sort()
+    const cuerpo: CuerpoFacturasPeriodo = { periodos: elegidos }
+    const montos = elegidos.flatMap((inicio) => {
+        const periodo = periodos.find(p => p.periodo === inicio)
+        const monto = periodo ? montoEditado(periodo, datos.montos) : null
+        return monto ? [{ periodo: inicio, monto }] : []
+    })
+    if (montos.length) {
+        cuerpo.montos = montos
+    }
     if (datos.motivo) {
         cuerpo.motivo = datos.motivo
     }

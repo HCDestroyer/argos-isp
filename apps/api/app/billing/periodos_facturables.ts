@@ -8,8 +8,14 @@ import { configuracionDeServicio, leerServicio, type ServicioFacturable } from '
 import type { ConfiguracionFacturacion } from '#billing/excepciones'
 import { facturarDesdeDe } from '#billing/asignacion_plantilla'
 import { saldoAnticipos } from '#billing/cobros'
-import { claveFactura, periodosHasta, sumarDias, type PeriodoFacturable } from '#billing/periodos'
-import EmitirFactura from '#billing/actions/emitir_factura'
+import {
+    claveFactura,
+    periodosAntesDelInicio,
+    periodosHasta,
+    sumarDias,
+    type PeriodoFacturable,
+} from '#billing/periodos'
+import EmitirFactura, { type EntradaEmitirFactura } from '#billing/actions/emitir_factura'
 
 /**
  * Periodos de un servicio para la emisión manual (`facturas.emitir_periodos`, pedido del PM del 19
@@ -18,7 +24,15 @@ import EmitirFactura from '#billing/actions/emitir_factura'
  * (`POST /servicios/:id/facturas-periodo`), así las dos ven los mismos periodos.
  *
  * - Los periodos salen de `periodosHasta` (los mismos del cron): del primer día facturable del
- *   servicio en adelante, con el prorrateo del primer periodo.
+ *   servicio en adelante. **Sin prorrateo a mano** (pedido del PM, 21 nov: «si un servicio vale 200,
+ *   la factura es de 200»): todo periodo no emitido se calcula con factor 1, aunque la plantilla
+ *   prorratee; el cron sigue respetando el «Prorrateo» de la plantilla. Lo emitido se muestra tal cual.
+ * - **Antes del inicio del servicio** (`antes_del_inicio`, decisión del PM del 21 nov): hasta
+ *   `MAXIMO_PERIODOS_ANTERIORES` periodos completos del ciclo anteriores al primero del servicio
+ *   (`periodosAntesDelInicio`). Mismo permiso y motivo que `antes_de_facturar_desde`.
+ * - **Vencimiento de lo pasado a mano** (`antes_del_inicio` y `antes_de_facturar_desde`): vence desde
+ *   hoy, `max(periodo + dias_gracia, hoy + dias_gracia)`, para que emitirlo no corte al cliente de
+ *   inmediato (`vencimientoDe`). Pendientes y futuros vencen en su fecha normal, como el cron.
  * - **Pasados y el actual** (empiezan hoy o antes): `pendiente` si el cron lo emitiría,
  *   `antes_de_facturar_desde` si el servicio recibió plantilla después (nada hacia atrás para el
  *   cron; a mano, solo con `facturas.emitir_periodo_anterior` y motivo).
@@ -30,14 +44,43 @@ import EmitirFactura from '#billing/actions/emitir_factura'
 /** Periodos futuros (pago adelantado) que se pueden emitir o ver a la vez. */
 export const MAXIMO_PERIODOS_FUTUROS = 12
 
+/** Periodos completos anteriores al primero del servicio que se pueden emitir a mano (24 meses). */
+export const MAXIMO_PERIODOS_ANTERIORES = 24
+
 export const ESTADOS_PERIODO = [
     'emitida',
     'bonificada',
     'pendiente',
     'futuro',
     'antes_de_facturar_desde',
+    'antes_del_inicio',
 ] as const
 export type EstadoPeriodo = (typeof ESTADOS_PERIODO)[number]
+
+/**
+ * Periodos «pasados a mano»: excepciones a lo que factura el cron. Piden
+ * `facturas.emitir_periodo_anterior` y motivo, y vencen desde hoy (`vencimientoDe`).
+ */
+export function esPeriodoAnterior(estado: EstadoPeriodo): boolean {
+    return estado === 'antes_de_facturar_desde' || estado === 'antes_del_inicio'
+}
+
+/**
+ * Vencimiento de un periodo que se emite hoy: `periodo + dias_gracia`; si es un periodo pasado a mano
+ * (`esPeriodoAnterior`), nunca antes de `hoy + dias_gracia` (decisión del PM del 21 nov: el cliente
+ * tiene su plazo de gracia completo desde que se le factura; si no paga, se corta como siempre).
+ */
+export function vencimientoDe(
+    periodo: string,
+    estado: EstadoPeriodo,
+    hoy: string,
+    diasGracia: number,
+): string {
+    const normal = sumarDias(periodo, diasGracia)
+    if (!esPeriodoAnterior(estado)) return normal
+    const desdeHoy = sumarDias(hoy, diasGracia)
+    return desdeHoy > normal ? desdeHoy : normal
+}
 
 export const MOTIVOS_NO_EMITIBLE = [
     'servicio_retirado',
@@ -76,7 +119,7 @@ export interface PeriodosDelServicio {
     facturar_desde: string | null
     /** por qué no se le pueden emitir periodos (null = sí se puede) */
     no_emitible: MotivoNoEmitible | null
-    /** todos los periodos hasta el último futuro permitido, ascendentes */
+    /** los anteriores al inicio y todos hasta el último futuro permitido, ascendentes */
     periodos: PeriodoDelServicio[]
 }
 
@@ -107,8 +150,9 @@ function horizonte(hoy: string): string {
 }
 
 /**
- * Los periodos del servicio con su estado, hasta el `MAXIMO_PERIODOS_FUTUROS`-ésimo futuro. Sin
- * plantilla, retirado o pendiente de instalación: `no_emitible` y ningún periodo.
+ * Los periodos del servicio con su estado: los `MAXIMO_PERIODOS_ANTERIORES` anteriores a su inicio y
+ * los suyos hasta el `MAXIMO_PERIODOS_FUTUROS`-ésimo futuro. Sin plantilla, retirado o pendiente de
+ * instalación: `no_emitible` y ningún periodo. Lo no emitido va sin prorrateo (factor 1).
  */
 export async function periodosDelServicio(
     cliente: QueryClientContract,
@@ -123,11 +167,14 @@ export async function periodosDelServicio(
     if (noEmitible || !config) return { ...base, periodos: [] }
 
     let futuros = 0
-    const calculados = periodosHasta(config, servicio.inicio, horizonte(hoy)).filter((p) => {
+    const delServicio = periodosHasta(config, servicio.inicio, horizonte(hoy)).filter((p) => {
         if (p.periodo <= hoy) return true
         futuros += 1
         return futuros <= MAXIMO_PERIODOS_FUTUROS
     })
+    const anteriores = periodosAntesDelInicio(config, servicio.inicio, MAXIMO_PERIODOS_ANTERIORES)
+    const inicioServicio = delServicio[0]?.periodo ?? servicio.inicio
+    const calculados = [...anteriores, ...delServicio]
     const ocupados = await ocupacionDe(
         cliente,
         servicio.id,
@@ -137,13 +184,16 @@ export async function periodosDelServicio(
         const ocupacion = ocupados.get(p.periodo) ?? null
         let estado: EstadoPeriodo
         if (ocupacion) estado = ocupacion.factura_id ? 'emitida' : 'bonificada'
+        else if (p.periodo < inicioServicio) estado = 'antes_del_inicio'
         else if (p.periodo > hoy) estado = 'futuro'
         else if (facturarDesde && p.periodo < facturarDesde) estado = 'antes_de_facturar_desde'
         else estado = 'pendiente'
         return {
             ...p,
+            // a mano nunca se prorratea; lo emitido queda como se emitió
+            factor: ocupacion ? p.factor : '1',
             estado,
-            vence_en: ocupacion?.vence_en ?? sumarDias(p.periodo, config.dias_gracia),
+            vence_en: ocupacion?.vence_en ?? vencimientoDe(p.periodo, estado, hoy, config.dias_gracia),
             ocupacion,
         }
     })
@@ -257,6 +307,7 @@ export interface VistaPreviaPeriodos {
     hoy: string
     facturar_desde: string | null
     maximo_futuros: number
+    maximo_anteriores: number
     /** saldo a favor (Anticipos) del cliente en la empresa del servicio, antes de emitir */
     saldo_a_favor: string
     periodos: PeriodoVistaPrevia[]
@@ -290,7 +341,11 @@ export async function vistaPreviaPeriodos(
         string,
         { monto: string | null; pagado: string | null; bonificacion: boolean; error: string | null }
     >()
-    const libres = elegidos.filter((p) => !p.ocupacion)
+    // los anteriores al inicio, al final: el saldo a favor se muestra primero sobre los del servicio
+    const libres = [
+        ...elegidos.filter((p) => !p.ocupacion && p.estado !== 'antes_del_inicio'),
+        ...elegidos.filter((p) => !p.ocupacion && p.estado === 'antes_del_inicio'),
+    ]
     if (libres.length > 0) {
         await simularEnTransaccion(ctx, async (t) => {
             for (const p of libres) {
@@ -299,7 +354,7 @@ export async function vistaPreviaPeriodos(
                         {
                             servicio_id: servicio.id,
                             periodo: soloPeriodo(p),
-                            manual: { motivo: null, antes_de_facturar_desde: true },
+                            manual: manualDe(p, null),
                         },
                         ctx,
                         { trx: t.trx },
@@ -353,6 +408,7 @@ export async function vistaPreviaPeriodos(
         hoy: datos.hoy,
         facturar_desde: datos.facturar_desde,
         maximo_futuros: MAXIMO_PERIODOS_FUTUROS,
+        maximo_anteriores: MAXIMO_PERIODOS_ANTERIORES,
         saldo_a_favor: aTexto(saldo),
         periodos: elegidos.map((p) => {
             const calc = calculados.get(p.periodo)
@@ -374,6 +430,25 @@ export async function vistaPreviaPeriodos(
                 error: calc?.error ?? null,
             }
         }),
+    }
+}
+
+/**
+ * La emisión manual de un periodo para `EmitirFactura`: permite lo anterior (quien llama ya validó
+ * permiso y motivo), fija el vencimiento de la vista previa (`vencimientoDe`) y nunca prorratea
+ * (el factor ya viene en 1). `monto`: el total editado a mano, si lo hay.
+ */
+export function manualDe(
+    p: PeriodoDelServicio,
+    motivo: string | null,
+    monto: string | null = null,
+): NonNullable<EntradaEmitirFactura['manual']> {
+    return {
+        motivo,
+        antes_de_facturar_desde: p.estado === 'antes_de_facturar_desde',
+        antes_del_inicio: p.estado === 'antes_del_inicio',
+        vence_en: p.vence_en,
+        monto,
     }
 }
 

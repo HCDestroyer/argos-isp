@@ -1,11 +1,14 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { aTexto } from '#ledger/dinero'
+import { aTexto, dec } from '#ledger/dinero'
 import { fechaValida } from '#ledger/fechas'
 import { bloquearCliente, saldoAnticipos } from '#billing/cobros'
 import {
+    esPeriodoAnterior,
     exigirDentroDelMaximo,
     exigirEmitible,
+    manualDe,
+    MAXIMO_PERIODOS_ANTERIORES,
     periodosDelServicio,
     soloPeriodo,
     type PeriodoDelServicio,
@@ -25,11 +28,21 @@ import EmitirFactura from '#billing/actions/emitir_factura'
  *   cliente, de la factura más antigua a la más nueva.
  * - Un periodo ya ocupado (factura o bonificación) se omite y se informa en `omitidas`: nunca se
  *   duplica (la clave es única también frente al cron).
+ * - **Sin prorrateo** (pedido del PM, 21 nov): cada periodo cobra el precio efectivo completo,
+ *   aunque la plantilla prorratee (el cron sí lo respeta).
  * - Futuros: hasta `MAXIMO_PERIODOS_FUTUROS` (422 `maximo_periodos_futuros`). Vencen en su fecha
  *   normal (`periodo + dias_gracia`): el corte no los cuenta antes.
- * - Anteriores a `facturar_desde` (asignación de plantilla sin facturar hacia atrás): solo pedidos en
- *   `periodos`, con `puede_emitir_anterior` (la ruta lo fija con `facturas.emitir_periodo_anterior`)
- *   y `motivo`; si no, 422 `antes_de_facturar_desde` o `motivo_requerido`.
+ * - Anteriores a `facturar_desde` (asignación de plantilla sin facturar hacia atrás) y **anteriores al
+ *   inicio del servicio** (hasta `MAXIMO_PERIODOS_ANTERIORES`, decisión del PM del 21 nov): solo
+ *   pedidos en `periodos`, con `puede_emitir_anterior` (la ruta lo fija con
+ *   `facturas.emitir_periodo_anterior`) y `motivo`; si no, 422 `antes_de_facturar_desde` /
+ *   `antes_del_inicio` o `motivo_requerido`; más atrás, 422 `maximo_periodos_anteriores`. Vencen
+ *   desde hoy (`hoy + dias_gracia` si su vencimiento normal ya pasó): emitirlos no corta al cliente.
+ * - **Monto editado** (`montos`, pedido del PM del 21 nov): el total de un periodo distinto del
+ *   calculado exige `puede_editar_monto` (`facturas.editar_monto_periodo`; si no, 422
+ *   `editar_monto_sin_permiso`) y `motivo` (422 `motivo_requerido`); mayor que cero (422
+ *   `monto_positivo`). Las líneas: `EmisionManual.monto` en `EmitirFactura`. Calculado y cobrado
+ *   quedan en `reglas_snapshot.emision_manual`, en el resultado y en la bitácora (`montos_editados`).
  * - Retirado, pendiente de instalación o sin plantilla: 422 con esa regla. Un inicio que no es de un
  *   periodo del servicio: 422 `periodo_invalido`.
  */
@@ -39,8 +52,12 @@ export interface EntradaEmitirFacturasPeriodo {
     periodos?: string[]
     hasta?: string
     motivo?: string | null
+    /** total a cobrar por periodo (con IVA), si difiere del calculado */
+    montos?: Array<{ periodo: string; monto: string }>
     /** la ruta lo fija según `facturas.emitir_periodo_anterior`; nunca viene del cuerpo */
     puede_emitir_anterior?: boolean
+    /** la ruta lo fija según `facturas.editar_monto_periodo`; nunca viene del cuerpo */
+    puede_editar_monto?: boolean
     /** día de Guatemala que cuenta como hoy (pruebas); por defecto el real */
     hoy?: string
 }
@@ -50,6 +67,10 @@ export interface FacturaPeriodoCreada {
     factura_id: number
     estado: string
     total: string
+    /** total calculado (precio efectivo completo, conceptos, adicionales y descuentos) */
+    monto_calculado: string
+    /** el total se editó a mano (distinto del calculado) */
+    monto_editado: boolean
     /** lo que cubrió el saldo a favor al emitirla */
     pagado: string
     vence_en: string
@@ -112,21 +133,9 @@ export default class EmitirFacturasPeriodo extends DomainAction<
             ? elegirPorInicio(datos.periodos, input.periodos!, datos)
             : elegirHasta(datos.periodos, fechaValida(input.hasta!, 'hasta'), datos)
 
-        const anteriores = elegidos.filter((p) => p.estado === 'antes_de_facturar_desde')
         const motivo = input.motivo?.trim() || null
-        if (anteriores.length > 0) {
-            const lista = anteriores.map((p) => p.periodo).join(', ')
-            if (!input.puede_emitir_anterior) {
-                const mensaje = `${lista}: anterior a facturar_desde (${datos.facturar_desde}); requiere el permiso facturas.emitir_periodo_anterior`
-                throw new ReglaNegocio(mensaje, 'antes_de_facturar_desde', [
-                    { field: 'periodos', message: mensaje, rule: 'antes_de_facturar_desde' },
-                ])
-            }
-            if (!motivo) {
-                const mensaje = `${lista}: emitir un periodo anterior a facturar_desde exige un motivo`
-                throw new ValidacionFallida([{ field: 'motivo', message: mensaje, rule: 'motivo_requerido' }])
-            }
-        }
+        exigirAnteriores(elegidos, datos.facturar_desde, input.puede_emitir_anterior === true, motivo)
+        const montos = montosPedidos(input.montos ?? [], elegidos)
 
         const resultado: ResultadoEmitirFacturasPeriodo = {
             servicio_id: servicio.id,
@@ -138,6 +147,13 @@ export default class EmitirFacturasPeriodo extends DomainAction<
         }
         const emitidas: number[] = []
         const creadasPorPeriodo = new Map<number, string>()
+        const calculadoPorFactura = new Map<number, string>()
+        const editados: Array<{
+            periodo: string
+            factura_id: number | null
+            calculado: string
+            cobrado: string
+        }> = []
         for (const p of elegidos) {
             if (p.ocupacion) {
                 resultado.omitidas.push({
@@ -152,14 +168,26 @@ export default class EmitirFacturasPeriodo extends DomainAction<
                 {
                     servicio_id: servicio.id,
                     periodo: soloPeriodo(p),
-                    manual: { motivo, antes_de_facturar_desde: p.estado === 'antes_de_facturar_desde' },
+                    manual: manualDe(p, motivo, montos.get(p.periodo) ?? null),
                 },
                 t.ctx,
                 { trx: t.trx },
             )
+            const pedido = montos.get(p.periodo)
+            if (r.creada && pedido && r.monto_calculado && !dec(pedido).equals(r.monto_calculado)) {
+                // se valida al conocer el calculado; el error revierte toda la transacción
+                exigirEdicion(p.periodo, input.puede_editar_monto === true, motivo)
+                editados.push({
+                    periodo: p.periodo,
+                    factura_id: r.factura_id,
+                    calculado: r.monto_calculado,
+                    cobrado: aTexto(pedido),
+                })
+            }
             if (r.creada && r.factura_id) {
                 emitidas.push(r.factura_id)
                 creadasPorPeriodo.set(r.factura_id, p.periodo)
+                calculadoPorFactura.set(r.factura_id, r.monto_calculado ?? '0.00')
             } else if (r.creada && r.bonificacion_id) {
                 resultado.bonificadas.push({ periodo: p.periodo, bonificacion_id: r.bonificacion_id })
             } else if (r.motivo === 'ya_existe') {
@@ -196,14 +224,87 @@ export default class EmitirFacturasPeriodo extends DomainAction<
                 factura_id: Number(f.id),
                 estado: f.estado,
                 total: aTexto(f.total),
+                monto_calculado: calculadoPorFactura.get(Number(f.id))!,
+                monto_editado: !dec(f.total).equals(calculadoPorFactura.get(Number(f.id))!),
                 pagado: aTexto(f.pagado),
                 vence_en: f.vence_en,
             }))
         }
+        if (editados.length > 0) t.anotarAuditoria({ montos_editados: editados })
         resultado.saldo_a_favor = aTexto(
             await saldoAnticipos(t.trx, servicio.cliente_id, servicio.empresa_id),
         )
         return resultado
+    }
+}
+
+/** Permiso y motivo de los periodos pasados a mano (`esPeriodoAnterior`). */
+function exigirAnteriores(
+    elegidos: PeriodoDelServicio[],
+    facturarDesde: string | null,
+    puede: boolean,
+    motivo: string | null,
+): void {
+    const anteriores = elegidos.filter((p) => esPeriodoAnterior(p.estado))
+    if (anteriores.length === 0) return
+    const lista = anteriores.map((p) => p.periodo).join(', ')
+    if (!puede) {
+        const delInicio = anteriores.some((p) => p.estado === 'antes_del_inicio')
+        const regla = delInicio ? 'antes_del_inicio' : 'antes_de_facturar_desde'
+        const mensaje = delInicio
+            ? `${lista}: anterior al inicio del servicio; requiere el permiso facturas.emitir_periodo_anterior`
+            : `${lista}: anterior a facturar_desde (${facturarDesde}); requiere el permiso facturas.emitir_periodo_anterior`
+        throw new ReglaNegocio(mensaje, regla, [{ field: 'periodos', message: mensaje, rule: regla }])
+    }
+    if (!motivo) {
+        const mensaje = `${lista}: emitir un periodo anterior al inicio del servicio o del cobro exige un motivo`
+        throw new ValidacionFallida([{ field: 'motivo', message: mensaje, rule: 'motivo_requerido' }])
+    }
+}
+
+/** Los montos pedidos por periodo: de un periodo elegido, una vez, y mayores que cero. */
+function montosPedidos(
+    pedidos: Array<{ periodo: string; monto: string }>,
+    elegidos: PeriodoDelServicio[],
+): Map<string, string> {
+    const salida = new Map<string, string>()
+    const errores = []
+    for (const [i, m] of pedidos.entries()) {
+        const periodo = fechaValida(m.periodo, `montos.${i}.periodo`)
+        if (!elegidos.some((p) => p.periodo === periodo) || salida.has(periodo)) {
+            errores.push({
+                field: `montos.${i}.periodo`,
+                message: `${periodo} no es uno de los periodos elegidos (o se repite)`,
+                rule: 'periodo_invalido',
+            })
+            continue
+        }
+        const monto = dec(m.monto)
+        if (!monto.gt(0) || monto.decimalPlaces() > 2) {
+            errores.push({
+                field: `montos.${i}.monto`,
+                message: 'El monto debe ser mayor que cero, con hasta 2 decimales',
+                rule: 'monto_positivo',
+            })
+            continue
+        }
+        salida.set(periodo, aTexto(monto))
+    }
+    if (errores.length > 0) throw new ValidacionFallida(errores, 'Hay montos que no se pueden usar')
+    return salida
+}
+
+/** Editar el total de un periodo: permiso `facturas.editar_monto_periodo` y motivo. */
+function exigirEdicion(periodo: string, puede: boolean, motivo: string | null): void {
+    if (!puede) {
+        const mensaje = `${periodo}: cambiar el monto calculado requiere el permiso facturas.editar_monto_periodo`
+        throw new ReglaNegocio(mensaje, 'editar_monto_sin_permiso', [
+            { field: 'montos', message: mensaje, rule: 'editar_monto_sin_permiso' },
+        ])
+    }
+    if (!motivo) {
+        const mensaje = `${periodo}: cambiar el monto calculado exige un motivo`
+        throw new ValidacionFallida([{ field: 'motivo', message: mensaje, rule: 'motivo_requerido' }])
     }
 }
 
@@ -218,6 +319,7 @@ function elegirPorInicio(
     for (const [i, pedido] of unicos.entries()) {
         if (porInicio.has(pedido)) continue
         exigirDentroDelMaximo(datos, pedido, `periodos.${i}`)
+        exigirDentroDeAnteriores(periodos, pedido, `periodos.${i}`)
         errores.push({
             field: `periodos.${i}`,
             message: `${pedido} no es el inicio de un periodo del servicio`,
@@ -230,12 +332,22 @@ function elegirPorInicio(
     return unicos.map((p) => porInicio.get(p)!)
 }
 
-/** Todos los periodos hasta `hasta`, sin los anteriores a `facturar_desde` (esos, solo por `periodos`). */
+/** 422 `maximo_periodos_anteriores` si `fecha` es anterior al primer periodo anterior permitido. */
+function exigirDentroDeAnteriores(periodos: PeriodoDelServicio[], fecha: string, campo: string): void {
+    const primero = periodos[0]
+    if (!primero || fecha >= primero.periodo) return
+    const mensaje = `Se pueden emitir hasta ${MAXIMO_PERIODOS_ANTERIORES} periodos anteriores al inicio del servicio: el primero empieza el ${primero.periodo}`
+    throw new ReglaNegocio(mensaje, 'maximo_periodos_anteriores', [
+        { field: campo, message: mensaje, rule: 'maximo_periodos_anteriores' },
+    ])
+}
+
+/** Todos los periodos hasta `hasta`, sin los pasados a mano (anteriores al inicio o a `facturar_desde`: esos, solo por `periodos`). */
 function elegirHasta(
     periodos: PeriodoDelServicio[],
     hasta: string,
     datos: Parameters<typeof exigirDentroDelMaximo>[0],
 ): PeriodoDelServicio[] {
     exigirDentroDelMaximo(datos, hasta, 'hasta')
-    return periodos.filter((p) => p.periodo <= hasta && p.estado !== 'antes_de_facturar_desde')
+    return periodos.filter((p) => p.periodo <= hasta && !esPeriodoAnterior(p.estado))
 }

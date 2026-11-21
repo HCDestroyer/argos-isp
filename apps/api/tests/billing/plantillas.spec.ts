@@ -35,7 +35,8 @@ test.group('Plantillas de facturación (API)', () => {
             nombre,
             ciclo: 'dia_fijo',
             dia: 5,
-            prorrateo: true,
+            // por defecto sin prorrateo (pedido del PM, 21 nov): la primera factura cobra el mes completo
+            prorrateo: false,
             dias_gracia: 0,
             facturas_para_limitar: 1,
             facturas_para_cortar: 1,

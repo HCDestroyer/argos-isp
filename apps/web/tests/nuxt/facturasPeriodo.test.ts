@@ -78,12 +78,14 @@ describe('facturas de periodos', () => {
             expect(presentacion.icono).toMatch(/^i-lucide-/)
             expect(presentacion.color).not.toBe('primary')
         }
-        expect(Object.keys(ESTADOS_PERIODO).sort()).toEqual(['antes_de_facturar_desde', 'bonificada', 'emitida', 'futuro', 'pendiente'])
+        expect(Object.keys(ESTADOS_PERIODO).sort()).toEqual(['antes_de_facturar_desde', 'antes_del_inicio', 'bonificada', 'emitida', 'futuro', 'pendiente'])
+        expect(ESTADOS_PERIODO.antes_del_inicio.etiqueta).toBe('Antes del inicio del servicio')
         expect(Object.keys(MOTIVOS_NO_EMITIBLE).sort()).toEqual(['servicio_pendiente_instalacion', 'servicio_retirado', 'sin_plantilla'])
     })
 
     it('selección: solo pendientes y futuros con monto; anteriores con su permiso; adelantar N', () => {
         const lista = [
+            periodo({ periodo: '2026-07-01', estado: 'antes_del_inicio' }),
             periodo({ periodo: '2026-08-01', estado: 'antes_de_facturar_desde' }),
             periodo({ periodo: '2026-09-01', estado: 'emitida', factura_id: 1 }),
             periodo({ periodo: '2026-10-01', estado: 'pendiente' }),
@@ -95,7 +97,7 @@ describe('facturas de periodos', () => {
         ]
         const elegibles = (conAnteriores: boolean) => lista.filter(p => periodoElegible(p, conAnteriores)).map(p => p.periodo)
         expect(elegibles(false)).toEqual(['2026-10-01', '2026-11-01', '2027-01-01', '2027-02-01'])
-        expect(elegibles(true)).toEqual(['2026-08-01', '2026-10-01', '2026-11-01', '2027-01-01', '2027-02-01'])
+        expect(elegibles(true)).toEqual(['2026-07-01', '2026-08-01', '2026-10-01', '2026-11-01', '2027-01-01', '2027-02-01'])
 
         // Adelantar: los próximos N futuros con monto; lo pendiente marcado se queda, los demás futuros salen.
         expect(adelantar(lista, ['2026-10-01', '2027-02-01'], 2)).toEqual(['2026-10-01', '2026-11-01', '2027-01-01'])
@@ -113,20 +115,43 @@ describe('facturas de periodos', () => {
         const sobra = resumenEmision(lista, ['2026-11-01'], '500.00')
         expect(sobra && [sobra.cubre.toFixed(2), sobra.porCobrar.toFixed(2)]).toEqual(['150.00', '0.00'])
         expect(resumenEmision(lista, ['2027-01-01'], '0.00')).toBeNull()
+        // con un monto editado, el total usa el que se cobrará
+        const editado = resumenEmision(lista, ['2026-11-01', '2026-12-01'], '0.00', { '2026-11-01': '99.50', '2026-12-01': 'abc' })
+        expect(editado?.total.toFixed(2)).toBe('249.50')
         expect(cubiertoPorSaldo(periodo({ periodo: '2026-11-01', estado: 'futuro', pagado: '150.00' }))).toBe('150.00')
         expect(cubiertoPorSaldo(periodo({ periodo: '2026-09-01', estado: 'emitida', factura_id: 1, pagado: '150.00' }))).toBeNull()
     })
 
-    it('esquema: motivo obligatorio solo con anteriores; de 3 a 500; cuerpo ordenado', () => {
-        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: [], motivo: '' }).success).toBe(false)
-        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], motivo: '' }).success).toBe(true)
-        const sinMotivo = esquemaFacturasPeriodo(true).safeParse({ periodos: ['2026-08-01'], motivo: '  ' })
+    it('esquema: motivo obligatorio con anteriores; de 3 a 500; cuerpo ordenado', () => {
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: [], montos: {}, motivo: '' }).success).toBe(false)
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], montos: {}, motivo: '' }).success).toBe(true)
+        const sinMotivo = esquemaFacturasPeriodo(true).safeParse({ periodos: ['2026-08-01'], montos: {}, motivo: '  ' })
         expect(sinMotivo.error?.issues.map(i => i.path.join('.'))).toEqual(['motivo'])
-        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], motivo: 'ab' }).success).toBe(false)
-        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], motivo: 'x'.repeat(501) }).success).toBe(false)
-        const datos = esquemaFacturasPeriodo(true).parse({ periodos: ['2026-12-01', '2026-08-01'], motivo: ' Cobro acordado ' })
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], montos: {}, motivo: 'ab' }).success).toBe(false)
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], montos: {}, motivo: 'x'.repeat(501) }).success).toBe(false)
+        const datos = esquemaFacturasPeriodo(true).parse({ periodos: ['2026-12-01', '2026-08-01'], montos: {}, motivo: ' Cobro acordado ' })
         expect(cuerpoFacturasPeriodo(datos)).toEqual({ periodos: ['2026-08-01', '2026-12-01'], motivo: 'Cobro acordado' })
-        expect(cuerpoFacturasPeriodo({ periodos: ['2026-11-01'], motivo: '' })).toEqual({ periodos: ['2026-11-01'] })
+        expect(cuerpoFacturasPeriodo({ periodos: ['2026-11-01'], montos: {}, motivo: '' })).toEqual({ periodos: ['2026-11-01'] })
+    })
+
+    it('monto editado: mayor que cero con 2 decimales, motivo obligatorio y solo lo que cambió va al POST', () => {
+        const lista = [periodo({ periodo: '2026-11-01', estado: 'futuro' }), periodo({ periodo: '2026-12-01', estado: 'futuro' })]
+        expect(montoEditado(lista[0]!, { '2026-11-01': '150' })).toBeNull()
+        expect(montoEditado(lista[0]!, { '2026-11-01': ' 120.5 ' })).toBe('120.50')
+        expect(montoEditado(lista[0]!, { '2026-11-01': '' })).toBeNull()
+        const esquema = esquemaFacturasPeriodo(false, lista)
+        const sinMotivo = esquema.safeParse({ periodos: ['2026-11-01'], montos: { '2026-11-01': '120.00' }, motivo: '' })
+        expect(sinMotivo.error?.issues.map(i => i.path.join('.'))).toEqual(['motivo'])
+        for (const malo of ['0', '0.00', '-5', '1.234', 'abc']) {
+            const r = esquema.safeParse({ periodos: ['2026-11-01'], montos: { '2026-11-01': malo }, motivo: 'Acuerdo' })
+            expect(r.error?.issues.map(i => i.path.join('.'))).toEqual(['montos.2026-11-01'])
+        }
+        // igual al calculado: no es edición ni pide motivo
+        expect(esquema.safeParse({ periodos: ['2026-11-01'], montos: { '2026-11-01': '150.00' }, motivo: '' }).success).toBe(true)
+        // un monto de un periodo no marcado no cuenta
+        expect(esquema.safeParse({ periodos: ['2026-12-01'], montos: { '2026-11-01': '1' }, motivo: '' }).success).toBe(true)
+        const datos = esquema.parse({ periodos: ['2026-12-01', '2026-11-01'], montos: { '2026-11-01': '150', '2026-12-01': '99.9' }, motivo: 'Acuerdo' })
+        expect(cuerpoFacturasPeriodo(datos, lista)).toEqual({ periodos: ['2026-11-01', '2026-12-01'], montos: [{ periodo: '2026-12-01', monto: '99.90' }], motivo: 'Acuerdo' })
     })
 
     it('errores de la emisión en llano por su regla', () => {
@@ -144,7 +169,12 @@ describe('facturas de periodos', () => {
         if (!r.ok) {
             return
         }
-        expect(r.data).toMatchObject({ emitible: true, motivo: null, hoy: '2026-10-15', maximo_futuros: 12 })
+        expect(r.data).toMatchObject({ emitible: true, motivo: null, hoy: '2026-10-15', maximo_futuros: 12, maximo_anteriores: 24 })
+        // 24 meses antes del inicio del servicio, ascendentes, que vencen desde hoy
+        const anteriores = r.data.periodos.filter(p => p.estado === 'antes_del_inicio')
+        expect(anteriores).toHaveLength(24)
+        expect(r.data.periodos.slice(0, 24)).toEqual(anteriores)
+        expect(anteriores.every(p => p.vence_en >= '2026-10-15' && p.monto === bd.servicios[0]?.precio_mensual)).toBe(true)
         expect(r.data.periodos.filter(p => p.estado === 'emitida').map(p => p.periodo)).toEqual(['2026-09-01', '2026-10-01'])
         const futuros = r.data.periodos.filter(p => p.estado === 'futuro')
         expect(futuros).toHaveLength(12)
@@ -223,6 +253,53 @@ describe('facturas de periodos', () => {
         vista.unmount()
     })
 
+    it('antes del inicio del servicio: plegados, con permiso y motivo; vencen desde hoy', async () => {
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        const r = await useFacturasPeriodo().periodos(1)
+        const ultimo = r.ok ? r.data.periodos.filter(p => p.estado === 'antes_del_inicio').at(-1) : undefined
+        expect(ultimo).toBeDefined()
+        const inicio = ultimo?.periodo ?? ''
+        // plegados al entrar
+        expect(vista.find(`[data-periodo="${inicio}"]`).exists()).toBe(false)
+        expect(vista.find('[data-prueba="ver-anteriores"]').text()).toContain('24 periodos antes del inicio del servicio')
+        await vista.find('[data-prueba="ver-anteriores"]').trigger('click')
+        await esperar(() => expect(estadoDe(vista, inicio)).toBe('antes_del_inicio'))
+        expect(vista.find(`[data-periodo="${inicio}"]`).text()).toContain('Antes del inicio del servicio')
+
+        await marcar(vista, inicio)
+        await esperar(() => expect(vista.find('[data-prueba="aviso-anterior"]').text()).toContain('vencen desde hoy'))
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.text()).toContain('Obligatorio: emites un periodo anterior'))
+
+        await vista.find('[data-prueba="motivo-periodos"]').setValue('Usó el servicio antes del alta')
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find(`[data-creada="${inicio}"]`).exists()).toBe(true))
+        const factura = bd.facturas.find(f => f.clave_unica === `1-${inicio}`)
+        expect(factura?.vence_en).toBe(ultimo?.vence_en)
+        expect((factura?.vence_en ?? '') >= '2026-10-15').toBe(true)
+        vista.unmount()
+    })
+
+    it('monto editado en la fila: pide motivo y emite con el monto escrito', async () => {
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        expect(vista.find('[data-prueba="monto-2026-11-01"]').exists()).toBe(false)
+        await marcar(vista, '2026-11-01')
+        await esperar(() => expect(vista.find('[data-prueba="monto-2026-11-01"]').exists()).toBe(true))
+        await vista.find('[data-prueba="monto-2026-11-01"] input, input[data-prueba="monto-2026-11-01"]').setValue('99.50')
+        await esperar(() => expect(vista.find('[data-prueba="monto-editado-2026-11-01"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="resumen-total"]').text()).toBe(formatearQuetzales('99.50'))
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.text()).toContain('Obligatorio: cambiaste un monto'))
+
+        await vista.find('[data-prueba="motivo-periodos"]').setValue('Acuerdo con el cliente')
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find('[data-creada="2026-11-01"]').exists()).toBe(true))
+        expect(bd.facturas.find(f => f.clave_unica === '1-2026-11-01')?.total).toBe('99.50')
+        vista.unmount()
+    })
+
     it('anteriores sin el permiso (cajero): se ven pero no se eligen; la API responde 422', async () => {
         sesionFixture('fixture-cajero')
         useUsuarioActual().value = meCajero
@@ -237,6 +314,12 @@ describe('facturas de periodos', () => {
 
         const r = await useFacturasPeriodo().emitir(9, { periodos: ['2026-08-01'], motivo: 'Prueba' }, nuevaClaveIdempotencia())
         expect(!r.ok && reglaEmision(r.problema)).toBe('antes_de_facturar_desde')
+        const delInicio = await useFacturasPeriodo().emitir(9, { periodos: ['2026-06-01'], motivo: 'Prueba' }, nuevaClaveIdempotencia())
+        expect(!delInicio.ok && reglaEmision(delInicio.problema)).toBe('antes_del_inicio')
+        // sin editar_monto_periodo: ni el campo ni el permiso en la API
+        expect(meCajero.permisos).not.toContain('facturas.editar_monto_periodo')
+        const editar = await useFacturasPeriodo().emitir(9, { periodos: ['2026-11-01'], montos: [{ periodo: '2026-11-01', monto: '1.00' }], motivo: 'Prueba' }, nuevaClaveIdempotencia())
+        expect(!editar.ok && reglaEmision(editar.problema)).toBe('editar_monto_sin_permiso')
     })
 
     it('la emisión no duplica: lo ocupado va en omitidas; motivo_requerido sin motivo', async () => {
