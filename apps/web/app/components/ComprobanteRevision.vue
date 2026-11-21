@@ -340,7 +340,7 @@ defineExpose({ comprobante })
                     data-prueba="servicio-cortado"
                 >
                     <template #actions>
-                        <UTooltip :text="MOTIVO_SIN_RECONEXION">
+                        <span :title="MOTIVO_SIN_RECONEXION">
                             <UButton
                                 label="Reconectar mientras reviso"
                                 icon="i-lucide-power"
@@ -350,7 +350,7 @@ defineExpose({ comprobante })
                                 disabled
                                 data-prueba="reconectar-mientras-reviso"
                             />
-                        </UTooltip>
+                        </span>
                     </template>
                 </UAlert>
 
@@ -632,7 +632,10 @@ defineExpose({ comprobante })
                                 {{ resumenLecturaIris(comprobante) ?? 'Llegó por Iris' }}
                                 <template v-if="textoActorIris(comprobante.iris_actor)"> · {{ textoActorIris(comprobante.iris_actor) }}</template>
                             </span>
-                            <UTooltip :text="MOTIVO_SIN_CONVERSACION">
+                            <span
+                                :title="MOTIVO_SIN_CONVERSACION"
+                                class="self-start"
+                            >
                                 <UButton
                                     label="Ver conversación en Iris"
                                     icon="i-lucide-message-square"
@@ -643,7 +646,7 @@ defineExpose({ comprobante })
                                     disabled
                                     data-prueba="ver-conversacion-iris"
                                 />
-                            </UTooltip>
+                            </span>
                             <span class="sr-only">{{ MOTIVO_SIN_CONVERSACION }}</span>
                             <span
                                 v-if="comprobante.iris_conversacion"

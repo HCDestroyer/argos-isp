@@ -660,7 +660,6 @@ onMounted(async () => {
                                         <span
                                             v-if="row.original.motivo_reconexion"
                                             class="block text-xs text-muted"
-                                            data-prueba="promesa-motivo-reconexion"
                                         >{{ etiquetaMotivoReconexion(row.original) }}</span>
                                     </template>
 

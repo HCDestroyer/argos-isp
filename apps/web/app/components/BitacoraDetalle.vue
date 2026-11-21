@@ -237,7 +237,10 @@ onMounted(cargar)
             </dl>
         </section>
 
-        <UCollapsible :ui="{ content: 'pt-2' }">
+        <UCollapsible
+            :unmount-on-hide="false"
+            :ui="{ content: 'pt-2' }"
+        >
             <UButton
                 label="Entrada tal como llegó"
                 icon="i-lucide-braces"

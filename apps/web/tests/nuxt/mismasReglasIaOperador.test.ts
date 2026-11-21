@@ -145,14 +145,10 @@ describe('mismas reglas para IA y operador · fixtures y pantallas', () => {
     it('la lista marca la plantilla y cuenta la aprobación de IA con los límites de operador', async () => {
         const plantilla = bd.plantillas.find(p => p.id === 2)!
         plantilla.reglas_promesa.mismas_reglas_ia_operador = true
-        const pagina = await mountSuspended(defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaPlantillas) }) }))
-        await esperar(() => expect(pagina.find('[data-plantilla="2"]').exists()).toBe(true))
         // Rediseño: la plantilla abierta muestra sus reglas por canal en «Promesas y reconexión».
-        const promesas = () => [...document.body.querySelectorAll<HTMLElement>('[data-prueba="plantilla-abierta"] [role="tab"]')].find(t => t.textContent?.includes('Promesas'))
+        const pagina = await mountSuspended(defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaPlantillas) }) }), { route: '/plantillas?seccion=promesas' })
+        await esperar(() => expect(pagina.find('[data-plantilla="2"]').exists()).toBe(true))
         await pagina.find('[data-plantilla="2"] button').trigger('click')
-        await esperar(() => expect(promesas()).toBeDefined())
-        promesas()!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-        promesas()!.click()
         await esperar(() => expect(pagina.find('[data-prueba="plantilla-abierta"] [data-prueba="plantilla-mismas-reglas"]').exists()).toBe(true))
         expect(pagina.find('[data-prueba="plantilla-abierta"]').text()).toContain('Con aprobación')
         await pagina.find('[data-plantilla="1"] button').trigger('click')

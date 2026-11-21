@@ -56,10 +56,12 @@ describe('tarea 14 · bitácora', () => {
         const lista = await useBitacora().acciones({ accion: 'servicios.crear', limit: 1 })
         const accion = lista.ok ? lista.data.data[0] : undefined
         expect(accion).toBeDefined()
-        const vista = await mountSuspended(BitacoraDetalle, { props: { accion: accion ?? null, open: true } })
-        await esperar(() => expect(document.body.querySelector('[data-prueba="entrada"]')).not.toBeNull())
-        expect(document.body.querySelector('[data-prueba="entrada"]')?.textContent).toContain('"pass_ppp": "***"')
-        expect(document.body.textContent).toContain(accion?.request_id ?? '')
+        // Rediseño (OperBitacora): el detalle va en el panel de la derecha; la entrada, plegada dentro.
+        const vista = await mountSuspended(BitacoraDetalle, { props: { accion: accion! } })
+        await esperar(() => expect(vista.find('[data-prueba="entrada"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="entrada"]').element.textContent).toContain('"pass_ppp": "***"')
+        expect(vista.text()).toContain(accion?.request_id ?? '')
+        expect(vista.text()).toContain('servicios.crear')
         vista.unmount()
     })
 

@@ -106,11 +106,11 @@ describe('iris 0.8.0 · cuenta desactivada en llano', () => {
         const vista = await mountSuspended(conApp(defineComponent({
             render: () => h(ComprobanteRevision, { comprobanteId: comprobante.id }),
         })))
-        await esperar(() => expect(enCuerpo('[data-prueba="aprobar-comprobante"]')).not.toBeNull())
-        enCuerpo('[data-prueba="aprobar-comprobante"]')!.click()
-        await esperar(() => expect(enCuerpo('[data-prueba="cuenta-inactiva"]')).not.toBeNull())
-        expect(enCuerpo('[data-prueba="cuenta-inactiva"]')?.textContent).toContain('cuenta desactivada')
-        expect(enCuerpo('[data-prueba="cuenta-inactiva"]')?.textContent).toContain('Configuración → Cuentas bancarias')
+        await esperar(() => expect(vista.find('[data-prueba="aprobar-comprobante"]').exists()).toBe(true))
+        await vista.find('[data-prueba="aprobar-comprobante"]').trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="cuenta-inactiva"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="cuenta-inactiva"]').text()).toContain('cuenta desactivada')
+        expect(vista.find('[data-prueba="cuenta-inactiva"]').text()).toContain('Configuración → Cuentas bancarias')
         vista.unmount()
     })
 })
