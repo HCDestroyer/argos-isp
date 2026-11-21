@@ -9776,6 +9776,29 @@
                     "maxLength": 50,
                     "description": "Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`"
                   },
+                  "telefonos_adicionales": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 25,
+                          "description": "E.164"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "numero"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 4,
+                    "description": "Números adicionales del titular (contrato Iris 0.10.0 §3.2, hasta 4, E.164): van a su contacto titular y no cuentan como registrados"
+                  },
                   "codigo_referido": {
                     "type": [
                       "string",
@@ -10184,6 +10207,422 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/a-cargo": {
+      "get": {
+        "operationId": "clientesACargo",
+        "summary": "Servicios de otros clientes que esta persona tiene a cargo (contrato Iris 0.10.1 §3.8)",
+        "description": "«Está a cargo de»: los contactos de otros clientes vinculados a este (`persona_cliente_id`). Con el token de Iris exige `X-Iris-Actor` y tiene los límites de `GET /contactos/buscar`.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contactos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ContactoCliente"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contactos.buscar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contactos.buscar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/contactos": {
+      "get": {
+        "operationId": "clientesContactos",
+        "summary": "Contactos del cliente con sus teléfonos (el titular primero)",
+        "description": "Lo que la ficha muestra como «A cargo de sus servicios». Del titular, sus números registrados son `telefono` y `movil` del cliente; en `telefonos` lleva solo los adicionales. Con el token de Iris exige `X-Iris-Actor` y tiene los límites de `GET /contactos/buscar`.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contactos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ContactoCliente"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contactos.buscar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contactos.buscar",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "clientesCrearContacto",
+        "summary": "Crear un contacto del cliente",
+        "description": "Con relación, servicios (null = todos), permisos (todos encendidos por defecto) y números E.164 (uno principal). `relacion: titular` → `422 contacto_titular_no_permitido`. Con el token de Iris: `X-Iris-Actor` obligatoria y nunca `asistente_ia` (`403 actor_ia_no_permitido`). Emite `cliente.contactos_cambiados` (sin números). `Idempotency-Key` obligatoria.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "relacion": {
+                    "type": "string",
+                    "enum": [
+                      "titular",
+                      "familiar",
+                      "inquilino",
+                      "empleado",
+                      "otro"
+                    ],
+                    "description": "`titular` no se admite (422 contacto_titular_no_permitido): el titular es el cliente"
+                  },
+                  "servicios": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "description": "Servicios del cliente a los que aplica; null o ausente = todos"
+                  },
+                  "permisos": {
+                    "type": "object",
+                    "properties": {
+                      "consultar": {
+                        "type": "boolean"
+                      },
+                      "reportar": {
+                        "type": "boolean"
+                      },
+                      "pagar": {
+                        "type": "boolean"
+                      },
+                      "avisos": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "consultar (saldo, estado, facturas), reportar (tickets), pagar (comprobantes y promesas), avisos (avisos de cobro). Los que no vienen, encendidos"
+                  },
+                  "telefonos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 25,
+                          "description": "E.164 (`+50255123344`); también 8 dígitos de Guatemala. Se guarda en E.164"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        },
+                        "principal": {
+                          "description": "Exactamente uno por contacto (con un solo número, ese es el principal)",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "numero"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  },
+                  "persona_cliente_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Otro cliente de la misma empresa que es esta persona (A46). Desde Iris solo se vincula si un número del contacto es el teléfono verificado de ese cliente; si no, queda suelto"
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "relacion",
+                  "telefonos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contacto creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactoCliente"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contactos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contactos.gestionar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/contrasena-portal": {
       "get": {
         "operationId": "clientesContrasenaPortalVer",
@@ -10581,6 +11020,370 @@
           }
         },
         "x-permiso": "clientes.estado_cuenta",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/identidad": {
+      "get": {
+        "operationId": "clientesVerIdentidad",
+        "summary": "Ver la identidad del titular: vigente y anterior (cada vista queda auditada)",
+        "description": "Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identidades",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IdentidadCliente"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "clientesRegistrarIdentidad",
+        "summary": "Registrar la identidad del titular (contrato Iris 0.10.0 §3.4.3)",
+        "description": "`multipart/form-data`: `frente` (obligatoria) y `reverso` (opcional), JPEG o PNG hasta 5 MB (`413 tamano_excedido`, `422 mime_no_permitido`), y los campos de texto. `mayor_de_edad` y `coincide` deben ser true. Se guarda cifrada en reposo como versión nueva (solo quedan la vigente y la anterior). Desde Iris: `X-Iris-Actor`, nunca el asistente, solo para el cliente de un servicio pendiente de Iris (`422 cliente_sin_instalacion`, `403 servicio_no_de_iris`), `Idempotency-Key = iris:identidad:<orden_id>:<toma>`. Cliente con historial: documento y nombre deben coincidir (`422 titular_no_coincide`). Nunca escribe `nit_cui`. Emite `cliente.identidad_registrada` sin número ni foto. El `detail` y los `errors[]` nunca repiten el valor recibido.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documento_tipo": {
+                    "type": "string",
+                    "enum": [
+                      "dpi",
+                      "pasaporte"
+                    ]
+                  },
+                  "documento_numero": {
+                    "type": "string",
+                    "minLength": 5,
+                    "maxLength": 25,
+                    "description": "DPI: 13 dígitos con departamento y municipio. Pasaporte: 5 a 20 letras o dígitos"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200,
+                    "description": "Como aparece en el documento"
+                  },
+                  "mayor_de_edad": {
+                    "description": "Debe ser true (sin fecha de nacimiento)",
+                    "type": "boolean"
+                  },
+                  "coincide": {
+                    "description": "true: el técnico comprobó que la foto es de quien está presente",
+                    "type": "boolean"
+                  },
+                  "verificado_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "foto_documento",
+                      "revision_panel"
+                    ],
+                    "description": "foto_documento (el técnico en sitio) o revision_panel (un supervisor revisa la foto tomada en sitio)"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  },
+                  "frente": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto del frente del documento (JPEG o PNG, hasta 5 MB)"
+                  },
+                  "reverso": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto del reverso (opcional)"
+                  }
+                },
+                "required": [
+                  "documento_tipo",
+                  "documento_numero",
+                  "nombre",
+                  "mayor_de_edad",
+                  "coincide",
+                  "verificado_en",
+                  "metodo",
+                  "frente"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identidad registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentidadRegistrada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.registrar_identidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.registrar_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/identidad/{identidadId}/{parte}": {
+      "get": {
+        "operationId": "clientesVerFotoIdentidad",
+        "summary": "Ver una foto del documento del titular (cada vista queda auditada)",
+        "description": "`parte` = `frente` o `reverso`. Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "identidadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "parte",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "frente",
+                "reverso"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Foto (JPEG o PNG)",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
         "x-implementado": true
       }
     },
@@ -16705,6 +17508,445 @@
           }
         },
         "x-permiso": "compras.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/contactos/{id}": {
+      "put": {
+        "operationId": "contactosEditar",
+        "summary": "Editar un contacto del cliente",
+        "description": "Con `version` (`409 conflicto_version`). Desde Iris, cualquier `PUT` sobre el contacto titular responde `422 contacto_titular_no_permitido`. Cambiar los números revalida el vínculo `persona_cliente_id`. `Idempotency-Key` obligatoria.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "relacion": {
+                    "type": "string",
+                    "enum": [
+                      "titular",
+                      "familiar",
+                      "inquilino",
+                      "empleado",
+                      "otro"
+                    ]
+                  },
+                  "servicios": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "description": "Servicios del cliente a los que aplica; null o ausente = todos"
+                  },
+                  "permisos": {
+                    "type": "object",
+                    "properties": {
+                      "consultar": {
+                        "type": "boolean"
+                      },
+                      "reportar": {
+                        "type": "boolean"
+                      },
+                      "pagar": {
+                        "type": "boolean"
+                      },
+                      "avisos": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "consultar (saldo, estado, facturas), reportar (tickets), pagar (comprobantes y promesas), avisos (avisos de cobro). Los que no vienen, encendidos"
+                  },
+                  "telefonos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 25,
+                          "description": "E.164 (`+50255123344`); también 8 dígitos de Guatemala. Se guarda en E.164"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        },
+                        "principal": {
+                          "description": "Exactamente uno por contacto (con un solo número, ese es el principal)",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "numero"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 5,
+                    "description": "Reemplaza la lista completa. En el contacto titular, solo números adicionales (hasta 4, sin principal)"
+                  },
+                  "persona_cliente_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Otro cliente de la misma empresa que es esta persona (A46). Desde Iris solo se vincula si un número del contacto es el teléfono verificado de ese cliente; si no, queda suelto"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contacto actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactoCliente"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contactos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contactos.gestionar",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "contactosQuitar",
+        "summary": "Quitar un contacto del cliente",
+        "description": "Con `version`. El titular no se quita (`422 contacto_titular`; desde Iris, `422 contacto_titular_no_permitido`). Rompe su vínculo `persona_cliente_id`. `Idempotency-Key` obligatoria.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contacto quitado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactoCliente"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contactos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contactos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/contactos/buscar": {
+      "get": {
+        "operationId": "contactosBuscar",
+        "summary": "De quién es un número de teléfono (contrato Iris 0.10.0 §3.5)",
+        "description": "`telefono` en E.164. Una fila por cliente y contacto: el titular (el número es su `telefono` o `movil`; `adicional: true` si es uno de sus números adicionales, que Iris trata como no verificado) o un contacto (`a_cargo: true`). Solo clientes dentro del alcance de empresas. Nunca devuelve otros números ni documentos. Con el token de Iris exige `X-Iris-Actor`. Límite: 60 por minuto por token y 20 por actor (`429 demasiadas_busquedas` con `Retry-After`). Cada búsqueda queda auditada con el número enmascarado.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "telefono",
+            "in": "query",
+            "required": true,
+            "description": "Número en E.164 (`+50255123344`)",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Coincidencias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContactoEncontrado"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contactos.buscar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contactos.buscar",
         "x-implementado": true
       }
     },
@@ -55650,6 +56892,19 @@
                 "dedicado"
               ]
             }
+          },
+          {
+            "name": "modo",
+            "in": "query",
+            "required": false,
+            "description": "Contrato Iris 0.10.0 (A40): solo los planes aplicables a ese modo, activos y (con router_id) asignados a todos los routers o a ese router. empresarial incluye dedicado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "residencial",
+                "empresarial"
+              ]
+            }
           }
         ],
         "responses": {
@@ -69971,6 +71226,126 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/titulares-iris": {
+      "get": {
+        "operationId": "reportesTitularesIris",
+        "summary": "Cambios de titular que llegaron por Iris (para revisar los asignados a un cliente existente)",
+        "description": "Contrato Iris 0.10.0 (ajuste aj, decisión 9 del PM): `existente=true` lista los servicios que Iris asignó al momento a un cliente que ya existía, para que caja o supervisión los revise. Filtrado por las empresas de la petición.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "existente",
+            "in": "query",
+            "required": false,
+            "description": "true: los asignados a un cliente que ya existía",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "posible_duplicado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cambios de titular",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CambioTitularIris"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/roles": {
       "get": {
         "operationId": "rolesListar",
@@ -70107,8 +71482,10 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
+                        "clientes.registrar_identidad",
                         "clientes.restaurar_contrasena_portal",
                         "clientes.ver",
+                        "clientes.ver_identidad",
                         "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
@@ -70126,6 +71503,8 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contactos.buscar",
+                        "contactos.gestionar",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
                         "declaraciones.ajustar",
@@ -70309,7 +71688,10 @@
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
                         "servicios.cambiar_equipo",
+                        "servicios.cambiar_plan_pendiente",
+                        "servicios.cambiar_titular",
                         "servicios.cancelar_plan_temporal",
+                        "servicios.completar_datos",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -70320,6 +71702,7 @@
                         "servicios.quitar_adicional",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
+                        "servicios.reservar_ip",
                         "servicios.retirar",
                         "servicios.sincronizar_router",
                         "servicios.suspender",
@@ -70515,8 +71898,10 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
+                        "clientes.registrar_identidad",
                         "clientes.restaurar_contrasena_portal",
                         "clientes.ver",
+                        "clientes.ver_identidad",
                         "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
@@ -70534,6 +71919,8 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contactos.buscar",
+                        "contactos.gestionar",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
                         "declaraciones.ajustar",
@@ -70717,7 +72104,10 @@
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
                         "servicios.cambiar_equipo",
+                        "servicios.cambiar_plan_pendiente",
+                        "servicios.cambiar_titular",
                         "servicios.cancelar_plan_temporal",
+                        "servicios.completar_datos",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -70728,6 +72118,7 @@
                         "servicios.quitar_adicional",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
+                        "servicios.reservar_ip",
                         "servicios.retirar",
                         "servicios.sincronizar_router",
                         "servicios.suspender",
@@ -76800,6 +78191,15 @@
                     ],
                     "pattern": "^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
                   },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "description": "Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda"
+                  },
                   "direccion": {
                     "type": [
                       "string",
@@ -77267,6 +78667,15 @@
                       "null"
                     ],
                     "pattern": "^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "description": "Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda"
                   },
                   "direccion": {
                     "type": [
@@ -79012,6 +80421,299 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/cambiar-plan": {
+      "post": {
+        "operationId": "serviciosCambiarPlanPendiente",
+        "summary": "Cambiar el plan de un servicio pendiente de instalación (contrato Iris 0.10.0 §3.4.5)",
+        "description": "Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`), a un plan de `GET /planes?router_id=&modo=` (activo, del mismo modo y asignado a todos los routers o al del servicio; si no, `422 plan_no_permitido`). Sin factura ni prorrateo. `version` opcional (`409 conflicto_version`). Emite `servicio.config_cambiada` con `plan` y `precio` y la orden en `origen_tipo`/`origen_id`. Iris: `Idempotency-Key = iris:plan:<orden_id>:<cambio_id>`, `X-Iris-Actor` y solo servicios de Iris.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "enum": [
+                      "mas_velocidad",
+                      "menos_velocidad",
+                      "otro"
+                    ]
+                  },
+                  "motivo_texto": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500,
+                    "description": "Obligatorio con motivo otro; queda solo en la auditoría"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Opcional (§3.4): si viene y no coincide, 409 conflicto_version"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  }
+                },
+                "required": [
+                  "plan_id",
+                  "motivo",
+                  "origen_tipo",
+                  "origen_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio con el plan nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_plan_pendiente; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_plan_pendiente",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/cambiar-titular": {
+      "post": {
+        "operationId": "serviciosCambiarTitular",
+        "summary": "Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4)",
+        "description": "`multipart/form-data`: la parte `datos` (JSON) y las fotos `frente` y `reverso?` de A41. Quién es el titular lo decide Argos (nunca se manda `cliente_id`): mismo documento y nombre normalizado en la empresa del servicio → ese cliente (`existente: true`, aviso informativo); mismo documento y otro nombre → `422 titular_no_coincide`; si no, un cliente nuevo. Solo en pendiente (`422 servicio_no_pendiente`); sin `frente` o sin `coincide`, `422 evidencia_requerida`; 2 cambios por servicio y 10 por empresa y actor al día (`429 demasiados_cambios_titular` con `Retry-After`). El cliente anterior sin servicios ni movimientos se elimina. Emite `servicio.titular_cambiado` y `cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "datos": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 10000,
+                    "description": "JSON: { cliente: { nombre, documento_tipo, documento_numero, mayor_de_edad, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id }"
+                  },
+                  "frente": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto del frente del documento del titular (JPEG o PNG, hasta 5 MB)"
+                  },
+                  "reverso": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto del reverso (opcional)"
+                  }
+                },
+                "required": [
+                  "datos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Titular cambiado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TitularCambiado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_titular; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_titular",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/codigo-corte": {
       "get": {
         "operationId": "servicioCodigoCorte",
@@ -79082,6 +80784,220 @@
           }
         },
         "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/completar-datos": {
+      "post": {
+        "operationId": "serviciosCompletarDatos",
+        "summary": "Completar los datos del titular y del lugar antes de activar (contrato Iris 0.10.0 §3.4.6)",
+        "description": "Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`) y para el cliente de ese servicio. Del cliente solo llena vacíos (`422 campo_ya_registrado`); el `nombre` se corrige solo con `identidad_id` de su identidad vigente. Cliente con historial: sin `telefono`, `movil`, `email`, `nombre`, `tipo_documento_fiscal` ni `nit_cui` (`422 cliente_con_historial`). Del servicio corrige dirección, referencia, coordenadas y `precision_m`. Teléfono y correo agregados no cuentan como registrados hasta que el titular los confirme. Emite `cliente.actualizado` y `servicio.datos_cambiados`. Iris: `Idempotency-Key = iris:datos:<orden_id>:<n>` y `X-Iris-Actor`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente": {
+                    "type": "object",
+                    "properties": {
+                      "nombre": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 200,
+                        "description": "Solo con identidad_id: el nombre como aparece en el documento"
+                      },
+                      "telefono": {
+                        "type": "string",
+                        "maxLength": 30
+                      },
+                      "whatsapp": {
+                        "type": "boolean"
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "tipo_documento_fiscal": {
+                        "type": "string",
+                        "enum": [
+                          "cf",
+                          "nit",
+                          "cui"
+                        ]
+                      },
+                      "nit_cui": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 20
+                      },
+                      "relacion": {
+                        "type": "string",
+                        "enum": [
+                          "titular",
+                          "familiar",
+                          "otro"
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "servicio": {
+                    "type": "object",
+                    "properties": {
+                      "direccion": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "referencia": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "coordenadas": {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d+)?, ?-?\\d+(\\.\\d+)?$",
+                        "description": "Latitud y longitud: \"14.6349,-90.5069\""
+                      },
+                      "precision_m": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100000
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "identidad_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Opcional (§3.4): si viene y no coincide, 409 conflicto_version"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  }
+                },
+                "required": [
+                  "origen_tipo",
+                  "origen_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.completar_datos; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.completar_datos",
         "x-implementado": true
       }
     },
@@ -81917,6 +83833,143 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/reservar-ip": {
+      "post": {
+        "operationId": "serviciosReservarIp",
+        "summary": "Reservar en sitio la IP de un servicio pendiente (contrato Iris 0.10.0 §3.4.1)",
+        "description": "Para IP fija o amarre IP-MAC, cuando el equipo necesita la IP antes de activar (con PPPoE no hace falta). Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`). Una segunda llamada devuelve la misma reserva. Sin IP libre: `422 sin_ip_disponible`. La activación la usa; se libera al retirar y vence a los 30 días sin activar. Iris: `Idempotency-Key = iris:reservar_ip:<orden_id>:<router_id>`, `X-Iris-Actor` y solo servicios de Iris (`403 servicio_no_de_iris`).",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "router_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Router final; si es otro, el servicio pasa a él antes de reservar (el plan debe estar asignado)"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  }
+                },
+                "required": [
+                  "origen_tipo",
+                  "origen_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reserva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservaIp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.reservar_ip; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.reservar_ip",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/retirar": {
       "post": {
         "operationId": "serviciosRetirar",
@@ -83803,8 +85856,10 @@
                             "clientes.editar",
                             "clientes.estado_cuenta",
                             "clientes.quitar_responsable_pago",
+                            "clientes.registrar_identidad",
                             "clientes.restaurar_contrasena_portal",
                             "clientes.ver",
+                            "clientes.ver_identidad",
                             "clientes.verificar_identidad",
                             "clientes.vincular_telegram",
                             "cobros.configurar",
@@ -83822,6 +85877,8 @@
                             "comprobantes.reconexion_temporal",
                             "comprobantes.registrar",
                             "comprobantes.ver",
+                            "contactos.buscar",
+                            "contactos.gestionar",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
                             "declaraciones.ajustar",
@@ -84005,7 +86062,10 @@
                             "servicios.agregar_adicional",
                             "servicios.cambiar_empresa",
                             "servicios.cambiar_equipo",
+                            "servicios.cambiar_plan_pendiente",
+                            "servicios.cambiar_titular",
                             "servicios.cancelar_plan_temporal",
+                            "servicios.completar_datos",
                             "servicios.crear",
                             "servicios.desconectar",
                             "servicios.editar",
@@ -84016,6 +86076,7 @@
                             "servicios.quitar_adicional",
                             "servicios.quitar_limite",
                             "servicios.reactivar",
+                            "servicios.reservar_ip",
                             "servicios.retirar",
                             "servicios.sincronizar_router",
                             "servicios.suspender",
@@ -91530,6 +93591,77 @@
           }
         }
       },
+      "CambioTitularIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "servicio_id",
+          "empresa_id",
+          "de_cliente_id",
+          "a_cliente_id",
+          "existente",
+          "posible_duplicado",
+          "de_cliente_eliminado",
+          "motivo_codigo",
+          "origen_tipo",
+          "origen_id",
+          "ocurrido_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "a_cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "existente": {
+            "type": "boolean"
+          },
+          "posible_duplicado": {
+            "type": "boolean"
+          },
+          "de_cliente_eliminado": {
+            "type": "boolean"
+          },
+          "motivo_codigo": {
+            "type": "string",
+            "enum": [
+              "menor_de_edad",
+              "otro"
+            ]
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ocurrido_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CampoPersonalizado": {
         "type": "object",
         "required": [
@@ -96778,6 +98910,175 @@
               }
             },
             "description": "Cargos al cliente de las líneas consumible_cobro (id = la factura del cargo único)"
+          }
+        }
+      },
+      "ContactoCliente": {
+        "type": "object",
+        "required": [
+          "contacto_id",
+          "cliente_id",
+          "empresa_id",
+          "nombre",
+          "relacion",
+          "es_titular",
+          "servicios",
+          "permisos",
+          "telefonos",
+          "persona_cliente_id",
+          "origen",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "contacto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "relacion": {
+            "type": "string",
+            "enum": [
+              "titular",
+              "familiar",
+              "inquilino",
+              "empleado",
+              "otro"
+            ]
+          },
+          "es_titular": {
+            "type": "boolean"
+          },
+          "servicios": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Servicios del cliente a los que aplica; null = todos"
+          },
+          "permisos": {
+            "$ref": "#/components/schemas/PermisosContacto"
+          },
+          "telefonos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TelefonoContacto"
+            },
+            "description": "En el titular, solo los adicionales: sus números registrados son `telefono` y `movil` del cliente"
+          },
+          "persona_cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Otro cliente que es esta persona (A46)"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "argos",
+              "iris",
+              "portal"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ContactoEncontrado": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "empresa_id",
+          "contacto_id",
+          "nombre",
+          "relacion",
+          "es_titular",
+          "adicional",
+          "a_cargo",
+          "servicios",
+          "permisos"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "contacto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "relacion": {
+            "type": "string",
+            "enum": [
+              "titular",
+              "familiar",
+              "inquilino",
+              "empleado",
+              "otro"
+            ]
+          },
+          "es_titular": {
+            "type": "boolean"
+          },
+          "adicional": {
+            "type": "boolean",
+            "description": "El número es un adicional del titular (no verificado)"
+          },
+          "a_cargo": {
+            "type": "boolean",
+            "description": "El número no es del titular (0.10.1, §3.8)"
+          },
+          "servicios": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "permisos": {
+            "$ref": "#/components/schemas/PermisosContacto"
           }
         }
       },
@@ -105466,6 +107767,100 @@
           }
         }
       },
+      "IdentidadCliente": {
+        "type": "object",
+        "required": [
+          "identidad_id",
+          "version",
+          "vigente",
+          "documento_tipo",
+          "documento_numero",
+          "nombre",
+          "metodo",
+          "confirmada",
+          "verificado_en",
+          "tiene_reverso",
+          "origen_tipo",
+          "origen_id",
+          "created_at"
+        ],
+        "properties": {
+          "identidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer"
+          },
+          "vigente": {
+            "type": "boolean"
+          },
+          "documento_tipo": {
+            "type": "string",
+            "enum": [
+              "dpi",
+              "pasaporte"
+            ]
+          },
+          "documento_numero": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Como aparece en el documento"
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "foto_documento",
+              "revision_panel"
+            ]
+          },
+          "confirmada": {
+            "type": "boolean",
+            "description": "false: cliente con historial sin documento; no vale para verificar hasta que el titular la confirme"
+          },
+          "verificado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tiene_reverso": {
+            "type": "boolean"
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "IdentidadRegistrada": {
+        "type": "object",
+        "required": [
+          "identidad_id",
+          "version"
+        ],
+        "properties": {
+          "identidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "ImpuestoFiscal": {
         "type": "object",
         "required": [
@@ -108749,8 +111144,10 @@
           "clientes.editar",
           "clientes.estado_cuenta",
           "clientes.quitar_responsable_pago",
+          "clientes.registrar_identidad",
           "clientes.restaurar_contrasena_portal",
           "clientes.ver",
+          "clientes.ver_identidad",
           "clientes.verificar_identidad",
           "clientes.vincular_telegram",
           "cobros.configurar",
@@ -108768,6 +111165,8 @@
           "comprobantes.reconexion_temporal",
           "comprobantes.registrar",
           "comprobantes.ver",
+          "contactos.buscar",
+          "contactos.gestionar",
           "cuentas_bancarias.editar",
           "cuentas_bancarias.ver",
           "declaraciones.ajustar",
@@ -108951,7 +111350,10 @@
           "servicios.agregar_adicional",
           "servicios.cambiar_empresa",
           "servicios.cambiar_equipo",
+          "servicios.cambiar_plan_pendiente",
+          "servicios.cambiar_titular",
           "servicios.cancelar_plan_temporal",
+          "servicios.completar_datos",
           "servicios.crear",
           "servicios.desconectar",
           "servicios.editar",
@@ -108962,6 +111364,7 @@
           "servicios.quitar_adicional",
           "servicios.quitar_limite",
           "servicios.reactivar",
+          "servicios.reservar_ip",
           "servicios.retirar",
           "servicios.sincronizar_router",
           "servicios.suspender",
@@ -109049,8 +111452,10 @@
           "Editar datos de clientes",
           "Ver el estado de cuenta de un cliente",
           "Quitar el responsable de pago de un cliente",
+          "Registrar la identidad del titular (foto del documento, número y nombre; contrato Iris 0.10.0 §3.4.3)",
           "Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)",
           "Ver y buscar clientes",
+          "Ver la identidad del titular (número y foto del documento); cada vista queda auditada",
           "Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)",
           "Vincular el chat de Telegram de un cliente",
           "Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN",
@@ -109068,6 +111473,8 @@
           "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
           "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
+          "Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)",
+          "Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)",
           "Crear y editar cuentas bancarias propias",
           "Ver las cuentas bancarias propias (destino de depósitos y transferencias)",
           "Registrar o anular ajustes fiscales del ISR (cierre parcial y anual)",
@@ -109251,7 +111658,10 @@
           "Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado",
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
           "Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación",
+          "Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)",
+          "Pasar un servicio pendiente de instalación a otro titular (Argos decide si es un cliente existente por documento y nombre)",
           "Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)",
+          "Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio",
           "Crear servicios",
           "Desconectar la sesión PPPoE de un servicio",
           "Editar servicios (plan, router, IPs, datos)",
@@ -109262,6 +111672,7 @@
           "Dar de baja un adicional de un servicio (con fecha; no se borra)",
           "Quitar el límite de velocidad",
           "Reactivar servicios manualmente",
+          "Reservar en sitio la IP de un servicio pendiente de instalación (IP fija o amarre; vence a los 30 días)",
           "Retirar servicios",
           "Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió",
           "Suspender servicios manualmente",
@@ -112009,6 +114420,29 @@
           }
         }
       },
+      "PermisosContacto": {
+        "type": "object",
+        "required": [
+          "consultar",
+          "reportar",
+          "pagar",
+          "avisos"
+        ],
+        "properties": {
+          "consultar": {
+            "type": "boolean"
+          },
+          "reportar": {
+            "type": "boolean"
+          },
+          "pagar": {
+            "type": "boolean"
+          },
+          "avisos": {
+            "type": "boolean"
+          }
+        }
+      },
       "Plan": {
         "type": "object",
         "required": [
@@ -112123,6 +114557,22 @@
               "dedicado"
             ],
             "description": "residencial (por defecto), empresarial o dedicado"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial"
+            ],
+            "description": "Contrato Iris 0.10.0 (A40): residencial, o empresarial para los tipos empresarial y dedicado"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Routers con implementación propia del plan; con `global` vale en todos (A40)"
           },
           "global": {
             "type": "boolean"
@@ -112353,6 +114803,22 @@
               "dedicado"
             ],
             "description": "Tipo del plan (residencial, empresarial, dedicado)"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial"
+            ],
+            "description": "Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Routers con implementación propia del plan (A40)"
           }
         }
       },
@@ -121931,6 +124397,44 @@
           }
         }
       },
+      "ReservaIp": {
+        "type": "object",
+        "required": [
+          "ipv4",
+          "prefijo_v6",
+          "prefijo_enlace_v6",
+          "vence_en"
+        ],
+        "properties": {
+          "ipv4": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prefijo_v6": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Prefijo IPv6 delegado reservado (o null)"
+          },
+          "prefijo_enlace_v6": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vence_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Si no se activa antes, la reserva se libera (30 días); null si la IP no es una reserva en sitio"
+          }
+        }
+      },
       "ResolucionIp": {
         "type": "object",
         "required": [
@@ -123894,8 +126398,10 @@
               "clientes.editar",
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
+              "clientes.registrar_identidad",
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
+              "clientes.ver_identidad",
               "clientes.verificar_identidad",
               "clientes.vincular_telegram",
               "cobros.configurar",
@@ -123913,6 +126419,8 @@
               "comprobantes.reconexion_temporal",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contactos.buscar",
+              "contactos.gestionar",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
               "declaraciones.ajustar",
@@ -124096,7 +126604,10 @@
               "servicios.agregar_adicional",
               "servicios.cambiar_empresa",
               "servicios.cambiar_equipo",
+              "servicios.cambiar_plan_pendiente",
+              "servicios.cambiar_titular",
               "servicios.cancelar_plan_temporal",
+              "servicios.completar_datos",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",
@@ -124107,6 +126618,7 @@
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
               "servicios.reactivar",
+              "servicios.reservar_ip",
               "servicios.retirar",
               "servicios.sincronizar_router",
               "servicios.suspender",
@@ -124166,6 +126678,7 @@
               "comprobantes.rechazar",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contactos.buscar",
               "cuentas_bancarias.ver",
               "documentos.ver",
               "egresos.registrar",
@@ -124197,9 +126710,12 @@
               "clientes.editar",
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
+              "clientes.registrar_identidad",
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
               "clientes.vincular_telegram",
+              "contactos.buscar",
+              "contactos.gestionar",
               "documentos.ver",
               "facturas.emitir_cargo_unico",
               "facturas.ver",
@@ -124222,7 +126738,10 @@
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
+              "servicios.cambiar_plan_pendiente",
+              "servicios.cambiar_titular",
               "servicios.cancelar_plan_temporal",
+              "servicios.completar_datos",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",
@@ -124232,6 +126751,7 @@
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
               "servicios.reactivar",
+              "servicios.reservar_ip",
               "servicios.sincronizar_router",
               "servicios.suspender",
               "servicios.ver",
@@ -124248,6 +126768,7 @@
             "descripcion": "Red: routers, IPAM, planes por router, sesiones e instalaciones",
             "permisos": [
               "adicionales.ver",
+              "clientes.registrar_identidad",
               "clientes.ver",
               "inventario.asignar_comodato",
               "inventario.cancelar_traslado",
@@ -124292,11 +126813,15 @@
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
               "servicios.cambiar_equipo",
+              "servicios.cambiar_plan_pendiente",
+              "servicios.cambiar_titular",
+              "servicios.completar_datos",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",
               "servicios.editar_adicional",
               "servicios.quitar_adicional",
+              "servicios.reservar_ip",
               "servicios.sincronizar_router",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
@@ -125047,6 +127572,17 @@
             "type": "integer",
             "minimum": 1
           },
+          "codigo": {
+            "type": "string",
+            "description": "Código del servicio (`S-000412`): automático, único e inmutable (contrato Iris 0.10.0 §3.7). Es el «número de servicio» con que el cliente se identifica"
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre opcional del servicio (hasta 60: «Casa», «Negocio»); texto del cliente"
+          },
           "cliente_id": {
             "type": "integer",
             "minimum": 1
@@ -125146,6 +127682,13 @@
               "string",
               "null"
             ]
+          },
+          "precision_m": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Precisión del GPS de las coordenadas en metros enteros (Iris 0.10.0 §3.4.6)"
           },
           "fecha_instalacion": {
             "type": [
@@ -127564,6 +130107,31 @@
           }
         }
       },
+      "TelefonoContacto": {
+        "type": "object",
+        "required": [
+          "numero",
+          "whatsapp",
+          "principal",
+          "adicional"
+        ],
+        "properties": {
+          "numero": {
+            "type": "string",
+            "description": "E.164 (`+50255123344`)"
+          },
+          "whatsapp": {
+            "type": "boolean"
+          },
+          "principal": {
+            "type": "boolean"
+          },
+          "adicional": {
+            "type": "boolean",
+            "description": "Número adicional del titular: no cuenta como registrado (contacto no verificado)"
+          }
+        }
+      },
       "TelegramWebhookRespuesta": {
         "type": "object",
         "required": [
@@ -127733,6 +130301,55 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "TitularCambiado": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "titular",
+          "posible_duplicado",
+          "identidad_id",
+          "de_cliente_id",
+          "de_cliente_eliminado"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "titular": {
+            "type": "object",
+            "required": [
+              "cliente_id",
+              "existente"
+            ],
+            "properties": {
+              "cliente_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "existente": {
+                "type": "boolean",
+                "description": "El titular ya era cliente (documento y nombre iguales)"
+              }
+            }
+          },
+          "posible_duplicado": {
+            "type": "boolean",
+            "description": "Otro cliente con el mismo nombre o teléfono y otro documento: lo revisa una persona de Argos"
+          },
+          "identidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_eliminado": {
+            "type": "boolean"
           }
         }
       },

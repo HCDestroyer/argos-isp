@@ -67,6 +67,15 @@ export const PERMISOS_IRIS_CONTRATO = [
     // operador de Iris (`X-Iris-Actor: usuario:<id>`), que también necesita el permiso
     'comprobantes.aprobar',
     'comprobantes.rechazar',
+    // contactos del cliente (contrato 0.10.0 §3.5, A42)
+    'contactos.buscar',
+    'contactos.gestionar',
+    // de la venta a la instalación (contrato 0.10.0 §3.4)
+    'servicios.reservar_ip',
+    'servicios.cambiar_plan_pendiente',
+    'clientes.registrar_identidad',
+    'servicios.completar_datos',
+    'servicios.cambiar_titular',
 ] as const
 
 /** Permisos que el contrato 0.12.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
@@ -77,6 +86,20 @@ export const PERMISOS_IRIS_0120 = [
 
 /** Permiso que el contrato 0.12.0 le quitó al usuario técnico Iris (la pérdida la declara una persona). */
 export const PERMISO_RETIRADO_IRIS_0120 = 'inventario.declarar_perdida_comodato'
+
+/**
+ * Permisos que el contrato 0.10.0 sumó al usuario técnico Iris (§3.4 y §3.5; migración de los
+ * tokens vigentes `1795255982193_alter_permisos_iris_0100_s_table`).
+ */
+export const PERMISOS_IRIS_0100 = [
+    'contactos.buscar',
+    'contactos.gestionar',
+    'servicios.reservar_ip',
+    'servicios.cambiar_plan_pendiente',
+    'clientes.registrar_identidad',
+    'servicios.completar_datos',
+    'servicios.cambiar_titular',
+] as const satisfies ReadonlyArray<(typeof PERMISOS_IRIS_CONTRATO)[number]>
 
 /** Permisos que el contrato 0.7.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
 export const PERMISOS_IRIS_070 = [

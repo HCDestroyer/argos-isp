@@ -7,7 +7,9 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 - Estados posibles: `pendiente_instalacion` → `activo` → `limitado` → `suspendido` → `retirado`. Desde `pendiente_instalacion` solo se puede pasar a `activo`, con `servicios.activar_instalacion`, o a `retirado`, con `servicios.retirar`, si la venta se cae.
 - `evaluarEstadoServicio` **no** toca un servicio `pendiente_instalacion`: no tiene facturas, y ni el pago ni la promesa ni el corte lo mueven. La regla «única que decide el estado» sigue valiendo para los demás estados.
 - `servicios.crear` acepta `estado_inicial: "activo" | "pendiente_instalacion"`, con `activo` por defecto. Así, todo lo que hoy crea servicios se comporta igual.
-- Un servicio `pendiente_instalacion` ya tiene `user_ppp` y credenciales, router, plan e IP asignada (IPAM). El técnico configura el CPE con esos datos antes de activar.
+- Un servicio `pendiente_instalacion` ya tiene `user_ppp` y credenciales, router y plan, pero **no tiene IP** (contrato Iris 0.10.0 §3.4.1, A38; decisión 3 del PM del 21 nov): el IPAM asigna la IPv4 y los prefijos IPv6 con el router final al activar (`activar-instalacion`, §2, o `aprovisionar`). Con PPPoE el técnico configura el CPE solo con las credenciales. Una IP o un prefijo pedidos a mano en el alta (`ipv4`, `red_ipv4_id`, `prefijo_delegado_v6`) sí se asignan, y una edición no le asigna IP a un pendiente que no la tiene.
+- **Reservar la IP en sitio** (IP fija o amarre IP-MAC, cuando el equipo la necesita antes de activar): `POST /api/v1/servicios/:id/reservar-ip` (permiso `servicios.reservar_ip`: `admin`, `soporte`, `tecnico` y el usuario técnico «Iris»), cuerpo `{ router_id?, origen_tipo, origen_id }`, `Idempotency-Key` (Iris: `iris:reservar_ip:<orden_id>:<router_id>`). Solo en pendiente (`422 servicio_no_pendiente`). Con un `router_id` distinto, el servicio pasa antes a ese router (el plan debe estar asignado a él: `422 plan_no_permitido`). Responde `200 { ipv4, prefijo_v6, prefijo_enlace_v6, vence_en }`; una segunda llamada devuelve la misma reserva. Sin IP libre: `422 sin_ip_disponible`. Emite `asignacion.cambiada`. La activación usa la reserva; retirar el pendiente la libera; si no se activa en **30 días**, el cron `reservas_ip_vencidas` (cada hora, `servicios.vencer_reserva_ip`) la libera y emite `asignacion.cambiada` con las IPs vacías.
+- Datos existentes: los pendientes creados antes de la 0.10.0 conservan la IP que ya tenían (no es una reserva en sitio y no vence) y se activan como antes, sin asignar nada. Solo los que nacen sin IP desde la 0.10.0 llevan la marca `core.servicios.ip_al_activar` y reciben la IP al activar. Un pendiente sin PPPoE ya no necesita IPv4 mientras está pendiente (restricción `servicios_sin_pppoe_ipv4`); al pasar a activo la exige como siempre.
 
 ## 2. Activar la instalación
 
@@ -18,10 +20,14 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
   "planta": { "caja": "…"?, "puerto": "…"?, "olt": "…"?, "slot": "…"?, "pon": "…"?, "potencia_dbm": "-19.40"? }? }
 → 200 Servicio (estado activo, instalado_en)
 → 409 conflicto_version (solo si llega version) · 409 servicio_no_pendiente (estado distinto de pendiente_instalacion)
+→ 422 sin_ip_disponible · 422 plan_no_permitido (Iris 0.10.0)
 ```
 
 - **Efectos:**
     - pasa el servicio de `pendiente_instalacion` a `activo` y fija `core.servicios.instalado_en`, que es `instalado_en` o, si no viene, `now()`;
+    - si no tiene IP (no reservó en sitio), el IPAM la asigna con el router del servicio y emite `asignacion.cambiada`; sin IP libre: **422 `sin_ip_disponible`** (Iris 0.10.0, A38);
+    - el plan debe estar asignado a ese router (global o en `planes_routers`); si no, **422 `plan_no_permitido`** (§3.4.5 de Iris);
+    - con `origen_tipo`/`origen_id` sobre un servicio de Iris, la orden queda registrada en `core.servicios_origenes_iris` (alcance de §3.4 de Iris);
     - emite `servicio.estado_cambiado` con `de = pendiente_instalacion`, `a = activo` y `motivo = instalacion`;
     - refresca Redis AAA y RouterOS como cualquier cambio de estado.
 - **`version` opcional** (decisión del líder, 29 oct, contrato Iris 0.3.1): Iris reintenta desde su cola con los mismos bytes y la misma `Idempotency-Key`, así que una `version` leída al encolar queda vieja. Si llega y no coincide: 409 `conflicto_version`, como siempre (el panel la manda). Si no llega, la acción se protege sola: bloquea la fila (`FOR UPDATE`) y solo sale de `pendiente_instalacion`.

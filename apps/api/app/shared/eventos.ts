@@ -274,7 +274,7 @@ interface PayloadAdicional {
  * Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers; `precio`
  * solo en planes (contrato Iris 0.8.0: Iris relee `GET /servicios?plan_id=`).
  */
-export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas' | 'precio'
+export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas' | 'precio' | 'modo' | 'routers'
 
 /** Campos de `cuenta_bancaria.cambiada` (contrato Iris 0.8.0 §7.8); `empresa_id` no se edita. */
 export const CAMPOS_CUENTA_BANCARIA_CAMBIADA = [
@@ -354,6 +354,9 @@ export interface CatalogoEventos {
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'
         plan_temporal_id?: number
+        /** cambio de plan de un pendiente pedido por Iris (contrato 0.10.0 §3.4.5): la orden */
+        origen_tipo?: string
+        origen_id?: string
     }
     /**
      * Cambiaron datos de ubicación o contacto del servicio (contrato Iris 0.5.0, pedidos A10, A12 y
@@ -361,13 +364,25 @@ export interface CatalogoEventos {
      * nombres, nunca valores. Evento propio y no `servicio.config_cambiada`: no cambian nada en la
      * red, y así RouterOS, coa y aaa-cache no reaccionan. No se emite al crear (va en `servicio.creado`).
      * `empresas` = `[empresa_id]`, con la misma forma que `cliente.actualizado` (contrato Iris 0.5.0).
+     * Desde Iris 0.10.0 también `nombre` (A45: nombre del servicio) y, con `completar-datos` (A43),
+     * `precision_m` y `origen_tipo`/`origen_id` de la orden de Iris.
      */
     'servicio.datos_cambiados': {
         servicio_id: number
         empresa_id: number
         empresas: number[]
         cliente_id: number
-        campos: Array<'direccion' | 'coordenadas' | 'referencia' | 'contacto_nombre' | 'contacto_telefono'>
+        campos: Array<
+            | 'nombre'
+            | 'direccion'
+            | 'coordenadas'
+            | 'referencia'
+            | 'contacto_nombre'
+            | 'contacto_telefono'
+            | 'precision_m'
+        >
+        origen_tipo?: string
+        origen_id?: string
     }
     /**
      * Cambió una zona, un plan o un router en lo que otros sistemas muestran (contrato Iris 0.5.0,
@@ -674,6 +689,54 @@ export interface CatalogoEventos {
     'cliente.actualizado': {
         cliente_id: number
         campos: CampoClienteActualizado[]
+    }
+    /**
+     * Contrato Iris 0.10.0 §3.5 (A42) y 0.10.1 §3.8 (A46): se creó, editó o quitó un contacto del
+     * cliente. `campos[]` solo nombres (`nombre`, `relacion`, `servicios`, `permisos`, `telefonos`,
+     * `persona_cliente_id`); nunca números ni documentos. `persona_anterior_id` y `motivo:
+     * vinculo_roto` cuando el vínculo se rompe (los dos titulares reciben aviso). `numeros_agregados`:
+     * cuántos números nuevos hay (notify avisa al titular con los números enmascarados).
+     */
+    'cliente.contactos_cambiados': {
+        cliente_id: number
+        empresa_id: number | null
+        contacto_id: number
+        accion: 'creado' | 'editado' | 'quitado'
+        campos: Array<'nombre' | 'relacion' | 'servicios' | 'permisos' | 'telefonos' | 'persona_cliente_id'>
+        persona_cliente_id: number | null
+        persona_anterior_id?: number | null
+        motivo?: 'vinculo_roto'
+        numeros_agregados?: number
+    }
+    /**
+     * Contrato Iris 0.10.0 §3.4.3 (A41): se registró una identidad del titular (versión nueva). Nunca
+     * el número del documento ni la foto.
+     */
+    'cliente.identidad_registrada': {
+        cliente_id: number
+        empresa_id: number | null
+        identidad_id: number
+        documento_tipo: 'dpi' | 'pasaporte'
+        metodo: 'foto_documento' | 'revision_panel'
+        origen_tipo: string | null
+        origen_id: string | null
+    }
+    /**
+     * Contrato Iris 0.10.0 §3.4.4 (A39): el servicio pendiente pasó a otro titular. `existente`: el
+     * titular ya era cliente (documento y nombre normalizado iguales); notify le manda un aviso
+     * informativo. `motivo_codigo` sin el texto (queda en la auditoría). Nunca documento ni identidad.
+     */
+    'servicio.titular_cambiado': {
+        servicio_id: number
+        empresa_id: number
+        de_cliente_id: number
+        a_cliente_id: number
+        existente: boolean
+        posible_duplicado: boolean
+        de_cliente_eliminado: boolean
+        motivo_codigo: 'menor_de_edad' | 'otro'
+        origen_tipo: string | null
+        origen_id: string | null
     }
 
     // billing (A3)
@@ -1489,6 +1552,9 @@ export const EVENTOS = [
     'router.redes_cambiadas',
     'router.radius_cambiado',
     'cliente.actualizado',
+    'cliente.contactos_cambiados',
+    'cliente.identidad_registrada',
+    'servicio.titular_cambiado',
     'catalogo.cambiado',
     'sesion.iniciada',
     'sesion.terminada',

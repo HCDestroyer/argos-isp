@@ -5,6 +5,16 @@ import { verificarVersion } from '#shared/version'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { TOLERANCIA_RELOJ_MS, normalizarPlanta, type PlantaServicio } from '#core/instalacion'
+import {
+    PlanNoPermitido,
+    asignarIpPendiente,
+    bloquearServicio,
+    esServicioDeIris,
+    planDisponibleEnRouter,
+    registrarOrigenIris,
+    tieneAsignaciones,
+} from '#core/instalacion_iris'
+import { registrarTramo } from '#network/historial'
 
 export interface EntradaActivarInstalacion {
     id: number
@@ -42,6 +52,11 @@ export interface EntradaActivarInstalacion {
  *   retiró: conflicto con el estado actual, de negocio, no se reintenta). Se revisa antes que la
  *   versión, así una clave nueva sobre un servicio ya activo recibe el motivo real.
  * - Fecha futura o anterior al alta: 422 en `instalado_en`.
+ *
+ * - Iris 0.10.0 (§3.4.1, A38): si el servicio no reservó IP en sitio, el IPAM la asigna aquí con el
+ *   router final (`asignacion.cambiada`; sin IP libre, 422 `sin_ip_disponible`). El plan debe estar
+ *   asignado a ese router (si no, 422 `plan_no_permitido`, §3.4.5). Con `origen_tipo`/`origen_id`
+ *   sobre un servicio de Iris, la orden queda registrada (alcance de §3.4).
  *
  * El estado no lo decide esta acción por facturas: es el hecho de la instalación, como `retirar`.
  */
@@ -106,6 +121,31 @@ export default class ActivarInstalacionServicio extends DomainAction<
         // ms) quedaría <= created_at y la facturación lo tomaría por un servicio nacido activo
         // (`activadoDesdePendienteSql` de `#billing/configuracion` exige instalado_en > created_at).
         // Se guarda al menos 1 µs después del alta; al operador no le cambia nada.
+        // Iris 0.10.0 §3.4.5: el plan debe seguir siendo aplicable en el router final
+        const servicio = (await bloquearServicio(t.trx, input.id))!
+        if (!(await planDisponibleEnRouter(t.trx, servicio.plan_id, servicio.router_id))) {
+            throw new PlanNoPermitido(
+                'El plan del servicio no está asignado a su router: cámbialo antes de activar',
+            )
+        }
+        // A38: el pendiente sin reserva recibe aquí su IPv4 y sus prefijos (422 sin_ip_disponible)
+        const marca = (await t.trx
+            .from('core.servicios')
+            .where('id', input.id)
+            .select('ip_al_activar')
+            .first()) as {
+            ip_al_activar: boolean
+        }
+        const asignar = marca.ip_al_activar && !(await tieneAsignaciones(t.trx, input.id))
+        const asignaciones = asignar ? await asignarIpPendiente(t.trx, servicio) : null
+        // Alcance de §3.4: la orden queda registrada para un servicio que ya era de Iris
+        if (input.origen_tipo && input.origen_id && (await esServicioDeIris(t.trx, input.id))) {
+            await registrarOrigenIris(t.trx, input.id, {
+                origen_tipo: input.origen_tipo,
+                origen_id: input.origen_id,
+            })
+        }
+
         const instalado = `greatest(?::timestamptz, created_at + interval '1 microsecond')`
         const antes = await verServicio(input.id, t.trx)
         await t.trx
@@ -113,6 +153,8 @@ export default class ActivarInstalacionServicio extends DomainAction<
             .where('id', input.id)
             .update({
                 estado: 'activo',
+                ip_reservada_en: null,
+                ip_al_activar: false,
                 instalado_en: t.trx.knexRawQuery(instalado, [efectivo.toISOString()]),
                 ...(input.planta ? { planta: JSON.stringify(normalizarPlanta(input.planta)) } : {}),
                 ...(fila.fecha_instalacion === null
@@ -137,6 +179,18 @@ export default class ActivarInstalacionServicio extends DomainAction<
             ...(input.origen_tipo ? { origen_tipo: input.origen_tipo } : {}),
             ...(input.origen_id ? { origen_id: input.origen_id } : {}),
         })
+        if (asignaciones) {
+            await registrarTramo(t.trx, input.id, 'activacion')
+            await t.emit('asignacion.cambiada', {
+                servicio_id: input.id,
+                empresa_id: empresaId,
+                ipv4: asignaciones.ipv4 ? [asignaciones.ipv4] : [],
+                prefijo_enlace_v6: asignaciones.prefijo_enlace_v6,
+                prefijo_delegado_v6: asignaciones.prefijo_delegado_v6,
+                inicio: new Date().toISOString(),
+                fin: null,
+            })
+        }
         refrescarAaaAlConfirmar(t, { servicioId: input.id })
         return despues
     }

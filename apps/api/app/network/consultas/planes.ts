@@ -31,6 +31,13 @@ export interface PlanVista {
     tamano_prefijo_delegado: 64 | 56 | 48
     /** `residencial` (por defecto), `empresarial` o `dedicado`; solo informa y advierte */
     tipo: TipoPlan
+    /**
+     * Contrato Iris 0.10.0 §3.4.5 (A40): `residencial` o `empresarial` (los `empresarial` y `dedicado`).
+     * Un cambio de plan de un pendiente solo va a otro plan del mismo modo.
+     */
+    modo: 'residencial' | 'empresarial'
+    /** routers con implementación propia (`planes_routers`); con `global` vale en todos (A40) */
+    routers: number[]
     global: boolean
     activo: boolean
     version: number
@@ -98,6 +105,12 @@ export function columnasPlan(alias?: string) {
     return [
         ...COLUMNAS_PLAN_SIMPLES.map((c) => `${prefijo}${c}`),
         db.raw(`${prefijo}garantizado_pct::float8 AS garantizado_pct`),
+        db.raw(
+            `(CASE WHEN ${prefijo}tipo = 'residencial' THEN 'residencial' ELSE 'empresarial' END) AS modo`,
+        ),
+        db.raw(
+            `(SELECT coalesce(array_agg(pr_m.router_id::int ORDER BY pr_m.router_id), '{}') FROM network.planes_routers pr_m WHERE pr_m.plan_id = ${alias ?? 'network.planes'}.id) AS routers`,
+        ),
     ]
 }
 
@@ -134,12 +147,22 @@ export interface FiltrosPlanes extends OpcionesPaginacion {
     /** solo planes disponibles en ese router (globales o con implementación) */
     router_id?: number
     tipo?: TipoPlan
+    /**
+     * Contrato Iris 0.10.0 §3.4.5 (A40): solo los planes aplicables a ese modo, **activos** y (con
+     * `router_id`) asignados a todos los routers o a ese router
+     */
+    modo?: 'residencial' | 'empresarial'
 }
 
 export async function listarPlanes(filtros: FiltrosPlanes): Promise<Pagina<PlanVista>> {
     const consulta = db.from('network.planes as p').select(columnasPlan('p'))
     if (filtros.activo !== undefined) consulta.where('p.activo', filtros.activo)
     if (filtros.tipo) consulta.where('p.tipo', filtros.tipo)
+    if (filtros.modo) {
+        consulta.where('p.activo', true)
+        if (filtros.modo === 'residencial') consulta.where('p.tipo', 'residencial')
+        else consulta.whereNot('p.tipo', 'residencial')
+    }
     if (filtros.router_id) {
         const routerId = filtros.router_id
         consulta.where((q) =>
