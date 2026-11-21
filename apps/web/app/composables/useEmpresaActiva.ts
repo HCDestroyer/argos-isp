@@ -72,6 +72,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/libro/bloqueos',
     '/api/v1/libro/bloqueos/excepciones',
     '/api/v1/libro/bloqueos/historial',
+    '/api/v1/libro/borradores',
     '/api/v1/libro/comprobacion',
     '/api/v1/libro/cuentas',
     '/api/v1/libro/diario',
