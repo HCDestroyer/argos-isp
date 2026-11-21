@@ -15,7 +15,7 @@ Hay una sola plantilla de cada tipo para toda la instalación. Si trabajas con v
 - **Ver:** permiso `documentos.ver` (roles `admin` y `lectura`).
 - **Editar, vista previa y guardar:** permiso `documentos.editar` (solo `admin`). Sin él, el editor está en solo lectura y la pantalla lo dice.
 
-Está en **Configuración → Plantillas de documentos**.
+Está en **Configuración → Facturación y cobro → Plantillas de documentos**.
 
 ## Qué ves
 
@@ -79,7 +79,7 @@ Una plantilla que guardaste antes no recibe sola las variables nuevas de FEL. Si
 - **«La plantilla no puede quedar vacía»**, **«Máximo 100 000 caracteres»**, **«No se permite {{{ }}} ni {{& }}: usa {{variable}}»:** corrige el HTML.
 - **«Alguien más guardó la plantilla»:** otra persona guardó mientras editabas. Copia tus cambios si quieres conservarlos y toca «Recargar»: se reemplazan por la versión actual.
 - **El PDF del cliente no muestra los datos de FEL:** inserta el bloque FEL (arriba).
-- **Los datos de la empresa salen vacíos:** se llenan desde **Configuración → Contacto y pagos** y los datos de la empresa.
+- **Los datos de la empresa salen vacíos:** se llenan desde **Configuración → Empresa y fiscal → Contacto y pagos** y los datos de la empresa.
 
 ## Relacionado
 

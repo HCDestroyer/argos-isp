@@ -17,7 +17,7 @@ Las facturas de cada periodo las genera el sistema solo, según la plantilla de 
 - **Ver:** `facturas.ver`. Lo traen `admin`, `cajero`, `soporte`, `contabilidad` y `lectura`.
 - Las acciones piden su propio permiso (abajo). En general solo `contabilidad` y `admin` corrigen facturas.
 
-Se llega desde **Cobros → Facturas**.
+Se llega desde **Facturación → Facturas**.
 
 ## Qué ves
 

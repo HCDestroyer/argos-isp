@@ -10,7 +10,7 @@ pantallas:
 
 Los libros que exige la ley, con folio: Libro Diario, Libro Mayor, Libro de Ventas y Servicios Prestados y Libro de Compras y Servicios Recibidos. Aquí ves su borrador, los emites con folio y registras las habilitaciones de folios autorizadas por la SAT.
 
-Está en **Contabilidad → Libros legales**. Arriba hay tres pestañas: **Vista previa**, **Emisiones** y **Habilitaciones**.
+Está en **Contabilidad y fiscal → Libros legales**. Arriba hay tres pestañas: **Vista previa**, **Emisiones** y **Habilitaciones**.
 
 ::: tip Una empresa a la vez
 Cada libro es de una empresa (NIT). Con «Todas» en el selector de empresa no hay libro que mostrar ni emitir: elige la empresa arriba.

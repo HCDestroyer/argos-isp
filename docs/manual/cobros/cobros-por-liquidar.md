@@ -16,7 +16,7 @@ Esto solo aplica a los proveedores dados de alta en [Proveedores de cobro](./pro
 - **Ver:** `bancos.ver` (`admin`, `contabilidad`, `lectura`).
 - **Registrar liquidación:** `cobros.liquidar` (`admin`, `contabilidad`).
 
-Se llega desde **Bancos → Cobros por liquidar**.
+Se llega desde **Finanzas → Bancos → Cobros por liquidar**.
 
 ## Qué ves
 

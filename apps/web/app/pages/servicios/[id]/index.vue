@@ -56,6 +56,10 @@ function alEditar(actualizado: Servicio) {
  * que aplican al estado actual; un botón deshabilitado se confundía con uno activo.
  */
 const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
+/** Acciones por grupo (sistema visual Argos): estado, red y, al final y aparte, lo destructivo. */
+const accionesEstado = computed(() => acciones.value.filter(a => ['suspender', 'reactivar', 'limitar', 'quitar_limite'].includes(a.accion)))
+const accionesRed = computed(() => acciones.value.filter(a => a.accion === 'desconectar'))
+const accionesDestructivas = computed(() => acciones.value.filter(a => a.accion === 'retirar'))
 
 /** Pendiente de instalación (`contratos/instalacion.md`): sin facturas, no hay promesa (422 de A3). */
 const pendiente = computed(() => servicio.value !== null && esPendienteInstalacion(servicio.value))
@@ -484,80 +488,152 @@ onMounted(cargar)
 
             <div
                 v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico || puedeFacturasPeriodo || puedeSincronizarRouter"
-                class="flex flex-wrap gap-2"
+                class="flex flex-col gap-3 surface-card p-4 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-6"
                 role="group"
                 aria-label="Acciones del servicio"
+                data-prueba="acciones-servicio"
             >
-                <UButton
-                    v-if="puedeActivarInstalacion"
-                    label="Activar instalación"
-                    icon="i-lucide-hard-hat"
-                    color="success"
-                    data-prueba="abrir-activar-instalacion"
-                    @click="activarAbierto = true"
-                />
-                <UButton
-                    v-for="accion in acciones"
-                    :key="accion.accion"
-                    :label="accion.etiqueta"
-                    :icon="accion.icono"
-                    :color="accion.color"
-                    variant="outline"
-                    @click="abrirAccion(accion)"
-                />
-                <UButton
-                    v-if="puedePromesa"
-                    label="Promesa de pago"
-                    icon="i-lucide-calendar-clock"
-                    color="info"
-                    variant="outline"
-                    @click="abrirPromesa"
-                />
-                <UButton
-                    v-if="puedeCargoUnico"
-                    label="Cargo único"
-                    icon="i-lucide-receipt"
-                    color="neutral"
-                    variant="outline"
-                    data-prueba="abrir-cargo-unico"
-                    @click="cargoAbierto = true"
-                />
-                <UButton
-                    v-if="puedeFacturasPeriodo"
-                    :to="enlace(`/servicios/${servicio.id}/facturas-periodo`)"
-                    label="Emitir facturas de periodos"
-                    icon="i-lucide-calendar-plus"
-                    color="neutral"
-                    variant="outline"
-                    data-prueba="abrir-facturas-periodo"
-                />
-                <UButton
-                    v-if="puedeSimular"
-                    label="Simular promesa"
-                    icon="i-lucide-flask-conical"
-                    color="neutral"
-                    variant="outline"
-                    data-prueba="abrir-simulador"
-                    @click="simuladorAbierto = true"
-                />
-                <UButton
-                    v-if="puedeCambiarEmpresa"
-                    label="Cambiar empresa"
-                    icon="i-lucide-arrow-right-left"
-                    color="neutral"
-                    variant="outline"
-                    data-prueba="abrir-cambiar-empresa"
-                    @click="cambiarEmpresaAbierto = true"
-                />
-                <UButton
-                    v-if="puedeSincronizarRouter"
-                    label="Sincronizar con el router"
-                    icon="i-lucide-refresh-cw"
-                    color="neutral"
-                    variant="outline"
-                    data-prueba="abrir-sincronizar-router"
-                    @click="sincronizarRouterAbierto = true"
-                />
+                <div
+                    v-if="puedeActivarInstalacion || accionesEstado.length"
+                    class="flex flex-col gap-1.5"
+                    role="group"
+                    aria-labelledby="acciones-estado"
+                >
+                    <span
+                        id="acciones-estado"
+                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
+                    >Estado</span>
+                    <div class="flex flex-wrap gap-2">
+                        <UButton
+                            v-if="puedeActivarInstalacion"
+                            label="Activar instalación"
+                            icon="i-lucide-hard-hat"
+                            color="success"
+                            data-prueba="abrir-activar-instalacion"
+                            @click="activarAbierto = true"
+                        />
+                        <UButton
+                            v-for="accion in accionesEstado"
+                            :key="accion.accion"
+                            :label="accion.etiqueta"
+                            :icon="accion.icono"
+                            :color="accion.color"
+                            variant="soft"
+                            @click="abrirAccion(accion)"
+                        />
+                    </div>
+                </div>
+                <div
+                    v-if="puedePromesa || puedeCargoUnico || puedeFacturasPeriodo || puedeSimular"
+                    class="flex flex-col gap-1.5"
+                    role="group"
+                    aria-labelledby="acciones-cobro"
+                >
+                    <span
+                        id="acciones-cobro"
+                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
+                    >Cobro</span>
+                    <div class="flex flex-wrap gap-2">
+                        <UButton
+                            v-if="puedePromesa"
+                            label="Promesa de pago"
+                            icon="i-lucide-calendar-clock"
+                            color="neutral"
+                            variant="outline"
+                            @click="abrirPromesa"
+                        />
+                        <UButton
+                            v-if="puedeCargoUnico"
+                            label="Cargo único"
+                            icon="i-lucide-receipt"
+                            color="neutral"
+                            variant="outline"
+                            data-prueba="abrir-cargo-unico"
+                            @click="cargoAbierto = true"
+                        />
+                        <UButton
+                            v-if="puedeFacturasPeriodo"
+                            :to="enlace(`/servicios/${servicio.id}/facturas-periodo`)"
+                            label="Emitir facturas de periodos"
+                            icon="i-lucide-calendar-plus"
+                            color="neutral"
+                            variant="outline"
+                            data-prueba="abrir-facturas-periodo"
+                        />
+                        <UButton
+                            v-if="puedeSimular"
+                            label="Simular promesa"
+                            icon="i-lucide-flask-conical"
+                            color="neutral"
+                            variant="ghost"
+                            data-prueba="abrir-simulador"
+                            @click="simuladorAbierto = true"
+                        />
+                    </div>
+                </div>
+                <div
+                    v-if="accionesRed.length || puedeSincronizarRouter || puedeCambiarEmpresa"
+                    class="flex flex-col gap-1.5"
+                    role="group"
+                    aria-labelledby="acciones-red"
+                >
+                    <span
+                        id="acciones-red"
+                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
+                    >Red y administración</span>
+                    <div class="flex flex-wrap gap-2">
+                        <UButton
+                            v-for="accion in accionesRed"
+                            :key="accion.accion"
+                            :label="accion.etiqueta"
+                            :icon="accion.icono"
+                            color="neutral"
+                            variant="outline"
+                            @click="abrirAccion(accion)"
+                        />
+                        <UButton
+                            v-if="puedeSincronizarRouter"
+                            label="Sincronizar con el router"
+                            icon="i-lucide-refresh-cw"
+                            color="neutral"
+                            variant="outline"
+                            data-prueba="abrir-sincronizar-router"
+                            @click="sincronizarRouterAbierto = true"
+                        />
+                        <UButton
+                            v-if="puedeCambiarEmpresa"
+                            label="Cambiar empresa"
+                            icon="i-lucide-arrow-right-left"
+                            color="neutral"
+                            variant="ghost"
+                            data-prueba="abrir-cambiar-empresa"
+                            @click="cambiarEmpresaAbierto = true"
+                        />
+                    </div>
+                </div>
+                <!-- Lo destructivo al final y separado. -->
+                <div
+                    v-if="accionesDestructivas.length"
+                    class="flex flex-col gap-1.5 border-(--ax-borde) sm:ms-auto sm:border-s sm:ps-6"
+                    role="group"
+                    aria-labelledby="acciones-baja"
+                >
+                    <span
+                        id="acciones-baja"
+                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
+                    >Baja</span>
+                    <div class="flex flex-wrap gap-2">
+                        <UButton
+                            v-for="accion in accionesDestructivas"
+                            :key="accion.accion"
+                            :label="accion.etiqueta"
+                            :icon="accion.icono"
+                            color="error"
+                            variant="outline"
+                            @click="abrirAccion(accion)"
+                        />
+                    </div>
+                </div>
             </div>
             <p
                 v-else-if="servicio.estado === 'retirado'"

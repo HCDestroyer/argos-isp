@@ -10,10 +10,6 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const WEB = fileURLToPath(new URL('..', import.meta.url))
-const MANUAL = join(WEB, '../../docs/manual')
-const SALIDA = join(WEB, 'app/utils/indiceAyuda.ts')
-
 function archivos(dir) {
     return readdirSync(dir, { withFileTypes: true })
         .flatMap(e => (e.isDirectory() ? archivos(join(dir, e.name)) : e.name.endsWith('.md') ? [join(dir, e.name)] : []))
@@ -68,7 +64,7 @@ function primerParrafo(lineas, desde) {
     return texto.length > 420 ? `${texto.slice(0, 417).replace(/\s+\S*$/, '')}…` : texto
 }
 
-function leerPagina(archivo) {
+function leerPagina(archivo, MANUAL) {
     const texto = readFileSync(archivo, 'utf8')
     const frente = texto.match(/^---\n([\s\S]*?)\n---\n/)
     if (!frente) {
@@ -112,11 +108,12 @@ function aTs(valor, nivel) {
     return `{\n${claves.map(([k, v]) => `${sangria}${/^[a-z_]+$/.test(k) ? k : `'${k}'`}: ${aTs(v, nivel + 1)},`).join('\n')}\n${cierre}}`
 }
 
-/** Contenido de `app/utils/indiceAyuda.ts`. */
-export function generarIndiceAyuda() {
+/** Contenido de `app/utils/indiceAyuda.ts`; `web` es la carpeta de `apps/web`. */
+export function generarIndiceAyuda(web) {
+    const MANUAL = join(web, '../../docs/manual')
     const indice = {}
     for (const archivo of archivos(MANUAL)) {
-        const pagina = leerPagina(archivo)
+        const pagina = leerPagina(archivo, MANUAL)
         if (!pagina) {
             continue
         }
@@ -164,6 +161,8 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = ${aTs(ordenado, 0)}
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-    writeFileSync(SALIDA, generarIndiceAyuda())
-    console.log(`Índice de ayuda escrito en ${relative(WEB, SALIDA)}`)
+    const web = fileURLToPath(new URL('..', import.meta.url))
+    const salida = join(web, 'app/utils/indiceAyuda.ts')
+    writeFileSync(salida, generarIndiceAyuda(web))
+    console.log(`Índice de ayuda escrito en ${relative(web, salida)}`)
 }

@@ -160,7 +160,7 @@ const activos = computed(() => servicios.value?.filter(s => s.estado === 'activo
                 icon="i-lucide-wifi-off"
                 title="Sin servicios"
                 description="Este cliente todavía no tiene servicios."
-                :actions="puede('servicios.crear') ? [{ label: 'Agregar servicio', icon: 'i-lucide-plus', to: `/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1` }] : undefined"
+                :actions="puede('servicios.crear') && enlace(`/clientes/${cliente.id}`) ? [{ label: 'Agregar servicio', icon: ICONOS.crear, to: enlace(`/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1`) }] : undefined"
                 variant="naked"
                 size="sm"
             />
@@ -169,14 +169,14 @@ const activos = computed(() => servicios.value?.filter(s => s.estado === 'activo
         <template #acciones>
             <UButton
                 v-if="enlace(`/cobro?cliente=${cliente.id}`)"
-                :to="`/cobro?cliente=${cliente.id}`"
+                :to="enlace(`/cobro?cliente=${cliente.id}`)"
                 label="Cobrar"
-                icon="i-lucide-hand-coins"
+                :icon="ICONOS.cobrar"
                 color="neutral"
                 variant="outline"
             />
             <UButton
-                :to="`/clientes/${cliente.id}`"
+                :to="enlace(`/clientes/${cliente.id}`)"
                 label="Abrir ficha"
                 trailing-icon="i-lucide-arrow-right"
             />

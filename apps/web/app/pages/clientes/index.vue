@@ -100,18 +100,18 @@ function abrirVista(cliente: Cliente) {
 
 function accionesCliente(cliente: Cliente): AccionFila[] {
     const acciones: AccionFila[] = [
-        { etiqueta: 'Vista rápida', icono: 'i-lucide-panel-right-open', alElegir: () => abrirVista(cliente), grupo: 'Ver' },
-        { etiqueta: 'Abrir ficha del cliente', icono: 'i-lucide-arrow-up-right', to: `/clientes/${cliente.id}`, soloMenu: true, grupo: 'Ver' },
+        { etiqueta: 'Vista rápida', icono: ICONOS.vistaRapida, alElegir: () => abrirVista(cliente), grupo: 'Ver' },
+        { etiqueta: 'Abrir ficha del cliente', icono: ICONOS.abrir, to: `/clientes/${cliente.id}`, soloMenu: true, grupo: 'Ver' },
         { etiqueta: 'Estado de cuenta', icono: 'i-lucide-receipt-text', to: `/clientes/${cliente.id}?tab=cuenta`, soloMenu: true, grupo: 'Ver' },
     ]
     if (puede('pagos.registrar')) {
-        acciones.push({ etiqueta: 'Cobrar a este cliente', icono: 'i-lucide-hand-coins', to: `/cobro?cliente=${cliente.id}`, grupo: 'Cobro' })
+        acciones.push({ etiqueta: 'Cobrar a este cliente', icono: ICONOS.cobrar, to: `/cobro?cliente=${cliente.id}`, grupo: 'Cobro' })
     }
     if (puede('clientes.editar')) {
-        acciones.push({ etiqueta: 'Editar datos del cliente', icono: 'i-lucide-pencil', to: `/clientes/${cliente.id}/editar`, grupo: 'Cliente' })
+        acciones.push({ etiqueta: 'Editar datos del cliente', icono: ICONOS.editar, to: `/clientes/${cliente.id}/editar`, grupo: 'Cliente' })
     }
     if (puede('servicios.crear')) {
-        acciones.push({ etiqueta: 'Agregar servicio', icono: 'i-lucide-plus', to: `/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1`, soloMenu: true, grupo: 'Cliente' })
+        acciones.push({ etiqueta: 'Agregar servicio', icono: ICONOS.crear, to: `/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1`, soloMenu: true, grupo: 'Cliente' })
     }
     return acciones
 }

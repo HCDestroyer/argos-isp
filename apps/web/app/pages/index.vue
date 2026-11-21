@@ -105,11 +105,11 @@ function nombreCliente(id: number): string {
 
 /** Accesos rápidos del encabezado de bienvenida (los que el usuario puede abrir). */
 const rapidos = computed(() => [
-    { etiqueta: 'Cobrar', icono: 'i-lucide-hand-coins', to: '/cobro', permiso: 'pagos.registrar' },
-    { etiqueta: 'Nuevo cliente', icono: 'i-lucide-user-plus', to: '/clientes/nuevo', permiso: 'clientes.crear' },
-    { etiqueta: 'Cartera vencida', icono: 'i-lucide-alarm-clock', to: '/facturas?estado=vencida', permiso: 'facturas.ver' },
-    { etiqueta: 'Comprobantes', icono: 'i-lucide-file-check-2', to: '/comprobantes', permiso: 'comprobantes.ver' },
-].filter(acceso => puede(acceso.permiso)))
+    { etiqueta: 'Cobrar', icono: ICONOS.cobrar, to: enlace('/cobro') },
+    { etiqueta: 'Nuevo cliente', icono: 'i-lucide-user-plus', to: enlace('/clientes/nuevo') },
+    { etiqueta: 'Cartera vencida', icono: 'i-lucide-alarm-clock', to: enlace('/facturas?estado=vencida') },
+    { etiqueta: 'Comprobantes', icono: 'i-lucide-file-check-2', to: enlace('/comprobantes') },
+].filter((acceso): acceso is { etiqueta: string, icono: string, to: string } => acceso.to !== undefined))
 
 async function cargar() {
     void cargarPagos()
@@ -256,7 +256,7 @@ onMounted(cargar)
                         <TarjetaKpi
                             etiqueta="Cobros de hoy"
                             :valor="formatearQuetzales(resumen.hoy.cobrado)"
-                            icono="i-lucide-hand-coins"
+                            icono="i-lucide-banknote"
                             :tono="3"
                             :serie="serieCobrado"
                             comparacion="cobrado vs. mes anterior"
@@ -453,7 +453,7 @@ onMounted(cargar)
                         icon="i-lucide-banknote"
                         title="Sin pagos para mostrar"
                         :description="filtroPagos === 'todos' ? 'Los pagos que se registren aparecen aquí.' : 'Ninguno de los últimos pagos tiene ese estado.'"
-                        :actions="puede('pagos.registrar') && filtroPagos === 'todos' ? [{ label: 'Cobrar', icon: 'i-lucide-hand-coins', to: '/cobro' }] : undefined"
+                        :actions="puede('pagos.registrar') && filtroPagos === 'todos' ? [{ label: 'Cobrar', icon: ICONOS.cobrar, to: '/cobro' }] : undefined"
                         variant="naked"
                     />
                     <UButton

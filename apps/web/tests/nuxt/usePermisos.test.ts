@@ -36,6 +36,7 @@ describe('usePermisos', () => {
         const { puede } = usePermisos()
         const visibles = SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)
         // Igual que ROLES_BASE.cajero de apps/api/app/core/permisos.ts (incluye facturas.ver para bonificaciones, planes.ver, fel.ver, lealtad.ver, adicionales.ver e inventario.ver).
-        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'facturas', 'pagos', 'comprobantes', 'pasarela', 'promesas', 'dte', 'notas-credito', 'bonificaciones', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'existencias', 'traslados', 'mi-bodega', 'kardex', 'productos', 'tipos-producto', 'bodegas', 'unidades', 'por-recuperar', 'conteos', 'valorizado', 'planes', 'adicionales', 'fel', 'cuentas-bancarias'])
+        // En el orden del menú (rediseño): día a día, facturación, red, inventario, lealtad y configuración.
+        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'dte', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'configuracion-indice', 'fel', 'cuentas-bancarias'])
     })
 })

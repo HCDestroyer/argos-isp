@@ -851,7 +851,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/inventario/mi-bodega': {
         titulo: 'Bodegas y Mi bodega · Mi bodega',
-        resumen: 'Menú: Inventario → Mi bodega. Permiso inventario.ver.',
+        resumen: 'Menú: Inventario → Movimientos → Mi bodega. Permiso inventario.ver.',
         pagina: 'inventario/bodegas',
         ancla: 'mi-bodega',
         temas: [],
@@ -887,7 +887,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/inventario/tipos-producto': {
         titulo: 'Productos y tipos de producto · Tipos de producto',
-        resumen: 'Menú: Inventario → Tipos de producto.',
+        resumen: 'Menú: Inventario → Catálogos y kardex → Tipos de producto.',
         pagina: 'inventario/productos',
         ancla: 'tipos-de-producto',
         temas: [],

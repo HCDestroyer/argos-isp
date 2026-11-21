@@ -8,7 +8,7 @@ pantallas:
 
 Cada empresa puede tener un programa de puntos: sus clientes ganan puntos por pagar a tiempo, por su antigüedad, por referir a otros clientes y por pagar por adelantado, y los cambian por premios. Aquí lo creas, lo activas y defines las reglas para ganar puntos.
 
-Menú: **Cobros → Lealtad**.
+Menú: **Clientes y lealtad → Lealtad**.
 
 ## Quién la usa
 

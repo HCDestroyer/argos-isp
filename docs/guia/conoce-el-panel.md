@@ -10,30 +10,42 @@ El panel es la página donde trabaja el personal del ISP. Funciona en la computa
 
 ## El menú
 
-A la izquierda, en la computadora; en el teléfono se abre con el botón de tres rayas de arriba.
+A la izquierda, en la computadora; en el teléfono se abre con el botón de tres rayas de arriba. Va ordenado por lo que más se usa en el día a día, en bloques con un título en mayúsculas pequeñas:
 
-- **Inicio** arriba de todo. Al cajero lo lleva a su **Caja**.
-- **Cobrar** y **Caja**, sueltos, siempre a la vista para quien cobra.
-- Los grupos: **Operación**, **Cobros**, **Contabilidad**, **Compras**, **Inventario**, **Bancos**, **Red**, **Reportes y bitácora** y **Configuración**. El grupo de la pantalla donde estás se abre solo.
-- Un número junto a una sección avisa que hay algo pendiente. Por ejemplo, junto a **Comprobantes**, los que esperan verificación.
+- Arriba, **tu nombre y tu rol**: abre el menú de tu cuenta (**Mi cuenta**, **Apariencia**, **Qué cambió** y **Cerrar sesión**, ver [Mi cuenta](../manual/general/perfil.md)).
+- **Inicio**. Al cajero lo lleva a su **Caja**.
+- **Día a día**, siempre a la vista: **Cobrar**, **Caja**, **Clientes**, **Servicios**, **Promesas** y **Comprobantes**.
+- **Gestión**: **Facturación** (facturas, pagos, notas de crédito, bonificaciones, cola de DTE y conciliación de la pasarela), **Red** (routers, planes, prioridad QoS, adicionales y migración de router), **Inventario** (en dos partes: **Movimientos** y **Catálogos y kardex**) y **Clientes y lealtad** (lealtad, premios, canjes, sorteos y anuncios).
+- **Administración**: **Finanzas** (egresos, cartera y, en sus propios subgrupos, **Bancos** y **Compras**), **Contabilidad y fiscal** (libro, bloqueos, libros legales, tablero y calendario fiscal, declaraciones y comparador de regímenes) y **Reportes** (reportes y bitácora).
+- **Sistema**: **Configuración**, en cinco partes: **Empresa y fiscal**, **Facturación y cobro**, **Red y portal**, **Usuarios y acceso** y **Notificaciones e integraciones**. **Toda la configuración** abre una página con todas sus opciones por categoría y un buscador.
+- Cada grupo se abre y se cierra con su flecha; el de la pantalla donde estás se abre solo. Si dejas el puntero sobre una sección, aparece su descripción.
+- Un número en una pastilla junto a una sección avisa que hay algo pendiente. Por ejemplo, junto a **Comprobantes**, los que esperan verificación.
 - El botón de la barra de arriba con un cuadro y una flecha deja el menú **compacto**, solo con iconos. El panel lo recuerda para tu usuario.
-- Abajo, tu nombre abre el menú de tu cuenta: **Mi cuenta**, **Apariencia**, **Qué cambió** y **Cerrar sesión** (ver [Mi cuenta](../manual/general/perfil.md)).
 
 ## El buscador
 
-**Buscar** (arriba del menú) o las teclas **Ctrl + K** (**Cmd + K** en Mac) abren el buscador de secciones. Escribe parte del nombre («caja», «facturas», «routers») y pulsa Enter. Solo muestra las secciones que puedes abrir.
+**Buscar…** en la barra de arriba o las teclas **Ctrl + K** (**Cmd + K** en Mac) abren el buscador de secciones. Escribe parte del nombre («caja», «facturas», «routers») y pulsa Enter. Solo muestra las secciones que puedes abrir.
 
 Para buscar **clientes** usa la pantalla **Clientes** o **Cobrar**: buscan por nombre, NIT, teléfono, usuario PPP o IP.
 
+## El encabezado de cada pantalla
+
+Las pantallas del menú empiezan con las migas (por dónde llegaste, por ejemplo «Inicio › Facturación › Facturas»), el **título** con el botón **?** de ayuda, una frase que dice para qué sirve y, a la derecha, sus botones (por ejemplo, «Nuevo cliente»). Las fichas (un cliente, un servicio, una factura) tienen el título en la barra de arriba y las migas hasta su lista.
+
+## Listas: vista rápida y clic derecho
+
+En **Clientes** y **Servicios**, un clic en la fila (fuera del nombre) abre la **vista rápida** a la derecha: un resumen con sus datos y los botones más usados, sin salir de la lista. El clic derecho sobre una fila abre el menú con todas sus acciones, agrupadas («Ver», «Cobro», «Cliente», «Red»). Los iconos al final de la fila hacen lo mismo y dicen su nombre al pasar el puntero.
+
 ## La barra de arriba
 
-Cada pantalla tiene arriba su título y, a la derecha:
+A la derecha:
 
 - **El selector de empresa**, si trabajas con varias (ver abajo).
 - **El acceso a la caja**, si tienes caja: dice «Caja abierta» en verde o «Caja cerrada», y te lleva a **Caja**.
-- **Los botones de la pantalla** (por ejemplo, «Nuevo cliente» o «Editar»).
-- **Ayuda** (ver abajo).
+- **La campana de avisos**: el número son los comprobantes por verificar; te lleva a **Comprobantes**.
+- **Ayuda** en las fichas (en las pantallas del menú, el **?** va junto al título).
 - **El botón de sol o luna** para pasar a modo claro u oscuro.
+- **Tu avatar**, con el mismo menú de tu cuenta.
 
 ## La empresa activa
 
@@ -71,7 +83,7 @@ El botón de sol o luna de la barra cambia el modo. También en el menú de tu n
 
 ## El botón Ayuda
 
-Cada pantalla tiene el botón **Ayuda** en la barra de arriba (en el teléfono, solo el icono del signo de pregunta). Abre en otra pestaña la página de este manual que explica esa pantalla. Si la pantalla todavía no tiene su página, abre el inicio del manual.
+Cada pantalla tiene su ayuda: el **?** junto al título (en las fichas, **Ayuda** en la barra de arriba). Abre un panel a la derecha con el resumen de esa pantalla tomado de este manual y la lista de temas que explica; **Ver manual completo** abre la página en otra pestaña. Si la pantalla todavía no tiene su resumen, el botón abre directamente el manual.
 
 ## Fechas y montos
 

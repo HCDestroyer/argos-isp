@@ -14,7 +14,7 @@ test('el cajero no ve Routers y la ruta lo manda a sin permiso', async ({ page }
     await expect(lateral.getByRole('link', { name: 'Caja', exact: true })).toBeVisible()
     await expect(lateral.getByRole('link', { name: 'Promesas', exact: true })).toBeVisible()
     await expect(lateral.getByRole('link', { name: 'Routers', exact: true })).toHaveCount(0)
-    await expect(lateral.getByRole('link', { name: 'Plantillas', exact: true })).toHaveCount(0)
+    await expect(lateral.getByRole('link', { name: 'Plantillas de facturación', exact: true })).toHaveCount(0)
     await expect(lateral.getByRole('link', { name: 'Bitácora', exact: true })).toHaveCount(0)
     await expect(lateral.getByRole('link', { name: 'Libro', exact: true })).toHaveCount(0)
     await expect(lateral.getByRole('link', { name: 'Usuarios', exact: true })).toHaveCount(0)

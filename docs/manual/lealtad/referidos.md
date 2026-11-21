@@ -8,7 +8,7 @@ pantallas:
 
 Un cliente trae a otro con su código de referido y, cuando el nuevo cliente paga sus primeras facturas, los dos pueden ganar puntos. Aquí ves quién refirió a quién y en qué va cada referido.
 
-Menú: **Cobros → Lealtad → Referidos**.
+Menú: **Clientes y lealtad → Lealtad → Referidos**.
 
 ## Quién la usa
 

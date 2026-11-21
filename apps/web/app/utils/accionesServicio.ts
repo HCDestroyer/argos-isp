@@ -1,5 +1,6 @@
 import type { ButtonProps } from '@nuxt/ui'
 import * as z from 'zod'
+import { ICONOS } from './iconosAcciones'
 
 /**
  * Presentación de las acciones explícitas del servicio. `permiso` es el mismo nombre de la
@@ -27,7 +28,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         etiqueta: 'Suspender',
         confirmar: 'Suspender servicio',
         efecto: 'El cliente queda cortado: su navegación se redirige a la página de corte.',
-        icono: 'i-lucide-circle-x',
+        icono: ICONOS.suspender,
         color: 'error',
         permiso: 'servicios.suspender',
         desde: ['activo', 'limitado'],
@@ -38,7 +39,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         etiqueta: 'Reactivar',
         confirmar: 'Reactivar servicio',
         efecto: 'Se desconecta la sesión para que el equipo vuelva a conectarse con navegación completa.',
-        icono: 'i-lucide-circle-check',
+        icono: ICONOS.reactivar,
         color: 'success',
         permiso: 'servicios.reactivar',
         desde: ['suspendido'],
@@ -49,7 +50,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         etiqueta: 'Limitar',
         confirmar: 'Limitar velocidad',
         efecto: 'La velocidad baja a la limitada del plan hasta que se quite el límite.',
-        icono: 'i-lucide-gauge',
+        icono: ICONOS.limitar,
         color: 'warning',
         permiso: 'servicios.limitar',
         desde: ['activo'],
@@ -60,7 +61,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         etiqueta: 'Quitar límite',
         confirmar: 'Quitar límite',
         efecto: 'El servicio vuelve a la velocidad completa del plan.',
-        icono: 'i-lucide-gauge-circle',
+        icono: ICONOS.quitarLimite,
         color: 'success',
         permiso: 'servicios.quitar_limite',
         desde: ['limitado'],
@@ -71,7 +72,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         etiqueta: 'Desconectar sesión',
         confirmar: 'Desconectar sesión',
         efecto: 'Se cierra la sesión en el router (Disconnect por RADIUS o, sin RADIUS, quitándola de /ppp/active por la API); el equipo del cliente vuelve a conectarse solo.',
-        icono: 'i-lucide-unplug',
+        icono: ICONOS.desconectar,
         color: 'neutral',
         permiso: 'servicios.desconectar',
         desde: ['activo', 'limitado', 'suspendido'],
@@ -82,7 +83,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         etiqueta: 'Retirar',
         confirmar: 'Retirar servicio',
         efecto: 'Baja definitiva: se liberan la IPv4 y los prefijos IPv6 y no se puede deshacer.',
-        icono: 'i-lucide-archive',
+        icono: ICONOS.retirar,
         color: 'error',
         permiso: 'servicios.retirar',
         // Un pendiente de instalación se retira si la venta se cae (`contratos/instalacion.md` §1).

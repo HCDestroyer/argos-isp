@@ -8,7 +8,7 @@ pantallas:
 
 La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia e impuestos. También los feriados, que valen para todas las empresas.
 
-Está en **Configuración → Fiscal**. Lo que cambies aquí rige desde la fecha que indiques y nunca reescribe lo ya emitido.
+Está en **Configuración → Empresa y fiscal → Fiscal**. Lo que cambies aquí rige desde la fecha que indiques y nunca reescribe lo ya emitido.
 
 ::: tip Una empresa a la vez
 Todo, menos los feriados, es por empresa (NIT). Con «Todas» en el selector de empresa verás «Elige una empresa».
