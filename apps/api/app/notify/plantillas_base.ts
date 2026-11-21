@@ -606,5 +606,34 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
         'Intentamos recuperar el equipo {{equipo.serie}}{{#servicio.direccion}} en {{servicio.direccion}}{{/servicio.direccion}}. ' +
             'Si ya lo entregaste, comunícate con nosotros.',
     ),
+    // Soporte de Iris (contrato 0.9.0 §6.6, `soporte.ts`): número, tipo y estado; nunca el texto del
+    // mensaje (no llega a Argos). WhatsApp no: Iris avisa en su conversación.
+    ...ambos(
+        'soporte.ticket_resuelto',
+        'Tu ticket {{ticket.numero}} quedó resuelto',
+        'Resolvimos tu ticket {{ticket.numero}}.' +
+            '{{#ticket.puede_confirmar}} Revísalo y confírmalo{{#empresa.portal_url}} en {{empresa.portal_url}}{{/empresa.portal_url}}; si el problema sigue, respóndenos ahí mismo.{{/ticket.puede_confirmar}}' +
+            '{{^ticket.puede_confirmar}} Si el problema sigue, comunícate con nosotros.{{/ticket.puede_confirmar}}',
+    ),
+    ...ambos(
+        'soporte.ticket_cerrado',
+        'Cerramos tu ticket {{ticket.numero}}',
+        'Tu ticket {{ticket.numero}} quedó cerrado. Si necesitas ayuda de nuevo, abre otro' +
+            '{{#empresa.portal_url}} en {{empresa.portal_url}}{{/empresa.portal_url}} o comunícate con nosotros.',
+    ),
+    ...ambos(
+        'soporte.ticket_respondido',
+        '{{#ticket.masivo}}Novedades sobre una falla en el servicio{{/ticket.masivo}}{{^ticket.masivo}}Tienes una respuesta en tu ticket {{ticket.numero}}{{/ticket.masivo}}',
+        '{{#ticket.masivo}}Publicamos novedades sobre la falla que afecta tu servicio (ticket {{ticket.numero}}).{{/ticket.masivo}}' +
+            '{{^ticket.masivo}}Tienes una respuesta en tu ticket {{ticket.numero}}.{{/ticket.masivo}}' +
+            '{{#empresa.portal_url}} Léela en {{empresa.portal_url}}.{{/empresa.portal_url}}',
+    ),
+    ...ambos(
+        'soporte.solicitud_estado_cambiado',
+        'Tu solicitud {{solicitud.numero}}: {{solicitud.estado_texto}}',
+        'Tu solicitud de {{solicitud.tipo_texto}} {{solicitud.numero}} {{solicitud.estado_texto}}.' +
+            '{{#solicitud.no_procede}} Si tienes dudas, comunícate con nosotros.{{/solicitud.no_procede}}' +
+            '{{#empresa.portal_url}} Consulta el detalle en {{empresa.portal_url}}.{{/empresa.portal_url}}',
+    ),
     ...PLANTILLAS_WHATSAPP,
 ]

@@ -1,4 +1,6 @@
 import type { Transaccion } from '#shared/domain_action'
+import { EVENTO_BIENVENIDA } from '#notify/instalacion'
+import { seguirBienvenida } from '#notify/bienvenida'
 
 /**
  * Acuse de un aviso de WhatsApp que Iris tenía en cola (contrato Iris 0.6.0 §6.6): lo aplican el
@@ -43,9 +45,10 @@ export async function aplicarAcuseIris(t: Transaccion, acuse: Acuse): Promise<Re
         .where('id', acuse.envioId)
         .where('canal', 'whatsapp')
         .forUpdate()
-        .select('id', 'cliente_id', 'empresa_id', 'evento', 'estado', 'proveedor_id', 'leido_en')
+        .select('id', 'origen', 'cliente_id', 'empresa_id', 'evento', 'estado', 'proveedor_id', 'leido_en')
         .first()) as {
         id: number
+        origen: string
         cliente_id: number | null
         empresa_id: number | null
         evento: string
@@ -82,6 +85,7 @@ export async function aplicarAcuseIris(t: Transaccion, acuse: Acuse): Promise<Re
                 estado: 'omitido',
                 motivo: `Iris: ${acuse.motivo ?? 'bloqueado'}`.slice(0, 500),
             })
+        if (envio.evento === EVENTO_BIENVENIDA) await seguirBienvenida(t, envio.origen)
         return { ...base, cambio: true, estado: 'omitido' }
     }
     if (acuse.tipo === 'entregado') {
@@ -109,6 +113,8 @@ export async function aplicarAcuseIris(t: Transaccion, acuse: Acuse): Promise<Re
             })
     }
     const estado = acuse.tipo === 'entregado' ? 'enviado' : 'fallido'
+    // 0.9.0 §12.5: el WhatsApp de la bienvenida reenvía a Iris lo que Iris informó
+    if (envio.evento === EVENTO_BIENVENIDA) await seguirBienvenida(t, envio.origen)
     if (base.cliente_id !== null) {
         await t.emit('notificacion.enviada', {
             cliente_id: base.cliente_id,
