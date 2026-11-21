@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, verDatosCliente } from './ayudas'
 
 /**
  * Pendientes de la prioridad 2, segunda tanda (modo fixtures, escritorio y teléfono): premio y
@@ -52,6 +52,7 @@ test('lealtad: crear un premio, canjearlo y revertir el canje', async ({ page })
 test('Telegram del cliente y nodo del portal', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/clientes/1')
+    await verDatosCliente(page)
     const telegram = page.locator('[data-prueba="cliente-telegram"]')
     await expect(telegram).toBeVisible({ timeout: 15_000 })
     await telegram.locator('[data-prueba="vincular-telegram"]').click()

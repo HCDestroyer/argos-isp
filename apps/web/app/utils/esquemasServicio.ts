@@ -54,6 +54,8 @@ export const esquemaServicio = z.object({
     costo_override: conPatron(PATRON_DINERO, 'Monto con hasta 2 decimales, por ejemplo 150.00'),
     excluir_firewall: z.boolean(),
     mac: conPatron(PATRON_MAC, 'MAC como 4C:5E:0C:12:34:56'),
+    /** Nombre opcional del servicio («Casa», «Negocio»; A1 #281, contrato Iris 0.10.0 §3.7). */
+    nombre: opcional(60),
     direccion: opcional(300),
     // Ubicación y contacto en sitio (pedidos A12 y A13 de Iris): cómo llegar y quién recibe al técnico.
     referencia: opcional(300),
@@ -123,6 +125,7 @@ export function entradaServicioVacia(clienteId?: number): EntradaServicio {
         costo_override: '',
         excluir_firewall: false,
         mac: '',
+        nombre: '',
         direccion: '',
         referencia: '',
         contacto_nombre: '',
@@ -149,6 +152,7 @@ export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoSe
         plan_id: datos.plan_id,
         // Sin `tipo_conexion`: el servicio toma el del router (`contratos/tipo-conexion-router.md` §2).
         mac: datos.mac,
+        nombre: datos.nombre,
         direccion: datos.direccion,
         referencia: datos.referencia,
         contacto_nombre: datos.contacto_nombre,

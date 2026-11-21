@@ -51,6 +51,7 @@ import { redAccesoInicial, sembrarServidoresServicios, type RedAccesoFixtures } 
 import { nodosPortal } from './nodosPortal/datos'
 import { portalCorteInicial } from './portalCorte/datos'
 import { portalContrasenasIniciales, type PortalContrasenasFixture } from './portalContrasena/datos'
+import { contactosIniciales } from './contactos/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
 import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDatos'
@@ -214,6 +215,8 @@ interface BaseFixtures {
     portalCorte: Schema<'PortalCorte'>
     /** Contraseña del portal (A5): la por defecto por empresa y la propia de cada cliente, sin hashes. */
     portalContrasenas: PortalContrasenasFixture
+    /** Contactos de los clientes (A1, #281). */
+    contactos: Schema<'ContactoCliente'>[]
     /** Catálogo de campos personalizados del cliente (A1). */
     camposPersonalizados: Schema<'CampoPersonalizado'>[]
     /** Inventario interno (A3, `contratos/inventario.md`): productos, bodegas, kardex, unidades y conteos. */
@@ -417,6 +420,7 @@ function inicial(): BaseFixtures {
         nodosPortal,
         portalCorte: portalCorteInicial(),
         portalContrasenas: portalContrasenasIniciales(),
+        contactos: contactosIniciales(),
         camposPersonalizados,
         productos: productosIniciales,
         bodegas: bodegasIniciales,
