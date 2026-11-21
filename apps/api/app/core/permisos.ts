@@ -346,6 +346,17 @@ export const PERMISOS = {
     'sorteos.entregar': 'Registrar la entrega de un premio de sorteo o marcarlo no reclamado',
 
     'bitacora.ver': 'Ver bitácora de acciones y cambios',
+    // Salud, registro y apariencia del sistema (`contratos/salud.md`, `contratos/apariencia.md`); solo admin
+    'sistema.ver_salud':
+        'Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor',
+    'sistema.ver_registro':
+        'Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos',
+    'apariencia.ver': 'Ver la apariencia de la instalación (tema, marca y archivos del inicio de sesión)',
+    'apariencia.editar': 'Cambiar el tema, el modo predeterminado, el nombre de la marca y el eslogan',
+    'apariencia.subir_logo_login': 'Subir el logo del inicio de sesión del panel y del portal',
+    'apariencia.quitar_logo_login': 'Quitar el logo del inicio de sesión',
+    'apariencia.subir_fondo_login': 'Subir la imagen de fondo del inicio de sesión',
+    'apariencia.quitar_fondo_login': 'Quitar la imagen de fondo del inicio de sesión',
     'usuarios.ver': 'Ver usuarios',
     'usuarios.crear': 'Crear usuarios',
     'usuarios.editar': 'Editar usuarios y sus roles',
