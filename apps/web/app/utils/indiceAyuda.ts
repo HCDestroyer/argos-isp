@@ -1391,7 +1391,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/servicios/[id]/facturas-periodo': {
         titulo: 'Facturas · Emitir facturas de un servicio a mano (meses adelantados o meses que faltan)',
-        resumen: 'Normalmente el sistema emite solo la factura de cada mes. Esta acción sirve para dos casos:',
+        resumen: 'Normalmente el sistema emite solo la factura de cada mes. Esta acción sirve para tres casos:',
         pagina: 'facturacion/facturas',
         ancla: 'emitir-facturas-de-un-servicio-a-mano-meses-adelantados-o-meses-que-faltan',
         temas: [],
