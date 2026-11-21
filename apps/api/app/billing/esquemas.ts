@@ -139,7 +139,8 @@ export const PlantillaFacturacion = definirEsquema(
             motivo_retiro: nulable(texto),
             ...auditable,
         },
-        ['por_defecto'],
+        // siempre viene; opcional en el esquema para no romper clientes tipados (decisión del PM 14)
+        ['por_defecto', 'rechazar_monto_distinto'],
     ),
 )
 

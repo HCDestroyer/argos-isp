@@ -1,6 +1,7 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
+import { dinero, empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada } from '#shared/validadores'
+import { FORMATOS_IMPRESION } from '#ledger/cajas'
 import { PAUSA_TOPE_MAXIMO } from '#billing/ajustes_cobro'
 import { ESTADOS_BORRADOR } from '#ledger/borradores'
 import {
@@ -115,3 +116,54 @@ export const listarBorradoresValidator = vine.compile(
 )
 
 export const rechazarBorradorValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+/** `POST /servicios/:id/pausar-sin-cobro` (decisión 16). */
+export const pausarSinCobroValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        dias: vine.number().withoutDecimals().range([1, PAUSA_TOPE_MAXIMO]).meta({
+            description: 'Días de pausa desde hoy; hasta pausa_tope_dias de la empresa (90 de fábrica)',
+        }),
+    }),
+)
+
+export const terminarPausaValidator = vine.compile(
+    vine.object({ motivo: vine.string().trim().maxLength(500).nullable().optional() }),
+)
+
+/** `PUT /cajas/:id/impresion` (decisión 20). */
+export const impresionCajaValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        formato_recibo: vine
+            .enum(FORMATOS_IMPRESION)
+            .optional()
+            .meta({ description: 'pos_80 (ticket de 80 mm, de fábrica) o carta' }),
+        formato_factura: vine
+            .enum(FORMATOS_IMPRESION)
+            .optional()
+            .meta({ description: 'carta (de fábrica) o pos_80' }),
+    }),
+)
+
+/** Catálogo de bancos de origen (decisión 23). */
+export const crearBancoOrigenValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        orden: vine.number().withoutDecimals().range([0, 100000]).optional().meta({
+            description: 'Posición en las listas (por defecto, después de los demás y antes de «Otro»)',
+        }),
+    }),
+)
+
+export const editarBancoOrigenValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        orden: vine.number().withoutDecimals().range([0, 100000]).optional(),
+        activo: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'false: sale de las listas de todas las empresas' }),
+    }),
+)

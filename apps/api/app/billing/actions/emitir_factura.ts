@@ -24,6 +24,7 @@ import {
     type OrigenBonificacion,
 } from '#billing/bonificaciones'
 
+import { enPausa, rangosSinCobro } from '#billing/pausas'
 /**
  * `facturas.emitir`: emite la factura de UN periodo de un servicio. La llama `generarFacturas`
  * (cron o `POST /facturas/generar`), una transacción por factura.
@@ -156,6 +157,10 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         const permitida = input.manual?.antes_de_facturar_desde || input.manual?.antes_del_inicio
         if (desde && input.periodo.periodo < desde && !permitida) {
             return { factura_id: null, creada: false, motivo: 'antes_de_facturar_desde' }
+        }
+        // pausa sin cobro (decisión del PM 16): el periodo que empieza dentro de la pausa no se cobra
+        if (enPausa(await rangosSinCobro(t.trx, servicio.id), input.periodo.periodo)) {
+            return { factura_id: null, creada: false, motivo: 'en_pausa' }
         }
 
         const { periodo, fin, dias, dias_ciclo: diasCiclo } = input.periodo

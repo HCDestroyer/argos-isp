@@ -12,10 +12,10 @@ import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { pagina } from '#shared/openapi/esquemas'
+import { lista, pagina } from '#shared/openapi/esquemas'
 import { Problema, ValidacionFallida } from '#shared/errores'
 import { empresasDeLaLista } from '#shared/empresa_activa'
-import { exigirCliente } from '#core/acceso_empresa'
+import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
 import { esTokenIris, exigirActorIris } from '#integraciones/iris/atencion'
 import { exigirContactoIris } from '#billing/contacto_iris'
 import { exigirEmpresaPeticion } from '#billing/empresa'
@@ -26,6 +26,8 @@ import {
     BorradorAsiento,
     GestionCobro,
     GestionCobroRegistrada,
+    PausaServicio,
+    BancoOrigen,
 } from '#billing/esquemas_cobro'
 import { ArchivoComprobante } from '#billing/esquemas'
 import {
@@ -49,6 +51,17 @@ import RegistrarAsientoManual from '#ledger/actions/registrar_asiento_manual'
 import AprobarAsiento from '#ledger/actions/aprobar_asiento'
 import RechazarAsiento from '#ledger/actions/rechazar_asiento'
 import ReconectarTemporal from '#billing/actions/reconectar_temporal'
+import PausarSinCobro from '#billing/actions/pausar_sin_cobro'
+import TerminarPausa from '#billing/actions/terminar_pausa'
+import { pausasDeServicio } from '#billing/pausas'
+import { existeCaja } from '#ledger/cajas'
+import { Caja } from '#ledger/esquemas'
+import ConfigurarImpresionCaja from '#ledger/actions/configurar_impresion_caja'
+import { listarBancosOrigen } from '#billing/cuentas_bancarias'
+import CrearBancoOrigen from '#billing/actions/crear_banco_origen'
+import EditarBancoOrigen from '#billing/actions/editar_banco_origen'
+import OcultarBancoOrigen from '#billing/actions/ocultar_banco_origen'
+import MostrarBancoOrigen from '#billing/actions/mostrar_banco_origen'
 import * as v from '#billing/validators'
 import { ReconexionTemporal } from '#billing/esquemas'
 import { exigirAcceso } from '#billing/empresa'
@@ -372,4 +385,165 @@ const reconexion: Ruta[] = [
     }),
 ]
 
-export default [...gestiones, ...ajustes, ...asientos, ...reconexion]
+const pausas: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/pausar-sin-cobro',
+        operacion: 'serviciosPausarSinCobro',
+        resumen: 'Pausar un servicio sin cobro (suspende y no factura los periodos de la pausa)',
+        etiqueta: 'servicios',
+        permiso: 'servicios.pausar_sin_cobro',
+        cuerpo: vc.pausarSinCobroValidator,
+        idempotente: true,
+        descripcion:
+            'Decisión del PM 16. La suspensión manual (POST /servicios/:id/suspender) sigue facturando; esta no: los periodos que empiezan entre hoy y hoy + dias no se emiten nunca. Suspende con la suspensión manual de A1 (servicio.estado_cambiado) y, al llegar hasta, el cron pausas lo reactiva solo y evaluarEstadoServicio decide por la deuda. dias de 1 a pausa_tope_dias de la empresa (422 tope_pausa; 90 de fábrica). 422 pausa_activa, suspension_manual (ya suspendido a mano), servicio_retirado o servicio_pendiente_instalacion. Emite servicio.pausa_iniciada.',
+        respuesta: { status: 201, descripcion: 'Pausa', esquema: PausaServicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new PausarSinCobro().execute(
+                { servicio_id: id, motivo: cuerpo.motivo, dias: cuerpo.dias },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/terminar-pausa',
+        operacion: 'serviciosTerminarPausa',
+        resumen: 'Terminar antes de tiempo la pausa sin cobro (reactiva el servicio)',
+        etiqueta: 'servicios',
+        permiso: 'servicios.terminar_pausa',
+        cuerpo: vc.terminarPausaValidator,
+        idempotente: true,
+        descripcion:
+            'Reactiva con A1 y luego evaluarEstadoServicio (si debe, vuelve a limitarse o cortarse según su plantilla). 422 sin_pausa. Emite servicio.pausa_terminada (fin_motivo manual).',
+        respuesta: { status: 200, descripcion: 'Pausa terminada', esquema: PausaServicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new TerminarPausa().execute(
+                { servicio_id: id, fin_motivo: 'manual', motivo: cuerpo.motivo ?? null },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/pausas',
+        operacion: 'serviciosPausas',
+        resumen: 'Pausas sin cobro de un servicio, la más reciente primero',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        respuesta: { status: 200, descripcion: 'Pausas', esquema: lista(PausaServicio) },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return pausasDeServicio(id)
+        },
+    }),
+]
+
+const impresion: Ruta[] = [
+    definirRuta({
+        metodo: 'put',
+        ruta: '/cajas/:id/impresion',
+        operacion: 'cajasConfigurarImpresion',
+        resumen: 'Elegir el formato de impresión de la caja (recibo y factura)',
+        etiqueta: 'cajas',
+        permiso: 'cajas.configurar_impresion',
+        cuerpo: vc.impresionCajaValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Decisión del PM 20: cada caja recuerda su formato. De fábrica, recibo en ticket de 80 mm (pos_80) y factura en carta. Solo cambia lo que viene; 409 conflicto_version. Emite caja.impresion_cambiada.',
+        respuesta: { status: 200, descripcion: 'Caja', esquema: Caja },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await existeCaja(id))
+            return new ConfigurarImpresionCaja().execute({ caja_id: id, ...cuerpo }, ctx.contextoAccion())
+        },
+    }),
+]
+
+const bancosOrigen: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos-origen',
+        operacion: 'bancosOrigenListar',
+        resumen: 'Catálogo de bancos de origen con su estado en la empresa activa',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.ver',
+        descripcion:
+            'Decisión del PM 23: catálogo único del sistema, con los inactivos y `oculto` para la empresa activa (sin empresa activa, oculto es false). Las listas para elegir banco (GET /bancos) ya no traen los ocultos de la empresa activa.',
+        respuesta: { status: 200, descripcion: 'Bancos', esquema: lista(BancoOrigen) },
+        handler: (ctx) => listarBancosOrigen(ctx.empresa?.activa ?? null),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos-origen',
+        operacion: 'bancosOrigenCrear',
+        resumen: 'Agregar un banco al catálogo de bancos de origen (todas las empresas)',
+        etiqueta: 'pagos',
+        permiso: 'bancos_origen.crear',
+        cuerpo: vc.crearBancoOrigenValidator,
+        idempotente: true,
+        descripcion:
+            '409 banco_duplicado si el nombre ya existe. Emite banco_origen.cambiado (creado: true).',
+        respuesta: { status: 201, descripcion: 'Banco', esquema: BancoOrigen },
+        handler: (ctx, { cuerpo }) => new CrearBancoOrigen().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/bancos-origen/:id',
+        operacion: 'bancosOrigenEditar',
+        resumen: 'Editar nombre, orden o estado de un banco del catálogo',
+        etiqueta: 'pagos',
+        permiso: 'bancos_origen.editar',
+        cuerpo: vc.editarBancoOrigenValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Afecta a todas las empresas; los pagos y comprobantes que ya lo usan no cambian. 409 conflicto_version o banco_duplicado. Emite banco_origen.cambiado.',
+        respuesta: { status: 200, descripcion: 'Banco', esquema: BancoOrigen },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarBancoOrigen().execute({ id: Number(params.id), ...cuerpo }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos-origen/:id/ocultar',
+        operacion: 'bancosOrigenOcultar',
+        resumen: 'Ocultar en la empresa activa un banco que no usa',
+        etiqueta: 'pagos',
+        permiso: 'bancos_origen.ocultar',
+        idempotente: true,
+        descripcion:
+            'Ya no sale en GET /bancos de esta empresa. Idempotente. Emite banco_origen.cambiado (campos [oculto]).',
+        respuesta: { status: 200, descripcion: 'Banco', esquema: BancoOrigen },
+        handler: (ctx, { params }) =>
+            new OcultarBancoOrigen().execute({ banco_id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos-origen/:id/mostrar',
+        operacion: 'bancosOrigenMostrar',
+        resumen: 'Volver a mostrar en la empresa activa un banco oculto',
+        etiqueta: 'pagos',
+        permiso: 'bancos_origen.mostrar',
+        idempotente: true,
+        descripcion: 'Idempotente. Emite banco_origen.cambiado (campos [oculto]).',
+        respuesta: { status: 200, descripcion: 'Banco', esquema: BancoOrigen },
+        handler: (ctx, { params }) =>
+            new MostrarBancoOrigen().execute({ banco_id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+]
+
+export default [
+    ...gestiones,
+    ...ajustes,
+    ...asientos,
+    ...reconexion,
+    ...pausas,
+    ...impresion,
+    ...bancosOrigen,
+]

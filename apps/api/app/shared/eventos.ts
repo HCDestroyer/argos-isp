@@ -1165,6 +1165,49 @@ export interface CatalogoEventos {
         decidido_por: number | null
         motivo: string
     }
+    /**
+     * Pausa sin cobro (decisión del PM 16). Iniciada: el servicio queda suspendido a mano (sale además
+     * `servicio.estado_cambiado`) y los periodos que empiezan antes de `hasta` no se facturan.
+     * Terminada: `fin_motivo` vencida (cron), manual, reactivado o retirado; si correspondía, el
+     * servicio ya se reactivó (`servicio.estado_cambiado`).
+     */
+    'servicio.pausa_iniciada': {
+        pausa_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        desde: string
+        hasta: string
+        dias: number
+    }
+    'servicio.pausa_terminada': {
+        pausa_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        fin_motivo: 'vencida' | 'manual' | 'reactivado' | 'retirado'
+    }
+    /** Decisión del PM 20: la caja cambió su formato de impresión (`pos_80` o `carta`). */
+    'caja.impresion_cambiada': {
+        caja_id: number
+        empresa_id: number
+        campos: Array<'formato_recibo' | 'formato_factura'>
+        formato_recibo: 'pos_80' | 'carta'
+        formato_factura: 'pos_80' | 'carta'
+    }
+    /**
+     * Catálogo único de bancos de origen (decisión del PM 23). Del catálogo (`empresa_id` null): alta
+     * (`creado: true`) o edición de nombre, orden o activo. De una empresa: `campos: ['oculto']` y
+     * `oculto` (la empresa lo ocultó o lo volvió a mostrar). Solo nombres de campos.
+     */
+    'banco_origen.cambiado': {
+        banco_id: number
+        empresa_id: number | null
+        campos: Array<'nombre' | 'orden' | 'activo' | 'oculto'>
+        creado: boolean
+        activo: boolean | null
+        oculto: boolean | null
+    }
     'cartera.castigada': {
         castigo_id: number
         empresa_id: number
@@ -1680,6 +1723,10 @@ export const EVENTOS = [
     'libro.asiento_pendiente',
     'libro.asiento_manual_registrado',
     'libro.asiento_rechazado',
+    'servicio.pausa_iniciada',
+    'servicio.pausa_terminada',
+    'caja.impresion_cambiada',
+    'banco_origen.cambiado',
     'cartera.castigada',
     'compra.registrada',
     'compra.anulada',

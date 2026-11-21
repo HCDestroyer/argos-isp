@@ -354,40 +354,43 @@ export const ProvisionCartera = definirEsquema(
 
 export const CastigoCartera = definirEsquema(
     'CastigoCartera',
-    objeto({
-        id,
-        empresa_id: id,
-        cliente_id: id,
-        cliente_nombre: texto,
-        fecha,
-        motivo: texto,
-        evidencia: { ...texto, description: 'Gestión de cobro documentada' },
-        monto: Dinero,
-        iva: { ...Dinero, description: 'IVA de avisos sin DTE que sale de 2.1.11' },
-        estimacion: { ...Dinero, description: 'Contra 1.1.12 Estimación para cuentas incobrables' },
-        gasto: {
-            ...Dinero,
-            description: 'Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación)',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            cliente_id: id,
+            cliente_nombre: texto,
+            fecha,
+            motivo: texto,
+            evidencia: { ...texto, description: 'Gestión de cobro documentada' },
+            monto: Dinero,
+            iva: { ...Dinero, description: 'IVA de avisos sin DTE que sale de 2.1.11' },
+            estimacion: { ...Dinero, description: 'Contra 1.1.12 Estimación para cuentas incobrables' },
+            gasto: {
+                ...Dinero,
+                description: 'Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación)',
+            },
+            asiento_id: nulable(id),
+            registrado_por: nulable(id),
+            created_at: instante,
+            facturas: lista(objeto({ factura_id: id, monto: Dinero, iva: Dinero })),
+            gestiones: {
+                ...lista(
+                    objeto({
+                        id,
+                        tipo: enumerado(TIPOS_GESTION),
+                        resultado: enumerado(RESULTADOS_GESTION),
+                        ocurrido_en: instante,
+                        servicio_id: nulable(id),
+                        tiene_adjunto: booleano,
+                    }),
+                ),
+                description:
+                    'Gestiones de cobro del cliente en la empresa registradas hasta el castigo, de la más reciente a la más vieja (evidencia; decisión del PM 8). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
         },
-        asiento_id: nulable(id),
-        registrado_por: nulable(id),
-        created_at: instante,
-        facturas: lista(objeto({ factura_id: id, monto: Dinero, iva: Dinero })),
-        gestiones: {
-            ...lista(
-                objeto({
-                    id,
-                    tipo: enumerado(TIPOS_GESTION),
-                    resultado: enumerado(RESULTADOS_GESTION),
-                    ocurrido_en: instante,
-                    servicio_id: nulable(id),
-                    tiene_adjunto: booleano,
-                }),
-            ),
-            description:
-                'Gestiones de cobro del cliente en la empresa registradas hasta el castigo, de la más reciente a la más vieja (evidencia; decisión del PM 8)',
-        },
-    }),
+        ['gestiones'],
+    ),
 )
 
 export const DiferenciaCerrada = definirEsquema(

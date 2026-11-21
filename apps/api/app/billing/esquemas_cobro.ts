@@ -147,3 +147,39 @@ export const ComprobanteAprobado = definirEsquema('ComprobanteAprobado', {
         }),
     ],
 })
+
+export const PausaServicio = definirEsquema(
+    'PausaServicio',
+    objeto({
+        id,
+        empresa_id: id,
+        servicio_id: id,
+        cliente_id: id,
+        desde: { ...fecha, description: 'Primer día de la pausa (Guatemala)' },
+        hasta: {
+            ...fecha,
+            description: 'Día en que se reactiva (exclusivo); los periodos que empiezan antes no se facturan',
+        },
+        dias: entero,
+        motivo: texto,
+        estado: enumerado(['activa', 'terminada']),
+        terminada_en: nulable(instante),
+        fin_motivo: nulable(enumerado(['vencida', 'manual', 'reactivado', 'retirado'])),
+        creada_por: nulable(id),
+        terminada_por: nulable(id),
+        version: entero,
+        created_at: instante,
+    }),
+)
+
+export const BancoOrigen = definirEsquema(
+    'BancoOrigen',
+    objeto({
+        id,
+        nombre: texto,
+        orden: entero,
+        activo: { ...booleano, description: 'false: fuera de las listas de todas las empresas' },
+        oculto: { ...booleano, description: 'Oculto en la empresa activa (decisión del PM 23)' },
+        version: entero,
+    }),
+)

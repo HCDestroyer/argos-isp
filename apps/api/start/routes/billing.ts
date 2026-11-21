@@ -1601,7 +1601,8 @@ const bancos: Ruta[] = [
         permiso: null,
         cabecerasIris: 'opcional',
         respuesta: { status: 200, descripcion: 'Bancos activos', esquema: lista(Banco) },
-        handler: () => listarBancos(),
+        // decisión del PM 23: sin los que la empresa activa ocultó
+        handler: (ctx) => listarBancos(undefined, true, ctx.empresa?.activa ?? null),
     }),
     definirRuta({
         metodo: 'get',
