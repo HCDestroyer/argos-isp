@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.24.0](https://github.com/HCDestroyer/argos-isp/compare/v1.23.0...v1.24.0) (2026-11-21)
+
+
+### Funcionalidades
+
+* **core:** contrato Iris 0.10.x en núcleo: A38 a A46 ([#281](https://github.com/HCDestroyer/argos-isp/issues/281)) ([b04e6d8](https://github.com/HCDestroyer/argos-isp/commit/b04e6d8795a9d88d45e2eb2f66a4ccac6eeb779b))
+* **importacion:** estados de cuenta del banco, webhooks a Iris, prospectos A44 y avisos a contactos ([#278](https://github.com/HCDestroyer/argos-isp/issues/278)) ([7f60f17](https://github.com/HCDestroyer/argos-isp/commit/7f60f174b9189ba7948c4453544e3fe05d09eb4c))
+* **inventario:** resumen del turno de caja, estado de cuenta por servicio, A47 bodega de cuadrilla, A48 equipos y A36 ([#279](https://github.com/HCDestroyer/argos-isp/issues/279)) ([5047d9e](https://github.com/HCDestroyer/argos-isp/commit/5047d9e842646e0d878fa3c1256056d8da4f1f96))
+* **monitoreo,core:** salud del sistema, registro, almacenamiento, apariencia y accesos rápidos (API) ([#271](https://github.com/HCDestroyer/argos-isp/issues/271)) ([462dd1c](https://github.com/HCDestroyer/argos-isp/commit/462dd1cf5665cbd1062b6f44c3f798e26e8de7a5))
+* **web:** rediseño fase 1, marco del panel con menú flotante y encabezado de botones sueltos ([#280](https://github.com/HCDestroyer/argos-isp/issues/280)) ([d1f2517](https://github.com/HCDestroyer/argos-isp/commit/d1f25176d8b00562f2865b0aeaacfaca6eb1c29a))
+
 ## [1.23.0](https://github.com/HCDestroyer/argos-isp/compare/v1.22.2...v1.23.0) (2026-11-21)
 
 
