@@ -1132,6 +1132,39 @@ export interface CatalogoEventos {
         tipo_archivo: string
         tamano: number
     }
+    /** Ajustes de cobro y libro de una empresa cambiados (`ajustes_cobro.editar`); solo nombres. */
+    'ajustes_cobro.cambiados': {
+        empresa_id: number
+        campos: Array<'asientos_requieren_aprobacion' | 'pausa_tope_dias'>
+    }
+    /**
+     * Asiento manual de ajuste (decisión del PM 10). `libro.asiento_pendiente`: quedó como borrador
+     * (la empresa exige aprobación; no toca el libro). `libro.asiento_manual_registrado`: entró al
+     * libro, directo (`borrador_id` y `aprobado_por` null) o al aprobar el borrador otro usuario.
+     * `libro.asiento_rechazado`: el borrador se rechazó con motivo.
+     */
+    'libro.asiento_pendiente': {
+        borrador_id: number
+        empresa_id: number
+        creado_por: number | null
+        fecha: string | null
+        total: Dinero
+    }
+    'libro.asiento_manual_registrado': {
+        asiento_id: number
+        empresa_id: number
+        borrador_id: number | null
+        total: Dinero
+        registrado_por: number | null
+        aprobado_por: number | null
+    }
+    'libro.asiento_rechazado': {
+        borrador_id: number
+        empresa_id: number
+        creado_por: number | null
+        decidido_por: number | null
+        motivo: string
+    }
     'cartera.castigada': {
         castigo_id: number
         empresa_id: number
@@ -1643,6 +1676,10 @@ export const EVENTOS = [
     'cuenta_bancaria.cambiada',
     'gestion_cobro.registrada',
     'gestion_cobro.adjunto_agregado',
+    'ajustes_cobro.cambiados',
+    'libro.asiento_pendiente',
+    'libro.asiento_manual_registrado',
+    'libro.asiento_rechazado',
     'cartera.castigada',
     'compra.registrada',
     'compra.anulada',

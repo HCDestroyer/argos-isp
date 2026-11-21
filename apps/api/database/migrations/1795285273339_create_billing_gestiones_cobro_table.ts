@@ -74,6 +74,17 @@ export default class extends BaseSchema {
             $$;
             CREATE TRIGGER gestiones_cobro_inmutable BEFORE UPDATE OR DELETE ON billing.gestiones_cobro
                 FOR EACH ROW EXECUTE FUNCTION billing.gestiones_cobro_inmutable();
+            CREATE TRIGGER gestiones_cobro_sin_truncate BEFORE TRUNCATE ON billing.gestiones_cobro
+                FOR EACH STATEMENT EXECUTE FUNCTION audit.rechazar_modificacion();
+
+            DO $do$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'argosisp_app') THEN
+                    GRANT SELECT, INSERT, UPDATE ON billing.gestiones_cobro TO argosisp_app;
+                    REVOKE DELETE, TRUNCATE ON billing.gestiones_cobro FROM argosisp_app;
+                END IF;
+            END
+            $do$;
         `)
     }
 

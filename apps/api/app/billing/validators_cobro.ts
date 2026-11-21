@@ -1,6 +1,8 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { idEntidad } from '#shared/validadores'
+import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
+import { PAUSA_TOPE_MAXIMO } from '#billing/ajustes_cobro'
+import { ESTADOS_BORRADOR } from '#ledger/borradores'
 import {
     NOTA_GESTION_MAXIMO,
     ORIGENES_GESTION,
@@ -54,3 +56,62 @@ export const listarGestionesValidator = vine.compile(
         tipo: vine.enum(TIPOS_GESTION).optional(),
     }),
 )
+
+/** `PUT /ajustes-cobro` (decisiones 10 y 16). */
+export const editarAjustesCobroValidator = vine.compile(
+    vine.object({
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se guardó); si cambió responde 409' }),
+        asientos_requieren_aprobacion: vine.boolean().optional().meta({
+            description:
+                'Un asiento manual queda como borrador hasta que otro usuario lo aprueba (false de fábrica)',
+        }),
+        pausa_tope_dias: vine
+            .number()
+            .withoutDecimals()
+            .range([1, PAUSA_TOPE_MAXIMO])
+            .optional()
+            .meta({ description: 'Días máximos de una pausa sin cobro (90 de fábrica)' }),
+    }),
+)
+
+/** `POST /libro/asientos` (decisión 10). */
+export const asientoManualValidator = vine.compile(
+    vine.object({
+        fecha: fechaIso()
+            .optional()
+            .meta({ description: 'Fecha contable (por defecto hoy, al registrar o aprobar)' }),
+        descripcion: vine.string().trim().minLength(3).maxLength(500),
+        movimientos: vine
+            .array(
+                vine.object({
+                    cuenta: vine.string().trim().minLength(1).maxLength(30).meta({
+                        description: 'Código del plan de cuentas (imputable y activa)',
+                    }),
+                    debe: dinero().nullable().optional(),
+                    haber: dinero().nullable().optional(),
+                    cliente_id: idEntidad().nullable().optional().meta({
+                        description: 'Obligatorio en cuentas con auxiliar de cliente (CxC, anticipos)',
+                    }),
+                    proveedor_id: idEntidad().nullable().optional().meta({
+                        description: 'Obligatorio en 2.1.03 Proveedores',
+                    }),
+                }),
+            )
+            .minLength(2)
+            .maxLength(200),
+    }),
+)
+
+export const listarBorradoresValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        estado: vine.enum(ESTADOS_BORRADOR).optional(),
+        empresas: empresasConsulta(),
+    }),
+)
+
+export const rechazarBorradorValidator = vine.compile(vine.object({ motivo: motivo() }))

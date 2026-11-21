@@ -20,7 +20,13 @@ import { esTokenIris, exigirActorIris } from '#integraciones/iris/atencion'
 import { exigirContactoIris } from '#billing/contacto_iris'
 import { exigirEmpresaPeticion } from '#billing/empresa'
 import * as vc from '#billing/validators_cobro'
-import { GestionCobro, GestionCobroRegistrada } from '#billing/esquemas_cobro'
+import {
+    AjustesCobro,
+    AsientoManual,
+    BorradorAsiento,
+    GestionCobro,
+    GestionCobroRegistrada,
+} from '#billing/esquemas_cobro'
 import { ArchivoComprobante } from '#billing/esquemas'
 import {
     FORMATO_CLAVE_GESTION_IRIS,
@@ -35,6 +41,13 @@ import {
     type TipoComprobante,
 } from '#billing/comprobantes_archivos'
 import RegistrarGestionCobro from '#billing/actions/registrar_gestion_cobro'
+import { resolverEmpresaActiva } from '#core/empresas'
+import { leerAjustesCobro } from '#billing/ajustes_cobro'
+import EditarAjustesCobro from '#billing/actions/editar_ajustes_cobro'
+import { listarBorradores, verBorrador } from '#ledger/borradores'
+import RegistrarAsientoManual from '#ledger/actions/registrar_asiento_manual'
+import AprobarAsiento from '#ledger/actions/aprobar_asiento'
+import RechazarAsiento from '#ledger/actions/rechazar_asiento'
 import AdjuntarGestionCobro from '#billing/actions/adjuntar_gestion_cobro'
 
 const sinCampos = vine.compile(vine.object({}))
@@ -211,4 +224,113 @@ const gestiones: Ruta[] = [
     }),
 ]
 
-export default [...gestiones]
+const ajustes: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/ajustes-cobro',
+        operacion: 'ajustesCobroVer',
+        resumen: 'Ajustes de cobro y libro de la empresa activa',
+        etiqueta: 'cobranza',
+        permiso: 'ajustes_cobro.ver',
+        descripcion:
+            'Sin guardar nunca: los valores de fábrica (asientos_requieren_aprobacion false, pausa_tope_dias 90) y version 0.',
+        respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesCobro },
+        handler: async (ctx) => leerAjustesCobro(await resolverEmpresaActiva(ctx.contextoAccion())),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/ajustes-cobro',
+        operacion: 'ajustesCobroEditar',
+        resumen: 'Editar los ajustes de cobro y libro de la empresa activa',
+        etiqueta: 'cobranza',
+        permiso: 'ajustes_cobro.editar',
+        cuerpo: vc.editarAjustesCobroValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Decisiones del PM 10 (aprobación de asientos manuales por otro usuario) y 16 (tope de días de la pausa sin cobro, 1 a 365). Solo cambia lo que viene; 409 conflicto_version. Emite ajustes_cobro.cambiados.',
+        respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesCobro },
+        handler: async (ctx, { cuerpo }) => new EditarAjustesCobro().execute(cuerpo, ctx.contextoAccion()),
+    }),
+]
+
+const asientos: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/asientos',
+        operacion: 'libroRegistrarAsiento',
+        resumen: 'Registrar un asiento manual de ajuste (o su borrador, si la empresa exige aprobación)',
+        etiqueta: 'libro',
+        permiso: 'libro.registrar_asiento',
+        cuerpo: vc.asientoManualValidator,
+        idempotente: true,
+        descripcion:
+            'Decisión del PM 10. Origen ajuste. Cada línea con debe o haber (422 debe_o_haber), Σ debe = Σ haber (422 descuadre); cuenta imputable y activa, auxiliar de cliente o proveedor, mes cerrado (422 periodo_cerrado) y bloqueos como cualquier asiento. Sin aprobación (de fábrica): estado registrado y el asiento ya está en el libro (libro.asiento_manual_registrado). Con asientos_requieren_aprobacion en los ajustes de la empresa: estado pendiente_aprobacion y un borrador que no toca el libro (libro.asiento_pendiente); lo aprueba otro usuario en POST /libro/borradores/:id/aprobar.',
+        respuesta: { status: 201, descripcion: 'Asiento o borrador', esquema: AsientoManual },
+        handler: async (ctx, { cuerpo }) =>
+            new RegistrarAsientoManual().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/borradores',
+        operacion: 'libroBorradores',
+        resumen: 'Borradores de asiento manual (pendientes, aprobados y rechazados)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: vc.listarBorradoresValidator,
+        respuesta: { status: 200, descripcion: 'Página de borradores', esquema: pagina(BorradorAsiento) },
+        handler: (ctx, { query }) => listarBorradores(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/borradores/:id',
+        operacion: 'libroVerBorrador',
+        resumen: 'Ver un borrador de asiento manual',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        respuesta: { status: 200, descripcion: 'Borrador', esquema: BorradorAsiento },
+        handler: async (ctx, { params }) => {
+            const borrador = await verBorrador(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, borrador.empresa_id)
+            return borrador
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/borradores/:id/aprobar',
+        operacion: 'libroAprobarBorrador',
+        resumen: 'Aprobar el borrador de asiento de otro usuario (lo registra en el libro)',
+        etiqueta: 'libro',
+        permiso: 'libro.aprobar_asiento',
+        idempotente: true,
+        descripcion:
+            'Quien lo creó no puede aprobarlo: 403 autoaprobacion. 409 borrador_decidido si ya se aprobó o rechazó. Registra el asiento con la fecha del borrador (o hoy); si el mes se cerró o una cuenta cambió, responde ese error y el borrador sigue pendiente. Emite libro.asiento_manual_registrado.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Borrador aprobado (con asiento_id)',
+            esquema: BorradorAsiento,
+        },
+        handler: async (ctx, { params }) =>
+            new AprobarAsiento().execute({ borrador_id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/borradores/:id/rechazar',
+        operacion: 'libroRechazarBorrador',
+        resumen: 'Rechazar con motivo un borrador de asiento (no toca el libro)',
+        etiqueta: 'libro',
+        permiso: 'libro.rechazar_asiento',
+        cuerpo: vc.rechazarBorradorValidator,
+        idempotente: true,
+        descripcion:
+            'Quien lo creó también puede rechazarlo (retirarlo). 409 borrador_decidido. Emite libro.asiento_rechazado.',
+        respuesta: { status: 200, descripcion: 'Borrador rechazado', esquema: BorradorAsiento },
+        handler: async (ctx, { cuerpo, params }) =>
+            new RechazarAsiento().execute(
+                { borrador_id: Number(params.id), motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            ),
+    }),
+]
+
+export default [...gestiones, ...ajustes, ...asientos]

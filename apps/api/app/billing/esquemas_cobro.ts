@@ -1,13 +1,18 @@
 import {
+    Dinero,
     booleano,
     definirEsquema,
+    entero,
     enumerado,
+    fecha,
     id,
     instante,
+    lista,
     nulable,
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import { ESTADOS_BORRADOR } from '#ledger/borradores'
 import { ORIGENES_GESTION, RESULTADOS_GESTION, TIPOS_GESTION } from '#billing/gestiones_cobro'
 
 /**
@@ -54,5 +59,63 @@ export const GestionCobroRegistrada = definirEsquema(
             description:
                 'true si Iris repitió la misma gestión (mismo iris_gestion_id y datos): no se duplicó',
         },
+    }),
+)
+
+export const AjustesCobro = definirEsquema(
+    'AjustesCobro',
+    objeto({
+        empresa_id: id,
+        asientos_requieren_aprobacion: {
+            ...booleano,
+            description:
+                'Decisión 10: un asiento manual queda como borrador hasta que otro usuario lo aprueba',
+        },
+        pausa_tope_dias: { ...entero, description: 'Decisión 16: días máximos de una pausa sin cobro' },
+        version: { ...entero, description: '0 = nunca se guardó (valores de fábrica)' },
+        updated_by: nulable(id),
+        updated_at: nulable(instante),
+    }),
+)
+
+export const BorradorAsiento = definirEsquema(
+    'BorradorAsiento',
+    objeto({
+        id,
+        empresa_id: id,
+        fecha: { ...nulable(fecha), description: 'null = la fecha de hoy al aprobar' },
+        descripcion: texto,
+        movimientos: lista(
+            objeto({
+                cuenta: texto,
+                debe: Dinero,
+                haber: Dinero,
+                cliente_id: nulable(id),
+                proveedor_id: nulable(id),
+            }),
+        ),
+        total: Dinero,
+        estado: enumerado(ESTADOS_BORRADOR),
+        creado_por: nulable(id),
+        creado_por_nombre: nulable(texto),
+        created_at: instante,
+        decidido_por: nulable(id),
+        decidido_por_nombre: nulable(texto),
+        decidido_en: nulable(instante),
+        motivo_rechazo: nulable(texto),
+        asiento_id: { ...nulable(id), description: 'El asiento que se registró al aprobarlo' },
+    }),
+)
+
+export const AsientoManual = definirEsquema(
+    'AsientoManual',
+    objeto({
+        estado: {
+            ...enumerado(['registrado', 'pendiente_aprobacion']),
+            description:
+                'registrado: ya está en el libro; pendiente_aprobacion: borrador que aprueba otro usuario',
+        },
+        asiento_id: nulable(id),
+        borrador: nulable(BorradorAsiento),
     }),
 )

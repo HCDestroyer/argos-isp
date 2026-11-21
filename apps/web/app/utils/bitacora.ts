@@ -120,6 +120,9 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     // Decisiones del PM del 21 nov (A3): operación de cobro
     'gestiones_cobro.registrar': 'Gestión de cobro registrada',
     'gestiones_cobro.adjuntar': 'Archivo agregado a la gestión de cobro',
+    'ajustes_cobro.editar': 'Ajustes de cobro y libro editados',
+    'libro.aprobar_asiento': 'Asiento manual aprobado',
+    'libro.rechazar_asiento': 'Asiento manual rechazado',
     'documentos.editar': 'Plantilla de documento editada',
     'documentos.crear': 'Plantilla de documento creada',
     'documentos.predeterminar': 'Plantilla de documento predeterminada',
