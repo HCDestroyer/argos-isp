@@ -14,7 +14,7 @@ Una promesa de pago es el compromiso del cliente de pagar lo vencido antes de un
 - **Crear:** `promesas.crear` (`admin`, `cajero`, `soporte`). Las promesas se crean desde la **ficha del servicio** con el botón «Promesa de pago», o desde el simulador con «Crear con estos datos».
 - **Aprobar:** `promesas.aprobar`. **Rechazar:** `promesas.rechazar`. **Cancelar:** `promesas.cancelar`. Los tres los traen `admin` y `contabilidad`.
 
-Se llega desde **Cobros → Promesas**.
+Se llega desde **Promesas**.
 
 ## Cómo se decide una promesa
 

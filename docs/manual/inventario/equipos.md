@@ -9,7 +9,7 @@ pantallas:
 
 Cada router, ONU o antena que se lleva por serie es un equipo con su serie o MAC. Aquí lo buscas, ves dónde está y su historia, y sigues los que hay que recuperar de servicios retirados.
 
-Menú: **Inventario → Equipos por serie** y **Inventario → Por recuperar**.
+Menú: **Inventario → Movimientos → Equipos por serie** y **Inventario → Movimientos → Por recuperar**.
 
 ## Quién la usa
 

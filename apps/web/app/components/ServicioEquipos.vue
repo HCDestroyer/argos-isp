@@ -327,6 +327,7 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
                 <div class="flex w-full justify-end gap-2">
                     <UButton
                         label="Cancelar"
+                        :icon="ICONOS.cancelar"
                         color="neutral"
                         variant="ghost"
                         :disabled="asignando"
@@ -420,6 +421,7 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
                 <div class="flex w-full justify-end gap-2">
                     <UButton
                         label="Cancelar"
+                        :icon="ICONOS.cancelar"
                         color="neutral"
                         variant="ghost"
                         :disabled="devolviendo"

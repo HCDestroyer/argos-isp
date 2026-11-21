@@ -8,7 +8,7 @@ pantallas:
 
 Los vencimientos de las declaraciones de cada empresa según su régimen y sus banderas: IVA, pequeño contribuyente, ISR, ISO y retenciones. Las vencidas sin presentar se ven en rojo y las presentadas en verde.
 
-Está en **Contabilidad → Calendario fiscal**. El sistema nunca presenta nada a la SAT.
+Está en **Contabilidad y fiscal → Calendario fiscal**. El sistema nunca presenta nada a la SAT.
 
 ## Quién la usa
 

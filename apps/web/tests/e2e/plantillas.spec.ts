@@ -14,7 +14,7 @@ function campo(contenedor: Locator, prueba: string): Locator {
 test('crear y editar una plantilla con reglas de promesas por canal', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     // El menú lleva a la sección; se entra por URL para no depender de la primera compilación de `nuxt dev`.
-    await expect((await menu(page)).getByRole('link', { name: 'Plantillas', exact: true })).toBeVisible()
+    await expect((await menu(page)).getByRole('link', { name: 'Plantillas de facturación', exact: true })).toBeVisible()
     await page.goto('/plantillas')
 
     const tabla = page.locator('[data-prueba="tabla-plantillas"]')

@@ -87,6 +87,7 @@ async function aprobar() {
             <div class="flex w-full justify-end gap-2">
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     :disabled="enviando"

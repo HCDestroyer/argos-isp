@@ -8,7 +8,7 @@ pantallas:
 
 Las constancias de las retenciones de IVA e ISR: las que te entregan los clientes al pagarte y las que tú emites a tus proveedores en una compra.
 
-Está en **Compras → Constancias de retención**.
+Está en **Finanzas → Compras → Constancias de retención**.
 
 ## Quién la usa
 

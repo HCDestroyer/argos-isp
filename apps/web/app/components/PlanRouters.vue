@@ -339,6 +339,7 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
                 <div class="flex w-full justify-end gap-2">
                     <UButton
                         label="Cancelar"
+                        :icon="ICONOS.cancelar"
                         color="neutral"
                         variant="ghost"
                         :disabled="enviando"

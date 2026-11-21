@@ -57,10 +57,11 @@ test('servicio: «Retirados» aparte, el motivo de no eliminar y eliminar uno re
 
     // Un servicio recién dado de alta nunca se usó: se elimina.
     await ir(page, 'Clientes', /\/clientes$/)
-    // Desde #180 el alta de cliente es un modal y el de servicio un panel lateral de la ficha.
-    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
-    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
-    await expect(altaCliente).toBeVisible()
+    // Desde el rediseño el alta de cliente es una página propia (formulario largo).
+    await page.getByRole('link', { name: 'Nuevo cliente' }).first().click()
+    await expect(page).toHaveURL(/\/clientes\/nuevo$/)
+    const altaCliente = page.locator('#dashboard-panel-cliente-nuevo')
+    await expect(altaCliente.getByRole('button', { name: 'Crear cliente' })).toBeVisible()
     await altaCliente.getByLabel('Nombre', { exact: true }).fill('Mario Prueba Borrar')
     await altaCliente.getByLabel('Teléfono').fill('5555-9876')
     await altaCliente.getByRole('button', { name: 'Crear cliente' }).click()
