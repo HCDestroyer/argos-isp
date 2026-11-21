@@ -70,7 +70,8 @@
     "pdfkit": "^0.17.2",
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
-    "svg-to-pdfkit": "0.1.8"
+    "svg-to-pdfkit": "0.1.8",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@adonisjs/assembler": "^7.8.2",

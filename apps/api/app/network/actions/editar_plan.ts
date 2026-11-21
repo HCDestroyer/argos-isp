@@ -90,6 +90,9 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
         if (despues.activo !== antes.activo) camposCatalogo.push('activo')
         // contrato Iris 0.8.0: cambia el precio efectivo de los servicios del plan sin `costo_override`
         if (despues.precio !== antes.precio) camposCatalogo.push('precio')
+        // contrato Iris 0.10.0 (A40): Iris guarda `modo` y `routers` del plan en su instantánea
+        if (despues.modo !== antes.modo) camposCatalogo.push('modo')
+        if (despues.global !== antes.global) camposCatalogo.push('routers')
         if (camposCatalogo.length > 0) {
             // los planes no son de una empresa: `empresa_id` siempre null (contrato Iris 0.5.0)
             await t.emit('catalogo.cambiado', {

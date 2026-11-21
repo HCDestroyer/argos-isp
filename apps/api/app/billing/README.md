@@ -375,6 +375,7 @@ Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasa
 - `facturas_pendientes`: `emitida`/`parcial`/`vencida` (servicio y mora), la más antigua primero.
 - `movimientos`: un renglón por asiento que toca su CxC (fecha, asiento) con `cargo`, `abono` y saldo acumulado; el último es igual a `saldo`. `referencia_id` = id de la factura, pago o mora de origen.
 - Pago de terceros: en el estado de cuenta del dueño, la descripción nombra solo sus facturas y termina en "· pagado por <pagador>".
+- `?servicio_id=` (contrato Iris 0.10.0 §2.1; 404 si no es del cliente): solo las facturas de ese servicio y, de cada asiento, la parte del servicio (factura y mora enteras; nota de crédito y diferencia de cobro si su factura es del servicio; de un pago, lo aplicado a facturas del servicio en esa misma transacción, y en su reverso todo lo aplicado), con la descripción que nombra solo sus facturas. Ajustes y saldos a favor son del cliente: no salen. `saldo` = suma de esos movimientos; `saldo_a_favor` = `0.00`; `servicio_id` en la respuesta.
 
 ## Reportes y dashboard (semana 2, `reportes/`)
 

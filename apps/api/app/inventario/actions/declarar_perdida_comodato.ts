@@ -30,6 +30,11 @@ export interface EntradaPerdidaComodato {
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
+    /**
+     * interno (A48): `no_recuperada` cuando la declara una persona con `inventario.cobrar_equipo` después de
+     * los intentos de recuperación; por defecto `dada_de_baja`
+     */
+    estado_final?: 'dada_de_baja' | 'no_recuperada'
 }
 
 export default class DeclararPerdidaComodato extends DomainAction<EntradaPerdidaComodato, UnidadVista> {
@@ -69,11 +74,17 @@ export default class DeclararPerdidaComodato extends DomainAction<EntradaPerdida
             t.ctx,
             { trx: t.trx },
         )
-        await actualizarUnidad(t, unidad!.id, { estado: 'dada_de_baja', activo_id: null })
+        const estado = input.estado_final ?? 'dada_de_baja'
+        await actualizarUnidad(
+            t,
+            unidad!.id,
+            { estado, activo_id: null },
+            { motivo: estado === 'no_recuperada' ? 'no_recuperada' : 'perdida' },
+        )
         await t.registrarCambios(
             { tipo: 'unidad', id: unidad!.id },
             { estado: unidad!.estado, activo_id: unidad!.activo_id },
-            { estado: 'dada_de_baja', activo_id: null },
+            { estado, activo_id: null },
         )
         return unidadVista(unidad!.id, t)
     }

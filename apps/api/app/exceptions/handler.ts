@@ -15,6 +15,15 @@ export default class HttpExceptionHandler extends ExceptionHandler {
 
     async handle(error: unknown, ctx: HttpContext) {
         const cuerpo = aProblema(error, this.debug)
+        // 429 de un límite que lanza una acción (`#core/limite_ventana`): `Retry-After` en segundos
+        const reintentar = (error as { reintentarEnS?: unknown } | null)?.reintentarEnS
+        if (
+            cuerpo.status === 429 &&
+            typeof reintentar === 'number' &&
+            ctx.response.getHeader('Retry-After') === undefined
+        ) {
+            ctx.response.header('Retry-After', String(reintentar))
+        }
         ctx.response.status(cuerpo.status)
         ctx.response.header('Content-Type', 'application/problem+json; charset=utf-8')
         ctx.response.send(JSON.stringify(cuerpo))

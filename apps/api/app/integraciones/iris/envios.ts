@@ -13,6 +13,7 @@ import {
     destinoWebhooksIris,
 } from '#integraciones/iris/configuracion'
 import { ocultarDocumentoIris } from '#integraciones/iris/atencion'
+import { pendienteDe, verFactura, type FacturaFila } from '#billing/facturas'
 import {
     entregarPendientesDe,
     insertarEnvio,
@@ -84,6 +85,18 @@ export const EVENTOS_A_IRIS = [
     'promesa.incumplida',
     'promesa.cancelada',
     'cuenta_bancaria.cambiada',
+    // 0.9.0 (A36): solo de facturas `iris_orden`
+    'factura.emitida',
+    'factura.anulada',
+    'pago.registrado',
+    'pago.anulado',
+    // 0.10.0 (A42, A41 y A39)
+    'cliente.contactos_cambiados',
+    'cliente.identidad_registrada',
+    'servicio.titular_cambiado',
+    // 0.12.0 (A48)
+    'inventario.equipo_cambiado',
+    'inventario.unidad_estado_cambiado',
 ] as const
 
 /** Eventos que nacieron con el contrato Iris 0.5.0: solo a conectores con contrato ≥ 0.5.0. */
@@ -116,10 +129,47 @@ export const EVENTOS_DESDE_080 = ['cuenta_bancaria.cambiada'] as const satisfies
 /** Versión mínima del contrato para `EVENTOS_DESDE_080`. */
 export const CONTRATO_EVENTOS_080 = '0.8.0'
 
-/** Versión mínima propia de este módulo (0.5.0 y 0.8.0); la de 0.6.0 la decide A1. */
+/**
+ * Cobro de las órdenes de Iris (contrato 0.9.0 §2.3, A36): `factura.*` y `pago.*` solo de facturas
+ * con origen `iris_orden` y solo a conectores con contrato ≥ 0.9.0.
+ */
+export const EVENTOS_DESDE_090 = [
+    'factura.emitida',
+    'factura.anulada',
+    'pago.registrado',
+    'pago.anulado',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+export const CONTRATO_EVENTOS_090 = '0.9.0'
+
+/**
+ * Eventos que nacieron con el contrato Iris 0.10.0 (§3.4 y §3.5; contactos A42, identidad A41 y
+ * titular A39): solo a conectores con contrato ≥ 0.10.0 (`CONTRATO_EVENTOS_0100`, más abajo).
+ */
+export const EVENTOS_DESDE_0100 = [
+    'cliente.contactos_cambiados',
+    'cliente.identidad_registrada',
+    'servicio.titular_cambiado',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+/** `persona_cliente_id` en `cliente.contactos_cambiados` (A46): solo con contrato ≥ 0.10.1. */
+export const CONTRATO_PERSONA_CLIENTE = '0.10.1'
+
+/** Equipos del cliente (A48), contrato 0.12.0 §2.3 y §3.10: solo con contrato ≥ 0.12.0. */
+export const EVENTOS_DESDE_0120 = [
+    'inventario.equipo_cambiado',
+    'inventario.unidad_estado_cambiado',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+export const CONTRATO_EVENTOS_0120 = '0.12.0'
+
+/** Versión mínima propia de este módulo (0.5.0, 0.8.0, 0.9.0, 0.10.0, 0.12.0); la de 0.6.0 la decide A1. */
 function contratoMinimoEnvio(evento: string): string | null {
     if ((EVENTOS_DESDE_050 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_050
     if ((EVENTOS_DESDE_080 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_080
+    if ((EVENTOS_DESDE_090 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_090
+    if ((EVENTOS_DESDE_0100 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_0100
+    if ((EVENTOS_DESDE_0120 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_0120
     return contratoMinimoEventoIris(evento)
 }
 
@@ -221,6 +271,29 @@ export interface WebhookIris {
  * Payload que recibe Iris (§2.3) a partir del evento de Argos, con `empresa_id`; null si el evento
  * no sirve a Iris. Lista cerrada de campos: lo que no está aquí no sale de Argos.
  */
+/** Versión del contrato desde la que los payloads llevan `servicio_codigo`/`servicio_nombre` (A45). */
+export const CONTRATO_EVENTOS_0100 = '0.10.0'
+
+/**
+ * Contrato Iris 0.10.0 §3.7 (A45): todo payload hacia Iris que lleva `servicio_id` suma
+ * `servicio_codigo` y `servicio_nombre` del servicio (o null si ya no existe: `servicio.eliminado`).
+ * Solo a conectores con contrato ≥ 0.10.0 (`registrarEnvioIris`). `servicio_nombre` es texto del
+ * cliente: va en el cuerpo firmado, nunca a logs.
+ */
+export async function conCodigoServicio(payload: Payload): Promise<Payload> {
+    const servicioId = entero(payload.servicio_id)
+    if (!servicioId) return payload
+    const fila = (await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .select('codigo', 'nombre')
+        .first()) as {
+        codigo: string
+        nombre: string | null
+    } | null
+    return { ...payload, servicio_codigo: fila?.codigo ?? null, servicio_nombre: fila?.nombre ?? null }
+}
+
 export async function payloadParaIris(evento: string, p: Payload): Promise<WebhookIris | null> {
     if (evento === 'cliente.actualizado') {
         const clienteId = entero(p.cliente_id)
@@ -236,6 +309,10 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
             },
             empresas,
         }
+    }
+
+    if (evento === 'cliente.contactos_cambiados' || evento === 'cliente.identidad_registrada') {
+        return payloadClienteIris(evento, p)
     }
 
     if (evento === 'inventario.equipo_por_recuperar') {
@@ -287,6 +364,9 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
     }
     if (evento.startsWith('promesa.')) return payloadPromesa(evento, p)
     if (evento === 'cuenta_bancaria.cambiada') return payloadCuentaBancaria(p)
+    if (evento === 'factura.emitida' || evento === 'factura.anulada') return payloadFacturaIris(evento, p)
+    if (evento === 'pago.registrado' || evento === 'pago.anulado') return payloadPagoIris(p)
+    if (evento === 'inventario.unidad_estado_cambiado') return payloadUnidadEstado(p)
 
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
@@ -338,6 +418,9 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                     ...(anterior ? { empresa_anterior_id: anterior } : {}),
                     ...(texto(p.motivo) ? { motivo: texto(p.motivo) } : {}),
                     ...(entero(p.plan_temporal_id) ? { plan_temporal_id: entero(p.plan_temporal_id) } : {}),
+                    // 0.10.0 §3.4.5: el cambio de plan de un pendiente lo pidió una orden de Iris
+                    ...(texto(p.origen_tipo) ? { origen_tipo: texto(p.origen_tipo) } : {}),
+                    ...(texto(p.origen_id) ? { origen_id: texto(p.origen_id) } : {}),
                 },
                 // Un cambio de empresa le interesa a quien tenía el servicio y a quien lo recibe
                 empresas: anterior && anterior !== empresaId ? [...empresas, anterior] : empresas,
@@ -346,7 +429,16 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         case 'servicio.datos_cambiados':
             // Solo nombres de campo (dirección, coordenadas, referencia, contacto): Iris relee el servicio.
             // `empresas` = [empresa_id], la forma de `cliente.actualizado` (§2.3)
-            return { payload: { ...base, empresas, campos: textos(p.campos) }, empresas }
+            return {
+                payload: {
+                    ...base,
+                    empresas,
+                    campos: textos(p.campos),
+                    ...(texto(p.origen_tipo) ? { origen_tipo: texto(p.origen_tipo) } : {}),
+                    ...(texto(p.origen_id) ? { origen_id: texto(p.origen_id) } : {}),
+                },
+                empresas,
+            }
         case 'asignacion.cambiada':
             return {
                 payload: {
@@ -359,6 +451,42 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                 },
                 empresas,
             }
+        case 'servicio.titular_cambiado': {
+            const de = entero(p.de_cliente_id)
+            const a = entero(p.a_cliente_id) ?? clienteId
+            return {
+                payload: {
+                    servicio_id: servicioId,
+                    empresa_id: empresaId,
+                    de_cliente_id: de,
+                    a_cliente_id: a,
+                    existente: p.existente === true,
+                    posible_duplicado: p.posible_duplicado === true,
+                    de_cliente_eliminado: p.de_cliente_eliminado === true,
+                    // nunca documento ni identidad; el texto del motivo queda solo en la auditoría de Argos
+                    motivo_codigo: unoDe(p.motivo_codigo, MOTIVOS_TITULAR) ?? 'otro',
+                    origen_tipo: unoDe(p.origen_tipo, ORIGENES_EXTERNOS),
+                    origen_id: unoDe(p.origen_tipo, ORIGENES_EXTERNOS) ? texto(p.origen_id) : null,
+                },
+                empresas,
+            }
+        }
+        case 'inventario.equipo_cambiado': {
+            const origenTipo = unoDe(p.origen, ORIGENES_EXTERNOS) ?? unoDe(p.origen_tipo, ORIGENES_EXTERNOS)
+            return {
+                payload: {
+                    ...base,
+                    sale_unidad_id: entero(p.sale_unidad_id),
+                    entra_unidad_id: entero(p.entra_unidad_id),
+                    motivo: unoDe(p.motivo, MOTIVOS_CAMBIO_EQUIPO),
+                    destino_sale: unoDe(p.destino_sale, DESTINOS_SALE),
+                    // nunca la nota ni el cobro propuesto (§3.10, «Textos libres»)
+                    origen: origenTipo,
+                    origen_id: origenTipo ? texto(p.origen_id) : null,
+                },
+                empresas,
+            }
+        }
         case 'servicio.caidas_repetidas': {
             const causas: Record<string, number> = {}
             if (p.causas && typeof p.causas === 'object' && !Array.isArray(p.causas)) {
@@ -384,6 +512,52 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         }
         default:
             return null
+    }
+}
+
+const CAMPOS_CONTACTO_IRIS = [
+    'nombre',
+    'relacion',
+    'servicios',
+    'permisos',
+    'telefonos',
+    'persona_cliente_id',
+]
+
+/**
+ * `cliente.contactos_cambiados` y `cliente.identidad_registrada` (0.10.0, §2.3): lista cerrada, sin
+ * números, documentos ni fotos. El alcance es la empresa del evento (o las de los servicios del
+ * cliente si viene null).
+ */
+async function payloadClienteIris(evento: string, p: Payload): Promise<WebhookIris | null> {
+    const clienteId = entero(p.cliente_id)
+    if (!clienteId) return null
+    const empresaEvento = entero(p.empresa_id)
+    const empresas = empresaEvento ? [empresaEvento] : await empresasDelCliente(clienteId)
+    const empresaId = empresas[0] ?? null
+    if (evento === 'cliente.identidad_registrada') {
+        return {
+            payload: {
+                cliente_id: clienteId,
+                empresa_id: empresaId,
+                documento_tipo: unoDe(p.documento_tipo, ['dpi', 'pasaporte'] as const),
+                metodo: unoDe(p.metodo, ['foto_documento', 'revision_panel'] as const),
+            },
+            empresas,
+        }
+    }
+    return {
+        payload: {
+            cliente_id: clienteId,
+            empresa_id: empresaId,
+            contacto_id: entero(p.contacto_id),
+            accion: unoDe(p.accion, ['creado', 'editado', 'quitado'] as const),
+            campos: [...new Set(textos(p.campos))].filter((c) => CAMPOS_CONTACTO_IRIS.includes(c)),
+            persona_cliente_id: entero(p.persona_cliente_id),
+        },
+        // un cliente sin servicios lo ve cualquier empresa (como `GET /clientes`)
+        empresas,
+        compartido: empresas.length === 0,
     }
 }
 
@@ -633,6 +807,162 @@ async function payloadCuentaBancaria(p: Payload): Promise<WebhookIris | null> {
     }
 }
 
+// ── 0.9.0 (A36): cobro de las órdenes de Iris ─────────────────────────────────────────────────
+
+const ORIGENES_EXTERNOS = ['iris_orden'] as const
+
+interface FacturaIris {
+    id: number
+    empresa_id: number
+    cliente_id: number
+    servicio_id: number | null
+    estado: string
+    total: string
+    saldo: string
+    origen_externo_id: string
+    numero: string
+}
+
+/**
+ * Factura con origen `iris_orden` (null si no existe o no es de una orden de Iris). Total, cubierto
+ * y estado salen de `verFactura` de A3 (pagos, saldos a favor y notas de crédito vigentes).
+ */
+async function facturaIris(facturaId: number): Promise<FacturaIris | null> {
+    const existe = (await db
+        .from('billing.facturas')
+        .where('id', facturaId)
+        .where('origen_externo_tipo', 'iris_orden')
+        .select('origen_externo_id')
+        .first()) as { origen_externo_id: string } | null
+    if (!existe) return null
+    const f = (await verFactura(facturaId)) as unknown as FacturaFila
+    const pendiente = pendienteDe(f)
+    return {
+        id: Number(f.id),
+        empresa_id: Number(f.empresa_id),
+        cliente_id: Number(f.cliente_id),
+        servicio_id: entero(f.servicio_id),
+        estado: f.estado,
+        total: new Decimal(f.total).toFixed(2),
+        saldo: f.estado === 'anulada' || pendiente.isNegative() ? '0.00' : pendiente.toFixed(2),
+        origen_externo_id: existe.origen_externo_id,
+        numero: f.fel_serie && f.fel_numero ? `${f.fel_serie}-${f.fel_numero}` : String(f.id),
+    }
+}
+
+/**
+ * `factura.emitida` / `factura.anulada` (0.9.0, A36): factura_id, numero (serie-número del DTE o el
+ * id), empresa_id, cliente_id, servicio_id, origen_tipo, origen_id, estado, total, saldo y moneda.
+ * Solo facturas `iris_orden`; las demás no salen (null).
+ */
+async function payloadFacturaIris(evento: string, p: Payload): Promise<WebhookIris | null> {
+    const facturaId = entero(p.factura_id)
+    if (!facturaId) return null
+    const f = await facturaIris(facturaId)
+    if (!f) return null
+    return {
+        payload: {
+            factura_id: f.id,
+            numero: f.numero,
+            empresa_id: f.empresa_id,
+            cliente_id: f.cliente_id,
+            servicio_id: f.servicio_id,
+            origen_tipo: 'iris_orden',
+            origen_id: f.origen_externo_id,
+            estado: evento === 'factura.anulada' ? 'anulada' : f.estado,
+            total: f.total,
+            saldo: evento === 'factura.anulada' ? '0.00' : f.saldo,
+            moneda: 'GTQ',
+        },
+        empresas: [f.empresa_id],
+    }
+}
+
+/**
+ * `pago.registrado` / `pago.anulado` (0.9.0, A36): pago_id, factura_id, origen_tipo, origen_id,
+ * empresa_id, monto (lo aplicado a esa factura) y fecha (instante del pago). Solo si el pago se
+ * aplicó a una factura `iris_orden`; si cubre varias, la primera (un webhook por evento).
+ */
+async function payloadPagoIris(p: Payload): Promise<WebhookIris | null> {
+    const pagoId = entero(p.pago_id)
+    if (!pagoId) return null
+    const facturas = Array.isArray(p.facturas) ? p.facturas.map(entero).filter((x): x is number => !!x) : []
+    const aplicaciones = (await db
+        .from('billing.pagos_aplicaciones as a')
+        .join('billing.facturas as f', 'f.id', 'a.factura_id')
+        .join('billing.pagos as p', 'p.id', 'a.pago_id')
+        .where('a.pago_id', pagoId)
+        .where('f.origen_externo_tipo', 'iris_orden')
+        .if(facturas.length > 0, (q) => q.whereIn('a.factura_id', facturas))
+        .groupBy('a.factura_id', 'f.empresa_id', 'f.origen_externo_id', 'p.created_at')
+        .orderBy('a.factura_id')
+        .select(
+            'a.factura_id',
+            'f.empresa_id',
+            'f.origen_externo_id',
+            'p.created_at',
+            db.raw('sum(a.monto) AS monto'),
+        )) as Array<{
+        factura_id: number
+        empresa_id: number
+        origen_externo_id: string
+        created_at: Date
+        monto: string
+    }>
+    const a = aplicaciones[0]
+    if (!a) return null
+    const empresaId = entero(p.empresa_id) ?? Number(a.empresa_id)
+    return {
+        payload: {
+            pago_id: pagoId,
+            factura_id: Number(a.factura_id),
+            origen_tipo: 'iris_orden',
+            origen_id: a.origen_externo_id,
+            empresa_id: empresaId,
+            monto: decimal(a.monto),
+            fecha: instanteIso(a.created_at),
+        },
+        empresas: [empresaId],
+    }
+}
+
+// ── 0.10.0 (A42, A39) y 0.12.0 (A48) ─────────────────────────────────────────────────────────
+
+const MOTIVOS_TITULAR = ['menor_de_edad', 'otro'] as const
+const MOTIVOS_CAMBIO_EQUIPO = ['danado', 'actualizacion', 'garantia', 'otro'] as const
+const DESTINOS_SALE = ['funciona', 'revision', 'garantia', 'danado'] as const
+const ESTADOS_UNIDAD = [
+    'disponible',
+    'en_comodato',
+    'por_recuperar',
+    'revision',
+    'garantia',
+    'dada_de_baja',
+    'no_recuperada',
+] as const
+
+/**
+ * `inventario.unidad_estado_cambiado` (0.12.0 §3.10): unidad_id, empresa_id, servicio_id (o null),
+ * de, a y motivo. Sin costos, proveedor ni RMA (lista cerrada).
+ */
+function payloadUnidadEstado(p: Payload): WebhookIris | null {
+    const unidadId = entero(p.unidad_id)
+    const empresaId = entero(p.empresa_id)
+    const a = unoDe(p.a, ESTADOS_UNIDAD)
+    if (!unidadId || !empresaId || !a) return null
+    return {
+        payload: {
+            unidad_id: unidadId,
+            empresa_id: empresaId,
+            servicio_id: entero(p.servicio_id),
+            de: unoDe(p.de, ESTADOS_UNIDAD),
+            a,
+            motivo: texto(p.motivo),
+        },
+        empresas: [empresaId],
+    }
+}
+
 /**
  * Si el alcance del conector cubre el evento. Un evento sin empresa solo pasa con alcance global,
  * salvo el de infraestructura compartida (`compartido`), que pasa siempre.
@@ -669,7 +999,18 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
     if (!webhook || !enAlcance(alcance, webhook.empresas, webhook.compartido)) return null
 
     // Seguro extra (A1, 0.6.0): `nit_cui` nunca sale hacia el usuario técnico Iris
-    const payload = ocultarDocumentoIris({ ...webhook.payload })
+    const conCodigo = (await conectorAdmite(CONTRATO_EVENTOS_0100))
+        ? await conCodigoServicio(webhook.payload)
+        : webhook.payload
+    const payload = ocultarDocumentoIris({ ...conCodigo })
+    // A46: el valor de `persona_cliente_id` solo a conectores ≥ 0.10.1; a un 0.10.0 la clave va en null
+    // (la forma de A1: siempre presente)
+    if (
+        evento.evento === 'cliente.contactos_cambiados' &&
+        !(await conectorAdmite(CONTRATO_PERSONA_CLIENTE))
+    ) {
+        payload.persona_cliente_id = null
+    }
     if (evento.evento === 'cliente.actualizado' && !alcance.global) {
         // Iris solo ve las empresas de su alcance
         const visibles = webhook.empresas.filter((e) => alcance.empresas.includes(e))

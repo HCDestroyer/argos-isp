@@ -96,6 +96,51 @@ export function exigirCabecerasIris(
     return origen
 }
 
+export class ActorIaNoPermitido extends Problema {
+    constructor() {
+        super(
+            403,
+            'actor_ia_no_permitido',
+            'El asistente de IA no puede hacer esto',
+            'Esta operación la pide una persona de Iris (`X-Iris-Actor: usuario:<id>`), nunca el asistente de IA',
+        )
+    }
+}
+
+/**
+ * Contrato Iris 0.10.0 (§3.4 y §3.5): rutas que exigen solo `X-Iris-Actor` (contactos, identidad,
+ * titular, plan y datos de la instalación). Con el token de Iris: `X-Iris-Actor` obligatoria y bien
+ * formada (`400 cabecera_iris_requerida`); `X-Iris-Conversacion` opcional, validada si viene. Las
+ * deja en `ctx.iris` (auditoría y canal). Con `sinAsistente`, `asistente_ia` responde
+ * `403 actor_ia_no_permitido`. Otro actor (panel, otro token): null, sin exigir nada.
+ */
+export function exigirActorIris(
+    ctx: HttpContext,
+    opciones: { sinAsistente?: boolean } = {},
+): OrigenIris | null {
+    if (!esTokenIris(ctx)) return null
+    const origen =
+        ctx.iris ??
+        (() => {
+            const actor = ctx.request.header(CABECERA_IRIS_ACTOR)?.trim()
+            if (!actor || !FORMATO_IRIS_ACTOR.test(actor)) {
+                throw new CabeceraIrisRequerida(
+                    `${CABECERA_IRIS_ACTOR} es obligatoria: \`asistente_ia\` o \`usuario:<id en Iris>\``,
+                )
+            }
+            const conversacion = ctx.request.header(CABECERA_IRIS_CONVERSACION)?.trim()
+            if (conversacion !== undefined && !FORMATO_IRIS_CONVERSACION.test(conversacion)) {
+                throw new CabeceraIrisRequerida(
+                    `${CABECERA_IRIS_CONVERSACION} mal formada (hasta 128 caracteres A-Z a-z 0-9 . _ : -)`,
+                )
+            }
+            return { actor, conversacion: conversacion ?? null }
+        })()
+    ctx.iris = origen
+    if (opciones.sinAsistente && origen.actor === 'asistente_ia') throw new ActorIaNoPermitido()
+    return origen
+}
+
 /**
  * Copia de `valor` (JSON plano) con `nit_cui` como `***` donde no es null, a cualquier
  * profundidad. Para respuestas y payloads que van al usuario técnico Iris.

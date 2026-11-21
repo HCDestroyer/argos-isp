@@ -85,6 +85,10 @@ const NOMBRES: Record<string, string> = {
     'sorteo.ganador_notificado': 'Ganador de un sorteo',
     'sorteo.premio_entregado': 'Premio de sorteo entregado',
     'bonificacion.registrada': 'Periodo o cargo sin costo',
+    'contacto.agregado': 'Contacto agregado a la cuenta (aviso al titular)',
+    'contacto.telefono_agregado': 'Número de un contacto cambiado (aviso al titular)',
+    'servicio.asignado_a_tu_nombre': 'Servicio asignado a tu nombre (aviso al titular)',
+    'equipo.intento_recuperacion': 'Intento de recuperación del equipo (aviso al titular)',
 }
 
 const ETIQUETAS_GRUPO: Record<string, string> = {
@@ -105,6 +109,9 @@ const ETIQUETAS_GRUPO: Record<string, string> = {
     canje: 'Canje',
     sorteo: 'Sorteo',
     bonificacion: 'Bonificación',
+    contacto: 'Contacto',
+    equipo: 'Equipo',
+    titular: 'Titular',
     alerta: 'Alerta',
 }
 
@@ -339,6 +346,20 @@ function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
             es_suplente: false,
             sustituye: false,
         }
+    }
+    if (evento === 'contacto.agregado' || evento === 'contacto.telefono_agregado') {
+        v.contacto = {
+            id: 77,
+            nombre: 'Luis Pérez',
+            relacion: 'familiar',
+            telefono: '+502 ****-3344',
+            telefonos: '+502 ****-3344, +502 ****-6677',
+        }
+    }
+    if (evento === 'servicio.asignado_a_tu_nombre') v.servicio = SERVICIO
+    if (evento === 'equipo.intento_recuperacion') {
+        v.servicio = SERVICIO
+        v.equipo = { serie: '…1A2B', intento: 2 }
     }
     if (evento === 'bonificacion.registrada') {
         v.servicio = SERVICIO

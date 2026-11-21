@@ -30,11 +30,17 @@ const VARIABLES = [
 
 const CONTRASENA_DEFECTO = 'Bienvenido2026'
 
-let secuencia = Math.floor(Math.random() * 200)
-/** IPs distintas por prueba (no comparten límites ni sesiones de otras suites). */
+let secuencia = Math.floor(Math.random() * 150_000)
+/**
+ * IPs distintas por prueba (no comparten límites ni sesiones de otras suites). Salen de
+ * 100.124.0.0–100.126.255.255: `redUnica()` de las fábricas reparte redes desde 100.64.0.0, y una
+ * IP de este archivo que cayera en la asignación de otro servicio identificaría a ese servicio en
+ * `/corte` (422 `no_identificado` intermitente en CI).
+ */
 function ipNueva(): string {
     secuencia += 1
-    return `100.${64 + (secuencia % 60)}.${Math.floor(Math.random() * 250) + 1}.${(secuencia % 250) + 1}`
+    const n = secuencia % (3 * 256 * 254)
+    return `100.${124 + Math.floor(n / (256 * 254))}.${Math.floor(n / 254) % 256}.${(n % 254) + 1}`
 }
 
 /** Admin con la empresa 1 activa: configura la contraseña por defecto de esa empresa. */

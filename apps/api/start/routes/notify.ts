@@ -73,6 +73,7 @@ const notify: Ruta[] = [
                     estado: cuerpo.estado,
                     origen: 'argos_panel',
                     empresa_id: cuerpo.empresa_id ?? ctx.empresa?.activa ?? null,
+                    telefono: cuerpo.telefono ?? null,
                 },
                 ctx.contextoAccion(),
             )

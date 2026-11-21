@@ -253,3 +253,31 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | `tests/importacion/origenes.spec.ts`       | Esquemas reales, CSV = Mikrowisp con los mismos datos, idempotencia por origen, plantillas                     |
 | `tests/importacion/facturar_desde.spec.ts` | Plantilla de fábrica sin `--plantilla`: nada hacia atrás; facturas importadas del ciclo siguiente sin duplicar |
 | `tests/importacion/archivo.spec.ts`        | Archivo del origen: credenciales enmascaradas, fila sin contar = la corrida falla, fila que cambia             |
+
+## Estados de cuenta del banco (`extractos/`)
+
+Importa el estado de cuenta **tal como lo descarga el banco** (.xlsx, .xls o .csv) y lo convierte a
+la forma neutral de `bancos.importar_extracto` (A3, `#ledger/actions/importar_extracto`). Los
+adaptadores viven en la API, no en el navegador.
+
+| Pieza | Qué hace |
+| --- | --- |
+| `extractos/hoja.ts` | Lee el archivo a celdas de texto: SheetJS para .xlsx, .xls (BIFF8, y los «.xls» que son HTML o XML de Excel 2003); lector propio para CSV (separador `,` `;` tabulador o `|`, UTF-8 o Windows-1252). Fechas de Excel → `AAAA-MM-DD` desde el número de serie (sin zona horaria). Máximo 10 MB y 20 000 filas |
+| `extractos/formatos.ts` | Perfiles de Banrural, Industrial, BAC, G&T y Promerica: marca del banco (en las filas de encabezado, el nombre del archivo o el banco de la cuenta) y fila de títulos por sinónimos (`fecha`, `descripcion`/`concepto`, `documento`/`referencia`, `debito`/`cargos`, `credito`/`abonos`, `monto`, `saldo`/`balance`). Sin reconocer: sugerencia por la forma de los datos. Firma de títulos para reconocer un mapeo guardado aunque cambie el número de filas de encabezado |
+| `extractos/interpretar.ts` | Filas → líneas `{ fecha, descripcion, referencia, monto (+ entra, − sale), saldo }`: `monto = crédito − débito`, `(1.00)` y `1.00-` negativos; «Saldo anterior/final» con etiqueta; «Totales» se ignora; del más reciente al más antiguo se invierte; revisa que la columna de saldo encadene |
+| `extractos/vista_previa.ts` | `prepararExtracto`: mapeo (enviado → guardado → banco → sugerencia), periodo, saldos (etiquetas, columna de saldo, extracto anterior o manual), entradas, salidas y revisiones (`cuadra`, `encadena`, `repetidos` contra `ledger.extractos_lineas`) |
+| `actions/importar_extracto_archivo.ts` | `bancos.importar_extracto_archivo`: llama a `bancos.importar_extracto` en la misma transacción, guarda el archivo original con su sha256 (`importacion.extractos_archivos`) y el mapeo de la cuenta |
+| `actions/guardar_mapeo_extracto.ts` | `bancos.guardar_mapeo_extracto`: un mapeo por cuenta bancaria (`importacion.extractos_mapeos`), con `version` (409) y diff en `audit.cambios` |
+
+Rutas (`start/routes/extractos_bancarios.ts`): `POST /bancos/extractos/vista-previa` y
+`POST /bancos/extractos/archivo` (multipart: `archivo`, `cuenta_bancaria_id`, `mapeo` en JSON,
+`saldo_inicial`, `saldo_final`, `desde`, `hasta`, `hoja`; la importación además `guardar_mapeo` y
+`motivo_no_encadena`) con `bancos.importar_extracto_archivo`; `GET` y `PUT
+/bancos/cuentas-bancarias/:id/mapeo-extracto` (`bancos.ver`, `bancos.guardar_mapeo_extracto`). Errores:
+422 `archivo_no_legible`, `mapeo_invalido`, `formato_no_reconocido`, `extracto_con_errores`,
+`extracto_vacio`, `saldos_requeridos`, más los de A3 (`extracto_descuadrado`, `extracto_no_encadena`,
+409 `extracto_duplicado`). Evento: `banco.extracto_importado` (lo emite la acción de A3).
+
+Dependencia: `xlsx` 0.20.3 desde el CDN oficial de SheetJS (la versión del registro npm, 0.18.5, tiene
+CVE-2023-30533 y CVE-2024-22363 al leer archivos de terceros). Es la única forma razonable de leer .xls
+BIFF8.

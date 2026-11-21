@@ -132,7 +132,7 @@ export function claveTelefono(valor: string): string {
 }
 
 /** La misma `claveTelefono` en SQL sobre una columna. */
-function sqlClaveTelefono(columna: string): string {
+export function sqlClaveTelefono(columna: string): string {
     const d = `regexp_replace(coalesce(${columna}, ''), '\\D', '', 'g')`
     return `(CASE WHEN ${d} LIKE '00%' THEN substr(${d}, 3) WHEN length(${d}) = 8 THEN '502' || ${d} ELSE ${d} END)`
 }

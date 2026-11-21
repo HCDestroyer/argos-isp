@@ -57,6 +57,7 @@ export const TIPOS_BODEGA: Record<Schema<'Bodega'>['tipo'] | 'transito', { etiqu
     bodega: { etiqueta: 'Bodega', icono: 'i-lucide-warehouse' },
     tecnico: { etiqueta: 'Técnico', icono: 'i-lucide-hard-hat' },
     transito: { etiqueta: 'En tránsito', icono: 'i-lucide-truck' },
+    cuadrilla: { etiqueta: 'Cuadrilla', icono: 'i-lucide-users' },
 }
 
 /** La bodega virtual de tránsito (D.1). */
@@ -93,6 +94,7 @@ export const ESTADOS_UNIDAD: Record<UnidadApi['estado'], { etiqueta: string, col
     anulada: { etiqueta: 'Anulada', color: 'neutral', icono: 'i-lucide-ban' },
     devuelta_proveedor: { etiqueta: 'Devuelta al proveedor', color: 'neutral', icono: 'i-lucide-truck' },
     entregada: { etiqueta: 'Entregada (premio)', color: 'neutral', icono: 'i-lucide-gift' },
+    no_recuperada: { etiqueta: 'No recuperada', color: 'error', icono: 'i-lucide-circle-x' },
 }
 
 export const CONDICIONES_UNIDAD: Record<UnidadApi['condicion'], string> = {
