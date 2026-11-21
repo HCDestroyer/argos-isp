@@ -14,7 +14,7 @@ test('cierre de caja con faltante y motivo obligatorio', async ({ page }) => {
     const cobrar = await elegirClienteCobro(page, 'Juan Carlos', /Juan Carlos Ramírez/)
     await expect(cobrar).toHaveText('Cobrar Q 300.00')
     await cobrar.click()
-    await expect(page.getByRole('article', { name: 'Recibo de pago' })).toContainText('Caja Central')
+    await expect(page.locator('article[aria-label="Recibo de pago"]')).toContainText('Caja Central')
     await page.locator('[data-prueba="siguiente-cliente"]').click()
 
     await ir(page, 'Caja', /\/caja/)

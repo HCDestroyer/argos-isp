@@ -74,7 +74,7 @@ test('cobro repartido: un pago por empresa y el recibo con una sección por empr
     const partes = page.locator('[data-prueba="pagos-por-empresa"]')
     await expect(partes).toContainText('ArgosNet')
     await expect(partes).toContainText('Fibra del Sur')
-    const recibo = page.getByRole('article', { name: 'Recibo del cobro' })
+    const recibo = page.locator('article[aria-label="Recibo del cobro"]')
     await expect(recibo.locator('section[data-empresa]')).toHaveCount(2)
     await expect(recibo.locator('[data-prueba="total-cobro"]')).toContainText('Q 900.00')
 })

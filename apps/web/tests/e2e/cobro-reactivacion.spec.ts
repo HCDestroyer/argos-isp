@@ -38,7 +38,7 @@ test('registrar pago y ver el servicio reactivarse', async ({ page }) => {
     // Sale en la respuesta del pago: no hay que esperar al sondeo de respaldo (3 s).
     await expect(listo).toContainText('se reactivó', { timeout: 2_000 })
 
-    const recibo = page.getByRole('article', { name: 'Recibo de pago' })
+    const recibo = page.locator('article[aria-label="Recibo de pago"]')
     await expect(recibo).toContainText('Juan Carlos Ramírez')
     await expect(recibo).toContainText('Efectivo en caja')
     await expect(recibo).toContainText('Caja Central')
