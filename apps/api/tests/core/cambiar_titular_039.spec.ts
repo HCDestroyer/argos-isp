@@ -180,7 +180,10 @@ test.group('Cambiar el titular de un pendiente (A39)', (group) => {
 
         const { token: admin } = await usuarioConRoles(['admin'])
         const reporte = await estado(
-            client.get('/api/v1/reportes/titulares-iris').qs({ existente: true, limit: 100 }).bearerToken(admin),
+            client
+                .get('/api/v1/reportes/titulares-iris')
+                .qs({ existente: true, limit: 100 })
+                .bearerToken(admin),
             200,
         )
         const fila2 = reporte.body().data.find((c: any) => c.servicio_id === servicio.id)

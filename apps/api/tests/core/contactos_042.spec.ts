@@ -5,7 +5,7 @@ import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 import { comoCliente, conActor, conectorIris, movilUnico, tokenIris } from '#tests/core/ayudas_iris_0100'
 import { registrarEnvioIris } from '#integraciones/iris/envios'
-import { enmascararNumero, telefonosEnmascarados } from '#core/contactos'
+import { enmascararNumero, exigirPermisoDeContacto, telefonosEnmascarados } from '#core/contactos'
 import EditarCliente from '#core/actions/editar_cliente'
 
 /**
@@ -437,5 +437,58 @@ test.group('Contactos a cargo de otro cliente (A46)', () => {
         assert.equal(roto.payload.persona_anterior_id, joseId)
         const despues = await db.from('core.clientes').where('id', joseId).first()
         assert.isNull(despues.telefono_verificado_en)
+    })
+})
+
+test.group('X-Iris-Contacto (0.10.1 §7.1)', () => {
+    test('exigirPermisoDeContacto: servicio fuera del contacto y permiso apagado', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['soporte'])
+        const clienteId = await crearClienteFila()
+        const suyo = await crearServicioFila({ cliente_id: clienteId })
+        const otro = await crearServicioFila({ cliente_id: clienteId })
+        const r = await client
+            .post(`/api/v1/clientes/${clienteId}/contactos`)
+            .bearerToken(token)
+            .header('Idempotency-Key', randomUUID())
+            .json({
+                nombre: 'Luis',
+                relacion: 'familiar',
+                servicios: [suyo],
+                permisos: { consultar: false },
+                telefonos: [{ numero: movilUnico() }],
+            })
+        r.assertStatus(201)
+        const id = r.body().contacto_id
+        const ok = await exigirPermisoDeContacto(id, {
+            cliente_id: clienteId,
+            servicio_id: suyo,
+            permiso: 'pagar',
+        })
+        assert.equal(ok.contacto_id, id)
+        await assert.rejects(
+            () => exigirPermisoDeContacto(id, { cliente_id: clienteId, servicio_id: otro, permiso: 'pagar' }),
+            /no está entre los suyos/,
+        )
+        await assert.rejects(
+            () =>
+                exigirPermisoDeContacto(id, {
+                    cliente_id: clienteId,
+                    servicio_id: suyo,
+                    permiso: 'consultar',
+                }),
+            /consultar/,
+        )
+        await assert.rejects(
+            () =>
+                exigirPermisoDeContacto(id, {
+                    cliente_id: clienteId + 1,
+                    servicio_id: null,
+                    permiso: 'pagar',
+                }),
+            /no es de este cliente/,
+        )
     })
 })

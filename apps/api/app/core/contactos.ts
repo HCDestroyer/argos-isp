@@ -1,7 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { normalizarTelefono } from '#core/telefonos'
 import { claveTelefono } from '#core/consultas/clientes'
 
@@ -583,4 +583,50 @@ export async function telefonosEnmascarados(
         .orderBy('id')
         .select('numero')) as Array<{ numero: string }>
     return filas.map((f) => enmascararNumero(f.numero))
+}
+
+// ── X-Iris-Contacto (contrato Iris 0.10.1 §7.1) ─────────────────────────────────────────────
+
+/** Valor de `X-Iris-Contacto`: un `contacto_id` (`^[1-9]\d{0,17}$`) o `titular`. */
+export const FORMATO_IRIS_CONTACTO = /^([1-9]\d{0,17}|titular)$/
+
+/**
+ * Para A3 (promesas, comprobantes y `estado-cuenta?servicio_id=` pedidos por un contacto, §3.5 y
+ * §7.1): el contacto debe ser vigente y del cliente (`403 servicio_fuera_del_contacto`), el servicio
+ * debe estar entre sus `servicios[]` (null = todos los del cliente; también 403
+ * `servicio_fuera_del_contacto`) y su permiso (`pagar` o `consultar`) encendido (`403
+ * permiso_de_contacto`).
+ */
+export async function exigirPermisoDeContacto(
+    contactoId: number,
+    entrada: { cliente_id: number; servicio_id: number | null; permiso: PermisoContacto },
+    cliente: QueryClientContract = db.connection(),
+): Promise<ContactoVista> {
+    const fuera = () =>
+        new Problema(
+            403,
+            'servicio_fuera_del_contacto',
+            'Servicio fuera del contacto',
+            'El contacto no es de este cliente o el servicio no está entre los suyos',
+        )
+    const contacto = await verContacto(contactoId, cliente).catch(() => null)
+    if (!contacto || contacto.cliente_id !== entrada.cliente_id) throw fuera()
+    if (entrada.servicio_id !== null) {
+        const servicio = (await cliente
+            .from('core.servicios')
+            .where('id', entrada.servicio_id)
+            .select('cliente_id')
+            .first()) as { cliente_id: number } | null
+        if (!servicio || Number(servicio.cliente_id) !== entrada.cliente_id) throw fuera()
+        if (contacto.servicios !== null && !contacto.servicios.includes(entrada.servicio_id)) throw fuera()
+    }
+    if (!contacto.permisos[entrada.permiso]) {
+        throw new Problema(
+            403,
+            'permiso_de_contacto',
+            'Permiso del contacto apagado',
+            `El titular no le dio a este contacto el permiso ${entrada.permiso}`,
+        )
+    }
+    return contacto
 }
