@@ -9,6 +9,9 @@ import TerminarPlanTemporal from '#core/actions/terminar_plan_temporal'
 import VencerCanjeIris, { type SalidaVencerCanjeIris } from '#integraciones/iris/actions/vencer_canje_iris'
 import { canjeIrisPorRevisar } from '#integraciones/iris/desconexion'
 import VencerReservaIp, { reservasIpVencidas } from '#core/actions/vencer_reserva_ip'
+import BorrarIdentidadesCliente, {
+    clientesConIdentidadVencida,
+} from '#core/actions/borrar_identidades_cliente'
 
 /**
  * Crons del núcleo (A1) con BullMQ. Los atiende `node ace eventos:relay` (proceso de A1 que ya
@@ -18,6 +21,7 @@ import VencerReservaIp, { reservasIpVencidas } from '#core/actions/vencer_reserv
  * | --- | --- | --- |
  * | `planes_temporales` | 1 min | Termina los planes temporales activos con `fin ≤ ahora` y luego inicia los programados con `inicio ≤ ahora` (todo lo pendiente hasta ahora, nunca "los de hoy") |
  * | `reservas_ip_vencidas` | 1 h | Contrato Iris 0.10.0 §3.4.1 (A38): libera la IP reservada en sitio de los servicios que siguen pendientes 30 días después (`servicios.vencer_reserva_ip`, uno por servicio) |
+ * | `identidades_vencidas` | 24 h | Contrato Iris 0.10.0 §3.4.3 (A41): borra la identidad (fotos y documento) de los clientes retirados hace más de 12 meses (`clientes.borrar_identidades`) |
  * | `iris_canjes_sin_uso` | 5 min | Contrato Iris 0.6.3: confirma el canje del conector Iris cuyo `atk_` ya se usó y revoca (desconectando el conector) el que lleva 24 h sin uso. Solo llama a `iris.vencer_canje` si hay algo que hacer |
  *
  * Lock: el worker tiene concurrencia 1 y el job toma un advisory lock de Postgres
@@ -33,6 +37,7 @@ export const CRONS_CORE = {
     planes_temporales: 60_000,
     iris_canjes_sin_uso: 5 * 60_000,
     reservas_ip_vencidas: 60 * 60_000,
+    identidades_vencidas: 24 * 60 * 60_000,
 } as const
 export type NombreCronCore = keyof typeof CRONS_CORE
 
@@ -160,6 +165,21 @@ export async function procesarReservasIpVencidas(ahora: Date = new Date()): Prom
     return resultado
 }
 
+/** Identidades de clientes retirados hace más de 12 meses (todo lo vencido hasta `ahora`). */
+export async function procesarIdentidadesVencidas(ahora: Date = new Date()): Promise<{ clientes: number[] }> {
+    const ctx = contextoSistema('cron', `core-identidades_vencidas-${ahora.toISOString()}`)
+    const clientes: number[] = []
+    for (const id of await clientesConIdentidadVencida(ahora)) {
+        try {
+            const salida = await new BorrarIdentidadesCliente().execute({ cliente_id: id, ahora }, ctx)
+            if (salida.borradas > 0) clientes.push(id)
+        } catch (error) {
+            logger.error({ err: error, cliente_id: id }, 'No se pudo borrar la identidad del cliente')
+        }
+    }
+    return { clientes }
+}
+
 /** Ejecuta un cron del núcleo por nombre con su lock (lo usa el worker; las pruebas lo llaman directo). */
 export async function ejecutarCronCore(
     nombre: 'planes_temporales',
@@ -181,6 +201,8 @@ export async function ejecutarCronCore(nombre: string, ahora: Date = new Date())
             return conLock(nombre, () => procesarCanjesIrisSinUso(ahora))
         case 'reservas_ip_vencidas':
             return conLock(nombre, () => procesarReservasIpVencidas(ahora))
+        case 'identidades_vencidas':
+            return conLock(nombre, () => procesarIdentidadesVencidas(ahora))
         default:
             throw new Error(`Cron del núcleo desconocido: ${nombre}`)
     }

@@ -56,3 +56,38 @@ export function conActor(peticion: any, actor = 'usuario:op-1', extra: Record<st
     for (const [nombre, valor] of Object.entries(extra)) peticion.header(nombre, valor)
     return peticion
 }
+
+/** DPI válido único: 9 dígitos al azar, departamento 01 y municipio 01. */
+export function dpiUnico(): string {
+    return `${String(randomInt(100_000_000, 999_999_999))}0101`
+}
+
+/** JPEG mínimo (firma FF D8 FF) con relleno para que cada foto sea distinta. */
+export function jpeg(relleno = 'a'): Buffer {
+    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(relleno.repeat(64))])
+}
+
+/** Campos de texto de una identidad (multipart). */
+export function camposIdentidad(extra: Record<string, string> = {}): Record<string, string> {
+    return {
+        documento_tipo: 'dpi',
+        documento_numero: dpiUnico(),
+        nombre: 'Ana Pérez',
+        mayor_de_edad: 'true',
+        coincide: 'true',
+        verificado_en: new Date(Date.now() - 60_000).toISOString(),
+        metodo: 'foto_documento',
+        origen_tipo: 'iris_orden',
+        origen_id: '9123',
+        ...extra,
+    }
+}
+
+/** Petición multipart con campos y fotos. */
+export function multipart(peticion: any, campos: Record<string, string>, fotos: Record<string, Buffer>) {
+    for (const [nombre, valor] of Object.entries(campos)) peticion.field(nombre, valor)
+    for (const [nombre, contenido] of Object.entries(fotos)) {
+        peticion.file(nombre, contenido, { filename: `${nombre}.jpg` })
+    }
+    return peticion
+}

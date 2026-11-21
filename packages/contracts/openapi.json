@@ -10805,6 +10805,370 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/identidad": {
+      "get": {
+        "operationId": "clientesVerIdentidad",
+        "summary": "Ver la identidad del titular: vigente y anterior (cada vista queda auditada)",
+        "description": "Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identidades",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IdentidadCliente"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "clientesRegistrarIdentidad",
+        "summary": "Registrar la identidad del titular (contrato Iris 0.10.0 §3.4.3)",
+        "description": "`multipart/form-data`: `frente` (obligatoria) y `reverso` (opcional), JPEG o PNG hasta 5 MB (`413 tamano_excedido`, `422 mime_no_permitido`), y los campos de texto. `mayor_de_edad` y `coincide` deben ser true. Se guarda cifrada en reposo como versión nueva (solo quedan la vigente y la anterior). Desde Iris: `X-Iris-Actor`, nunca el asistente, solo para el cliente de un servicio pendiente de Iris (`422 cliente_sin_instalacion`, `403 servicio_no_de_iris`), `Idempotency-Key = iris:identidad:<orden_id>:<toma>`. Cliente con historial: documento y nombre deben coincidir (`422 titular_no_coincide`). Nunca escribe `nit_cui`. Emite `cliente.identidad_registrada` sin número ni foto. El `detail` y los `errors[]` nunca repiten el valor recibido.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documento_tipo": {
+                    "type": "string",
+                    "enum": [
+                      "dpi",
+                      "pasaporte"
+                    ]
+                  },
+                  "documento_numero": {
+                    "type": "string",
+                    "minLength": 5,
+                    "maxLength": 25,
+                    "description": "DPI: 13 dígitos con departamento y municipio. Pasaporte: 5 a 20 letras o dígitos"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200,
+                    "description": "Como aparece en el documento"
+                  },
+                  "mayor_de_edad": {
+                    "description": "Debe ser true (sin fecha de nacimiento)",
+                    "type": "boolean"
+                  },
+                  "coincide": {
+                    "description": "true: el técnico comprobó que la foto es de quien está presente",
+                    "type": "boolean"
+                  },
+                  "verificado_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "foto_documento",
+                      "revision_panel"
+                    ],
+                    "description": "foto_documento (el técnico en sitio) o revision_panel (un supervisor revisa la foto tomada en sitio)"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  },
+                  "frente": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto del frente del documento (JPEG o PNG, hasta 5 MB)"
+                  },
+                  "reverso": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto del reverso (opcional)"
+                  }
+                },
+                "required": [
+                  "documento_tipo",
+                  "documento_numero",
+                  "nombre",
+                  "mayor_de_edad",
+                  "coincide",
+                  "verificado_en",
+                  "metodo",
+                  "frente"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identidad registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentidadRegistrada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.registrar_identidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.registrar_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/identidad/{identidadId}/{parte}": {
+      "get": {
+        "operationId": "clientesVerFotoIdentidad",
+        "summary": "Ver una foto del documento del titular (cada vista queda auditada)",
+        "description": "`parte` = `frente` o `reverso`. Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "identidadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "parte",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "frente",
+                "reverso"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Foto (JPEG o PNG)",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/puntos": {
       "get": {
         "operationId": "lealtadPuntosCliente",
@@ -69538,8 +69902,10 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
+                        "clientes.registrar_identidad",
                         "clientes.restaurar_contrasena_portal",
                         "clientes.ver",
+                        "clientes.ver_identidad",
                         "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
@@ -69943,8 +70309,10 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
+                        "clientes.registrar_identidad",
                         "clientes.restaurar_contrasena_portal",
                         "clientes.ver",
+                        "clientes.ver_identidad",
                         "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
@@ -82974,8 +83342,10 @@
                             "clientes.editar",
                             "clientes.estado_cuenta",
                             "clientes.quitar_responsable_pago",
+                            "clientes.registrar_identidad",
                             "clientes.restaurar_contrasena_portal",
                             "clientes.ver",
+                            "clientes.ver_identidad",
                             "clientes.verificar_identidad",
                             "clientes.vincular_telegram",
                             "cobros.configurar",
@@ -104402,6 +104772,100 @@
           }
         }
       },
+      "IdentidadCliente": {
+        "type": "object",
+        "required": [
+          "identidad_id",
+          "version",
+          "vigente",
+          "documento_tipo",
+          "documento_numero",
+          "nombre",
+          "metodo",
+          "confirmada",
+          "verificado_en",
+          "tiene_reverso",
+          "origen_tipo",
+          "origen_id",
+          "created_at"
+        ],
+        "properties": {
+          "identidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer"
+          },
+          "vigente": {
+            "type": "boolean"
+          },
+          "documento_tipo": {
+            "type": "string",
+            "enum": [
+              "dpi",
+              "pasaporte"
+            ]
+          },
+          "documento_numero": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Como aparece en el documento"
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "foto_documento",
+              "revision_panel"
+            ]
+          },
+          "confirmada": {
+            "type": "boolean",
+            "description": "false: cliente con historial sin documento; no vale para verificar hasta que el titular la confirme"
+          },
+          "verificado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tiene_reverso": {
+            "type": "boolean"
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "IdentidadRegistrada": {
+        "type": "object",
+        "required": [
+          "identidad_id",
+          "version"
+        ],
+        "properties": {
+          "identidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "ImpuestoFiscal": {
         "type": "object",
         "required": [
@@ -107436,8 +107900,10 @@
           "clientes.editar",
           "clientes.estado_cuenta",
           "clientes.quitar_responsable_pago",
+          "clientes.registrar_identidad",
           "clientes.restaurar_contrasena_portal",
           "clientes.ver",
+          "clientes.ver_identidad",
           "clientes.verificar_identidad",
           "clientes.vincular_telegram",
           "cobros.configurar",
@@ -107733,8 +108199,10 @@
           "Editar datos de clientes",
           "Ver el estado de cuenta de un cliente",
           "Quitar el responsable de pago de un cliente",
+          "Registrar la identidad del titular (foto del documento, número y nombre; contrato Iris 0.10.0 §3.4.3)",
           "Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)",
           "Ver y buscar clientes",
+          "Ver la identidad del titular (número y foto del documento); cada vista queda auditada",
           "Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)",
           "Vincular el chat de Telegram de un cliente",
           "Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN",
@@ -122349,8 +122817,10 @@
               "clientes.editar",
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
+              "clientes.registrar_identidad",
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
+              "clientes.ver_identidad",
               "clientes.verificar_identidad",
               "clientes.vincular_telegram",
               "cobros.configurar",
@@ -122650,6 +123120,7 @@
               "clientes.editar",
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
+              "clientes.registrar_identidad",
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
               "clientes.vincular_telegram",
@@ -122705,6 +123176,7 @@
             "descripcion": "Red: routers, IPAM, planes por router, sesiones e instalaciones",
             "permisos": [
               "adicionales.ver",
+              "clientes.registrar_identidad",
               "clientes.ver",
               "inventario.asignar_comodato",
               "inventario.cancelar_traslado",

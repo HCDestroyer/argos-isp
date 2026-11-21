@@ -16,6 +16,10 @@ export const PERMISOS = {
     'clientes.quitar_responsable_pago': 'Quitar el responsable de pago de un cliente',
     'clientes.verificar_identidad':
         'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
+    'clientes.registrar_identidad':
+        'Registrar la identidad del titular (foto del documento, número y nombre; contrato Iris 0.10.0 §3.4.3)',
+    'clientes.ver_identidad':
+        'Ver la identidad del titular (número y foto del documento); cada vista queda auditada',
     'clientes.restaurar_contrasena_portal':
         'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
     'contactos.buscar':
@@ -509,6 +513,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.activar_instalacion',
             'servicios.reservar_ip',
             'servicios.cambiar_plan_pendiente',
+            'clientes.registrar_identidad',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -557,6 +562,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.activar_instalacion',
             'servicios.reservar_ip',
             'servicios.cambiar_plan_pendiente',
+            'clientes.registrar_identidad',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
