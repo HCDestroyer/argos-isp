@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn, TabsItem } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
+/**
+ * Ficha de una factura (tablero OperFacturaDetalle): franja con el número, estado, saldo y las
+ * acciones (Cobrar, Nota de crédito y «⋯» con sustituir, anular y el aviso en PDF); a la izquierda
+ * una tarjeta con pestañas (líneas y pagos, factura electrónica, historial) y a la derecha la
+ * impresión con su vista previa (Carta o POS 80 mm).
+ */
 definePageMeta({ permiso: 'facturas.ver' })
 
 const route = useRoute()
@@ -107,11 +113,10 @@ const porCertificar = computed(() => factura.value?.estado === 'por_certificar')
 const pendiente = computed(() => (factura.value && factura.value.estado !== 'anulada' && !porCertificar.value ? saldoFactura(factura.value) : null))
 
 const columnasLineas: TableColumn<FacturaLinea>[] = [
-    { accessorKey: 'concepto', header: 'Concepto', meta: { class: { td: 'whitespace-normal' } } },
+    { accessorKey: 'concepto', header: 'Descripción', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'cantidad', header: 'Cant.', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
     { accessorKey: 'precio_unitario', header: 'Precio', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
-    { accessorKey: 'iva', header: 'IVA', meta: { class: { th: 'hidden text-right lg:table-cell', td: 'hidden text-right lg:table-cell' } } },
-    { accessorKey: 'total', header: 'Total', meta: { class: { th: 'text-right', td: 'text-right' } } },
+    { accessorKey: 'total', header: 'Importe', meta: { class: { th: 'text-right', td: 'text-right' } } },
 ]
 
 interface PagoAplicado {
@@ -123,13 +128,6 @@ const pagosAplicados = computed<PagoAplicado[]>(() => pagos.value.map(pago => ({
     pago,
     aplicado: pago.aplicaciones.filter(a => a.factura_id === facturaId.value).reduce((suma, a) => suma.plus(a.monto), new Decimal(0)).toFixed(2),
 })))
-
-const columnasPagos: TableColumn<PagoAplicado>[] = [
-    { id: 'pago', header: 'Pago' },
-    { id: 'metodo', header: 'Método', meta: SOLO_ANCHO },
-    { id: 'aplicado', header: 'Aplicado', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { id: 'estado', header: 'Estado' },
-]
 
 /** Cantidad con hasta 3 decimales, sin ceros de más (`1.000` → `1`). */
 function cantidad(valor: string): string {
@@ -221,6 +219,59 @@ function alCambiarDte() {
     void cargar()
 }
 
+const pestana = ref<'lineas' | 'fel' | 'historial'>('lineas')
+const pestanas = computed<TabsItem[]>(() => [
+    { label: 'Líneas y pagos', value: 'lineas', icon: 'i-lucide-list' },
+    ...(puede('fel.ver') ? [{ label: 'Factura electrónica', value: 'fel', icon: 'i-lucide-badge-check' }] : []),
+    { label: 'Historial', value: 'historial', icon: 'i-lucide-history' },
+])
+
+const hoy = hoyGuatemala()
+const diasVencida = computed(() => (factura.value ? diasVencidaFactura(factura.value, hoy) : 0))
+/** Insignia del estado: «Vencida hace 11 días» cuando aplica. */
+const textoEstado = computed(() => {
+    if (!factura.value) {
+        return ''
+    }
+    const visual = estadoFacturaVisual(factura.value.estado)
+    return diasVencida.value > 0 ? `Vencida hace ${diasVencida.value} ${diasVencida.value === 1 ? 'día' : 'días'}` : visual.etiqueta
+})
+const tonoFranja = computed(() => {
+    const estado = factura.value?.estado
+    if (diasVencida.value > 0 || estado === 'vencida') {
+        return 'tono-error'
+    }
+    if (estado === 'pagada') {
+        return 'tono-exito'
+    }
+    return estado === 'parcial' || estado === 'por_certificar' ? 'tono-aviso' : 'tono-marca'
+})
+const puedeCobrar = computed(() => puede('pagos.registrar') && pendiente.value !== null && pendiente.value.gt(0))
+
+function abrirSustituir() {
+    sustituirAbierto.value = true
+}
+
+function abrirAnular() {
+    anularAbierto.value = true
+}
+
+/** «⋯»: lo que no es la acción principal ni la nota de crédito. */
+const masAcciones = computed<DropdownMenuItem[][]>(() => {
+    const documento: DropdownMenuItem[] = [
+        { label: 'Aviso de cobro (PDF)', icon: 'i-lucide-file-down', onSelect: () => void abrirAvisoPdf() },
+    ]
+    const cambios: DropdownMenuItem[] = []
+    if (puedeSustituir.value) {
+        cambios.push({ label: 'Sustituir factura', icon: 'i-lucide-replace', onSelect: () => abrirSustituir() })
+    }
+    const peligro: DropdownMenuItem[] = []
+    if (puedeAnular.value) {
+        peligro.push({ label: 'Anular factura', icon: 'i-lucide-ban', color: 'error', onSelect: () => abrirAnular() })
+    }
+    return [documento, cambios, peligro].filter(grupo => grupo.length)
+})
+
 watch(facturaId, cargar)
 onMounted(cargar)
 </script>
@@ -228,26 +279,16 @@ onMounted(cargar)
 <template>
     <PanelPagina
         id="factura"
-        :titulo="`Factura #${route.params.id}`"
+        :titulo="factura ? `Factura ${numeroFactura(factura)}` : `Factura #${route.params.id}`"
         icono="i-lucide-receipt-text"
+        encabezado-propio
     >
-        <template #acciones>
-            <UButton
-                to="/facturas"
-                icon="i-lucide-arrow-left"
-                label="Facturas"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
-            />
-        </template>
-
         <div
             v-if="cargando && !factura"
             class="flex flex-col gap-4"
         >
-            <USkeleton class="h-8 w-64" />
-            <USkeleton class="h-32 w-full" />
+            <USkeleton class="h-20 w-full rounded-[1.375rem]" />
+            <USkeleton class="h-96 w-full rounded-[1.375rem]" />
         </div>
 
         <UEmpty
@@ -267,69 +308,94 @@ onMounted(cargar)
 
         <div
             v-else-if="factura"
-            class="flex flex-col gap-6"
+            class="flex min-h-0 flex-1 flex-col gap-4"
         >
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="flex flex-col gap-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h2 class="text-xl font-semibold text-highlighted">
-                            Factura #{{ factura.id }}
-                        </h2>
-                        <EstadoFacturaBadge
-                            :estado="factura.estado"
-                            data-prueba="factura-estado"
+            <!-- Franja: número, estado, saldo y acciones. -->
+            <header
+                class="surface-card flex flex-col gap-4 rounded-[1.375rem] p-4 sm:flex-row sm:items-center"
+                data-prueba="franja-factura"
+            >
+                <div class="flex min-w-0 flex-1 items-center gap-4">
+                    <span
+                        class="pastilla-icono pastilla-tono hidden size-12 shrink-0 rounded-2xl sm:inline-flex"
+                        :class="tonoFranja"
+                    >
+                        <UIcon
+                            name="i-lucide-receipt-text"
+                            class="size-6"
                         />
-                        <UBadge
-                            v-if="factura.tipo_dte"
-                            :label="factura.fel_estado === 'certificado' ? `${factura.tipo_dte} certificada` : (factura.aviso_cobro ? 'Aviso de cobro' : factura.tipo_dte)"
-                            :icon="factura.fel_estado === 'certificado' ? 'i-lucide-badge-check' : 'i-lucide-file-clock'"
-                            :color="factura.fel_estado === 'certificado' ? 'success' : 'neutral'"
-                            variant="outline"
-                        />
-                        <UBadge
-                            v-if="tipoVisual"
-                            :label="tipoVisual.etiqueta"
-                            :icon="tipoVisual.icono"
-                            :color="tipoVisual.color"
-                            variant="outline"
-                            :data-tipo="factura.tipo"
-                        />
+                    </span>
+                    <div class="flex min-w-0 flex-col gap-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h1 class="font-mono text-xl font-bold text-highlighted sm:text-2xl">
+                                {{ factura.fel_serie && factura.fel_numero ? numeroFactura(factura) : `Factura #${factura.id}` }}
+                            </h1>
+                            <UBadge
+                                :label="textoEstado"
+                                :icon="estadoFacturaVisual(factura.estado).icono"
+                                :color="diasVencida > 0 ? 'error' : estadoFacturaVisual(factura.estado).color"
+                                variant="subtle"
+                                data-prueba="factura-estado"
+                            />
+                            <UBadge
+                                v-if="factura.tipo_dte"
+                                :label="factura.fel_estado === 'certificado' ? 'Certificada' : (factura.aviso_cobro ? 'Aviso de cobro' : factura.tipo_dte)"
+                                :icon="factura.fel_estado === 'certificado' ? 'i-lucide-shield-check' : 'i-lucide-file-clock'"
+                                :color="factura.fel_estado === 'certificado' ? 'success' : 'neutral'"
+                                variant="subtle"
+                            />
+                            <UBadge
+                                v-if="tipoVisual"
+                                :label="tipoVisual.etiqueta"
+                                :icon="tipoVisual.icono"
+                                :color="tipoVisual.color"
+                                variant="outline"
+                                :data-tipo="factura.tipo"
+                            />
+                        </div>
+                        <p class="text-[0.8125rem] text-muted">
+                            <ULink
+                                :to="enlace(`/clientes/${factura.cliente_id}?tab=cuenta`)"
+                                class="text-primary underline"
+                            >{{ nombres.nombre(factura.cliente_id) }}</ULink>
+                            <template v-if="factura.servicio_id">
+                                ·
+                                <ULink
+                                    :to="enlace(`/servicios/${factura.servicio_id}`)"
+                                    class="text-primary underline"
+                                >servicio {{ factura.servicio_id }}</ULink>
+                            </template>
+                            · {{ etiquetaPeriodo(factura.periodo) }} · emitida el {{ formatearFecha(factura.emitida_en) }} · {{ diasVencida > 0 ? 'venció' : 'vence' }} el {{ formatearFecha(factura.vence_en) }}
+                            <template v-if="factura.factura_origen_id">
+                                · {{ relacionOrigen(factura.tipo) }}
+                                <ULink
+                                    :to="`/facturas/${factura.factura_origen_id}`"
+                                    class="text-primary underline"
+                                >factura #{{ factura.factura_origen_id }}</ULink>
+                            </template>
+                        </p>
                     </div>
-                    <p class="text-sm text-muted">
-                        {{ etiquetaPeriodo(factura.periodo) }} ·
-                        <ULink
-                            :to="enlace(`/clientes/${factura.cliente_id}?tab=cuenta`)"
-                            class="text-default hover:text-primary"
-                        >
-                            {{ nombres.nombre(factura.cliente_id) }}
-                        </ULink>
-                        <template v-if="factura.servicio_id">
-                            ·
-                            <ULink
-                                :to="enlace(`/servicios/${factura.servicio_id}`)"
-                                class="text-default hover:text-primary"
-                            >
-                                servicio {{ factura.servicio_id }}
-                            </ULink>
-                        </template>
-                        <template v-if="factura.factura_origen_id">
-                            · {{ relacionOrigen(factura.tipo) }}
-                            <ULink
-                                :to="`/facturas/${factura.factura_origen_id}`"
-                                class="text-default hover:text-primary"
-                            >
-                                factura #{{ factura.factura_origen_id }}
-                            </ULink>
-                        </template>
-                    </p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <ImprimirConPlantilla
-                        tipo="aviso_cobro"
-                        etiqueta="Aviso de cobro (PDF)"
-                        :generando="generandoPdf"
-                        data-prueba="aviso-pdf"
-                        @imprimir="abrirAvisoPdf"
+                <div class="flex flex-wrap items-center gap-3 sm:justify-end">
+                    <div
+                        v-if="pendiente !== null"
+                        class="flex flex-col items-end"
+                    >
+                        <span class="text-xs text-muted">Saldo de {{ formatearQuetzales(factura.total) }}</span>
+                        <span
+                            class="text-2xl font-bold tabular-nums"
+                            :class="pendiente.gt(0) ? 'text-error' : 'text-success'"
+                            data-prueba="factura-saldo"
+                        >{{ formatearQuetzales(pendiente) }}</span>
+                    </div>
+                    <UButton
+                        v-if="puedeCobrar"
+                        :to="`/cobro?cliente=${factura.cliente_id}`"
+                        label="Cobrar"
+                        :icon="ICONOS.cobrar"
+                        color="success"
+                        size="lg"
+                        class="px-5"
                     />
                     <UButton
                         v-if="puedeNotaCredito"
@@ -337,29 +403,25 @@ onMounted(cargar)
                         icon="i-lucide-file-minus"
                         color="neutral"
                         variant="outline"
+                        size="lg"
                         data-prueba="abrir-nota-credito"
                         @click="notaAbierta = true"
                     />
-                    <UButton
-                        v-if="puedeSustituir"
-                        label="Sustituir"
-                        icon="i-lucide-replace"
-                        color="neutral"
-                        variant="outline"
-                        data-prueba="abrir-sustituir"
-                        @click="sustituirAbierto = true"
-                    />
-                    <UButton
-                        v-if="puedeAnular"
-                        label="Anular"
-                        icon="i-lucide-ban"
-                        color="error"
-                        variant="outline"
-                        data-prueba="abrir-anular"
-                        @click="anularAbierto = true"
-                    />
+                    <UDropdownMenu
+                        :items="masAcciones"
+                        :content="{ align: 'end' }"
+                    >
+                        <UButton
+                            icon="i-lucide-ellipsis"
+                            color="neutral"
+                            variant="ghost"
+                            class="boton-flotante boton-circulo"
+                            aria-label="Más acciones de la factura"
+                            data-prueba="mas-acciones-factura"
+                        />
+                    </UDropdownMenu>
                 </div>
-            </div>
+            </header>
 
             <UAlert
                 v-if="avisoNoFiscal"
@@ -407,228 +469,6 @@ onMounted(cargar)
                 description="La factura se anula cuando la SAT lo confirme. Mientras tanto no recibe pagos ni notas de crédito."
                 data-prueba="factura-anulacion-pendiente"
             />
-
-            <div class="grid gap-4 lg:grid-cols-2">
-                <UPageCard
-                    title="Montos"
-                    icon="i-lucide-calculator"
-                    variant="subtle"
-                >
-                    <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
-                        <DatoFicha
-                            etiqueta="Subtotal"
-                            :valor="formatearQuetzales(factura.subtotal)"
-                        />
-                        <DatoFicha
-                            etiqueta="IVA"
-                            :valor="formatearQuetzales(factura.iva)"
-                        />
-                        <DatoFicha
-                            etiqueta="Total"
-                            :valor="formatearQuetzales(factura.total)"
-                        />
-                        <DatoFicha
-                            etiqueta="Pagado"
-                            :valor="formatearQuetzales(factura.pagado)"
-                        />
-                        <DatoFicha
-                            etiqueta="Pendiente"
-                            :valor="pendiente ? formatearQuetzales(pendiente) : (porCertificar ? 'Por certificar' : 'Anulada')"
-                        />
-                        <DatoFicha
-                            v-if="factura.acreditado && factura.acreditado !== '0.00'"
-                            etiqueta="De lo pagado, notas de crédito"
-                            :valor="formatearQuetzales(factura.acreditado)"
-                            data-prueba="factura-acreditado"
-                        />
-                        <DatoFicha
-                            v-if="factura.origen"
-                            etiqueta="Importada de"
-                            :valor="`${factura.origen}${factura.id_externo ? ` · ${factura.id_externo}` : ''}`"
-                            mono
-                        />
-                    </dl>
-                </UPageCard>
-
-                <UPageCard
-                    title="Fechas"
-                    icon="i-lucide-calendar"
-                    variant="subtle"
-                >
-                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <DatoFicha
-                            etiqueta="Emitida"
-                            :valor="formatearFechaHora(factura.emitida_en)"
-                        />
-                        <DatoFicha
-                            etiqueta="Vence"
-                            :valor="formatearFecha(factura.vence_en)"
-                        />
-                        <DatoFicha
-                            v-if="factura.vencida_en"
-                            etiqueta="Marcada vencida"
-                            :valor="formatearFechaHora(factura.vencida_en)"
-                        />
-                        <DatoFicha
-                            v-if="factura.certificar_al"
-                            etiqueta="Certificar"
-                            :valor="CERTIFICAR_AL[factura.certificar_al].etiqueta"
-                        />
-                        <DatoFicha
-                            etiqueta="Clave"
-                            :valor="`${factura.clave_unica} · versión ${factura.version}`"
-                            mono
-                        />
-                    </dl>
-                </UPageCard>
-            </div>
-
-            <UPageCard
-                v-if="puede('fel.ver')"
-                :title="factura.tipo === 'mora' ? 'Certificación FEL (nota de débito)' : 'Certificación FEL'"
-                icon="i-lucide-badge-check"
-                variant="subtle"
-                data-prueba="factura-fel"
-            >
-                <DteDocumento
-                    tipo="factura"
-                    :documento-id="factura.id"
-                    :dte-id="factura.dte_id ?? null"
-                    :certificable="factura.estado !== 'anulada' && factura.estado !== 'acreditada'"
-                    :sin-certificar="factura.estado === 'acreditada' ? 'Sin DTE: acreditada por notas de crédito internas, no es una venta y no se certifica.' : null"
-                    :refrescar="`${factura.version}-${factura.estado}-${factura.fel_estado ?? ''}`"
-                    @cambiado="alCambiarDte"
-                />
-            </UPageCard>
-
-            <section class="flex flex-col gap-2">
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Líneas
-                </h3>
-                <UTable
-                    :data="factura.lineas"
-                    :columns="columnasLineas"
-                >
-                    <template #concepto-cell="{ row }">
-                        <div class="flex flex-col">
-                            <span class="text-sm">{{ row.original.concepto }}</span>
-                            <span class="text-xs text-muted">
-                                {{ cantidad(row.original.cantidad) }} × {{ formatearQuetzales(row.original.precio_unitario) }}{{ row.original.gravable ? '' : ' · exenta' }}
-                            </span>
-                        </div>
-                    </template>
-                    <template #cantidad-cell="{ row }">
-                        <span class="tabular-nums">{{ cantidad(row.original.cantidad) }}</span>
-                    </template>
-                    <template #precio_unitario-cell="{ row }">
-                        <span class="tabular-nums">{{ formatearQuetzales(row.original.precio_unitario) }}</span>
-                    </template>
-                    <template #iva-cell="{ row }">
-                        <span class="tabular-nums">{{ formatearQuetzales(row.original.iva) }}</span>
-                    </template>
-                    <template #total-cell="{ row }">
-                        <span class="tabular-nums font-medium">{{ formatearQuetzales(row.original.total) }}</span>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-list"
-                            title="Sin líneas"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
-            </section>
-
-            <section
-                v-if="puede('pagos.ver')"
-                class="flex flex-col gap-2"
-            >
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Pagos aplicados
-                </h3>
-                <ProblemaAlerta
-                    v-if="problemaPagos"
-                    :problema="problemaPagos"
-                    :reintentar="reintentarPagos"
-                    :reintentando="cargandoPagos"
-                />
-                <UTable
-                    v-else
-                    :data="pagosAplicados"
-                    :columns="columnasPagos"
-                    :loading="cargandoPagos"
-                >
-                    <template #pago-cell="{ row }">
-                        <div class="flex flex-col">
-                            <ULink
-                                :to="`/pagos/${row.original.pago.id}`"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                            >
-                                Pago #{{ row.original.pago.id }}
-                            </ULink>
-                            <span class="text-xs text-muted">{{ formatearFechaHora(row.original.pago.created_at) }}</span>
-                        </div>
-                    </template>
-                    <template #metodo-cell="{ row }">
-                        <span class="text-sm">{{ ETIQUETAS_METODO[row.original.pago.metodo] }}</span>
-                    </template>
-                    <template #aplicado-cell="{ row }">
-                        <span class="tabular-nums font-medium">{{ formatearQuetzales(row.original.aplicado) }}</span>
-                    </template>
-                    <template #estado-cell="{ row }">
-                        <EstadoPagoBadge
-                            :estado="row.original.pago.estado"
-                            size="sm"
-                        />
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-banknote"
-                            title="Sin pagos aplicados"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
-            </section>
-
-            <section
-                v-if="puede('libro.ver')"
-                class="flex flex-col gap-2"
-            >
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Asientos del libro
-                </h3>
-                <ProblemaAlerta
-                    v-if="problemaAsientos"
-                    :problema="problemaAsientos"
-                    :reintentar="reintentarAsientos"
-                    :reintentando="cargandoAsientos"
-                />
-                <div
-                    v-else-if="cargandoAsientos && !asientos.length"
-                    class="flex flex-col gap-2"
-                >
-                    <USkeleton class="h-24 w-full" />
-                </div>
-                <p
-                    v-else-if="!asientos.length"
-                    class="text-sm text-muted"
-                >
-                    No se encontró el asiento de esta factura en el libro diario.
-                </p>
-                <div
-                    v-else
-                    class="grid gap-3 lg:grid-cols-2"
-                >
-                    <AsientoContable
-                        v-for="asiento in asientos"
-                        :key="asiento.id"
-                        :asiento="asiento"
-                        :con-origen="false"
-                    />
-                </div>
-            </section>
-
             <UAlert
                 v-for="evaluado in evaluadosNota.filter(e => e.cambiado)"
                 :key="`nc${evaluado.servicio_id}`"
@@ -640,50 +480,324 @@ onMounted(cargar)
                 data-prueba="nota-reactivacion"
             />
 
-            <section
-                v-if="factura.notas_credito?.length"
-                class="flex flex-col gap-2"
-                aria-labelledby="titulo-notas"
-                data-prueba="notas-credito"
-            >
-                <h3
-                    id="titulo-notas"
-                    class="text-sm font-semibold text-highlighted"
-                >
-                    Notas de crédito
-                </h3>
-                <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
-                    <li
-                        v-for="nota in factura.notas_credito"
-                        :key="nota.id"
-                        class="flex flex-wrap items-start justify-between gap-2 px-3 py-2"
+            <div class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+                <section class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+                    <div class="flex items-center justify-between gap-2 border-b border-(--ax-borde) p-3 sm:p-4">
+                        <OperPestanas
+                            v-model="pestana"
+                            :items="pestanas"
+                            etiqueta="Secciones de la factura"
+                        />
+                        <AyudaBoton solo-icono />
+                    </div>
+
+                    <!-- Líneas, totales, pagos y notas de crédito. -->
+                    <div
+                        v-show="pestana === 'lineas'"
+                        class="flex flex-col"
                     >
-                        <div class="flex min-w-0 flex-col">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <ULink
-                                    :to="`/notas-credito/${nota.id}`"
-                                    class="text-sm font-medium text-highlighted hover:text-primary"
+                        <UTable
+                            :data="factura.lineas"
+                            :columns="columnasLineas"
+                            :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none' }"
+                        >
+                            <template #concepto-cell="{ row }">
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-semibold text-highlighted">{{ row.original.concepto }}</span>
+                                    <span class="text-xs text-muted sm:hidden">
+                                        {{ cantidad(row.original.cantidad) }} × {{ formatearQuetzales(row.original.precio_unitario) }}
+                                    </span>
+                                    <span
+                                        v-if="!row.original.gravable"
+                                        class="text-xs text-muted"
+                                    >Exenta</span>
+                                </div>
+                            </template>
+                            <template #cantidad-cell="{ row }">
+                                <span class="tabular-nums">{{ cantidad(row.original.cantidad) }}</span>
+                            </template>
+                            <template #precio_unitario-cell="{ row }">
+                                <span class="tabular-nums">{{ formatearQuetzales(row.original.precio_unitario) }}</span>
+                            </template>
+                            <template #total-cell="{ row }">
+                                <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-list"
+                                    title="Sin líneas"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+
+                        <dl
+                            class="ms-auto flex w-full max-w-xs flex-col divide-y divide-(--ax-borde) px-4 py-2 text-sm"
+                            data-prueba="totales-factura"
+                        >
+                            <div class="flex justify-between py-2">
+                                <dt class="text-muted">
+                                    Subtotal sin IVA
+                                </dt>
+                                <dd class="tabular-nums">
+                                    {{ formatearQuetzales(factura.subtotal) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-muted">
+                                    IVA
+                                </dt>
+                                <dd class="tabular-nums">
+                                    {{ formatearQuetzales(factura.iva) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="font-semibold text-highlighted">
+                                    Total
+                                </dt>
+                                <dd class="text-lg font-bold tabular-nums text-highlighted">
+                                    {{ formatearQuetzales(factura.total) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-muted">
+                                    Pagado
+                                </dt>
+                                <dd class="tabular-nums">
+                                    − {{ formatearQuetzales(factura.pagado) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="factura.acreditado && factura.acreditado !== '0.00'"
+                                class="flex justify-between py-2"
+                                data-prueba="factura-acreditado"
+                            >
+                                <dt class="text-muted">
+                                    De lo pagado, notas de crédito
+                                </dt>
+                                <dd class="tabular-nums">
+                                    {{ formatearQuetzales(factura.acreditado) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="font-semibold text-error">
+                                    Saldo
+                                </dt>
+                                <dd class="text-lg font-bold tabular-nums text-error">
+                                    {{ pendiente ? formatearQuetzales(pendiente) : (porCertificar ? 'Por certificar' : 'Anulada') }}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <section
+                            v-if="puede('pagos.ver')"
+                            class="flex flex-col gap-1 px-4 pb-4"
+                            aria-labelledby="titulo-pagos"
+                        >
+                            <h3
+                                id="titulo-pagos"
+                                class="border-b border-(--ax-borde) pb-2 text-xs font-semibold tracking-[0.06em] text-muted uppercase"
+                            >
+                                Pagos aplicados
+                            </h3>
+                            <ProblemaAlerta
+                                v-if="problemaPagos"
+                                :problema="problemaPagos"
+                                :reintentar="reintentarPagos"
+                                :reintentando="cargandoPagos"
+                            />
+                            <USkeleton
+                                v-else-if="cargandoPagos && !pagosAplicados.length"
+                                class="h-12 w-full"
+                            />
+                            <p
+                                v-else-if="!pagosAplicados.length"
+                                class="py-2 text-sm text-muted"
+                            >
+                                Sin pagos aplicados.
+                            </p>
+                            <ul
+                                v-else
+                                class="flex flex-col divide-y divide-(--ax-borde)"
+                            >
+                                <li
+                                    v-for="aplicado in pagosAplicados"
+                                    :key="aplicado.pago.id"
+                                    class="flex items-center gap-3 py-2.5"
                                 >
-                                    Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}
-                                </ULink>
-                                <UBadge
-                                    v-if="nota.anulada_en"
-                                    label="Anulada"
-                                    icon="i-lucide-ban"
-                                    color="neutral"
-                                    variant="subtle"
-                                    size="sm"
+                                    <span class="pastilla-icono pastilla-tono tono-exito size-9 shrink-0 rounded-xl">
+                                        <UIcon
+                                            :name="ICONOS.cobrar"
+                                            class="size-4"
+                                        />
+                                    </span>
+                                    <div class="flex min-w-0 flex-1 flex-col">
+                                        <ULink
+                                            :to="`/pagos/${aplicado.pago.id}`"
+                                            class="text-sm font-semibold text-highlighted hover:text-primary"
+                                        >
+                                            Pago #{{ aplicado.pago.id }} · {{ ETIQUETAS_METODO[aplicado.pago.metodo].toLowerCase() }}
+                                        </ULink>
+                                        <span class="text-xs text-muted">{{ formatearFechaHora(aplicado.pago.created_at) }}</span>
+                                    </div>
+                                    <EstadoPagoBadge
+                                        :estado="aplicado.pago.estado"
+                                        size="sm"
+                                    />
+                                    <span class="font-semibold tabular-nums">{{ formatearQuetzales(aplicado.aplicado) }}</span>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section
+                            class="flex flex-col gap-1 px-4 pb-4"
+                            aria-labelledby="titulo-notas"
+                            data-prueba="notas-credito"
+                        >
+                            <h3
+                                id="titulo-notas"
+                                class="border-b border-(--ax-borde) pb-2 text-xs font-semibold tracking-[0.06em] text-muted uppercase"
+                            >
+                                Notas de crédito
+                            </h3>
+                            <p
+                                v-if="!factura.notas_credito?.length"
+                                class="py-2 text-sm text-muted"
+                            >
+                                Ninguna. Una nota de crédito baja el saldo sin que entre dinero (descuento, días sin servicio, error).
+                            </p>
+                            <ul
+                                v-else
+                                class="flex flex-col divide-y divide-(--ax-borde)"
+                            >
+                                <li
+                                    v-for="nota in factura.notas_credito"
+                                    :key="nota.id"
+                                    class="flex flex-wrap items-start justify-between gap-2 py-2"
+                                >
+                                    <div class="flex min-w-0 flex-col">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <ULink
+                                                :to="`/notas-credito/${nota.id}`"
+                                                class="text-sm font-semibold text-highlighted hover:text-primary"
+                                            >
+                                                Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}
+                                            </ULink>
+                                            <UBadge
+                                                v-if="nota.anulada_en"
+                                                label="Anulada"
+                                                icon="i-lucide-ban"
+                                                color="neutral"
+                                                variant="subtle"
+                                                size="sm"
+                                            />
+                                        </div>
+                                        <span class="text-xs text-muted">{{ nota.motivo }}<template v-if="nota.created_by_nombre"> · {{ nota.created_by_nombre }}</template></span>
+                                    </div>
+                                    <div class="flex flex-col items-end">
+                                        <span class="font-semibold tabular-nums">{{ formatearQuetzales(nota.monto) }}</span>
+                                        <span class="text-xs tabular-nums text-muted">IVA {{ formatearQuetzales(nota.iva) }}</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </section>
+                    </div>
+
+                    <!-- Factura electrónica. -->
+                    <div
+                        v-if="puede('fel.ver')"
+                        v-show="pestana === 'fel'"
+                        class="p-4"
+                        data-prueba="factura-fel"
+                    >
+                        <DteDocumento
+                            tipo="factura"
+                            :documento-id="factura.id"
+                            :dte-id="factura.dte_id ?? null"
+                            :certificable="factura.estado !== 'anulada' && factura.estado !== 'acreditada'"
+                            :sin-certificar="factura.estado === 'acreditada' ? 'Sin DTE: acreditada por notas de crédito internas, no es una venta y no se certifica.' : null"
+                            :refrescar="`${factura.version}-${factura.estado}-${factura.fel_estado ?? ''}`"
+                            @cambiado="alCambiarDte"
+                        />
+                    </div>
+
+                    <!-- Historial: fechas, clave y asientos del libro. -->
+                    <div
+                        v-show="pestana === 'historial'"
+                        class="flex flex-col gap-4 p-4"
+                    >
+                        <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <DatoFicha
+                                etiqueta="Emitida"
+                                :valor="formatearFechaHora(factura.emitida_en)"
+                            />
+                            <DatoFicha
+                                etiqueta="Vence"
+                                :valor="formatearFecha(factura.vence_en)"
+                            />
+                            <DatoFicha
+                                v-if="factura.vencida_en"
+                                etiqueta="Marcada vencida"
+                                :valor="formatearFechaHora(factura.vencida_en)"
+                            />
+                            <DatoFicha
+                                v-if="factura.certificar_al"
+                                etiqueta="Certificar"
+                                :valor="CERTIFICAR_AL[factura.certificar_al].etiqueta"
+                            />
+                            <DatoFicha
+                                v-if="factura.origen"
+                                etiqueta="Importada de"
+                                :valor="`${factura.origen}${factura.id_externo ? ` · ${factura.id_externo}` : ''}`"
+                                mono
+                            />
+                            <DatoFicha
+                                etiqueta="Clave"
+                                :valor="`${factura.clave_unica} · versión ${factura.version}`"
+                                mono
+                            />
+                        </dl>
+
+                        <section
+                            v-if="puede('libro.ver')"
+                            class="flex flex-col gap-2"
+                        >
+                            <h3 class="text-xs font-semibold tracking-[0.06em] text-muted uppercase">
+                                Asientos del libro
+                            </h3>
+                            <ProblemaAlerta
+                                v-if="problemaAsientos"
+                                :problema="problemaAsientos"
+                                :reintentar="reintentarAsientos"
+                                :reintentando="cargandoAsientos"
+                            />
+                            <USkeleton
+                                v-else-if="cargandoAsientos && !asientos.length"
+                                class="h-24 w-full"
+                            />
+                            <p
+                                v-else-if="!asientos.length"
+                                class="text-sm text-muted"
+                            >
+                                No se encontró el asiento de esta factura en el libro diario.
+                            </p>
+                            <div
+                                v-else
+                                class="grid gap-3 lg:grid-cols-2"
+                            >
+                                <AsientoContable
+                                    v-for="asiento in asientos"
+                                    :key="asiento.id"
+                                    :asiento="asiento"
+                                    :con-origen="false"
                                 />
                             </div>
-                            <span class="text-xs text-muted">{{ nota.motivo }}<template v-if="nota.created_by_nombre"> · {{ nota.created_by_nombre }}</template></span>
-                        </div>
-                        <div class="flex flex-col items-end">
-                            <span class="font-medium tabular-nums">{{ formatearQuetzales(nota.monto) }}</span>
-                            <span class="text-xs tabular-nums text-muted">IVA {{ formatearQuetzales(nota.iva) }}</span>
-                        </div>
-                    </li>
-                </ul>
-            </section>
+                        </section>
+                    </div>
+                </section>
+
+                <FacturaImpresion :factura-id="factura.id" />
+            </div>
 
             <NotaCreditoModal
                 v-if="puedeNotaCredito"

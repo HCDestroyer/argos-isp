@@ -63,34 +63,34 @@ onMounted(() => {
         id="referidos"
         titulo="Referidos"
         icono="i-lucide-user-plus"
+        descripcion="Clientes que llegaron recomendados; el que refirió gana sus puntos cuando el referido califica"
     >
-        <template #acciones>
-            <UButton
-                to="/lealtad"
-                icon="i-lucide-arrow-left"
-                label="Lealtad"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
-            />
-        </template>
-
-        <div class="flex flex-col gap-4">
-            <USelect
-                v-model="estado"
-                :items="itemsEstado"
-                aria-label="Estado"
-                class="w-full sm:w-56"
-            />
-            <ProblemaAlerta
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <LealtadPestanas actual="referidos">
+                <template #derecha>
+                    <USelect
+                        v-model="estado"
+                        :items="itemsEstado"
+                        icon="i-lucide-filter"
+                        aria-label="Estado"
+                        class="w-full sm:w-56"
+                    />
+                </template>
+            </LealtadPestanas>
+            <div
                 v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-                data-prueba="referidos-error"
-            />
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                    data-prueba="referidos-error"
+                />
+            </div>
             <template v-else>
                 <UTable
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none' }"
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
@@ -159,17 +159,19 @@ onMounted(() => {
                         />
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
 
         <AccionMotivoModal
             v-model:open="rechazando"
