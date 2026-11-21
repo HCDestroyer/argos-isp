@@ -363,13 +363,15 @@ pensado el portal. Pruebas: `tests/e2e/desborde.spec.ts` (390, 1280 y 1440 px).
 
 ### Tema del admin (apariencia)
 
-`plugins/apariencia.ts` lee `GET /api/v1/apariencia/publica` (A6) en el servidor, con tope de 1,5 s, y
-aplica el preset (`indigo` de fábrica, `azul`, `violeta`, `esmeralda`, `naranja`, `rosa`, `pizarra`)
-cambiando la paleta primaria de Nuxt UI y las variables `--ax-primario-claro|hover|oscuro` en `<html>`
-(con `data-tema`). Todos los colores de marca (`--ax-*`, degradados, logo) salen de esas variables: en
-`/corte` no se agrega ningún archivo. Esmeralda y naranja usan el tono 700 en claro (AA con texto
-blanco); con hex de la API, esos. El eslogan y el fondo del panel del login (`/entrar`) salen de ahí si
-existen (el fondo solo del mismo origen, por la CSP); el logo sigue siendo el de Empresas.
+`plugins/apariencia.ts` lee `GET /api/v1/apariencia/publica` (A6, `contratos/apariencia.md`) en el
+servidor, con tope de 1,5 s, y aplica el tema (`indigo` de fábrica, `azul`, `violeta`, `esmeralda`,
+`naranja`, `rosa`, `pizarra`): `paleta.color` como paleta primaria de Nuxt UI y `paleta.claro|oscuro`
+como `--ax-primario-claro|oscuro` en `<html>` (con `data-tema`). Todos los colores de marca (`--ax-*`, degradados, logo) salen de esas variables: en
+`/corte` no se agrega ningún archivo. Si la paleta no llega o no es la del tema, el tono
+del catálogo (700 en esmeralda, naranja y rosa; 600 el resto). El eslogan y el fondo del panel del login
+(`/entrar`) salen de ahí si existen; el fondo (`/api/v1/apariencia/archivos/…`) lo sirve el portal en
+su mismo origen (`server/api/v1/apariencia/archivos/[nombre].get.ts`), lo único que admite la CSP. El
+logo sigue siendo el de Empresas.
 `modo_predeterminado` se aplica solo si el visitante no eligió claro u oscuro. Si la API falla: índigo.
 Fixtures: `?tema=<preset>` en la URL. Pruebas: `tests/nuxt/apariencia.test.ts`,
 `tests/servidor/portal.test.ts` («apariencia del admin») y axe con esmeralda y naranja.

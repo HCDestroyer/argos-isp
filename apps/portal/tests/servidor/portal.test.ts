@@ -454,10 +454,20 @@ describe('apariencia del admin (tema) en el HTML del servidor', () => {
     })
 
     it('el preset del admin llega en `<html>` (data-tema y el tono AA del primario), también en /corte', async () => {
-        api.respuestas.set(APARIENCIA, JSON.stringify({ tema: 'esmeralda', modo_predeterminado: 'sistema', nombre_marca: null, eslogan: null, logo_login_url: null, fondo_login_url: null }))
+        api.respuestas.set(APARIENCIA, JSON.stringify({
+            tema: 'esmeralda',
+            paleta: { color: 'emerald', claro: '#047857', oscuro: '#34D399' },
+            modo_predeterminado: 'sistema',
+            nombre_marca: 'ArgosIsp',
+            eslogan: null,
+            logo_login_url: null,
+            fondo_login_url: null,
+            version: 2,
+        }))
         const html = (await pedir('/corte', { host: 'portal.argosisp.example' })).cuerpo
         expect(html).toMatch(/<html[^>]*data-tema="esmeralda"/)
-        expect(html).toContain('--ax-primario-claro:var(--ui-color-primary-700)')
+        expect(html).toContain('--ax-primario-claro:#047857')
+        expect(html).toContain('--ax-primario-oscuro:#34d399')
         expect(html).toContain('--color-emerald-500')
     })
 
@@ -471,6 +481,18 @@ describe('apariencia del admin (tema) en el HTML del servidor', () => {
         expect(rota.status).toBe(200)
         expect(rota.cuerpo).toMatch(/<html[^>]*data-tema="indigo"/)
         expect(rota.cuerpo).not.toContain('evil.example')
+    })
+
+    it('los archivos de apariencia se sirven en el mismo origen (§7); otro nombre, 404 sin llegar a la API', async () => {
+        api.rutas.length = 0
+        const archivo = await pedir('/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp', { host: 'portal.argosisp.example' })
+        expect(archivo.status).toBe(200)
+        expect(api.rutas).toContain('/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp')
+        api.rutas.length = 0
+        for (const ruta of ['/api/v1/apariencia/archivos/otro.png', '/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.exe']) {
+            expect((await pedir(ruta, { host: 'portal.argosisp.example' })).status, ruta).toBe(404)
+        }
+        expect(api.rutas).toEqual([])
     })
 })
 

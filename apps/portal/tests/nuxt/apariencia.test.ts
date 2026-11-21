@@ -11,48 +11,58 @@ afterEach(() => {
     useApariencia().value = APARIENCIA_DE_FABRICA
 })
 
-describe('normalizarApariencia', () => {
-    it('preset por nombre o con sus hex validados', () => {
-        expect(normalizarApariencia({ tema: 'esmeralda', modo_predeterminado: 'oscuro' })).toMatchObject({ preset: 'esmeralda', modo: 'oscuro', primarioClaro: null })
-        expect(normalizarApariencia({ tema: { preset: 'azul', primario_claro: '#1D4ED8', primario_oscuro: '#60a5fa' } }))
-            .toMatchObject({ preset: 'azul', primarioClaro: '#1d4ed8', primarioOscuro: '#60a5fa' })
+const PUBLICA_ESMERALDA = {
+    tema: 'esmeralda',
+    paleta: { color: 'emerald', claro: '#047857', oscuro: '#34D399' },
+    modo_predeterminado: 'oscuro',
+    nombre_marca: 'ArgosIsp',
+    eslogan: null,
+    logo_login_url: null,
+    fondo_login_url: null,
+    version: 2,
+}
+
+describe('normalizarApariencia (contrato §3)', () => {
+    it('tema con su paleta resuelta por la API', () => {
+        expect(normalizarApariencia(PUBLICA_ESMERALDA)).toMatchObject({ preset: 'esmeralda', color: 'emerald', primarioClaro: '#047857', primarioOscuro: '#34d399', modo: 'oscuro' })
+        expect(normalizarApariencia({ ...PUBLICA_ESMERALDA, tema: 'rosa', paleta: { color: 'pink', claro: '#BE185D', oscuro: '#F472B6' } }).color).toBe('pink')
     })
 
     it('lo raro cae a lo de fábrica, campo por campo', () => {
         expect(normalizarApariencia(null)).toEqual(APARIENCIA_DE_FABRICA)
-        expect(normalizarApariencia({ tema: 'fucsia' }).preset).toBe('indigo')
-        expect(normalizarApariencia({ tema: { preset: 'rosa', primario_claro: 'red; background:url(x)' } }).primarioClaro).toBeNull()
+        expect(normalizarApariencia({ tema: 'fucsia' })).toMatchObject({ preset: 'indigo', color: 'indigo' })
+        // una paleta que no es la del tema, o con hex raros, no entra al CSS
+        expect(normalizarApariencia({ ...PUBLICA_ESMERALDA, paleta: { color: 'red', claro: '#ff0000', oscuro: '#ff0000' } }).primarioClaro).toBeNull()
+        expect(normalizarApariencia({ ...PUBLICA_ESMERALDA, paleta: { color: 'emerald', claro: 'red; background:url(x)', oscuro: '#34D399' } }).primarioClaro).toBeNull()
         expect(normalizarApariencia({ modo_predeterminado: 'noche' }).modo).toBe('sistema')
         expect(normalizarApariencia({ eslogan: '   ' }).eslogan).toBeNull()
     })
 
-    it('fondo del login: solo rutas del mismo origen y sin caracteres que rompan `url()`', () => {
-        expect(urlImagenSegura('/api/v1/portal/apariencia/fondo.webp')).toBe('/api/v1/portal/apariencia/fondo.webp')
+    it('fondo del login: solo un archivo de apariencia (§7), servido en el mismo origen', () => {
+        expect(urlImagenSegura('/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp')).toBe('/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp')
+        expect(urlImagenSegura('/api/v1/apariencia/archivos/../../portal/cuenta')).toBeNull()
+        expect(urlImagenSegura('/api/v1/apariencia/archivos/fondo-login-3f2a.webp")')).toBeNull()
         expect(urlImagenSegura('https://cdn.example.com/fondo.jpg')).toBeNull()
-        expect(urlImagenSegura('//cdn.example.com/fondo.jpg')).toBeNull()
-        expect(urlImagenSegura('/fondo.jpg") ; x')).toBeNull()
-        expect(urlImagenSegura('javascript:alert(1)')).toBeNull()
+        expect(urlImagenSegura('/fondo.jpg')).toBeNull()
     })
 })
 
 describe('variablesTema', () => {
-    it('el tono AA de cada preset en claro (700 donde el 600 no llega) y el 400 en oscuro', () => {
+    it('los hex de la paleta de la API', () => {
+        const estilo = variablesTema(normalizarApariencia(PUBLICA_ESMERALDA))
+        expect(estilo).toContain('--ax-primario-claro: #047857')
+        expect(estilo).toContain('--ax-primario-oscuro: #34d399')
+        expect(estilo).toContain('--ax-primario-hover: var(--ui-color-primary-800)')
+    })
+
+    it('sin paleta válida: el tono AA del catálogo (700 en esmeralda, naranja y rosa; 600 el resto)', () => {
         expect(variablesTema(normalizarApariencia({ tema: 'indigo' }))).toContain('--ax-primario-claro: var(--ui-color-primary-600)')
-        expect(variablesTema(normalizarApariencia({ tema: 'esmeralda' }))).toContain('--ax-primario-claro: var(--ui-color-primary-700)')
-        expect(variablesTema(normalizarApariencia({ tema: 'naranja' }))).toContain('--ax-primario-hover: var(--ui-color-primary-800)')
-        expect(variablesTema(normalizarApariencia({ tema: 'rosa' }))).toContain('--ax-primario-oscuro: var(--ui-color-primary-400)')
+        expect(variablesTema(normalizarApariencia({ tema: 'rosa' }))).toContain('--ax-primario-claro: var(--ui-color-primary-700)')
+        expect(variablesTema(normalizarApariencia({ tema: 'naranja' }))).toContain('--ax-primario-oscuro: var(--ui-color-primary-400)')
     })
 
-    it('con los hex del admin, esos', () => {
-        const estilo = variablesTema(normalizarApariencia({ tema: { preset: 'azul', primario_claro: '#1d4ed8', primario_oscuro: '#93c5fd' } }))
-        expect(estilo).toContain('--ax-primario-claro: #1d4ed8')
-        expect(estilo).toContain('--ax-primario-oscuro: #93c5fd')
-    })
-
-    it('cada preset tiene su paleta de Tailwind', () => {
-        for (const preset of PRESETS_TEMA) {
-            expect(PALETAS_TEMA[preset].paleta).toMatch(/^[a-z]+$/)
-        }
+    it('el catálogo tiene los siete temas del contrato', () => {
+        expect(Object.keys(PALETAS_TEMA).sort()).toEqual([...PRESETS_TEMA].sort())
     })
 })
 
@@ -64,9 +74,9 @@ describe('panel del login', () => {
     })
 
     it('con eslogan y fondo del admin', async () => {
-        useApariencia().value = normalizarApariencia({ tema: 'violeta', eslogan: 'Conectados contigo', fondo_login_url: '/api/v1/portal/apariencia/fondo.webp' })
+        useApariencia().value = normalizarApariencia({ ...PUBLICA_ESMERALDA, eslogan: 'Conectados contigo', fondo_login_url: '/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp' })
         const wrapper = await mountSuspended(Acceso, { props: { titulo: 'Entrar', descripcion: 'x' } })
         expect(wrapper.find('[data-testid="acceso-eslogan"]').text()).toBe('Conectados contigo')
-        expect(wrapper.find('[data-testid="acceso-panel"]').attributes('style')).toContain('url("/api/v1/portal/apariencia/fondo.webp")')
+        expect(wrapper.find('[data-testid="acceso-panel"]').attributes('style')).toContain('url("/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp")')
     })
 })

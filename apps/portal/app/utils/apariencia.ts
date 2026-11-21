@@ -1,23 +1,24 @@
+import type { Schema } from '@argosisp/contracts'
+
 /**
- * Apariencia que elige el admin (`GET /api/v1/apariencia/publica`, sin sesión; A6, contrato
- * `.claude/integration/contratos/apariencia.md`): tema de color, modo claro u oscuro por defecto,
- * eslogan y fondo del panel del login.
+ * Apariencia de la instalación que elige el admin (`GET /api/v1/apariencia/publica`, sin sesión;
+ * A6, contrato `.claude/integration/contratos/apariencia.md`): tema (`paleta` ya resuelta con sus
+ * hex AA), modo claro u oscuro inicial, eslogan y fondo del panel del login. El logo de la empresa
+ * sigue saliendo de Empresas (contrato §0): `logo_login_url` y `nombre_marca` no se usan aquí.
  *
- * Mientras el endpoint no esté en `packages/contracts`, el tipo vive aquí (ver
- * `.claude/integration/a5.md`); al publicarse el contrato se cambia por `Schema<'AparienciaPublica'>`.
- *
- * Todo pasa por `normalizarApariencia`: un preset desconocido, un hex mal formado o una URL que no es
- * del mismo origen se ignoran y queda lo de fábrica (índigo). Nada de la respuesta entra al
- * CSS sin validar.
+ * Todo pasa por `normalizarApariencia` (caída segura): un tema o color fuera del catálogo, un hex
+ * mal formado o una URL que no sea la de un archivo de apariencia se ignoran y queda lo de fábrica
+ * (índigo, §3). Nada de la respuesta entra al CSS sin validar.
  */
+export type AparienciaPublica = Schema<'AparienciaPublica'>
+export type PresetTema = AparienciaPublica['tema']
 
-export const PRESETS_TEMA = ['indigo', 'azul', 'violeta', 'esmeralda', 'naranja', 'rosa', 'pizarra'] as const
-export type PresetTema = (typeof PRESETS_TEMA)[number]
+export const PRESETS_TEMA = ['indigo', 'azul', 'violeta', 'esmeralda', 'naranja', 'rosa', 'pizarra'] as const satisfies readonly PresetTema[]
 
 /**
- * Paleta de Tailwind de cada preset y el tono del primario en claro: el que deja el texto blanco
- * (botones) y el primario sobre blanco en 4,5:1 o más. Esmeralda y naranja necesitan el 700; el resto
- * pasa con el 600. En oscuro, el 400 de todas pasa sobre el azul noche.
+ * Catálogo del contrato (§2): color de Nuxt UI y tono del primario en claro (el que pasa 4,5:1 sobre
+ * blanco y con texto blanco). Sirve de respaldo si la `paleta` de la API no llega o no es válida;
+ * en oscuro, el 400 de todos.
  */
 export const PALETAS_TEMA: Record<PresetTema, { paleta: string, tonoClaro: 600 | 700 }> = {
     indigo: { paleta: 'indigo', tonoClaro: 600 },
@@ -25,34 +26,25 @@ export const PALETAS_TEMA: Record<PresetTema, { paleta: string, tonoClaro: 600 |
     violeta: { paleta: 'violet', tonoClaro: 600 },
     esmeralda: { paleta: 'emerald', tonoClaro: 700 },
     naranja: { paleta: 'orange', tonoClaro: 700 },
-    rosa: { paleta: 'rose', tonoClaro: 600 },
+    rosa: { paleta: 'pink', tonoClaro: 700 },
     pizarra: { paleta: 'slate', tonoClaro: 600 },
-}
-
-export type ModoApariencia = 'claro' | 'oscuro' | 'sistema'
-
-/** Respuesta de la API (forma del contrato; el tema llega como preset o con sus hex validados). */
-export interface AparienciaPublica {
-    tema: PresetTema | { preset: PresetTema, primario_claro?: string | null, primario_oscuro?: string | null }
-    modo_predeterminado: ModoApariencia
-    nombre_marca: string | null
-    eslogan: string | null
-    logo_login_url: string | null
-    fondo_login_url: string | null
 }
 
 /** Lo que usa el portal, ya validado. */
 export interface Apariencia {
     preset: PresetTema
+    /** Color de Nuxt UI (`appConfig.ui.colors.primary`). */
+    color: string
     primarioClaro: string | null
     primarioOscuro: string | null
-    modo: ModoApariencia
+    modo: AparienciaPublica['modo_predeterminado']
     eslogan: string | null
     fondoLogin: string | null
 }
 
 export const APARIENCIA_DE_FABRICA: Apariencia = {
     preset: 'indigo',
+    color: 'indigo',
     primarioClaro: null,
     primarioOscuro: null,
     modo: 'sistema',
@@ -68,16 +60,20 @@ function hex(valor: unknown): string | null {
     return typeof valor === 'string' && /^#[0-9a-f]{6}$/i.test(valor) ? valor.toLowerCase() : null
 }
 
+/** Nombre de un archivo de apariencia tal como lo sirve la API (§7). */
+export const NOMBRE_ARCHIVO_APARIENCIA = /^(?:logo|fondo)-login-[0-9a-f]{16}\.(?:png|svg|jpe?g|webp)$/
+
 /**
- * URL de imagen segura para `url("…")`: solo una ruta del mismo origen (`/…`), sin comillas,
- * paréntesis ni espacios. La CSP del portal (`img-src 'self'`, walled garden) bloquearía una imagen
- * de otro dominio, así que una URL absoluta se ignora y queda el fondo de fábrica.
+ * URL del fondo para `url("…")`: solo `/api/v1/apariencia/archivos/<nombre>` (contrato §3, ruta
+ * relativa a la API). El portal la sirve en su mismo origen (`server/api/v1/apariencia/archivos`),
+ * que es lo único que permite la CSP (`img-src 'self'`).
  */
 export function urlImagenSegura(valor: unknown): string | null {
-    if (typeof valor !== 'string' || valor.length > 2048 || /["'()\\\s<>]/.test(valor)) {
+    if (typeof valor !== 'string') {
         return null
     }
-    return /^\/[^/]/.test(valor) ? valor : null
+    const prefijo = '/api/v1/apariencia/archivos/'
+    return valor.startsWith(prefijo) && NOMBRE_ARCHIVO_APARIENCIA.test(valor.slice(prefijo.length)) ? valor : null
 }
 
 function textoCorto(valor: unknown, maximo: number): string | null {
@@ -94,23 +90,25 @@ export function normalizarApariencia(datos: unknown): Apariencia {
         return APARIENCIA_DE_FABRICA
     }
     const crudo = datos as Partial<Record<keyof AparienciaPublica, unknown>>
-    const tema = crudo.tema
-    const objeto = tema && typeof tema === 'object' ? tema as Record<string, unknown> : null
-    const preset = esPreset(tema) ? tema : esPreset(objeto?.preset) ? objeto.preset : 'indigo'
+    const preset = esPreset(crudo.tema) ? crudo.tema : 'indigo'
+    const paleta = crudo.paleta && typeof crudo.paleta === 'object' ? crudo.paleta as Partial<Record<'color' | 'claro' | 'oscuro', unknown>> : null
+    // La paleta de la API solo cuenta si es la del mismo tema (color del catálogo).
+    const paletaValida = paleta?.color === PALETAS_TEMA[preset].paleta
     const modo = crudo.modo_predeterminado === 'claro' || crudo.modo_predeterminado === 'oscuro' ? crudo.modo_predeterminado : 'sistema'
     return {
         preset,
-        primarioClaro: hex(objeto?.primario_claro),
-        primarioOscuro: hex(objeto?.primario_oscuro),
+        color: PALETAS_TEMA[preset].paleta,
+        primarioClaro: paletaValida ? hex(paleta?.claro) : null,
+        primarioOscuro: paletaValida ? hex(paleta?.oscuro) : null,
         modo,
-        eslogan: textoCorto(crudo.eslogan, 160),
+        eslogan: textoCorto(crudo.eslogan, 120),
         fondoLogin: urlImagenSegura(crudo.fondo_login_url),
     }
 }
 
 /**
- * Variables CSS del tema en `<html style>`: el primario en claro y en oscuro (hex validado de la API
- * o el tono AA del preset) y su tono de hover. Los tokens `--ax-*` de `main.css` salen de ellas.
+ * Variables CSS del tema en `<html style>`: el primario en claro y en oscuro (hex de la `paleta` o el
+ * tono del catálogo) y su tono de hover. Los tokens `--ax-*` de `main.css` salen de ellas.
  */
 export function variablesTema(apariencia: Apariencia): string {
     const { tonoClaro } = PALETAS_TEMA[apariencia.preset]
