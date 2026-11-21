@@ -14312,6 +14312,11 @@ export interface components {
              * @enum {string|null}
              */
             token: "***" | null;
+            /**
+             * @description Contrato 0.9.0 §1.2: `***` si Iris entregó el token del portal del cliente (§11); null si no. Nunca el valor
+             * @enum {string|null}
+             */
+            token_portal?: "***" | null;
             /** @description Receptor de Iris (webhooks Argos → Iris, §2.3) */
             webhook_salida_url: string | null;
             /**
@@ -40622,6 +40627,8 @@ export interface operations {
                     code_verifier?: string;
                     /** @description Versión del contrato que habla Iris (semver, 0.5.0). Se guarda en el conector: sin ella, Argos no envía los webhooks nuevos de 0.5.0 */
                     contrato?: string;
+                    /** @description Contrato 0.9.0 §1.2: `iris_pat_` recortado a `portal_argos.*` para el servidor del portal del cliente. Se rota con cada canje (ausente: el conector queda sin él). Argos lo guarda cifrado y nunca lo devuelve; en la auditoría queda como *** */
+                    token_portal?: string | null;
                     /** @description Contrato Iris 0.6.2: true si Iris guardó la URL y el secreto del receptor de Argos de esta respuesta (con B1, siempre true). Se guarda en el conector; omitido queda null (desconocido) */
                     receptor_argos?: boolean;
                 };
@@ -40696,6 +40703,8 @@ export interface operations {
                 "application/json": {
                     /** @description Versión del contrato Iris ↔ Argos que habla Iris (semver, p. ej. `0.5.0`) */
                     contrato: string;
+                    /** @description Contrato 0.9.0 §1.2: `iris_pat_` recortado a `portal_argos.*` para el servidor del portal del cliente. Solo con contrato ≥ 0.9.0 (con uno anterior se ignora). Omitido: se conserva el guardado. Argos lo guarda cifrado y nunca lo devuelve; en la auditoría queda como *** */
+                    token_portal?: string | null;
                     /** @description Contrato Iris 0.6.2: true si Iris tiene guardados la URL y el secreto del receptor de webhooks de Argos (los del canje); false si no (conector canjeado antes de B1: el panel pide volver a conectar). Omitido: se conserva el último informado */
                     receptor_argos?: boolean;
                 };
