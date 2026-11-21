@@ -59,17 +59,17 @@ onMounted(cargar)
         <template #acciones>
             <UButton
                 :to="enlace('/bancos/extractos')"
-                icon="i-lucide-file-spreadsheet"
-                label="Extractos"
-                color="neutral"
-                variant="ghost"
+                icon="i-lucide-scale"
+                label="Conciliar"
+                size="lg"
+                class="glow-brand rounded-full px-5"
                 :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Extractos"
+                aria-label="Conciliar estados de cuenta"
             />
         </template>
 
         <div class="flex flex-col gap-4">
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="surface-card grid gap-3 rounded-2xl p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3">
                 <CuentaBancoSelect
                     v-model="cuentaId"
                     con-todas
@@ -78,9 +78,11 @@ onMounted(cargar)
                 <UInput
                     v-model="fecha"
                     type="date"
+                    icon="i-lucide-calendar"
                     :max="hoy"
                     aria-label="Al día"
                     class="w-full"
+                    :ui="{ base: 'rounded-full' }"
                 />
             </div>
 
@@ -101,11 +103,11 @@ onMounted(cargar)
                 title="Sin cuentas bancarias que reportar"
                 variant="naked"
             />
-            <UPageCard
+            <div
                 v-for="fila in filas"
                 v-else
                 :key="fila.cuenta_id"
-                variant="subtle"
+                class="surface-card rounded-2xl p-3 sm:p-4"
                 :data-cuenta="fila.cuenta_id"
             >
                 <div class="flex flex-col gap-4">
@@ -126,6 +128,7 @@ onMounted(cargar)
                             :icon="fila.cuadra ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
                             variant="subtle"
                             size="lg"
+                            class="rounded-full"
                             data-prueba="cuadra-conciliacion"
                         />
                     </div>
@@ -164,6 +167,8 @@ onMounted(cargar)
                                 :data="fila.libro_en_transito"
                                 :columns="columnasPartidas"
                                 tabindex="0"
+                                class="overflow-hidden rounded-xl border border-(--ax-borde)"
+                                :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs' }"
                                 :aria-label="`Partidas del libro en tránsito de ${fila.cuenta_nombre}`"
                             >
                                 <template #descripcion-cell="{ row }">
@@ -188,6 +193,8 @@ onMounted(cargar)
                                 :data="fila.extracto_en_transito"
                                 :columns="columnasPartidas"
                                 tabindex="0"
+                                class="overflow-hidden rounded-xl border border-(--ax-borde)"
+                                :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs' }"
                                 :aria-label="`Partidas del extracto en tránsito de ${fila.cuenta_nombre}`"
                             >
                                 <template #descripcion-cell="{ row }">
@@ -209,7 +216,7 @@ onMounted(cargar)
                         Diferencia = extracto − (libro − tránsito del libro + tránsito del extracto). Una conciliación cuenta al día si su línea y sus movimientos son de esa fecha o antes.
                     </p>
                 </div>
-            </UPageCard>
+            </div>
         </div>
     </PanelPagina>
 </template>

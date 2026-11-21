@@ -87,6 +87,13 @@ watch(estado, () => {
 })
 
 onMounted(recargarTodo)
+
+/** Pestañas segmentadas dentro de la tarjeta: depósitos de caja o traslados entre bancos. */
+const vista = ref<'depositos' | 'traslados'>('depositos')
+const itemsVista = [
+    { label: 'Depósitos de caja', value: 'depositos', icon: 'i-lucide-landmark' },
+    { label: 'Traslados entre bancos', value: 'traslados', icon: 'i-lucide-arrow-right-left' },
+]
 </script>
 
 <template>
@@ -100,6 +107,8 @@ onMounted(recargarTodo)
                 v-if="puede('bancos.trasladar')"
                 label="Trasladar"
                 icon="i-lucide-arrow-right-left"
+                size="lg"
+                class="glow-brand rounded-full px-5"
                 :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Trasladar entre bancos"
                 data-prueba="abrir-traslado"
@@ -107,7 +116,7 @@ onMounted(recargarTodo)
             />
         </template>
 
-        <div class="flex flex-col gap-6">
+        <div class="flex min-h-0 flex-1 flex-col gap-4">
             <ProblemaAlerta
                 v-if="problema"
                 :problema="problema"
@@ -122,10 +131,10 @@ onMounted(recargarTodo)
                 v-else
                 class="grid gap-3 sm:grid-cols-2"
             >
-                <UPageCard
+                <div
                     v-for="fila in resumen"
                     :key="fila.empresa_id"
-                    variant="subtle"
+                    class="surface-card rounded-2xl p-4"
                     data-prueba="resumen-transito"
                 >
                     <div class="flex flex-col gap-3">
@@ -137,6 +146,7 @@ onMounted(recargarTodo)
                                 :icon="fila.cuadra ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
                                 variant="subtle"
                                 size="sm"
+                                class="rounded-full"
                             />
                         </div>
                         <dl class="grid grid-cols-2 gap-3">
@@ -158,7 +168,7 @@ onMounted(recargarTodo)
                             />
                         </dl>
                     </div>
-                </UPageCard>
+                </div>
                 <UEmpty
                     v-if="!resumen.length"
                     icon="i-lucide-truck"
@@ -167,148 +177,176 @@ onMounted(recargarTodo)
                 />
             </div>
 
-            <div class="flex flex-wrap items-center gap-3">
-                <USelect
-                    v-model="estado"
-                    :items="itemsEstado"
-                    aria-label="Estado"
-                    class="w-full sm:w-48"
-                />
-                <p class="text-xs text-muted">
-                    Se acreditan al conciliar su línea en la
-                    <ULink
-                        :to="enlace('/bancos/extractos')"
-                        class="underline"
-                    >conciliación bancaria</ULink>.
-                </p>
+            <div class="surface-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl">
+                <div class="flex flex-wrap items-center gap-3 p-3 sm:p-4">
+                    <UTabs
+                        v-model="vista"
+                        :items="itemsVista"
+                        :content="false"
+                        color="neutral"
+                        variant="pill"
+                        class="w-full sm:w-auto"
+                        :ui="{ list: 'rounded-xl bg-(--ax-panel) p-1', trigger: 'rounded-lg px-4 data-[state=active]:bg-(--ax-tarjeta) data-[state=active]:text-primary data-[state=active]:shadow-sm max-sm:flex-1' }"
+                        aria-label="Qué ver"
+                    />
+                    <USelect
+                        v-model="estado"
+                        :items="itemsEstado"
+                        aria-label="Estado"
+                        class="w-full sm:w-48"
+                        :ui="{ base: 'rounded-full' }"
+                    />
+                    <p class="text-xs text-muted">
+                        Se acreditan al conciliar su línea en la
+                        <ULink
+                            :to="enlace('/bancos/extractos')"
+                            class="underline"
+                        >conciliación bancaria</ULink>.
+                    </p>
+                </div>
+
+                <section
+                    v-if="vista === 'depositos'"
+                    class="flex min-h-0 flex-1 flex-col"
+                >
+                    <h3 class="sr-only">
+                        Depósitos de caja
+                    </h3>
+                    <UAlert
+                        v-if="!leeDepositos"
+                        class="m-3 w-auto"
+                        color="neutral"
+                        variant="subtle"
+                        icon="i-lucide-lock"
+                        title="Sin acceso a los depósitos de caja"
+                        description="Para verlos tu usuario necesita el permiso cajas.ver."
+                        data-prueba="depositos-sin-permiso"
+                    />
+                    <ProblemaAlerta
+                        v-else-if="depositos.problema.value"
+                        :problema="depositos.problema.value"
+                        :reintentar="depositos.recargar"
+                        :reintentando="depositos.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="depositos.filas.value"
+                            :columns="columnasDepositos"
+                            :loading="depositos.cargando.value"
+                            sticky
+                            class="min-h-0 flex-1"
+                            :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                            data-prueba="tabla-depositos"
+                        >
+                            <template #boleta-cell="{ row }">
+                                <div class="flex min-w-0 flex-col">
+                                    <span class="text-sm font-medium text-highlighted">#{{ row.original.id }} · boleta {{ row.original.boleta }}</span>
+                                    <span class="text-xs text-muted">{{ row.original.caja_nombre }} · turno #{{ row.original.turno_id }} · {{ formatearFecha(row.original.fecha) }}</span>
+                                    <span class="text-xs text-muted lg:hidden">{{ row.original.cuenta_nombre }}</span>
+                                    <span
+                                        v-if="row.original.acreditado_en"
+                                        class="text-xs text-muted"
+                                    >Acreditado {{ formatearFechaHora(row.original.acreditado_en) }}</span>
+                                </div>
+                            </template>
+                            <template #cuenta_nombre-cell="{ row }">
+                                <span class="text-sm">{{ row.original.cuenta_nombre }}</span>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <UBadge
+                                    :label="ESTADOS_TRANSITO[row.original.estado].etiqueta"
+                                    :color="ESTADOS_TRANSITO[row.original.estado].color"
+                                    :icon="ESTADOS_TRANSITO[row.original.estado].icono"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="rounded-full"
+                                />
+                            </template>
+                            <template #monto-cell="{ row }">
+                                <span class="whitespace-nowrap tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-landmark"
+                                    title="Sin depósitos"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="depositos.pagina.value"
+                            :hay-anterior="depositos.hayAnterior.value"
+                            :hay-siguiente="depositos.haySiguiente.value"
+                            :cargando="depositos.cargando.value"
+                            :filas="depositos.filas.value.length"
+                            @anterior="depositos.anterior"
+                            @siguiente="depositos.siguiente"
+                        />
+                    </template>
+                </section>
+
+                <section
+                    v-else
+                    class="flex min-h-0 flex-1 flex-col"
+                >
+                    <h3 class="sr-only">
+                        Traslados entre bancos
+                    </h3>
+                    <ProblemaAlerta
+                        v-if="traslados.problema.value"
+                        :problema="traslados.problema.value"
+                        :reintentar="traslados.recargar"
+                        :reintentando="traslados.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="traslados.filas.value"
+                            :columns="columnasTraslados"
+                            :loading="traslados.cargando.value"
+                            sticky
+                            class="min-h-0 flex-1"
+                            :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                            data-prueba="tabla-traslados"
+                        >
+                            <template #referencia-cell="{ row }">
+                                <div class="flex min-w-0 flex-col">
+                                    <span class="text-sm font-medium text-highlighted">#{{ row.original.id }} · {{ row.original.referencia }}</span>
+                                    <span class="text-xs text-muted"><span class="font-mono">{{ row.original.cuenta_origen_codigo }}</span> → <span class="font-mono">{{ row.original.cuenta_destino_codigo }}</span> · {{ formatearFecha(row.original.fecha) }}</span>
+                                </div>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <UBadge
+                                    :label="ESTADOS_TRANSITO[row.original.estado].etiqueta"
+                                    :color="ESTADOS_TRANSITO[row.original.estado].color"
+                                    :icon="ESTADOS_TRANSITO[row.original.estado].icono"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="rounded-full"
+                                />
+                            </template>
+                            <template #monto-cell="{ row }">
+                                <span class="whitespace-nowrap tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-arrow-right-left"
+                                    title="Sin traslados"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="traslados.pagina.value"
+                            :hay-anterior="traslados.hayAnterior.value"
+                            :hay-siguiente="traslados.haySiguiente.value"
+                            :cargando="traslados.cargando.value"
+                            :filas="traslados.filas.value.length"
+                            @anterior="traslados.anterior"
+                            @siguiente="traslados.siguiente"
+                        />
+                    </template>
+                </section>
             </div>
-
-            <section class="flex flex-col gap-2">
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Depósitos de caja
-                </h3>
-                <UAlert
-                    v-if="!leeDepositos"
-                    color="neutral"
-                    variant="subtle"
-                    icon="i-lucide-lock"
-                    title="Sin acceso a los depósitos de caja"
-                    description="Para verlos tu usuario necesita el permiso cajas.ver."
-                    data-prueba="depositos-sin-permiso"
-                />
-                <ProblemaAlerta
-                    v-else-if="depositos.problema.value"
-                    :problema="depositos.problema.value"
-                    :reintentar="depositos.recargar"
-                    :reintentando="depositos.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="depositos.filas.value"
-                        :columns="columnasDepositos"
-                        :loading="depositos.cargando.value"
-                        data-prueba="tabla-depositos"
-                    >
-                        <template #boleta-cell="{ row }">
-                            <div class="flex min-w-0 flex-col">
-                                <span class="text-sm font-medium text-highlighted">#{{ row.original.id }} · boleta {{ row.original.boleta }}</span>
-                                <span class="text-xs text-muted">{{ row.original.caja_nombre }} · turno #{{ row.original.turno_id }} · {{ formatearFecha(row.original.fecha) }}</span>
-                                <span class="text-xs text-muted lg:hidden">{{ row.original.cuenta_nombre }}</span>
-                                <span
-                                    v-if="row.original.acreditado_en"
-                                    class="text-xs text-muted"
-                                >Acreditado {{ formatearFechaHora(row.original.acreditado_en) }}</span>
-                            </div>
-                        </template>
-                        <template #cuenta_nombre-cell="{ row }">
-                            <span class="text-sm">{{ row.original.cuenta_nombre }}</span>
-                        </template>
-                        <template #estado-cell="{ row }">
-                            <UBadge
-                                :label="ESTADOS_TRANSITO[row.original.estado].etiqueta"
-                                :color="ESTADOS_TRANSITO[row.original.estado].color"
-                                :icon="ESTADOS_TRANSITO[row.original.estado].icono"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </template>
-                        <template #monto-cell="{ row }">
-                            <span class="whitespace-nowrap tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-landmark"
-                                title="Sin depósitos"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="depositos.pagina.value"
-                        :hay-anterior="depositos.hayAnterior.value"
-                        :hay-siguiente="depositos.haySiguiente.value"
-                        :cargando="depositos.cargando.value"
-                        :filas="depositos.filas.value.length"
-                        @anterior="depositos.anterior"
-                        @siguiente="depositos.siguiente"
-                    />
-                </template>
-            </section>
-
-            <section class="flex flex-col gap-2">
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Traslados entre bancos
-                </h3>
-                <ProblemaAlerta
-                    v-if="traslados.problema.value"
-                    :problema="traslados.problema.value"
-                    :reintentar="traslados.recargar"
-                    :reintentando="traslados.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="traslados.filas.value"
-                        :columns="columnasTraslados"
-                        :loading="traslados.cargando.value"
-                        data-prueba="tabla-traslados"
-                    >
-                        <template #referencia-cell="{ row }">
-                            <div class="flex min-w-0 flex-col">
-                                <span class="text-sm font-medium text-highlighted">#{{ row.original.id }} · {{ row.original.referencia }}</span>
-                                <span class="text-xs text-muted"><span class="font-mono">{{ row.original.cuenta_origen_codigo }}</span> → <span class="font-mono">{{ row.original.cuenta_destino_codigo }}</span> · {{ formatearFecha(row.original.fecha) }}</span>
-                            </div>
-                        </template>
-                        <template #estado-cell="{ row }">
-                            <UBadge
-                                :label="ESTADOS_TRANSITO[row.original.estado].etiqueta"
-                                :color="ESTADOS_TRANSITO[row.original.estado].color"
-                                :icon="ESTADOS_TRANSITO[row.original.estado].icono"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </template>
-                        <template #monto-cell="{ row }">
-                            <span class="whitespace-nowrap tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-arrow-right-left"
-                                title="Sin traslados"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="traslados.pagina.value"
-                        :hay-anterior="traslados.hayAnterior.value"
-                        :hay-siguiente="traslados.haySiguiente.value"
-                        :cargando="traslados.cargando.value"
-                        :filas="traslados.filas.value.length"
-                        @anterior="traslados.anterior"
-                        @siguiente="traslados.siguiente"
-                    />
-                </template>
-            </section>
         </div>
 
         <TrasladoModal

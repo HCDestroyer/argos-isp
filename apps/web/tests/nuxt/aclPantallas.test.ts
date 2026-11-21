@@ -162,7 +162,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'FelCredencialesModal.vue': { permisos: ['fel.configurar'], desde: ['pages/configuracion/fel.vue'] },
     'SustituirFacturaModal.vue': { permisos: ['facturas.sustituir'], desde: ['pages/facturas/[id].vue'] },
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
-    'CajaDepositoModal.vue': { permisos: ['cajas.depositar'], desde: ['pages/caja/index.vue'] },
+    'CajaDepositoSlideover.vue': { permisos: ['cajas.depositar'], desde: ['pages/caja/index.vue'] },
     'CarteraCastigoModal.vue': { permisos: ['cartera.castigar', 'facturas.ver'], desde: ['pages/cartera/index.vue'] },
     'CarteraProvisionModal.vue': { permisos: ['cartera.provisionar'], desde: ['pages/cartera/index.vue'] },
     'ConciliarLineaSlideover.vue': { permisos: ['bancos.conciliar', 'bancos.ver'], desde: ['pages/bancos/extractos/[id].vue'] },

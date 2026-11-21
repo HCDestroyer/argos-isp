@@ -1,243 +1,231 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
+/**
+ * Cajas (tablero NuevoCajas): contadores del día, y en pestañas los cierres de todas las cajas
+ * (con su cuadre, el efectivo contado y lo depositado del turno), los depósitos al banco con su
+ * boleta y los retiros de efectivo. La caja propia se abre o se cierra desde aquí (acción
+ * principal) o desde el icono de caja del encabezado; el cierre es la ventana en 3 pasos.
+ */
 definePageMeta({ permiso: 'cajas.ver' })
 
-useHead({ title: 'Caja · ArgosIsp' })
+useHead({ title: 'Cajas · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
 const { puede } = usePermisos()
 const usuario = useUsuarioActual()
 const toast = useToast()
-const nombres = useNombresClientes()
+const miCaja = useMiCaja()
+const impresion = useImpresionCaja()
+const { conSelector: variasEmpresas, empresas: empresasUsuario } = useEmpresaActiva()
+
+type Pestana = 'cierres' | 'depositos' | 'movimientos'
+const pestana = computed<Pestana>({
+    get: () => (['depositos', 'movimientos'].includes(String(route.query.vista)) ? route.query.vista as Pestana : 'cierres'),
+    set: (valor) => {
+        void router.replace({ query: { ...route.query, vista: valor === 'cierres' ? undefined : valor } })
+    },
+})
 
 const cajas = shallowRef<Caja[]>([])
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
-const cajaId = computed<number>({
-    get() {
-        const id = Number(route.query.caja)
-        if (cajas.value.some(c => c.id === id)) {
-            return id
-        }
-        // Por defecto la caja del usuario, si tiene una.
-        return cajas.value.find(c => c.cajero_id === usuario.value?.id)?.id ?? cajas.value[0]?.id ?? 0
-    },
-    set(id) {
-        void router.replace({ query: { ...route.query, caja: String(id) } })
-    },
-})
+/** Resumen del turno abierto de cada caja (lo que debe haber en efectivo). */
+const resumenes = shallowRef<Map<number, ResumenTurnoCaja | Problem>>(new Map())
 
-const caja = computed(() => cajas.value.find(c => c.id === cajaId.value) ?? null)
+/** Cierres (turnos) de todas las cajas, del más reciente al más viejo. */
+interface Cierre extends TurnoCaja {
+    caja: Caja
+}
+const cierres = shallowRef<Cierre[]>([])
+const cargandoCierres = ref(false)
+const problemaCierres = ref<Problem | null>(null)
 
-/** Turnos de la caja elegida (el abierto sale de aquí por `turno_abierto_id`). */
-const historial = usePaginacionCursor(cursor => (caja.value ? useCajas().turnos(caja.value.id, cursor) : Promise.resolve({ ok: true as const, data: { data: [], nextCursor: null } })))
-
-const turnoAbierto = shallowRef<TurnoCaja | null>(null)
-const problemaTurno = ref<Problem | null>(null)
-const cargandoTurno = ref(false)
-
-const cobros = shallowRef<Pago[]>([])
-const cargandoCobros = ref(false)
-const problemaCobros = ref<Problem | null>(null)
-
-/*
- * Egresos en efectivo del turno (`GET /egresos?caja_id=&turno_id=&metodo=caja`): bajan el esperado.
- * La API los deja leer con `egresos.ver` o, para la caja propia, con `cajas.ver` (el cajero), así
- * que quien ve esta página siempre puede leerlos.
- */
-const egresos = shallowRef<Egreso[]>([])
-const cargandoEgresos = ref(false)
-const problemaEgresos = ref<Problem | null>(null)
-const leeEgresos = computed(() => puede('egresos.ver') || puede('cajas.ver'))
-const egresosTurno = computed(() => (turnoAbierto.value ? egresosEnEfectivo(egresos.value, turnoAbierto.value.id) : []))
-const totalEgresos = computed(() => egresosTurno.value.reduce((suma, e) => suma.plus(e.monto), new Decimal(0)))
-
-/*
- * Depósitos al banco del turno (`GET /bancos/depositos?turno_id=`; fase 4): bajan el esperado
- * como un egreso. El cajero los lee de su caja con `cajas.ver`; con `bancos.ver`, cualquier caja.
- */
 const depositos = shallowRef<Deposito[]>([])
 const cargandoDepositos = ref(false)
 const problemaDepositos = ref<Problem | null>(null)
-const leeDepositos = computed(() => puede('cajas.ver') || puede('bancos.ver'))
-const depositosTurno = computed(() => (turnoAbierto.value ? depositosDelTurno(depositos.value, turnoAbierto.value.id) : []))
-const totalDepositos = computed(() => depositosTurno.value.reduce((suma, d) => suma.plus(d.monto), new Decimal(0)))
-const depositoAbierto = ref(false)
-/** El último depósito hecho en esta pantalla (lo ve también quien no tiene `bancos.ver`). */
-const ultimoDeposito = shallowRef<Deposito | null>(null)
 
-const aperturaAbierta = ref(false)
+const retiros = shallowRef<Egreso[]>([])
+const cargandoRetiros = ref(false)
+const problemaRetiros = ref<Problem | null>(null)
 
-/** Cómo funciona la caja, en el estado cerrado. */
-const PASOS_CAJA = [
-    { titulo: 'Abrir caja', detalle: 'Con el fondo inicial para dar vuelto.' },
-    { titulo: 'Cobrar', detalle: 'El efectivo de cada cobro entra a esta caja.' },
-    { titulo: 'Cerrar caja', detalle: 'Cuentas el efectivo y se calcula la diferencia.' },
-]
-const altaAbierta = ref(false)
+const cobradoHoy = shallowRef<{ monto: Decimal, cantidad: number } | null>(null)
+const problemaCobrado = ref<Problem | null>(null)
 
-/** Con varias empresas, cada tarjeta dice de cuál es la caja. */
-const { conSelector: variasEmpresas, empresas: empresasUsuario } = useEmpresaActiva()
+const hoy = hoyGuatemala()
+const meses = periodosRecientes(hoy, 12)
+const mes = ref(meses[0] ?? hoy)
+const itemsMes = meses.map(m => ({ label: etiquetaPeriodo(m).replace(/^./, c => c.toUpperCase()), value: m }))
+const filtroCaja = ref<number | 'todas'>('todas')
+const soloDiferencia = ref(false)
+
+const itemsCaja = computed(() => [{ label: 'Todas las cajas', value: 'todas' as const }, ...cajas.value.map(c => ({ label: c.nombre, value: c.id }))])
+
 function nombreEmpresa(id: number | undefined): string {
     return empresasUsuario.value.find(e => e.id === id)?.nombre_comercial ?? (id ? `Empresa ${id}` : '')
 }
-const cierreAbierto = ref(false)
-/** Resultado oficial del último cierre (lo que devolvió la API). */
-const ultimoCierre = shallowRef<TurnoCaja | null>(null)
 
-/**
- * Fondo + efectivo cobrado − egresos en efectivo del turno: solo con cobros y egresos leídos
- * (nunca sobre una lista que falló ni sin poder leer los egresos).
- */
-const esperado = computed<Decimal | null>(() => (turnoAbierto.value && leeEgresos.value && leeDepositos.value
-    && !problemaCobros.value && !cargandoCobros.value && !problemaEgresos.value && !cargandoEgresos.value
-    && !problemaDepositos.value && !cargandoDepositos.value
-    ? esperadoProvisional(turnoAbierto.value.fondo_inicial, cobros.value, egresos.value, turnoAbierto.value.id).minus(totalDepositos.value)
-    : null))
+const abiertas = computed(() => cajas.value.filter(c => c.activa && c.turno_abierto_id !== null))
+/** La caja del usuario: con turno abierto (para cerrar) o asignada y cerrada (para abrir). */
+const propia = computed(() => miCaja.abierta.value ?? cajas.value.find(c => c.activa && c.cajero_id === usuario.value?.id) ?? null)
 
-const efectivo = computed(() => cobrosEnEfectivo(cobros.value))
-const efectivoCobrado = computed(() => efectivo.value.reduce((suma, p) => suma.plus(p.monto), new Decimal(0)))
+const resumenDe = (cajaId: number) => {
+    const valor = resumenes.value.get(cajaId)
+    return valor && 'turno_id' in valor ? valor : null
+}
 
-/** Por qué no hay esperado provisional (se muestra en la página y en el cierre). */
-const sinEsperado = computed<string | null>(() => {
-    if (!turnoAbierto.value || esperado.value) {
+/** Efectivo en las cajas abiertas (lo que debe haber): solo con todos los resúmenes leídos. */
+const efectivoEnCajas = computed<{ monto: Decimal, cajas: number } | null>(() => {
+    if (!abiertas.value.length) {
+        return { monto: new Decimal(0), cajas: 0 }
+    }
+    const leidos = abiertas.value.map(c => resumenDe(c.id))
+    if (leidos.some(r => r === null)) {
         return null
     }
-    if (!leeEgresos.value) {
-        return 'El esperado lo calcula la API al cerrar: resta los egresos en efectivo del turno, que tu usuario no puede ver (falta egresos.ver o cajas.ver).'
-    }
-    if (!leeDepositos.value) {
-        return 'El esperado lo calcula la API al cerrar: resta los depósitos al banco del turno, que tu usuario no puede ver (falta cajas.ver).'
-    }
-    if (problemaCobros.value || problemaEgresos.value || problemaDepositos.value) {
-        return 'No se pudieron leer los cobros, los egresos o los depósitos del turno: la API calcula el esperado y la diferencia al cerrar.'
-    }
-    return null
+    return { monto: leidos.reduce((suma, r) => suma.plus(r?.esperado ?? '0'), new Decimal(0)), cajas: leidos.length }
 })
 
-const columnasCobros: TableColumn<Pago>[] = [
-    { accessorKey: 'id', header: 'Pago' },
-    { accessorKey: 'cliente_id', header: 'Cliente', meta: SOLO_ANCHO },
-    { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'estado', header: 'Estado', meta: SOLO_ANCHO },
-]
+const cierresMes = computed(() => cierres.value.filter(c => c.cerrado_en && fechaGuatemala(c.cerrado_en).slice(0, 7) === mes.value.slice(0, 7)))
+const diferenciasMes = computed(() => {
+    const con = cierresMes.value.filter(c => c.diferencia && !new Decimal(c.diferencia).isZero())
+    return { monto: con.reduce((suma, c) => suma.plus(c.diferencia ?? '0'), new Decimal(0)), cierres: con.length }
+})
 
-const columnasTurnos: TableColumn<TurnoCaja>[] = [
-    { accessorKey: 'abierto_en', header: 'Turno' },
-    { accessorKey: 'fondo_inicial', header: 'Fondo', meta: SOLO_ESCRITORIO },
-    { accessorKey: 'esperado', header: 'Esperado', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
-    { accessorKey: 'contado', header: 'Contado', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
-    { accessorKey: 'diferencia', header: 'Diferencia' },
-]
+const cierresFiltrados = computed(() => cierresMes.value
+    .filter(c => filtroCaja.value === 'todas' || c.caja_id === filtroCaja.value)
+    .filter(c => !soloDiferencia.value || (c.diferencia && !new Decimal(c.diferencia).isZero())))
 
-async function cargarCobros(turno: TurnoCaja) {
-    if (!puede('pagos.ver')) {
-        return
-    }
-    cargandoCobros.value = true
-    const resultado = await usePagos().listar({ caja_id: turno.caja_id, desde: turno.abierto_en, limit: 200 })
-    cargandoCobros.value = false
-    cobros.value = resultado.ok ? resultado.data.data : []
-    problemaCobros.value = resultado.ok ? null : resultado.problema
-    if (resultado.ok) {
-        void nombres.cargar(resultado.data.data.map(p => p.cliente_id))
-    }
+/** Depósitos hechos durante cada turno (`Deposito.turno_id`). */
+function depositosDe(turnoId: number): Deposito[] {
+    return depositos.value.filter(d => d.turno_id === turnoId)
 }
 
-/** Egresos en efectivo de la caja desde el día en que abrió el turno (se filtran por `turno_id`). */
-async function cargarEgresos(turno: TurnoCaja) {
-    if (!leeEgresos.value) {
-        return
-    }
-    cargandoEgresos.value = true
-    const leidos: Egreso[] = []
-    let cursor: string | undefined
+const contadores = computed(() => [
+    {
+        id: 'abiertas',
+        etiqueta: 'Cajas abiertas',
+        valor: String(abiertas.value.length),
+        detalle: abiertas.value[0] ? `${abiertas.value[0].nombre}${abiertas.value[0].turno_abierto_por_nombre ? ` · ${abiertas.value[0].turno_abierto_por_nombre}` : ''}${abiertas.value.length > 1 ? ` y ${abiertas.value.length - 1} más` : ''}` : 'Ninguna',
+        icono: 'i-lucide-wallet',
+        tono: 'tono-exito',
+    },
+    {
+        id: 'cobrado',
+        etiqueta: 'Cobrado hoy',
+        valor: cobradoHoy.value ? formatearQuetzales(cobradoHoy.value.monto) : '—',
+        detalle: cobradoHoy.value ? `${cobradoHoy.value.cantidad} ${cobradoHoy.value.cantidad === 1 ? 'cobro' : 'cobros'}` : (problemaCobrado.value ? 'No se pudo leer' : 'Sin permiso para ver pagos'),
+        icono: 'i-lucide-banknote',
+        tono: 'tono-marca',
+    },
+    {
+        id: 'efectivo',
+        etiqueta: 'Efectivo en cajas',
+        valor: efectivoEnCajas.value ? formatearQuetzales(efectivoEnCajas.value.monto) : '—',
+        detalle: efectivoEnCajas.value ? `${efectivoEnCajas.value.cajas} ${efectivoEnCajas.value.cajas === 1 ? 'caja abierta' : 'cajas abiertas'} · por depositar` : 'No se pudo leer el resumen',
+        icono: 'i-lucide-landmark',
+        tono: 'tono-aviso',
+    },
+    {
+        id: 'diferencias',
+        etiqueta: 'Diferencias del mes',
+        valor: diferenciasMes.value.cierres ? `${diferenciasMes.value.monto.isNegative() ? '−' : '+'} ${formatearQuetzales(diferenciasMes.value.monto.abs())}` : formatearQuetzales('0.00'),
+        detalle: `${diferenciasMes.value.cierres} ${diferenciasMes.value.cierres === 1 ? 'cierre' : 'cierres'}`,
+        icono: 'i-lucide-triangle-alert',
+        tono: 'tono-error',
+    },
+])
+
+const pestanas = computed(() => [
+    { label: 'Cierres', value: 'cierres' },
+    { label: 'Depósitos', value: 'depositos', badge: depositos.value.filter(d => d.estado === 'en_transito').length || undefined },
+    { label: 'Retiros e ingresos', value: 'movimientos' },
+])
+
+async function cargarResumenes() {
+    const mapa = new Map<number, ResumenTurnoCaja | Problem>()
+    await Promise.all(abiertas.value.map(async (c) => {
+        const resultado = await useCajas().resumen(c.id)
+        mapa.set(c.id, resultado.ok ? resultado.data : resultado.problema)
+    }))
+    resumenes.value = mapa
+}
+
+/** Turnos del mes elegido en cada caja (hasta 10 páginas de 20 por caja). */
+async function cargarCierres() {
+    cargandoCierres.value = true
+    problemaCierres.value = null
+    const leidos: Cierre[] = []
     let fallo: Problem | null = null
-    // Un turno no tiene cientos de egresos; se leen hasta 5 páginas de 200.
-    for (let pagina = 0; pagina < 5; pagina++) {
-        const resultado = await useEgresos().listar({ caja_id: turno.caja_id, turno_id: turno.id, metodo: 'caja', estado: 'registrado', desde: fechaGuatemala(turno.abierto_en), limit: 200 }, cursor)
-        if (!resultado.ok) {
-            fallo = resultado.problema
-            break
+    await Promise.all(cajas.value.map(async (caja) => {
+        let cursor: string | undefined
+        for (let pagina = 0; pagina < 10; pagina++) {
+            const resultado = await useCajas().turnos(caja.id, cursor)
+            if (!resultado.ok) {
+                fallo = resultado.problema
+                return
+            }
+            leidos.push(...resultado.data.data.filter(t => t.cerrado_en).map(t => ({ ...t, caja })))
+            const ultimo = resultado.data.data.at(-1)
+            if (!resultado.data.nextCursor || (ultimo && fechaGuatemala(ultimo.abierto_en).slice(0, 7) < mes.value.slice(0, 7))) {
+                return
+            }
+            cursor = resultado.data.nextCursor
         }
-        leidos.push(...resultado.data.data)
-        if (!resultado.data.nextCursor) {
-            break
-        }
-        cursor = resultado.data.nextCursor
-    }
-    cargandoEgresos.value = false
-    egresos.value = fallo ? [] : leidos
-    problemaEgresos.value = fallo
+    }))
+    cargandoCierres.value = false
+    problemaCierres.value = fallo
+    cierres.value = fallo ? [] : leidos.sort((a, b) => (b.cerrado_en ?? '').localeCompare(a.cerrado_en ?? ''))
 }
 
-/** Depósitos del turno abierto (`turno_id`, hasta 5 páginas de 200). */
 async function cargarDepositos() {
-    const turno = turnoAbierto.value
-    if (!leeDepositos.value || !turno) {
+    if (!puede('cajas.ver') && !puede('bancos.ver')) {
         return
     }
     cargandoDepositos.value = true
-    const leidos: Deposito[] = []
+    const resultado = await useFondosEnTransito().depositos(undefined, undefined, 200)
+    cargandoDepositos.value = false
+    depositos.value = resultado.ok ? resultado.data.data : []
+    problemaDepositos.value = resultado.ok ? null : resultado.problema
+}
+
+async function cargarRetiros() {
+    cargandoRetiros.value = true
+    const resultado = await useEgresos().listar({ metodo: 'caja', desde: `${mes.value.slice(0, 7)}-01`, limit: 200 })
+    cargandoRetiros.value = false
+    retiros.value = resultado.ok ? resultado.data.data : []
+    problemaRetiros.value = resultado.ok ? null : resultado.problema
+}
+
+async function cargarCobradoHoy() {
+    if (!puede('pagos.ver')) {
+        return
+    }
+    let monto = new Decimal(0)
+    let cantidad = 0
     let cursor: string | undefined
-    let fallo: Problem | null = null
-    for (let pagina = 0; pagina < 5; pagina++) {
-        const resultado = await useFondosEnTransito().depositos(undefined, cursor, 200, { turno_id: turno.id })
+    for (let pagina = 0; pagina < 10; pagina++) {
+        const resultado = await usePagos().listar({ desde: hoy, hasta: hoy, limit: 200 }, cursor)
         if (!resultado.ok) {
-            fallo = resultado.problema
-            break
+            problemaCobrado.value = resultado.problema
+            cobradoHoy.value = null
+            return
         }
-        leidos.push(...resultado.data.data)
+        for (const p of resultado.data.data.filter(x => x.estado !== 'anulado')) {
+            monto = monto.plus(p.monto)
+            cantidad++
+        }
         if (!resultado.data.nextCursor) {
             break
         }
         cursor = resultado.data.nextCursor
     }
-    cargandoDepositos.value = false
-    depositos.value = fallo ? [] : leidos
-    problemaDepositos.value = fallo
-}
-
-function alDepositar(deposito: Deposito) {
-    ultimoDeposito.value = deposito
-    toast.add({
-        title: `Depósito de ${formatearQuetzales(deposito.monto)} registrado`,
-        description: `Boleta ${deposito.boleta} a ${deposito.cuenta_nombre}: queda en tránsito hasta conciliar el extracto.`,
-        icon: 'i-lucide-landmark',
-        color: 'success',
-    })
-    void cargarDepositos()
-}
-
-async function cargarTurno() {
-    turnoAbierto.value = null
-    cobros.value = []
-    egresos.value = []
-    depositos.value = []
-    problemaDepositos.value = null
-    ultimoDeposito.value = null
-    problemaEgresos.value = null
-    problemaCobros.value = null
-    problemaTurno.value = null
-    if (!caja.value) {
-        return
-    }
-    cargandoTurno.value = true
-    await historial.recargar()
-    cargandoTurno.value = false
-    problemaTurno.value = historial.problema.value
-    const id = caja.value.turno_abierto_id
-    turnoAbierto.value = id === null ? null : (historial.filas.value.find(t => t.id === id) ?? null)
-    if (turnoAbierto.value) {
-        void cargarCobros(turnoAbierto.value)
-        void cargarEgresos(turnoAbierto.value)
-        void cargarDepositos()
-    }
+    problemaCobrado.value = null
+    cobradoHoy.value = { monto, cantidad }
 }
 
 async function cargar() {
@@ -251,522 +239,604 @@ async function cargar() {
     }
     problema.value = null
     cajas.value = resultado.data
-    await cargarTurno()
+    await Promise.all([cargarResumenes(), cargarCierres(), cargarDepositos(), cargarRetiros(), cargarCobradoHoy()])
 }
 
-async function alCrear(nueva: Caja) {
-    toast.add({ title: 'Caja creada', description: `${nueva.nombre} · ${nombreEmpresa(nueva.empresa_id)}`, icon: 'i-lucide-wallet', color: 'success' })
-    await cargar()
-    cajaId.value = nueva.id
+watch(mes, () => {
+    void cargarCierres()
+    void cargarRetiros()
+})
+
+// Acciones de la caja propia y de la lista
+const aperturaAbierta = ref(false)
+/** La caja que se abre: la propia (acción principal) o la elegida en «Cajas e impresión». */
+const cajaApertura = shallowRef<Caja | null>(null)
+const cierreAbierto = ref(false)
+const cajaCierre = shallowRef<Caja | null>(null)
+const depositoAbierto = ref(false)
+const altaAbierta = ref(false)
+const administrarAbierto = ref(false)
+const retiroAbierto = ref(false)
+const categorias = shallowRef<CategoriaEgresoApi[]>([])
+
+function abrirApertura(caja: Caja) {
+    cajaApertura.value = caja
+    aperturaAbierta.value = true
 }
+
+function abrirCierre(caja: Caja) {
+    cajaCierre.value = caja
+    cierreAbierto.value = true
+}
+
+async function abrirRetiro() {
+    if (!categorias.value.length) {
+        const resultado = await useEgresos().categorias()
+        categorias.value = resultado.ok ? resultado.data : []
+    }
+    retiroAbierto.value = true
+}
+
+const opcionesDeposito = computed(() => abiertas.value.map(caja => ({ caja, efectivo: resumenDe(caja.id) ? new Decimal(resumenDe(caja.id)?.esperado ?? '0') : null })))
 
 function alAbrir(turno: TurnoCaja) {
-    ultimoCierre.value = null
-    toast.add({ title: 'Turno abierto', description: `Fondo inicial ${formatearQuetzales(turno.fondo_inicial)}`, icon: 'i-lucide-lock-open', color: 'success' })
+    toast.add({ title: 'Caja abierta', description: `Fondo inicial ${formatearQuetzales(turno.fondo_inicial)}`, icon: 'i-lucide-lock-open', color: 'success' })
+    void miCaja.refrescar()
     void cargar()
 }
 
 function alCerrar(turno: TurnoCaja) {
-    ultimoCierre.value = turno
     toast.add({
-        title: 'Turno cerrado',
-        description: turno.diferencia ? etiquetaDiferencia(turno.diferencia) : undefined,
+        title: 'Caja cerrada',
+        description: turno.diferencia ? etiquetaCuadre(turno.diferencia) : undefined,
         icon: 'i-lucide-lock',
         color: colorDiferencia(turno.diferencia) === 'success' ? 'success' : 'warning',
     })
     void cargar()
 }
 
-watch(cajaId, (nuevo, anterior) => {
-    if (nuevo !== anterior) {
-        ultimoCierre.value = null
-        void cargarTurno()
-    }
-})
+function alDepositar(deposito: Deposito) {
+    toast.add({ title: `Depósito de ${formatearQuetzales(deposito.monto)} registrado`, description: `Boleta ${deposito.boleta} a ${deposito.cuenta_nombre}: queda en tránsito hasta conciliar el estado de cuenta.`, icon: 'i-lucide-landmark', color: 'success' })
+    void cargar()
+}
 
-onMounted(cargar)
+function alRetirar(egreso: Egreso) {
+    toast.add({ title: `Retiro de ${formatearQuetzales(egreso.monto)} registrado`, description: egreso.descripcion ?? undefined, icon: 'i-lucide-banknote', color: 'success' })
+    void cargar()
+}
+
+async function alCrear(nueva: Caja) {
+    toast.add({ title: 'Caja creada', description: `${nueva.nombre} · ${nombreEmpresa(nueva.empresa_id)}`, icon: 'i-lucide-wallet', color: 'success' })
+    await cargar()
+}
+
+const itemsMas = computed<DropdownMenuItem[][]>(() => [[
+    ...(puede('cajas.depositar') ? [{ label: 'Registrar depósito', icon: 'i-lucide-landmark', onSelect: () => { depositoAbierto.value = true } }] : []),
+    ...(puede('egresos.registrar') ? [{ label: 'Registrar retiro', icon: 'i-lucide-banknote-arrow-down', onSelect: () => { void abrirRetiro() } }] : []),
+    { label: 'Cajas e impresión', icon: 'i-lucide-settings-2', onSelect: () => { administrarAbierto.value = true } },
+    ...(puede('cajas.crear') ? [{ label: 'Nueva caja', icon: 'i-lucide-plus', onSelect: () => { altaAbierta.value = true } }] : []),
+]])
+
+// Tabla de cierres
+const columnasCierres: TableColumn<Cierre>[] = [
+    { accessorKey: 'id', header: 'Corte' },
+    { id: 'caja', header: 'Caja y cajero' },
+    { accessorKey: 'cerrado_en', header: 'Cerrada', meta: SOLO_ANCHO },
+    { accessorKey: 'esperado', header: 'Debe haber', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'contado', header: 'Efectivo', meta: SOLO_ANCHO },
+    { accessorKey: 'diferencia', header: 'Cuadre' },
+    { id: 'deposito', header: 'Depósito', meta: SOLO_ESCRITORIO },
+    { id: 'acciones', header: '', meta: { class: { td: 'w-0 text-right' } } },
+]
+
+const imprimiendo = shallowRef<{ cierre: Cierre, formato: FormatoImpresion } | null>(null)
+async function imprimir(cierre: Cierre, formato: FormatoImpresion = impresion.formatoDe(cierre.caja_id)) {
+    imprimiendo.value = { cierre, formato }
+    await nextTick()
+    window.print()
+    imprimiendo.value = null
+}
+
+const menuFila = useMenuFila<Cierre>(cierre => [
+    { etiqueta: 'Imprimir corte', icono: ICONOS.imprimir, alElegir: () => { void imprimir(cierre) } },
+    { etiqueta: 'Imprimir en carta', icono: 'i-lucide-file-text', alElegir: () => { void imprimir(cierre, 'carta') }, soloMenu: true },
+    ...(puede('pagos.ver') ? [{ etiqueta: 'Ver cobros del turno', icono: 'i-lucide-list', to: `/pagos?caja=${cierre.caja_id}&desde=${fechaGuatemala(cierre.abierto_en)}&hasta=${cierre.cerrado_en ? fechaGuatemala(cierre.cerrado_en) : hoy}`, soloMenu: true }] : []),
+])
+
+function exportar() {
+    const filas = [['Corte', 'Caja', 'Cajero', 'Abierta', 'Cerrada', 'Fondo', 'Debe haber', 'Contado', 'Diferencia', 'Motivo']]
+    for (const c of cierresFiltrados.value) {
+        filas.push([String(c.id), c.caja.nombre, c.cerrado_por_nombre ?? c.abierto_por_nombre ?? '', formatearFechaHora(c.abierto_en), c.cerrado_en ? formatearFechaHora(c.cerrado_en) : '', c.fondo_inicial, c.esperado ?? '', c.contado ?? '', c.diferencia ?? '', c.motivo ?? ''])
+    }
+    const csv = filas.map(f => f.map(v => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n')
+    const enlace = document.createElement('a')
+    enlace.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
+    enlace.download = `cierres-${mes.value.slice(0, 7)}.csv`
+    enlace.click()
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 10_000)
+}
+
+const columnasDepositos: TableColumn<Deposito>[] = [
+    { accessorKey: 'id', header: 'Depósito' },
+    { accessorKey: 'fecha', header: 'Fecha', meta: SOLO_ANCHO },
+    { accessorKey: 'cuenta_nombre', header: 'Cuenta', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'boleta', header: 'Boleta', meta: SOLO_ANCHO },
+    { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'text-right', td: 'text-right' } } },
+    { accessorKey: 'estado', header: 'Estado' },
+]
+
+const columnasRetiros: TableColumn<Egreso>[] = [
+    { accessorKey: 'fecha', header: 'Fecha' },
+    { id: 'tipo', header: 'Tipo', meta: SOLO_ANCHO },
+    { accessorKey: 'descripcion', header: 'Motivo y quién' },
+    { accessorKey: 'caja_nombre', header: 'Caja', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'text-right', td: 'text-right' } } },
+]
+
+onMounted(() => {
+    void miCaja.cargar()
+    void cargar()
+})
 </script>
 
 <template>
     <PanelPagina
         id="caja"
-        titulo="Caja"
+        titulo="Cajas"
         icono="i-lucide-wallet"
+        sin-descripcion
     >
         <template #acciones>
-            <UButton
-                v-if="puede('cajas.crear')"
-                icon="i-lucide-plus"
-                label="Nueva caja"
+            <UTabs
+                v-model="pestana"
+                :items="pestanas"
+                :content="false"
                 color="neutral"
-                variant="outline"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nueva caja"
-                data-prueba="nueva-caja"
-                @click="altaAbierta = true"
+                variant="pill"
+                class="max-sm:w-full"
+                :ui="{ list: 'rounded-xl bg-(--ax-panel) p-1', trigger: 'rounded-lg px-4 data-[state=active]:bg-(--ax-tarjeta) data-[state=active]:text-primary data-[state=active]:shadow-sm max-sm:flex-1', trailingBadge: 'bg-warning/15 text-warning' }"
+                aria-label="Vista de cajas"
+                data-prueba="pestanas-cajas"
             />
             <UButton
-                v-if="caja && caja.turno_abierto_id === null && puede('cajas.abrir')"
-                icon="i-lucide-lock-open"
+                v-if="propia && propia.turno_abierto_id !== null && puede('cajas.cerrar')"
+                label="Cerrar caja"
+                icon="i-lucide-lock"
+                class="glow-brand rounded-full"
+                data-prueba="cerrar-caja"
+                @click="abrirCierre(propia)"
+            />
+            <UButton
+                v-else-if="propia && puede('cajas.abrir')"
                 label="Abrir caja"
-                class="glow-brand"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Abrir caja"
+                icon="i-lucide-lock-open"
+                color="success"
+                class="rounded-full"
                 data-prueba="abrir-caja-barra"
-                @click="aperturaAbierta = true"
+                @click="abrirApertura(propia)"
             />
-            <UButton
-                v-if="puede('pagos.registrar')"
-                to="/cobro"
-                icon="i-lucide-hand-coins"
-                label="Cobrar"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Cobrar"
-            />
-        </template>
-
-        <div
-            v-if="cargando && !cajas.length"
-            class="flex flex-col gap-4"
-        >
-            <USkeleton class="h-20 w-full" />
-            <USkeleton class="h-48 w-full" />
-        </div>
-
-        <ProblemaAlerta
-            v-else-if="problema"
-            :problema="problema"
-            :reintentar="cargar"
-            :reintentando="cargando"
-        />
-
-        <UEmpty
-            v-else-if="!cajas.length"
-            icon="i-lucide-wallet"
-            title="No hay cajas"
-            :description="puede('cajas.crear') ? 'Crea la primera caja de esta empresa.' : 'Pide a un administrador que cree una caja.'"
-            :actions="puede('cajas.crear') ? [{ label: 'Nueva caja', icon: 'i-lucide-plus', onClick: () => { altaAbierta = true } }] : []"
-        />
-
-        <div
-            v-else
-            class="flex flex-col gap-6"
-        >
-            <div
-                class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-                role="radiogroup"
-                aria-label="Caja"
+            <UDropdownMenu
+                :items="itemsMas"
+                :content="{ align: 'end' }"
             >
                 <UButton
-                    v-for="c in cajas"
-                    :key="c.id"
-                    role="radio"
-                    :aria-checked="c.id === cajaId"
-                    :color="c.id === cajaId ? 'primary' : 'neutral'"
-                    :variant="c.id === cajaId ? 'soft' : 'outline'"
-                    class="justify-between p-3"
-                    :data-caja="c.id"
-                    @click="cajaId = c.id"
+                    icon="i-lucide-ellipsis"
+                    color="neutral"
+                    variant="outline"
+                    class="rounded-full"
+                    aria-label="Más acciones de cajas"
+                    data-prueba="mas-cajas"
+                />
+            </UDropdownMenu>
+        </template>
+
+        <div class="flex min-h-0 flex-1 flex-col gap-4">
+            <ProblemaAlerta
+                v-if="problema"
+                :problema="problema"
+                :reintentar="cargar"
+                :reintentando="cargando"
+            />
+
+            <template v-else>
+                <div
+                    v-if="pestana === 'cierres'"
+                    class="grid grid-cols-2 gap-3 lg:grid-cols-4"
+                    data-prueba="contadores-cajas"
                 >
-                    <span class="flex flex-col items-start text-left">
-                        <span class="font-medium">{{ c.nombre }}</span>
-                        <span class="text-xs text-muted">{{ c.cajero_id === usuario?.id ? 'Tu caja' : c.cajero_id ? (c.cajero_nombre ?? `Cajero #${c.cajero_id}`) : 'Sin cajero asignado' }}</span>
+                    <div
+                        v-for="c in contadores"
+                        :key="c.id"
+                        class="surface-card flex items-center gap-3 rounded-2xl p-3 sm:p-4"
+                        :data-contador="c.id"
+                    >
                         <span
-                            v-if="variasEmpresas"
-                            class="text-xs text-muted"
-                            :data-empresa-caja="c.empresa_id"
-                        >{{ nombreEmpresa(c.empresa_id) }}</span>
-                    </span>
-                    <UBadge
-                        :label="c.turno_abierto_id ? 'Turno abierto' : 'Cerrada'"
-                        :icon="c.turno_abierto_id ? 'i-lucide-lock-open' : 'i-lucide-lock'"
-                        :color="c.turno_abierto_id ? 'success' : 'neutral'"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </UButton>
-            </div>
-
-            <UAlert
-                v-if="ultimoCierre"
-                :color="colorDiferencia(ultimoCierre.diferencia) === 'success' ? 'success' : 'warning'"
-                variant="subtle"
-                icon="i-lucide-lock"
-                title="Turno cerrado"
-                data-prueba="resultado-cierre"
-            >
-                <template #description>
-                    <p class="tabular-nums">
-                        Esperado {{ formatearQuetzales(ultimoCierre.esperado) }} · contado {{ formatearQuetzales(ultimoCierre.contado) }} ·
-                        <strong>{{ ultimoCierre.diferencia ? etiquetaDiferencia(ultimoCierre.diferencia) : '—' }}</strong>
-                    </p>
-                    <p v-if="ultimoCierre.motivo">
-                        Motivo: {{ ultimoCierre.motivo }}
-                    </p>
-                </template>
-            </UAlert>
-
-            <template v-if="caja">
-                <ProblemaAlerta
-                    v-if="problemaTurno"
-                    :problema="problemaTurno"
-                    :reintentar="cargarTurno"
-                    :reintentando="cargandoTurno"
-                />
-
-                <USkeleton
-                    v-else-if="cargandoTurno"
-                    class="h-40 w-full"
-                />
-
-                <UPageCard
-                    v-else-if="turnoAbierto"
-                    variant="subtle"
-                    data-prueba="turno-abierto"
-                >
-                    <div class="flex flex-col gap-4">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="flex flex-col">
-                                <h2 class="flex items-center gap-2 text-lg font-semibold text-highlighted">
-                                    <UIcon
-                                        name="i-lucide-lock-open"
-                                        class="size-5 text-success"
-                                    />
-                                    {{ caja.nombre }} abierta
-                                </h2>
-                                <p class="text-sm text-muted">
-                                    Turno #{{ turnoAbierto.id }} abierto · desde {{ formatearFechaHora(turnoAbierto.abierto_en) }}
-                                </p>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <UButton
-                                    v-if="puede('cajas.depositar')"
-                                    label="Depositar al banco"
-                                    icon="i-lucide-landmark"
-                                    color="neutral"
-                                    variant="outline"
-                                    data-prueba="abrir-deposito"
-                                    @click="depositoAbierto = true"
-                                />
-                                <UButton
-                                    v-if="puede('cajas.cerrar')"
-                                    label="Cerrar caja"
-                                    class="glow-brand"
-                                    icon="i-lucide-lock"
-                                    @click="cierreAbierto = true"
-                                />
-                            </div>
-                        </div>
-
-                        <dl class="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-                            <DatoFicha
-                                etiqueta="Fondo inicial"
-                                :valor="formatearQuetzales(turnoAbierto.fondo_inicial)"
+                            class="pastilla-icono pastilla-tono size-10 shrink-0 rounded-xl"
+                            :class="c.tono"
+                        >
+                            <UIcon
+                                :name="c.icono"
+                                class="size-5"
                             />
-                            <template v-if="!problemaCobros && !cargandoCobros && puede('pagos.ver')">
-                                <DatoFicha
-                                    etiqueta="Cobros en efectivo"
-                                    :valor="`${efectivo.length}`"
+                        </span>
+                        <span class="flex min-w-0 flex-col">
+                            <span class="truncate text-xs text-muted">{{ c.etiqueta }}</span>
+                            <span class="truncate text-lg font-bold tabular-nums text-highlighted">
+                                <USkeleton
+                                    v-if="cargando"
+                                    class="h-6 w-20"
                                 />
-                                <DatoFicha
-                                    etiqueta="Efectivo cobrado"
-                                    :valor="formatearQuetzales(efectivoCobrado)"
-                                />
-                            </template>
-                            <template v-if="esperado">
-                                <DatoFicha
-                                    etiqueta="Egresos en efectivo"
-                                    :valor="totalEgresos.isZero() ? formatearQuetzales(totalEgresos) : `− ${formatearQuetzales(totalEgresos)}`"
-                                    data-prueba="turno-egresos"
-                                />
-                                <DatoFicha
-                                    etiqueta="Depositado al banco"
-                                    :valor="totalDepositos.isZero() ? formatearQuetzales(totalDepositos) : `− ${formatearQuetzales(totalDepositos)}`"
-                                    data-prueba="turno-depositos"
-                                />
-                                <DatoFicha
-                                    etiqueta="Esperado en caja"
-                                    :valor="formatearQuetzales(esperado)"
-                                    data-prueba="turno-esperado"
-                                />
-                            </template>
-                        </dl>
-                        <ul
-                            v-if="depositosTurno.length"
-                            class="flex flex-col gap-1 text-xs text-muted"
-                            data-prueba="depositos-turno"
-                        >
-                            <li
-                                v-for="deposito in depositosTurno"
-                                :key="deposito.id"
-                                class="flex flex-wrap items-center gap-2"
-                            >
-                                <UIcon
-                                    name="i-lucide-landmark"
-                                    class="size-3.5"
-                                />
-                                <span>Depósito #{{ deposito.id }} · boleta {{ deposito.boleta }} · {{ deposito.cuenta_nombre }} · <strong class="tabular-nums text-default">{{ formatearQuetzales(deposito.monto) }}</strong></span>
-                                <UBadge
-                                    :label="ESTADOS_TRANSITO[deposito.estado].etiqueta"
-                                    :color="ESTADOS_TRANSITO[deposito.estado].color"
-                                    :icon="ESTADOS_TRANSITO[deposito.estado].icono"
-                                    variant="subtle"
-                                    size="sm"
-                                />
-                            </li>
-                        </ul>
-                        <ProblemaAlerta
-                            v-if="problemaDepositos"
-                            :problema="problemaDepositos"
-                            :reintentar="cargarDepositos"
-                            :reintentando="cargandoDepositos"
+                                <template v-else>{{ c.valor }}</template>
+                            </span>
+                            <span class="hidden truncate text-[0.6875rem] text-muted sm:block">{{ c.detalle }}</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Cierres -->
+                <div
+                    v-if="pestana === 'cierres'"
+                    class="surface-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl"
+                >
+                    <div class="flex flex-wrap items-center gap-2 p-3 sm:p-4">
+                        <UButton
+                            label="Todos"
+                            :color="!soloDiferencia ? 'primary' : 'neutral'"
+                            :variant="!soloDiferencia ? 'solid' : 'outline'"
+                            :aria-pressed="!soloDiferencia"
+                            size="sm"
+                            class="rounded-full"
+                            @click="soloDiferencia = false"
                         />
-                        <UAlert
-                            v-if="ultimoDeposito && !leeDepositos"
-                            color="success"
-                            variant="subtle"
-                            icon="i-lucide-landmark"
-                            :title="`Depósito #${ultimoDeposito.id} registrado`"
-                            :description="`${formatearQuetzales(ultimoDeposito.monto)} · boleta ${ultimoDeposito.boleta} · ${ultimoDeposito.cuenta_nombre}. La API lo resta del esperado al cerrar.`"
-                            data-prueba="resultado-deposito"
+                        <UButton
+                            label="Con diferencia"
+                            :color="soloDiferencia ? 'primary' : 'neutral'"
+                            :variant="soloDiferencia ? 'solid' : 'outline'"
+                            :aria-pressed="soloDiferencia"
+                            size="sm"
+                            class="rounded-full"
+                            data-prueba="filtro-diferencia"
+                            @click="soloDiferencia = true"
                         />
-                        <p
-                            v-if="esperado"
-                            class="text-xs text-muted"
-                        >
-                            Esperado provisional: fondo + efectivo cobrado − {{ egresosTurno.length }} {{ egresosTurno.length === 1 ? 'egreso' : 'egresos' }} en efectivo − {{ depositosTurno.length }} {{ depositosTurno.length === 1 ? 'depósito' : 'depósitos' }} al banco del turno. La API calcula el oficial al cerrar.
-                        </p>
-                        <UAlert
-                            v-else-if="sinEsperado"
+                        <USelect
+                            v-model="mes"
+                            :items="itemsMes"
+                            icon="i-lucide-calendar"
+                            size="sm"
+                            aria-label="Mes"
+                            class="w-40"
+                            :ui="{ base: 'rounded-full' }"
+                        />
+                        <USelect
+                            v-model="filtroCaja"
+                            :items="itemsCaja"
+                            size="sm"
+                            aria-label="Caja"
+                            class="w-40"
+                            :ui="{ base: 'rounded-full' }"
+                        />
+                        <span class="flex-1" />
+                        <UButton
+                            label="Exportar"
+                            :icon="ICONOS.exportar"
                             color="neutral"
-                            variant="subtle"
-                            icon="i-lucide-info"
-                            title="Sin esperado provisional"
-                            :description="sinEsperado"
-                            data-prueba="sin-esperado"
+                            variant="outline"
+                            size="sm"
+                            class="rounded-full"
+                            :disabled="!cierresFiltrados.length"
+                            @click="exportar"
                         />
                     </div>
-                </UPageCard>
-
-                <UAlert
-                    v-else-if="caja.turno_abierto_id !== null"
-                    color="warning"
-                    variant="subtle"
-                    icon="i-lucide-circle-alert"
-                    :title="`El turno #${caja.turno_abierto_id} está abierto pero no aparece en la lista de turnos`"
-                    :actions="[{ label: 'Reintentar', icon: 'i-lucide-rotate-cw', color: 'warning', variant: 'outline', onClick: cargar }]"
-                />
-
-                <UPageCard
-                    v-else
-                    variant="subtle"
-                    data-prueba="caja-cerrada"
-                >
-                    <UEmpty
-                        icon="i-lucide-lock"
-                        :title="`${caja.nombre} está cerrada`"
-                        :description="puede('cajas.abrir')
-                            ? 'Para cobrar en efectivo, primero abre la caja con el dinero con el que empiezas (el fondo para dar vuelto).'
-                            : 'Para cobrar en efectivo la caja debe estar abierta. Pide a un supervisor que la abra.'"
-                        variant="naked"
-                        size="lg"
+                    <div
+                        v-if="problemaCierres"
+                        class="p-3 sm:p-4"
                     >
-                        <template #actions>
-                            <UButton
-                                v-if="puede('cajas.abrir')"
-                                label="Abrir caja"
-                                size="lg"
-                                class="glow-brand"
-                                icon="i-lucide-lock-open"
-                                data-prueba="abrir-caja"
-                                @click="aperturaAbierta = true"
-                            />
-                        </template>
-                        <template #footer>
-                            <ol
-                                class="mx-auto grid max-w-xl gap-3 text-left text-sm sm:grid-cols-3"
-                                aria-label="Cómo funciona la caja"
-                            >
-                                <li
-                                    v-for="(pasoCaja, indice) in PASOS_CAJA"
-                                    :key="pasoCaja.titulo"
-                                    class="flex gap-2"
-                                >
-                                    <UBadge
-                                        :label="String(indice + 1)"
-                                        color="neutral"
-                                        variant="soft"
-                                        class="h-6 shrink-0 justify-center rounded-full"
-                                    />
-                                    <span class="flex flex-col">
-                                        <span class="font-medium text-highlighted">{{ pasoCaja.titulo }}</span>
-                                        <span class="text-muted">{{ pasoCaja.detalle }}</span>
-                                    </span>
-                                </li>
-                            </ol>
-                        </template>
-                    </UEmpty>
-                </UPageCard>
-
-                <section
-                    v-if="turnoAbierto && puede('pagos.ver')"
-                    class="flex flex-col gap-2"
-                >
-                    <h3 class="text-sm font-semibold text-highlighted">
-                        Cobros del turno
-                    </h3>
-                    <ProblemaAlerta
-                        v-if="problemaCobros"
-                        :problema="problemaCobros"
-                        :reintentar="() => turnoAbierto && cargarCobros(turnoAbierto)"
-                        :reintentando="cargandoCobros"
-                    />
-                    <UTable
+                        <ProblemaAlerta
+                            :problema="problemaCierres"
+                            :reintentar="cargarCierres"
+                            :reintentando="cargandoCierres"
+                        />
+                    </div>
+                    <UContextMenu
                         v-else
-                        :data="cobros"
-                        tabindex="0"
-                        aria-label="Cobros del turno"
-                        :columns="columnasCobros"
-                        :loading="cargandoCobros"
+                        :items="menuFila.items.value"
                     >
-                        <template #id-cell="{ row }">
-                            <div class="flex flex-col">
-                                <ULink
-                                    :to="`/pagos/${row.original.id}`"
-                                    class="text-sm font-medium text-highlighted hover:text-primary"
-                                >
-                                    Pago #{{ row.original.id }}
-                                </ULink>
-                                <span class="text-xs text-muted">{{ formatearFechaHora(row.original.created_at) }} · {{ ETIQUETAS_METODO[row.original.metodo] }}</span>
-                                <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
-                            </div>
-                        </template>
-                        <template #cliente_id-cell="{ row }">
-                            <span class="text-sm">{{ nombres.nombre(row.original.cliente_id) }}</span>
-                        </template>
-                        <template #monto-cell="{ row }">
-                            <span
-                                class="tabular-nums font-medium"
-                                :class="row.original.estado === 'anulado' ? 'text-muted line-through' : 'text-highlighted'"
-                            >{{ formatearQuetzales(row.original.monto) }}</span>
-                        </template>
-                        <template #estado-cell="{ row }">
-                            <EstadoPagoBadge
-                                :estado="row.original.estado"
-                                size="sm"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-banknote"
-                                title="Sin cobros en este turno"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                </section>
-
-                <section
-                    v-if="!problemaTurno"
-                    class="flex flex-col gap-2"
-                >
-                    <h3 class="text-sm font-semibold text-highlighted">
-                        Turnos de {{ caja.nombre }}
-                    </h3>
-                    <!-- Con scroll horizontal en el teléfono: enfocable para moverlo con el teclado (axe). -->
-                    <UTable
-                        :data="historial.filas.value"
-                        tabindex="0"
-                        :aria-label="`Turnos de ${caja.nombre}`"
-                        :columns="columnasTurnos"
-                        :loading="historial.cargando.value"
-                    >
-                        <template #abierto_en-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm font-medium text-highlighted">Turno #{{ row.original.id }}</span>
-                                <span class="text-xs text-muted">
-                                    {{ formatearFechaHora(row.original.abierto_en) }} → {{ row.original.cerrado_en ? formatearFechaHora(row.original.cerrado_en) : 'abierto' }}
-                                </span>
+                        <UTable
+                            :data="cierresFiltrados"
+                            :columns="columnasCierres"
+                            :loading="cargandoCierres"
+                            sticky
+                            class="min-h-0 flex-1"
+                            :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                            aria-label="Cierres de caja"
+                            data-menu-contextual
+                            data-prueba="tabla-cierres"
+                            @contextmenu="menuFila.alContextmenu"
+                        >
+                            <template #id-cell="{ row }">
+                                <span class="font-mono text-sm">#{{ row.original.id }}</span>
+                            </template>
+                            <template #caja-cell="{ row }">
+                                <div class="flex flex-col">
+                                    <span class="font-semibold text-highlighted">{{ row.original.caja.nombre }}<template v-if="row.original.cerrado_por_nombre ?? row.original.abierto_por_nombre"> · {{ row.original.cerrado_por_nombre ?? row.original.abierto_por_nombre }}</template></span>
+                                    <span
+                                        v-if="variasEmpresas"
+                                        class="text-xs text-muted"
+                                    >{{ nombreEmpresa(row.original.caja.empresa_id) }}</span>
+                                    <span class="text-xs text-muted sm:hidden">{{ formatearFechaCorta(row.original.cerrado_en) }} · {{ formatearQuetzales(row.original.contado) }}</span>
+                                    <span
+                                        v-if="row.original.motivo"
+                                        class="max-w-xs truncate text-xs text-muted"
+                                        :title="row.original.motivo"
+                                    >{{ row.original.motivo }}</span>
+                                </div>
+                            </template>
+                            <template #cerrado_en-cell="{ row }">
+                                <span class="text-muted">{{ row.original.cerrado_en ? `${formatearFechaCorta(row.original.cerrado_en)} ${formatearHora(row.original.cerrado_en)}` : '—' }}</span>
+                            </template>
+                            <template #esperado-cell="{ row }">
+                                <span class="tabular-nums">{{ formatearQuetzales(row.original.esperado) }}</span>
+                            </template>
+                            <template #contado-cell="{ row }">
+                                <span class="tabular-nums">{{ formatearQuetzales(row.original.contado) }}</span>
+                            </template>
+                            <template #diferencia-cell="{ row }">
+                                <UBadge
+                                    v-if="row.original.diferencia !== null"
+                                    :label="etiquetaCuadre(row.original.diferencia)"
+                                    :icon="iconoDiferencia(row.original.diferencia)"
+                                    :color="colorDiferencia(row.original.diferencia)"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="rounded-full"
+                                />
+                            </template>
+                            <template #deposito-cell="{ row }">
+                                <UBadge
+                                    v-if="depositosDe(row.original.id).length"
+                                    :label="`${formatearQuetzales(depositosDe(row.original.id).reduce((s, d) => s.plus(d.monto), new Decimal(0)))} · ${ESTADOS_TRANSITO[depositosDe(row.original.id)[0]!.estado].etiqueta}`"
+                                    :icon="ESTADOS_TRANSITO[depositosDe(row.original.id)[0]!.estado].icono"
+                                    :color="ESTADOS_TRANSITO[depositosDe(row.original.id)[0]!.estado].color"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="rounded-full"
+                                />
                                 <span
-                                    v-if="row.original.motivo"
-                                    class="text-xs whitespace-normal text-muted"
-                                >{{ row.original.motivo }}</span>
-                            </div>
-                        </template>
-                        <template #fondo_inicial-cell="{ row }">
-                            <span class="tabular-nums">{{ formatearQuetzales(row.original.fondo_inicial) }}</span>
-                        </template>
-                        <template #esperado-cell="{ row }">
-                            <span class="tabular-nums">{{ formatearQuetzales(row.original.esperado) }}</span>
-                        </template>
-                        <template #contado-cell="{ row }">
-                            <span class="tabular-nums">{{ formatearQuetzales(row.original.contado) }}</span>
-                        </template>
-                        <template #diferencia-cell="{ row }">
-                            <UBadge
-                                v-if="row.original.diferencia !== null"
-                                :label="etiquetaDiferencia(row.original.diferencia)"
-                                :icon="iconoDiferencia(row.original.diferencia)"
-                                :color="colorDiferencia(row.original.diferencia)"
-                                variant="subtle"
-                                size="sm"
-                            />
-                            <UBadge
-                                v-else
-                                label="Abierto"
-                                icon="i-lucide-lock-open"
-                                color="success"
-                                variant="outline"
-                                size="sm"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-history"
-                                title="Sin turnos todavía"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="historial.pagina.value"
-                        :hay-anterior="historial.hayAnterior.value"
-                        :hay-siguiente="historial.haySiguiente.value"
-                        :cargando="historial.cargando.value"
-                        :filas="historial.filas.value.length"
-                        @anterior="historial.anterior"
-                        @siguiente="historial.siguiente"
-                    />
-                </section>
+                                    v-else
+                                    class="text-xs text-muted"
+                                >Sin depósito</span>
+                            </template>
+                            <template #acciones-cell="{ row }">
+                                <div class="flex items-center justify-end gap-0.5">
+                                    <AccionesFila
+                                        :acciones="menuFila.accionesDe(row.original)"
+                                        :nombre="`corte ${row.original.id}`"
+                                    />
+                                    <UDropdownMenu
+                                        :items="menuFila.itemsDe(row.original)"
+                                        :content="{ align: 'end' }"
+                                    >
+                                        <UButton
+                                            icon="i-lucide-ellipsis"
+                                            color="neutral"
+                                            variant="ghost"
+                                            size="sm"
+                                            :aria-label="`Más acciones del corte ${row.original.id}`"
+                                        />
+                                    </UDropdownMenu>
+                                </div>
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-lock"
+                                    :title="soloDiferencia ? 'Sin cierres con diferencia' : 'Sin cierres en este mes'"
+                                    description="Cada cierre de caja queda aquí con su cuadre."
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                    </UContextMenu>
+                </div>
 
-                <CajaAperturaModal
-                    v-model:open="aperturaAbierta"
-                    :caja="caja"
-                    @hecho="alAbrir"
-                />
-                <CajaDepositoModal
-                    v-if="turnoAbierto && puede('cajas.depositar')"
-                    v-model:open="depositoAbierto"
-                    :caja="caja"
-                    :turno="turnoAbierto"
-                    :efectivo="esperado"
-                    @hecho="alDepositar"
-                />
-                <CajaCierreModal
-                    v-if="turnoAbierto"
-                    v-model:open="cierreAbierto"
-                    :caja="caja"
-                    :turno="turnoAbierto"
-                    :esperado="esperado"
-                    :sin-esperado="sinEsperado"
-                    @hecho="alCerrar"
-                />
+                <!-- Depósitos -->
+                <template v-else-if="pestana === 'depositos'">
+                    <div
+                        class="flex flex-wrap items-center gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-3 sm:p-4"
+                        data-prueba="aviso-por-depositar"
+                    >
+                        <span class="pastilla-icono size-10 bg-warning/15 text-warning">
+                            <UIcon
+                                name="i-lucide-landmark"
+                                class="size-5"
+                            />
+                        </span>
+                        <span class="flex min-w-0 flex-1 flex-col">
+                            <span class="font-bold text-highlighted">{{ efectivoEnCajas ? `${formatearQuetzales(efectivoEnCajas.monto)} en efectivo en las cajas abiertas` : 'No se pudo leer el efectivo de las cajas' }}</span>
+                            <span class="text-xs text-warning">{{ abiertas.map(c => c.nombre).join(' y ') || 'Ninguna caja abierta' }}</span>
+                        </span>
+                        <UButton
+                            v-if="puede('cajas.depositar')"
+                            label="Registrar depósito"
+                            icon="i-lucide-plus"
+                            class="glow-brand rounded-full"
+                            :disabled="!abiertas.length"
+                            data-prueba="abrir-deposito"
+                            @click="depositoAbierto = true"
+                        />
+                    </div>
+                    <div class="surface-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl">
+                        <div
+                            v-if="problemaDepositos"
+                            class="p-3 sm:p-4"
+                        >
+                            <ProblemaAlerta
+                                :problema="problemaDepositos"
+                                :reintentar="cargarDepositos"
+                                :reintentando="cargandoDepositos"
+                            />
+                        </div>
+                        <UTable
+                            v-else
+                            :data="depositos"
+                            :columns="columnasDepositos"
+                            :loading="cargandoDepositos"
+                            sticky
+                            class="min-h-0 flex-1"
+                            :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                            aria-label="Depósitos al banco"
+                            data-prueba="tabla-depositos"
+                        >
+                            <template #id-cell="{ row }">
+                                <div class="flex flex-col">
+                                    <span class="font-mono text-sm">#{{ row.original.id }}</span>
+                                    <span class="text-xs text-muted">{{ row.original.caja_nombre }}</span>
+                                </div>
+                            </template>
+                            <template #fecha-cell="{ row }">
+                                <span class="text-muted">{{ formatearFechaCorta(row.original.fecha) }}</span>
+                            </template>
+                            <template #boleta-cell="{ row }">
+                                <span class="font-mono text-sm">{{ row.original.boleta }}</span>
+                            </template>
+                            <template #monto-cell="{ row }">
+                                <span class="font-bold tabular-nums text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <UBadge
+                                    :label="ESTADOS_TRANSITO[row.original.estado].etiqueta"
+                                    :color="ESTADOS_TRANSITO[row.original.estado].color"
+                                    :icon="ESTADOS_TRANSITO[row.original.estado].icono"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="rounded-full"
+                                />
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-landmark"
+                                    title="Sin depósitos"
+                                    description="El efectivo de una caja abierta se deposita con su boleta y queda en tránsito hasta conciliar."
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                    </div>
+                </template>
+
+                <!-- Retiros e ingresos -->
+                <template v-else>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <UButton
+                            v-if="puede('egresos.registrar')"
+                            label="Registrar retiro"
+                            icon="i-lucide-banknote"
+                            color="neutral"
+                            variant="outline"
+                            class="rounded-full"
+                            data-prueba="registrar-retiro"
+                            @click="abrirRetiro"
+                        />
+                        <span class="text-xs text-muted">Cada retiro pide motivo y queda en la bitácora; el cierre lo descuenta.</span>
+                    </div>
+                    <div class="surface-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl">
+                        <div
+                            v-if="problemaRetiros"
+                            class="p-3 sm:p-4"
+                        >
+                            <ProblemaAlerta
+                                :problema="problemaRetiros"
+                                :reintentar="cargarRetiros"
+                                :reintentando="cargandoRetiros"
+                            />
+                        </div>
+                        <UTable
+                            v-else
+                            :data="retiros"
+                            :columns="columnasRetiros"
+                            :loading="cargandoRetiros"
+                            sticky
+                            class="min-h-0 flex-1"
+                            :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                            aria-label="Retiros de efectivo"
+                            data-prueba="tabla-retiros"
+                        >
+                            <template #fecha-cell="{ row }">
+                                <span class="text-muted">{{ formatearFechaCorta(row.original.created_at) }} {{ formatearHora(row.original.created_at) }}</span>
+                            </template>
+                            <template #tipo-cell="{ row }">
+                                <UBadge
+                                    :label="row.original.estado === 'anulado' ? 'Anulado' : 'Retiro'"
+                                    :icon="row.original.estado === 'anulado' ? 'i-lucide-ban' : 'i-lucide-arrow-up-right'"
+                                    :color="row.original.estado === 'anulado' ? 'neutral' : 'error'"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="rounded-full"
+                                />
+                            </template>
+                            <template #descripcion-cell="{ row }">
+                                <span class="whitespace-normal">{{ row.original.descripcion }}<template v-if="row.original.registrado_por_nombre"> · {{ row.original.registrado_por_nombre }}</template></span>
+                            </template>
+                            <template #monto-cell="{ row }">
+                                <span
+                                    class="font-bold tabular-nums"
+                                    :class="row.original.estado === 'anulado' ? 'text-muted line-through' : 'text-highlighted'"
+                                >− {{ formatearQuetzales(row.original.monto) }}</span>
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-banknote"
+                                    title="Sin retiros en este mes"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                    </div>
+                </template>
             </template>
         </div>
+
+        <CajaAperturaModal
+            v-if="cajaApertura && puede('cajas.abrir')"
+            v-model:open="aperturaAbierta"
+            :caja="cajaApertura"
+            @hecho="alAbrir"
+        />
+        <CajaCierreModal
+            v-if="cajaCierre"
+            v-model:open="cierreAbierto"
+            :caja="cajaCierre"
+            @hecho="alCerrar"
+        />
+        <CajaDepositoSlideover
+            v-if="puede('cajas.depositar')"
+            v-model:open="depositoAbierto"
+            :opciones="opcionesDeposito"
+            @hecho="alDepositar"
+        />
+        <EgresoRegistrarModal
+            v-if="puede('egresos.registrar')"
+            v-model:open="retiroAbierto"
+            :categorias="categorias"
+            @hecho="alRetirar"
+        />
+        <CajasAdministrarSlideover
+            v-model:open="administrarAbierto"
+            :cajas="cajas"
+            @abrir="abrirApertura"
+            @cerrar="abrirCierre"
+            @nueva="altaAbierta = true"
+        />
         <CajaCrearModal
             v-if="puede('cajas.crear')"
             v-model:open="altaAbierta"
             @hecho="alCrear"
+        />
+        <CajaCorteImpresion
+            v-if="imprimiendo"
+            :caja="imprimiendo.cierre.caja"
+            :turno="imprimiendo.cierre"
+            :resumen="null"
+            :formato="imprimiendo.formato"
         />
     </PanelPagina>
 </template>

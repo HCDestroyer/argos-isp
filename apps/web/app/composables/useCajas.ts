@@ -2,6 +2,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type Caja = Schema<'Caja'>
 export type TurnoCaja = Schema<'CajaTurno'>
+export type ResumenTurnoCaja = Schema<'ResumenTurnoCaja'>
 export type DatosCierre = paths['/api/v1/cajas/{id}/cerrar']['post']['requestBody']['content']['application/json']
 export type DatosDeposito = paths['/api/v1/cajas/{id}/depositar']['post']['requestBody']['content']['application/json']
 
@@ -60,5 +61,14 @@ export function useCajas() {
         }))
     }
 
-    return { listar, turnos, abrir, cerrar, crear, depositar }
+    /**
+     * `GET /cajas/turno-actual/resumen` (`cajas.ver`): fondo, cobros por método, retiros e ingresos
+     * y lo que debe haber, con la misma regla del cierre. Sin `cajaId`, la caja del usuario. 404
+     * `sin_turno_abierto` si no hay turno abierto.
+     */
+    function resumen(cajaId?: number): Promise<Resultado<ResumenTurnoCaja>> {
+        return resolver(api.GET('/api/v1/cajas/turno-actual/resumen', { params: { query: cajaId ? { caja_id: cajaId } : {} } }))
+    }
+
+    return { listar, turnos, abrir, cerrar, crear, depositar, resumen }
 }

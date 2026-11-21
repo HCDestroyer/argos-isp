@@ -47,11 +47,12 @@ async function enviar(evento: FormSubmitEvent<SalidaTraslado>) {
 </script>
 
 <template>
-    <UModal
+    <USlideover
         v-model:open="abierto"
         title="Trasladar entre bancos"
         description="El dinero sale hoy de la cuenta de origen y queda en tránsito hasta que el extracto del destino lo acredite."
         :dismissible="!enviando"
+        :ui="{ content: 'sm:max-w-lg sm:m-4 sm:rounded-[1.375rem] sm:h-[calc(100dvh-2rem)]' }"
     >
         <template #body>
             <UForm
@@ -148,5 +149,5 @@ async function enviar(evento: FormSubmitEvent<SalidaTraslado>) {
                 />
             </div>
         </template>
-    </UModal>
+    </USlideover>
 </template>
