@@ -7,7 +7,9 @@ import type { BreadcrumbItem, FormSubmitEvent } from '@nuxt/ui'
  * adelantado (hasta 12 periodos futuros) y periodos que el cron no emitió. La vista previa
  * (`facturas.ver`) dice el estado, monto, vencimiento y lo que cubre el saldo a favor; la emisión
  * (`facturas.emitir_periodos`) nunca duplica lo ya emitido o bonificado. Los periodos anteriores al
- * inicio del cobro solo con `facturas.emitir_periodo_anterior` y motivo.
+ * inicio del servicio (hasta 24, pedido del PM del 21 nov) o del cobro solo con
+ * `facturas.emitir_periodo_anterior` y motivo, y vencen desde hoy. Cada periodo cobra el precio
+ * completo (sin prorrateo); con `facturas.editar_monto_periodo` se puede cambiar el monto, con motivo.
  */
 definePageMeta({ permiso: 'facturas.emitir_periodos' })
 
@@ -21,7 +23,8 @@ const vista = shallowRef<PeriodosFacturables | null>(null)
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
-const estado = reactive<{ periodos: string[], motivo: string }>({ periodos: [], motivo: '' })
+const estado = reactive<{ periodos: string[], montos: MontosEditados, motivo: string, tramo: ModoTramo, monto_tramo: string }>({ periodos: [], montos: {}, motivo: '', tramo: 'ninguno', monto_tramo: '' })
+const verAnteriores = ref(false)
 const adelantarMeses = ref(3)
 const enviando = ref(false)
 const problemaEnvio = ref<Problem | null>(null)
@@ -29,6 +32,7 @@ const resultado = shallowRef<FacturasPeriodoEmitidas | null>(null)
 let claveIdempotencia = nuevaClaveIdempotencia()
 
 const conAnteriores = computed(() => puede('facturas.emitir_periodo_anterior'))
+const conEdicion = computed(() => puede('facturas.editar_monto_periodo'))
 const titulo = computed(() => (servicio.value ? etiquetaServicio(servicio.value) : `Servicio #${servicioId.value}`))
 
 useHead(() => ({ title: `Emitir facturas de periodos · ${titulo.value} · ArgosIsp` }))
@@ -40,10 +44,43 @@ const migas = computed<BreadcrumbItem[]>(() => [
 ])
 
 const periodos = computed(() => vista.value?.periodos ?? [])
+const cantidadAnteriores = computed(() => periodos.value.filter(p => p.estado === 'antes_del_inicio').length)
+// Los anteriores al inicio del servicio van plegados: se muestran al pedirlos o si hay uno marcado.
+const periodosVisibles = computed(() => periodos.value.filter(p => verAnteriores.value || p.estado !== 'antes_del_inicio' || estado.periodos.includes(p.periodo)))
 const futurosDisponibles = computed(() => proximosFuturos(periodos.value, Number.POSITIVE_INFINITY).length)
-const eligeAnterior = computed(() => periodos.value.some(p => p.estado === 'antes_de_facturar_desde' && estado.periodos.includes(p.periodo)))
-const esquema = computed(() => esquemaFacturasPeriodo(eligeAnterior.value))
-const resumen = computed(() => (vista.value ? resumenEmision(periodos.value, estado.periodos, vista.value.saldo_a_favor) : null))
+const eligeAnterior = computed(() => periodos.value.some(p => esPeriodoAnterior(p) && estado.periodos.includes(p.periodo)))
+const eligeAntesDelInicio = computed(() => periodos.value.some(p => p.estado === 'antes_del_inicio' && estado.periodos.includes(p.periodo)))
+const hayMontoEditado = computed(() => periodos.value.some(p => estado.periodos.includes(p.periodo) && montoEditado(p, estado.montos) !== null))
+const tramo = computed(() => vista.value?.tramo_inicial ?? null)
+const tramoPendiente = computed(() => (tramo.value && !tramo.value.cobrado_como ? tramo.value : null))
+const conTramo = computed(() => tramoPendiente.value !== null && estado.tramo !== 'ninguno')
+const opcionesTramo = computed(() => {
+    const t = tramoPendiente.value
+    if (!t) {
+        return []
+    }
+    return [
+        { label: 'No cobrarlos', value: 'ninguno' },
+        {
+            label: 'Incluir en la primera factura',
+            description: t.primer_periodo_libre
+                ? `La factura de ${etiquetaPeriodo(t.primer_periodo)} cubre desde el ${formatearFecha(t.desde)}, por el mes completo.`
+                : 'No disponible: la primera factura ya está emitida.',
+            value: 'primera_factura',
+            disabled: !t.primer_periodo_libre,
+        },
+        {
+            label: 'Cobrar como cargo único',
+            description: `Una factura aparte por esos días, que vence el ${formatearFecha(t.vence_cargo)}.`,
+            value: 'cargo_unico',
+        },
+    ]
+})
+const cargoTramo = computed(() => (conTramo.value && estado.tramo === 'cargo_unico' ? (estado.monto_tramo || tramoPendiente.value?.monto_proporcional || null) : null))
+const motivoObligatorio = computed(() => eligeAnterior.value || hayMontoEditado.value || conTramo.value)
+const esquema = computed(() => esquemaFacturasPeriodo(eligeAnterior.value, periodos.value, tramoPendiente.value))
+const resumen = computed(() => (vista.value ? resumenEmision(periodos.value, estado.periodos, vista.value.saldo_a_favor, estado.montos, cargoTramo.value) : null))
+const cantidadDocumentos = computed(() => estado.periodos.length + (cargoTramo.value ? 1 : 0))
 const enlaceFacturas = computed(() => (vista.value ? enlace(`/facturas?cliente=${vista.value.cliente_id}&servicio=${servicioId.value}`) : undefined))
 
 async function cargar() {
@@ -65,6 +102,13 @@ async function cargar() {
     if (respuestaVista.ok) {
         vista.value = respuestaVista.data
         problema.value = null
+        const t = respuestaVista.data.tramo_inicial
+        if (!t || t.cobrado_como || (estado.tramo === 'primera_factura' && !t.primer_periodo_libre)) {
+            estado.tramo = 'ninguno'
+        }
+        if (t && !estado.monto_tramo) {
+            estado.monto_tramo = t.monto_proporcional
+        }
         // Lo marcado que ya no se puede elegir (se emitió mientras tanto) se desmarca.
         estado.periodos = estado.periodos.filter(p => respuestaVista.data.periodos.some(f => f.periodo === p && periodoElegible(f, conAnteriores.value)))
     }
@@ -77,6 +121,26 @@ async function cargar() {
 function marcar(periodo: string, marcado: boolean) {
     const otros = estado.periodos.filter(p => p !== periodo)
     estado.periodos = marcado ? [...otros, periodo].sort() : otros
+    if (!marcado) {
+        const { [periodo]: _quitado, ...resto } = estado.montos
+        estado.montos = resto
+        if (estado.tramo === 'primera_factura' && periodo === tramoPendiente.value?.primer_periodo) {
+            estado.tramo = 'ninguno'
+        }
+    }
+}
+
+/** Incluir el tramo en la primera factura marca ese periodo. */
+function elegirTramo(modo: ModoTramo) {
+    estado.tramo = modo
+    const primero = tramoPendiente.value?.primer_periodo
+    if (modo === 'primera_factura' && primero && !estado.periodos.includes(primero)) {
+        marcar(primero, true)
+    }
+}
+
+function marcado(periodo: string): boolean {
+    return estado.periodos.includes(periodo)
 }
 
 function aplicarAdelanto() {
@@ -86,7 +150,7 @@ function aplicarAdelanto() {
 async function emitirDatos(datos: DatosFacturasPeriodo) {
     enviando.value = true
     problemaEnvio.value = null
-    const respuesta = await useFacturasPeriodo().emitir(servicioId.value, cuerpoFacturasPeriodo(datos), claveIdempotencia)
+    const respuesta = await useFacturasPeriodo().emitir(servicioId.value, cuerpoFacturasPeriodo(datos, periodos.value, tramoPendiente.value), claveIdempotencia)
     enviando.value = false
     if (!respuesta.ok) {
         problemaEnvio.value = problemaEmision(respuesta.problema)
@@ -95,7 +159,10 @@ async function emitirDatos(datos: DatosFacturasPeriodo) {
     resultado.value = respuesta.data
     claveIdempotencia = nuevaClaveIdempotencia()
     estado.periodos = []
+    estado.montos = {}
     estado.motivo = ''
+    estado.tramo = 'ninguno'
+    estado.monto_tramo = ''
     toast.add({
         title: 'Facturas de periodos',
         description: avisoEmision(respuesta.data),
@@ -120,6 +187,10 @@ function reintentarEnvio() {
 
 watch(servicioId, () => {
     estado.periodos = []
+    estado.montos = {}
+    estado.tramo = 'ninguno'
+    estado.monto_tramo = ''
+    verAnteriores.value = false
     resultado.value = null
     void cargar()
 })
@@ -177,8 +248,8 @@ onMounted(cargar)
 
                 <template v-else>
                     <p class="text-sm text-muted">
-                        Elige los periodos que quieres facturar ya: los futuros para cobrar por adelantado (hasta {{ vista.maximo_futuros }}) o los que el sistema no emitió.
-                        Lo ya emitido o bonificado nunca se duplica. Cada factura vence en su fecha normal.
+                        Elige los periodos que quieres facturar ya: los futuros para cobrar por adelantado (hasta {{ vista.maximo_futuros }}), los que el sistema no emitió o, con permiso, los anteriores al inicio del servicio (hasta {{ vista.maximo_anteriores }}).
+                        Cada periodo cobra el mes completo. Lo ya emitido o bonificado nunca se duplica. Los futuros vencen en su fecha normal; los anteriores vencen desde hoy.
                     </p>
 
                     <UCard
@@ -226,6 +297,21 @@ onMounted(cargar)
                                 </span>
                                 <span class="tabular-nums text-muted">
                                     {{ formatearQuetzales(c.total) }} · vence {{ formatearFecha(c.vence_en) }}<template v-if="montoPositivo(c.pagado)"> · {{ formatearQuetzales(c.pagado) }} con saldo a favor</template>
+                                </span>
+                            </li>
+                            <li
+                                v-if="resultado.tramo_inicial?.modo === 'cargo_unico'"
+                                class="flex flex-wrap items-center justify-between gap-2"
+                                data-prueba="resultado-cargo-tramo"
+                            >
+                                <ULink
+                                    :to="enlace(`/facturas/${resultado.tramo_inicial.factura_id}`)"
+                                    class="font-medium text-highlighted hover:text-primary"
+                                >
+                                    Cargo único #{{ resultado.tramo_inicial.factura_id }} · del {{ formatearFecha(resultado.tramo_inicial.desde) }} al {{ formatearFecha(resultado.tramo_inicial.hasta) }}
+                                </ULink>
+                                <span class="tabular-nums text-muted">
+                                    {{ formatearQuetzales(resultado.tramo_inicial.total) }} · vence {{ formatearFecha(resultado.tramo_inicial.vence_en) }}
                                 </span>
                             </li>
                             <li
@@ -300,12 +386,23 @@ onMounted(cargar)
                             name="periodos"
                             label="Periodos"
                         >
+                            <UButton
+                                v-if="cantidadAnteriores > 0"
+                                :label="verAnteriores ? 'Ocultar periodos antes del inicio del servicio' : `Ver ${cantidadAnteriores} periodos antes del inicio del servicio`"
+                                :icon="verAnteriores ? 'i-lucide-chevron-up' : 'i-lucide-history'"
+                                color="neutral"
+                                variant="link"
+                                size="sm"
+                                class="mb-2 px-0"
+                                data-prueba="ver-anteriores"
+                                @click="verAnteriores = !verAnteriores"
+                            />
                             <ul
                                 class="flex flex-col divide-y divide-default rounded-lg border border-default"
                                 data-prueba="lista-periodos"
                             >
                                 <li
-                                    v-for="p in periodos"
+                                    v-for="p in periodosVisibles"
                                     :key="p.periodo"
                                     class="flex items-start gap-3 p-3"
                                     :data-periodo="p.periodo"
@@ -313,7 +410,7 @@ onMounted(cargar)
                                 >
                                     <UCheckbox
                                         v-if="periodoElegible(p, conAnteriores)"
-                                        :model-value="estado.periodos.includes(p.periodo)"
+                                        :model-value="marcado(p.periodo)"
                                         :aria-label="`Emitir ${etiquetaPeriodo(p.periodo)}`"
                                         class="mt-0.5"
                                         :data-prueba="`marcar-${p.periodo}`"
@@ -345,6 +442,13 @@ onMounted(cargar)
                                                 size="sm"
                                             />
                                         </div>
+                                        <span
+                                            v-if="estado.tramo === 'primera_factura' && p.periodo === tramoPendiente?.primer_periodo"
+                                            class="text-xs text-info"
+                                            data-prueba="incluye-tramo"
+                                        >
+                                            Incluye los días desde el {{ formatearFecha(tramoPendiente.desde) }}
+                                        </span>
                                         <span class="text-xs text-muted">
                                             Del {{ formatearFecha(p.periodo) }} al {{ formatearFecha(p.hasta) }}<template v-if="p.prorrateado"> · proporcional, {{ p.dias }} de {{ p.dias_ciclo }} días</template> · vence {{ formatearFecha(p.vence_en) }}
                                         </span>
@@ -363,10 +467,10 @@ onMounted(cargar)
                                             Bonificación #{{ p.bonificacion_id }}
                                         </ULink>
                                         <span
-                                            v-if="p.estado === 'antes_de_facturar_desde' && !conAnteriores"
+                                            v-if="esPeriodoAnterior(p) && !conAnteriores"
                                             class="text-xs text-muted"
                                         >
-                                            Anterior al inicio del cobro: hace falta el permiso «Emitir periodo anterior».
+                                            {{ p.estado === 'antes_del_inicio' ? 'Anterior al inicio del servicio' : 'Anterior al inicio del cobro' }}: hace falta el permiso «Emitir periodo anterior».
                                         </span>
                                         <span
                                             v-if="p.error"
@@ -377,7 +481,35 @@ onMounted(cargar)
                                         </span>
                                     </div>
                                     <div class="flex shrink-0 flex-col items-end gap-0.5 text-right">
-                                        <span class="text-sm font-medium tabular-nums text-highlighted">{{ formatearQuetzales(p.monto) }}</span>
+                                        <UFormField
+                                            v-if="conEdicion && marcado(p.periodo)"
+                                            :name="`montos.${p.periodo}`"
+                                            size="sm"
+                                            :ui="{ error: 'max-w-32 text-right' }"
+                                        >
+                                            <UInput
+                                                v-model="estado.montos[p.periodo]"
+                                                inputmode="decimal"
+                                                :placeholder="p.monto ?? undefined"
+                                                :aria-label="`Monto de ${etiquetaPeriodo(p.periodo)}`"
+                                                class="w-32"
+                                                :ui="{ base: 'text-right tabular-nums' }"
+                                                :data-prueba="`monto-${p.periodo}`"
+                                            >
+                                                <template #leading>
+                                                    <span class="text-xs text-muted">Q</span>
+                                                </template>
+                                            </UInput>
+                                        </UFormField>
+                                        <span
+                                            v-else
+                                            class="text-sm font-medium tabular-nums text-highlighted"
+                                        >{{ formatearQuetzales(p.monto) }}</span>
+                                        <span
+                                            v-if="marcado(p.periodo) && montoEditado(p, estado.montos)"
+                                            class="text-xs text-warning"
+                                            :data-prueba="`monto-editado-${p.periodo}`"
+                                        >calculado {{ formatearQuetzales(p.monto) }}</span>
                                         <span
                                             v-if="p.sera_bonificacion"
                                             class="text-xs text-muted"
@@ -397,21 +529,101 @@ onMounted(cargar)
                         </UFormField>
 
                         <UAlert
+                            v-if="tramo?.cobrado_como"
+                            color="neutral"
+                            variant="subtle"
+                            icon="i-lucide-calendar-check"
+                            title="Días antes del primer periodo ya cobrados"
+                            data-prueba="tramo-cobrado"
+                        >
+                            <template #description>
+                                <span>Del {{ formatearFecha(tramo.desde) }} al {{ formatearFecha(tramo.hasta) }} se cobró {{ COBRO_TRAMO[tramo.cobrado_como] }}.</span>
+                                <ULink
+                                    v-if="tramo.factura_id"
+                                    :to="enlace(`/facturas/${tramo.factura_id}`)"
+                                    class="ms-1 underline"
+                                >
+                                    Ver factura #{{ tramo.factura_id }}
+                                </ULink>
+                            </template>
+                        </UAlert>
+
+                        <div
+                            v-else-if="tramoPendiente"
+                            class="flex flex-col gap-3 rounded-lg border border-default p-3"
+                            data-prueba="tramo-inicial"
+                        >
+                            <div class="flex flex-col gap-1">
+                                <h3 class="text-sm font-medium text-highlighted">
+                                    Días antes del primer periodo
+                                </h3>
+                                <p class="text-sm text-muted">
+                                    El servicio empezó el {{ formatearFecha(tramoPendiente.primer_periodo) }}. Del {{ formatearFecha(tramoPendiente.desde) }} al {{ formatearFecha(tramoPendiente.hasta) }} ({{ tramoPendiente.dias }} {{ tramoPendiente.dias === 1 ? 'día' : 'días' }}) no son de ningún periodo.
+                                </p>
+                            </div>
+                            <p
+                                v-if="!conAnteriores"
+                                class="text-xs text-muted"
+                            >
+                                Para cobrarlos hace falta el permiso «Emitir periodo anterior».
+                            </p>
+                            <template v-else>
+                                <UFormField name="tramo">
+                                    <URadioGroup
+                                        :model-value="estado.tramo"
+                                        :items="opcionesTramo"
+                                        data-prueba="opciones-tramo"
+                                        @update:model-value="elegirTramo($event as ModoTramo)"
+                                    />
+                                </UFormField>
+                                <UFormField
+                                    v-if="estado.tramo === 'cargo_unico'"
+                                    name="monto_tramo"
+                                    label="Monto del cargo"
+                                    :hint="`sugerido ${formatearQuetzales(tramoPendiente.monto_proporcional)}`"
+                                    :description="`Proporcional: ${tramoPendiente.dias} de ${tramoPendiente.dias_ciclo} días del precio del servicio.`"
+                                >
+                                    <UInput
+                                        v-if="conEdicion"
+                                        v-model="estado.monto_tramo"
+                                        inputmode="decimal"
+                                        :placeholder="tramoPendiente.monto_proporcional"
+                                        class="w-40"
+                                        :ui="{ base: 'text-right tabular-nums' }"
+                                        data-prueba="monto-tramo"
+                                    >
+                                        <template #leading>
+                                            <span class="text-xs text-muted">Q</span>
+                                        </template>
+                                    </UInput>
+                                    <span
+                                        v-else
+                                        class="text-sm font-medium tabular-nums text-highlighted"
+                                        data-prueba="monto-tramo-fijo"
+                                    >{{ formatearQuetzales(tramoPendiente.monto_proporcional) }}</span>
+                                </UFormField>
+                            </template>
+                        </div>
+
+                        <UAlert
                             v-if="eligeAnterior"
                             color="warning"
                             variant="subtle"
                             icon="i-lucide-history"
                             title="Excepción a «no cobrar hacia atrás»"
-                            :description="`El sistema factura este servicio desde el ${formatearFecha(vista.facturar_desde)} y nunca cobra hacia atrás. Emitir un periodo anterior es una excepción: escribe el motivo, queda en la factura y en la bitácora.`"
+                            :description="eligeAntesDelInicio
+                                ? 'Vas a cobrar meses de antes del inicio del servicio. Es una excepción: escribe el motivo, queda en la factura y en la bitácora. Estas facturas vencen desde hoy, con los días de gracia de la plantilla, para que el cliente no quede cortado de inmediato.'
+                                : `El sistema factura este servicio desde el ${formatearFecha(vista.facturar_desde)} y nunca cobra hacia atrás. Emitir un periodo anterior es una excepción: escribe el motivo, queda en la factura y en la bitácora. Vence desde hoy, con los días de gracia de la plantilla.`"
                             data-prueba="aviso-anterior"
                         />
 
                         <UFormField
                             name="motivo"
                             label="Motivo"
-                            :required="eligeAnterior"
-                            :hint="eligeAnterior ? undefined : 'Opcional'"
-                            description="Queda guardado en la factura y en la bitácora."
+                            eager-validation
+                            :required="motivoObligatorio"
+                            :hint="motivoObligatorio ? undefined : 'Opcional'"
+                            :description="hayMontoEditado ? 'Cambiaste un monto: explica por qué. Queda guardado en la factura y en la bitácora, con el monto calculado y el cobrado.' : 'Queda guardado en la factura y en la bitácora.'"
                         >
                             <UTextarea
                                 v-model="estado.motivo"
@@ -435,7 +647,7 @@ onMounted(cargar)
                             </p>
                             <template v-else-if="resumen">
                                 <div class="flex justify-between gap-2">
-                                    <span class="text-muted">Total de {{ resumen.cantidad }} {{ resumen.cantidad === 1 ? 'periodo' : 'periodos' }}</span>
+                                    <span class="text-muted">Total de {{ resumen.cantidad }} {{ resumen.cantidad === 1 ? 'factura' : 'facturas' }}</span>
                                     <span
                                         class="tabular-nums text-highlighted"
                                         data-prueba="resumen-total"
@@ -476,10 +688,10 @@ onMounted(cargar)
                             />
                             <UButton
                                 type="submit"
-                                :label="estado.periodos.length ? `Emitir ${estado.periodos.length} ${estado.periodos.length === 1 ? 'factura' : 'facturas'}` : 'Emitir facturas'"
+                                :label="cantidadDocumentos ? `Emitir ${cantidadDocumentos} ${cantidadDocumentos === 1 ? 'factura' : 'facturas'}` : 'Emitir facturas'"
                                 icon="i-lucide-receipt"
                                 :loading="enviando"
-                                :disabled="!estado.periodos.length"
+                                :disabled="!cantidadDocumentos"
                                 class="justify-center"
                                 data-prueba="emitir-periodos"
                             />

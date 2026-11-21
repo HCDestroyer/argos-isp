@@ -62,6 +62,8 @@ export async function crearPlantillaFila(campos: Record<string, unknown> = {}): 
             nombre: await unicoBd('Plantilla', 'billing.plantillas_facturacion'),
             ciclo: 'dia_fijo',
             dia: 1,
+            // `escenario` lo apaga (como las plantillas reales desde el 21 nov); aquí sigue encendido porque
+            // `tests/contabilidad` arma sus servicios con esta fila y cuenta con el prorrateo
             prorrateo: true,
             dias_gracia: 5,
             facturas_para_limitar: 1,
@@ -75,7 +77,9 @@ export async function crearPlantillaFila(campos: Record<string, unknown> = {}): 
 }
 
 export async function escenario(opciones: OpcionesEscenario = {}): Promise<Escenario> {
-    const plantillaId = await crearPlantillaFila(opciones.plantilla)
+    // como las plantillas reales desde el 21 nov (decisión del PM): sin prorrateo; las pruebas del
+    // prorrateo lo piden explícito (`plantilla: { prorrateo: true }`)
+    const plantillaId = await crearPlantillaFila({ prorrateo: false, ...opciones.plantilla })
     const limitada = opciones.limitada ?? 1000
     const planId = await crearPlanFila({
         precio: opciones.precio ?? '150.00',

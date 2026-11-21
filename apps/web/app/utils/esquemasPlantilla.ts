@@ -152,7 +152,8 @@ export function entradaPlantillaVacia(): EntradaPlantilla {
         por_defecto: false,
         ciclo: 'dia_fijo',
         dia: 1,
-        prorrateo: true,
+        // pedido del PM (21 nov): una plantilla nueva cobra el mes completo desde la primera factura
+        prorrateo: false,
         dias_gracia: 0,
         facturas_para_limitar: 1,
         facturas_para_cortar: 1,
