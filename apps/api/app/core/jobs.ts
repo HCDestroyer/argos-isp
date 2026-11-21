@@ -12,6 +12,7 @@ import VencerReservaIp, { reservasIpVencidas } from '#core/actions/vencer_reserv
 import BorrarIdentidadesCliente, {
     clientesConIdentidadVencida,
 } from '#core/actions/borrar_identidades_cliente'
+import { correrJobCron } from '#monitoreo/crons/corridas'
 
 /**
  * Crons del núcleo (A1) con BullMQ. Los atiende `node ace eventos:relay` (proceso de A1 que ya
@@ -209,11 +210,16 @@ export async function ejecutarCronCore(nombre: string, ahora: Date = new Date())
 }
 
 export function crearWorkerCore(opciones: OpcionesColaCore = {}) {
-    const worker = new Worker(NOMBRE_COLA_CORE, (job: Job) => ejecutarCronCore(job.name), {
-        connection: opciones.conexion ?? conexionRedis(),
-        prefix: prefijo(opciones),
-        concurrency: 1,
-    })
+    const worker = new Worker(
+        NOMBRE_COLA_CORE,
+        // corrida anotada en «Tareas programadas» (`core.cron_corridas`)
+        (job: Job) => correrJobCron(NOMBRE_COLA_CORE, job, () => ejecutarCronCore(job.name)),
+        {
+            connection: opciones.conexion ?? conexionRedis(),
+            prefix: prefijo(opciones),
+            concurrency: 1,
+        },
+    )
     worker.on('completed', (job, salida) =>
         logger.debug({ cron: job.name, salida }, 'Cron del núcleo terminado'),
     )

@@ -15,6 +15,7 @@ import { pendientesDeSellar } from '#ledger/sellos'
 import DepreciarActivos from '#ledger/actions/depreciar_activos'
 import AmortizarDiferidos from '#ledger/actions/amortizar_diferidos'
 import { cronAntiguedad, cronVencer } from '#lealtad/jobs'
+import { correrJobCron } from '#monitoreo/crons/corridas'
 
 /**
  * Crons de facturación con BullMQ (`node ace billing:worker`).
@@ -174,11 +175,16 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
 }
 
 export function crearWorkerBilling(opciones: OpcionesColaBilling = {}) {
-    const worker = new Worker(NOMBRE_COLA_BILLING, (job: Job) => ejecutarCron(job.name), {
-        connection: opciones.conexion ?? conexionRedisBilling(),
-        prefix: prefijo(opciones),
-        concurrency: 1,
-    })
+    const worker = new Worker(
+        NOMBRE_COLA_BILLING,
+        // corrida anotada en «Tareas programadas» (`core.cron_corridas`)
+        (job: Job) => correrJobCron(NOMBRE_COLA_BILLING, job, () => ejecutarCron(job.name)),
+        {
+            connection: opciones.conexion ?? conexionRedisBilling(),
+            prefix: prefijo(opciones),
+            concurrency: 1,
+        },
+    )
     worker.on('completed', (job, salida) => {
         logger.debug({ cron: job.name, salida }, 'Cron de billing terminado')
     })

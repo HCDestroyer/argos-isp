@@ -74858,8 +74858,10 @@
                         "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sistema.ejecutar_cron",
                         "sistema.recalcular_almacenamiento",
                         "sistema.ver_almacenamiento",
+                        "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
                         "sorteos.ejecutar",
@@ -75277,8 +75279,10 @@
                         "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sistema.ejecutar_cron",
                         "sistema.recalcular_almacenamiento",
                         "sistema.ver_almacenamiento",
+                        "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
                         "sorteos.ejecutar",
@@ -88449,6 +88453,268 @@
         "x-implementado": true
       }
     },
+    "/api/v1/sistema/crons": {
+      "get": {
+        "operationId": "sistemaCrons",
+        "summary": "Tareas programadas: horario, última y próxima corrida, atrasos y quién las corre",
+        "description": "Todas las tareas del catálogo (`app/monitoreo/crons/catalogo.ts`) con su última corrida (`core.cron_corridas`, o `audit.acciones` antes de esta versión), la próxima (agenda de BullMQ o calculada del horario), si está atrasada (regla de `notificaciones.vigilar_crons`) y qué instancia tiene el lock. Solo lee; sin caché. Si Redis no responde, `avisos` lo dice y la próxima se calcula.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tareas programadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TareasProgramadas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_crons",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_crons",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/crons/{clave}/corridas": {
+      "get": {
+        "operationId": "sistemaCronCorridas",
+        "summary": "Historial de corridas de una tarea programada",
+        "description": "De la más nueva a la más vieja, paginado por cursor. Las corridas programadas seguidas sin cambios van agrupadas en una fila (`repeticiones`). Se guardan 90 días. 404 si la clave no existe.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z_]+\\.[a-z_:]+$",
+              "description": "Clave del cron (`billing.generar`)"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de corridas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorridasCronPagina"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_crons",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_crons",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/crons/{clave}/ejecutar": {
+      "post": {
+        "operationId": "sistemaEjecutarCron",
+        "summary": "Ejecutar ahora una tarea programada",
+        "description": "Encola el job en la cola del cron; lo corre el worker de su módulo con el mismo lock que la corrida programada. Responde 202 en cuanto queda encolada; la corrida aparece en su historial. 409 `en_curso` si ya se está ejecutando o hay otra ejecución esperando; 422 `no_manual` en los procesos continuos y `cron_apagado` si está apagada; 403 si faltan los permisos propios del cron.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z_]+\\.[a-z_:]+$",
+              "description": "Clave del cron (`billing.generar`)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Ejecución encolada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EjecucionCron"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ejecutar_cron; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ejecutar_cron",
+        "x-implementado": true
+      }
+    },
     "/api/v1/sistema/registro": {
       "get": {
         "operationId": "sistemaRegistro",
@@ -89238,8 +89504,10 @@
                             "servidores_pppoe.eliminar",
                             "sesiones.desconectar",
                             "sesiones.ver",
+                            "sistema.ejecutar_cron",
                             "sistema.recalcular_almacenamiento",
                             "sistema.ver_almacenamiento",
+                            "sistema.ver_crons",
                             "sistema.ver_registro",
                             "sistema.ver_salud",
                             "sorteos.ejecutar",
@@ -102595,6 +102863,138 @@
           }
         }
       },
+      "CorridaCron": {
+        "type": "object",
+        "required": [
+          "id",
+          "clave",
+          "origen",
+          "estado",
+          "inicio",
+          "primera",
+          "fin",
+          "duracion_ms",
+          "repeticiones",
+          "resumen",
+          "error",
+          "instancia",
+          "usuario_id",
+          "fuente"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null si sale de la auditoría o del outbox"
+          },
+          "clave": {
+            "type": "string"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "programado",
+              "manual"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "ok",
+              "sin_cambios",
+              "error",
+              "omitido"
+            ],
+            "description": "`omitido`: no corrió porque otra instancia tenía el lock (o no aplicaba). Una corrida que quedó `en_curso` en una instancia que se detuvo sale `error`"
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inicio de la corrida (la última si se agruparon varias)"
+          },
+          "primera": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inicio de la primera corrida agrupada"
+          },
+          "fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "duracion_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "repeticiones": {
+            "type": "integer",
+            "description": "Corridas programadas seguidas sin cambios agrupadas en esta fila"
+          },
+          "resumen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Frase corta: «24 facturas emitidas»"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Mensaje del error, sin secretos"
+          },
+          "instancia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Instancia que la corrió (`ARGOSISP_INSTANCIA` o host:pid)"
+          },
+          "usuario_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Quién pidió «Ejecutar ahora»"
+          },
+          "fuente": {
+            "type": "string",
+            "enum": [
+              "corridas",
+              "auditoria"
+            ]
+          }
+        }
+      },
+      "CorridasCronPagina": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorridaCron"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "CorridasFacturacion": {
         "type": "object",
         "required": [
@@ -106098,6 +106498,33 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EjecucionCron": {
+        "type": "object",
+        "required": [
+          "clave",
+          "job_id",
+          "estado",
+          "encolada_en"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "encolada"
+            ]
+          },
+          "encolada_en": {
             "type": "string",
             "format": "date-time"
           }
@@ -114826,8 +115253,10 @@
           "servidores_pppoe.eliminar",
           "sesiones.desconectar",
           "sesiones.ver",
+          "sistema.ejecutar_cron",
           "sistema.recalcular_almacenamiento",
           "sistema.ver_almacenamiento",
+          "sistema.ver_crons",
           "sistema.ver_registro",
           "sistema.ver_salud",
           "sorteos.ejecutar",
@@ -115137,8 +115566,10 @@
           "Eliminar servidores PPPoE sin servicios",
           "Desconectar sesiones PPPoE",
           "Ver sesiones PPPoE",
+          "Ejecutar ahora una tarea programada (respeta su lock; algunas piden además el permiso de lo que hacen)",
           "Recalcular el almacenamiento a pedido (solo lee y suma; no borra nada)",
           "Ver qué se almacena y cuánto espacio ocupa: carpetas de archivos, base de datos, Redis y discos",
+          "Ver las tareas programadas: horario, última y próxima corrida, atrasos, quién las corre e historial",
           "Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos",
           "Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor",
           "Ejecutar un sorteo y cerrar su acta (con checklist legal completo)",
@@ -130798,8 +131229,10 @@
               "servidores_pppoe.eliminar",
               "sesiones.desconectar",
               "sesiones.ver",
+              "sistema.ejecutar_cron",
               "sistema.recalcular_almacenamiento",
               "sistema.ver_almacenamiento",
+              "sistema.ver_crons",
               "sistema.ver_registro",
               "sistema.ver_salud",
               "sorteos.ejecutar",
@@ -134226,6 +134659,270 @@
                 }
               }
             }
+          }
+        }
+      },
+      "TareaProgramada": {
+        "type": "object",
+        "required": [
+          "clave",
+          "nombre",
+          "modulo",
+          "modulo_nombre",
+          "descripcion",
+          "proceso",
+          "horario",
+          "activo",
+          "manual",
+          "permisos",
+          "estado",
+          "ultima",
+          "ultima_correcta",
+          "proxima",
+          "proxima_fuente",
+          "atrasada",
+          "en_curso",
+          "lock",
+          "nota"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "modulo": {
+            "type": "string"
+          },
+          "modulo_nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "proceso": {
+            "type": "string",
+            "description": "Proceso que la corre (`node ace <proceso>`)"
+          },
+          "horario": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "cada_segundos",
+              "hora",
+              "dia",
+              "zona",
+              "texto"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "cada",
+                  "diario",
+                  "mensual",
+                  "continuo"
+                ]
+              },
+              "cada_segundos": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "hora": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "HH:mm en la zona de `zona`"
+              },
+              "dia": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Día del mes (mensual)"
+              },
+              "zona": {
+                "type": "string"
+              },
+              "texto": {
+                "type": "string",
+                "description": "Para mostrar tal cual: «Cada 5 min», «Todos los días a las 02:15»"
+              }
+            }
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false si está apagada por configuración"
+          },
+          "manual": {
+            "type": "boolean",
+            "description": "Se puede ejecutar a mano"
+          },
+          "permisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permisos para ejecutarla a mano"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "error",
+              "atrasada",
+              "ok",
+              "sin_cambios",
+              "sin_datos",
+              "apagada"
+            ]
+          },
+          "ultima": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorridaCron"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ultima_correcta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "proxima": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "proxima_fuente": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "bullmq",
+              "calculada",
+              null
+            ],
+            "description": "`bullmq`: la agenda real del job scheduler; `calculada`: del horario (Redis no respondió o no está agendada)"
+          },
+          "atrasada": {
+            "type": "boolean"
+          },
+          "en_curso": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "corrida_id",
+              "desde",
+              "instancia",
+              "origen"
+            ],
+            "properties": {
+              "corrida_id": {
+                "type": "integer"
+              },
+              "desde": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "instancia": {
+                "type": "string"
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "programado",
+                  "manual"
+                ]
+              }
+            }
+          },
+          "lock": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "tomado",
+              "dueno",
+              "instancia"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "postgres",
+                  "redis",
+                  "cola"
+                ]
+              },
+              "tomado": {
+                "type": "boolean"
+              },
+              "dueno": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "instancia": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TareasProgramadas": {
+        "type": "object",
+        "required": [
+          "data",
+          "avisos",
+          "generado_en"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TareaProgramada"
+            }
+          },
+          "avisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Fuentes que no se pudieron leer (Redis, locks)"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
