@@ -6,6 +6,7 @@ import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { resolverCodigoReferido } from '#core/referidos'
 import { exigeRequeridos, validarCamposPersonalizados } from '#core/campos_personalizados'
 import { telefonoParaGuardar } from '#core/telefonos'
+import { contactoTitularDe, guardarTelefonos, validarTelefonos } from '#core/contactos'
 
 export interface DatosCliente {
     nombre?: string
@@ -40,6 +41,17 @@ export interface EntradaCrearCliente extends DatosCliente {
      * empresa cuenta. 422 `referido_invalido` si no existe o es del mismo NIT/CUI.
      */
     codigo_referido?: string | null
+    /**
+     * Números adicionales del titular (contrato Iris 0.10.0 §3.2, A44): hasta 4, en E.164. Se
+     * guardan en su contacto titular con `adicional: true` y nunca cuentan como «registrados» (§7.5,
+     * §12.4).
+     */
+    telefonos_adicionales?: Array<{ numero: string; whatsapp?: boolean }>
+    /**
+     * El alta la pidió el token de Iris: un `nit_cui` que manda Iris no vale como `documento` de §7.5
+     * hasta que coincida con una identidad A41 (ajuste ai): queda en `campos_sin_confirmar`.
+     */
+    desdeIris?: boolean
 }
 
 const CAMPOS_DOCUMENTO = ['tipo_documento_fiscal', 'nit_cui', 'pais_fiscal'] as const
@@ -138,8 +150,17 @@ export default class CrearCliente extends DomainAction<EntradaCrearCliente, Clie
     readonly nombre = 'clientes.crear'
 
     protected async handle(input: EntradaCrearCliente, t: Transaccion): Promise<ClienteVista> {
-        const { externo, codigo_referido: codigoReferido, ...datos } = input
+        const {
+            externo,
+            codigo_referido: codigoReferido,
+            telefonos_adicionales: adicionalesEntrada,
+            desdeIris,
+            ...datos
+        } = input
+        // antes de escribir: un número inválido es 422 sin crear nada
+        const adicionales = validarTelefonos(adicionalesEntrada ?? [], true, 'telefonos_adicionales')
         const columnas = await columnasCliente(t, datos)
+        if (desdeIris && columnas.nit_cui) columnas.campos_sin_confirmar = ['nit_cui']
         if (codigoReferido) {
             const referido = await resolverCodigoReferido(t.trx, t.ctx, codigoReferido, columnas)
             columnas.referido_por_id = referido.referido_por_id
@@ -155,6 +176,14 @@ export default class CrearCliente extends DomainAction<EntradaCrearCliente, Clie
         const id = fila!.id
         t.fijarEntidad('cliente', id)
         await vincularExterno(t.trx, 'cliente', id, externo)
+        if (adicionales.length > 0) {
+            // el contacto titular lo crea la base al insertar el cliente (trigger)
+            const titular = await contactoTitularDe(id, t.trx)
+            await guardarTelefonos(t, titular, adicionales)
+            await t.registrarCambios({ tipo: 'contacto_cliente', id: titular }, null, {
+                telefonos: adicionales,
+            })
+        }
         const cliente = await verCliente(id, t.trx)
         // los códigos de referido no son datos del alta (los crea el primer servicio)
         const auditable: Record<string, unknown> = { ...cliente }

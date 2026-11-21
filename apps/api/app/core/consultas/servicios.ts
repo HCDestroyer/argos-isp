@@ -29,6 +29,10 @@ export type TipoConexion = (typeof TIPOS_CONEXION)[number]
 
 export interface ServicioVista {
     id: number
+    /** `S-000412`: automático, único e inmutable (contrato Iris 0.10.0 §3.7, A45) */
+    codigo: string
+    /** opcional, hasta 60 («Casa», «Negocio»); texto del cliente, nunca a logs (A45) */
+    nombre: string | null
     cliente_id: number
     /** empresa (NIT) que factura el servicio (`core.empresas`) */
     empresa_id: number
@@ -52,6 +56,8 @@ export interface ServicioVista {
     contacto_nombre: string | null
     contacto_telefono: string | null
     coordenadas: string | null
+    /** precisión del GPS de las coordenadas, en metros (Iris 0.10.0 §3.4.6), o null */
+    precision_m: number | null
     fecha_instalacion: string | null
     /** activación de la instalación (inicio de facturación); null mientras está pendiente */
     instalado_en: string | null
@@ -127,6 +133,8 @@ export function precioMensualSql(alias = 's'): string {
 function columnas(cliente: QueryClientContract) {
     return [
         's.id',
+        's.codigo',
+        's.nombre',
         's.cliente_id',
         's.empresa_id',
         's.router_id',
@@ -147,6 +155,7 @@ function columnas(cliente: QueryClientContract) {
         's.contacto_nombre',
         's.contacto_telefono',
         's.coordenadas',
+        's.precision_m',
         cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion`),
         's.instalado_en',
         's.planta',

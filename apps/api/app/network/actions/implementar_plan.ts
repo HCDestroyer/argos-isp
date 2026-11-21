@@ -94,6 +94,15 @@ export default class ImplementarPlan extends DomainAction<EntradaImplementarPlan
         if (campos.length > 0) {
             await t.emit('plan.velocidad_cambiada', { plan_id: planId, router_id: routerId, campos })
         }
+        // contrato Iris 0.10.0 (A40): un router nuevo para el plan cambia dónde se ofrece
+        if (!antes) {
+            await t.emit('catalogo.cambiado', {
+                catalogo: 'plan',
+                id: planId,
+                empresa_id: null,
+                campos: ['routers'],
+            })
+        }
         refrescarAaaAlConfirmar(t, { planId, routerId })
         return despues
     }

@@ -59,7 +59,7 @@ const eventosEstado = (servicioId: number) =>
 test.group('Servicios · pendiente de instalación', (group) => {
     group.setup(limpiarClavesAaa)
 
-    test('alta pendiente: credenciales, IPs y prefijos, sin instalado_en; Redis con estado pendiente', async ({
+    test('alta pendiente: credenciales, sin IP ni prefijos (A38), sin instalado_en; Redis con estado pendiente', async ({
         client,
         assert,
     }) => {
@@ -68,9 +68,10 @@ test.group('Servicios · pendiente de instalación', (group) => {
         assert.equal(s.estado, 'pendiente_instalacion')
         assert.isNull(s.instalado_en)
         assert.isString(s.user_ppp)
-        assert.isString(s.ipv4)
-        assert.isString(s.prefijo_enlace_v6)
-        assert.isString(s.prefijo_delegado_v6)
+        // Iris 0.10.0 §3.4.1: la IP la asigna la activación (o reservar-ip en sitio)
+        assert.isNull(s.ipv4)
+        assert.isNull(s.prefijo_enlace_v6)
+        assert.isNull(s.prefijo_delegado_v6)
 
         const cacheado = await leerRedis(s.user_ppp)
         assert.equal(cacheado?.estado, 'pendiente_instalacion')

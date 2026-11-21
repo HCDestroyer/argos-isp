@@ -43,6 +43,10 @@ const OPCIONALES: Record<string, string[]> = {
         'servidor_pppoe_id',
         'local_address',
         'local_address_derivado',
+        // `codigo`, `nombre` y `precision_m` (21 nov, Iris 0.10.0 A45 y A43): igual, hasta las fixtures
+        'codigo',
+        'nombre',
+        'precision_m',
     ],
     // `coincide_en` solo con el filtro `telefono` (Iris 0.6.0 §7.6)
     Cliente: ['referencia', 'coincide_en'],
@@ -50,7 +54,9 @@ const OPCIONALES: Record<string, string[]> = {
     // obligatorios cuando las fixtures del panel los traigan (fila en `a1.md`); igual
     // `via_token_id` (10 nov, Iris 0.7.0 A23, actuación vinculada)
     AccionAuditoria: ['iris_actor', 'iris_conversacion', 'via_token_id'],
-    Plan: ['warnings'],
+    // `modo` y `routers` (21 nov, Iris 0.10.0 A40): la API siempre los envía; hasta las fixtures
+    Plan: ['warnings', 'modo', 'routers'],
+    PlanEfectivo: ['modo', 'routers'],
     // `csrf` solo con la sesión del panel por cookie
     Me: ['csrf'],
     // nuevos el 28 oct (`zona_id`, editar router), el 29 oct (`serial`, `unido_a_id`, routers

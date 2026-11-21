@@ -49,6 +49,8 @@ export interface EntradaEditarServicio {
     user_ppp?: string
     pass_ppp?: string
     mac?: string | null
+    /** nombre del servicio (A45); el `codigo` es inmutable */
+    nombre?: string | null
     direccion?: string | null
     /** cómo llegar, texto libre (pedido A12 de Iris) */
     referencia?: string | null
@@ -81,6 +83,11 @@ export interface EntradaEditarServicio {
      * sale con `motivo: 'union_routers'` (`contratos/routers.md`).
      */
     mismo_equipo?: boolean
+    /**
+     * Solo interno (`servicios.cambiar_plan_pendiente`, contrato Iris 0.10.0 §3.4.5): la orden de Iris
+     * que pidió el cambio; va en `servicio.config_cambiada` (`origen_tipo`/`origen_id`).
+     */
+    origen?: { origen_tipo: string; origen_id: string }
 }
 
 type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
@@ -88,6 +95,7 @@ type CampoDatos = CatalogoEventos['servicio.datos_cambiados']['campos'][number]
 
 /** Datos de ubicación y contacto que emiten `servicio.datos_cambiados` (pedidos A10, A12, A13). */
 export const CAMPOS_DATOS_SERVICIO = [
+    'nombre',
     'direccion',
     'coordenadas',
     'referencia',
@@ -168,6 +176,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             user_ppp: userPppEntrada,
             excepciones: excepcionesEntrada,
             mismo_equipo: mismoEquipo,
+            origen,
             servidor_pppoe_id: servidorEntrada,
             ...datos
         } = input
@@ -329,24 +338,37 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                     routerId === antes.router_id &&
                     asignacionesAntes.ipv4 === null &&
                     plan.dual_stack !== 'v6'))
+        // A38 (Iris 0.10.0): un pendiente sin IP sigue sin IP al editarse (la asigna la activación);
+        // con una reserva o una IP pedida a mano, se reconcilia como siempre
+        const pendienteSinIp =
+            antes.estado === 'pendiente_instalacion' &&
+            asignacionesAntes.ipv4 === null &&
+            asignacionesAntes.prefijo_enlace_v6 === null &&
+            asignacionesAntes.prefijo_delegado_v6 === null &&
+            !ipv4 &&
+            !prefijoEstatico
         // `routers.unir`: las direcciones ya son del router que queda (mismo equipo); no se tocan
-        const asignaciones = mismoEquipo
-            ? asignacionesAntes
-            : await reconciliarAsignaciones(t.trx, {
-                  servicioId: id,
-                  routerId,
-                  plan,
-                  modo,
-                  tipoConexion: tipo,
-                  ipv4: ipv4 ?? undefined,
-                  sinIpv4,
-                  // otro servidor con su red: la IPv4 pasa a esa red (si no se pidió una IP)
-                  redIpv4Id: cambiaServidor && !ipv4 && !sinIpv4 ? servidor?.red_ipv4_id : undefined,
-                  prefijoEstatico,
-                  poolsV6: servidor
-                      ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
-                      : undefined,
-              })
+        const asignaciones =
+            mismoEquipo || pendienteSinIp
+                ? asignacionesAntes
+                : await reconciliarAsignaciones(t.trx, {
+                      servicioId: id,
+                      routerId,
+                      plan,
+                      modo,
+                      tipoConexion: tipo,
+                      ipv4: ipv4 ?? undefined,
+                      sinIpv4,
+                      // otro servidor con su red: la IPv4 pasa a esa red (si no se pidió una IP)
+                      redIpv4Id: cambiaServidor && !ipv4 && !sinIpv4 ? servidor?.red_ipv4_id : undefined,
+                      prefijoEstatico,
+                      poolsV6: servidor
+                          ? {
+                                enlace: servidor.ipv6_pool_enlace_id,
+                                delegacion: servidor.ipv6_pool_delegacion_id,
+                            }
+                          : undefined,
+                  })
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
 
@@ -399,6 +421,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 empresa_id: despues.empresa_id,
                 campos,
                 ...(mismoEquipo ? { motivo: 'union_routers' as const } : {}),
+                ...(origen ? { origen_tipo: origen.origen_tipo, origen_id: origen.origen_id } : {}),
             })
         }
         if (campos.includes('ips') || campos.includes('prefijo_v6')) {
