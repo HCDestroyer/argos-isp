@@ -65,6 +65,7 @@ const migas = computed<BreadcrumbItem[]>(() => {
                 >
                     <template #leading>
                         <UDashboardSidebarCollapse />
+                        <AccesosRapidosBoton />
                         <UDashboardSearchButton
                             v-if="encabezado"
                             label="Buscar…"

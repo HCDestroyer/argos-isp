@@ -22,6 +22,10 @@ A la izquierda, en la computadora; en el teléfono se abre con el botón de tres
 - Un número en una pastilla junto a una sección avisa que hay algo pendiente. Por ejemplo, junto a **Comprobantes**, los que esperan verificación.
 - El botón de la barra de arriba con un cuadro y una flecha deja el menú **compacto**, solo con iconos. El panel lo recuerda para tu usuario.
 
+## Accesos rápidos
+
+El botón del **rayo**, arriba a la izquierda de cada pantalla, abre tus accesos rápidos agrupados por área. Los nueve primeros se abren también con **Alt + 1** a **Alt + 9**. Con **Personalizar** eliges hasta 12 y los ordenas (arrastrando o con las flechas). El **Inicio** muestra los mismos. Si nunca los cambiaste, ves los de tu rol (por ejemplo, el cajero: Cobrar, Caja, Clientes y Comprobantes).
+
 ## El buscador
 
 **Buscar…** en la barra de arriba o las teclas **Ctrl + K** (**Cmd + K** en Mac) abren el buscador de secciones. Escribe parte del nombre («caja», «facturas», «routers») y pulsa Enter. Solo muestra las secciones que puedes abrir.

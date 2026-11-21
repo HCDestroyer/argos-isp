@@ -111,6 +111,10 @@ const rapidos = computed(() => [
     { etiqueta: 'Comprobantes', icono: 'i-lucide-file-check-2', to: enlace('/comprobantes') },
 ].filter((acceso): acceso is { etiqueta: string, icono: string, to: string } => acceso.to !== undefined))
 
+/** Los mismos accesos rápidos de la barra superior (rayo), también aquí. */
+const accesosRapidos = useAccesosRapidos()
+const personalizandoAccesos = ref(false)
+
 async function cargar() {
     void cargarPagos()
     if (!verTablero.value) {
@@ -203,6 +207,58 @@ onMounted(cargar)
                         />
                     </div>
                 </div>
+            </section>
+
+            <section
+                v-if="accesosRapidos.accesos.value.length"
+                class="flex flex-col gap-3"
+                aria-labelledby="titulo-accesos-rapidos"
+                data-prueba="inicio-accesos-rapidos"
+            >
+                <div class="flex items-center justify-between gap-2">
+                    <h3
+                        id="titulo-accesos-rapidos"
+                        class="flex items-center gap-2 text-sm font-semibold text-highlighted"
+                    >
+                        <UIcon
+                            name="i-lucide-zap"
+                            class="size-4 text-primary"
+                        />
+                        Tus accesos rápidos
+                    </h3>
+                    <UButton
+                        label="Personalizar"
+                        icon="i-lucide-sliders-horizontal"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        @click="personalizandoAccesos = true"
+                    />
+                </div>
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+                    <ULink
+                        v-for="(seccion, indice) in accesosRapidos.accesos.value"
+                        :key="seccion.id"
+                        :to="seccion.ruta"
+                        :title="seccion.descripcion"
+                        class="tarjeta-interactiva flex items-center gap-2.5 surface-card px-3 py-2.5 text-sm font-medium text-highlighted"
+                    >
+                        <span class="pastilla-icono tono-marca pastilla-tono size-8">
+                            <UIcon
+                                :name="seccion.icono"
+                                class="size-4"
+                            />
+                        </span>
+                        <span class="flex-1 truncate">{{ seccion.etiqueta }}</span>
+                        <UKbd
+                            v-if="indice < 9"
+                            :value="String(indice + 1)"
+                            size="sm"
+                            class="hidden lg:inline-flex"
+                        />
+                    </ULink>
+                </div>
+                <AccesosRapidosEditor v-model:open="personalizandoAccesos" />
             </section>
 
             <template v-if="verTablero">

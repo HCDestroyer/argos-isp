@@ -429,7 +429,7 @@ onMounted(async () => {
                                 icon="i-lucide-search-x"
                                 :title="hayFiltros ? 'Ningún cliente coincide' : 'Todavía no hay clientes'"
                                 :description="hayFiltros ? 'Prueba con otra búsqueda o quita algún filtro.' : undefined"
-                                :actions="hayFiltros ? [{ label: 'Limpiar filtros', icon: 'i-lucide-filter-x', color: 'neutral', variant: 'subtle', onClick: limpiarFiltros }] : puede('clientes.crear') ? [{ label: 'Crear el primer cliente', icon: 'i-lucide-user-plus', to: '/clientes/nuevo' }] : undefined"
+                                :actions="hayFiltros ? [{ label: 'Limpiar filtros', icon: 'i-lucide-filter-x', color: 'neutral', variant: 'subtle', onClick: limpiarFiltros }] : puede('clientes.crear') && !lista.cargando.value ? [{ label: 'Crear el primer cliente', icon: 'i-lucide-user-plus', to: '/clientes/nuevo' }] : undefined"
                                 variant="naked"
                             />
                         </template>

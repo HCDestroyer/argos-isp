@@ -71,6 +71,15 @@ primario al 10 % y texto primario; las secciones dentro de un grupo llevan viñe
 descripción en tooltip. Contadores en pastilla del primario. En el menú compacto los subgrupos se
 aplanan en el popover. Buscador Ctrl/Cmd+K con todas las secciones permitidas.
 
+## Accesos rápidos
+
+Botón del rayo en la barra superior de todas las pantallas (`AccesosRapidosBoton`): los accesos del
+usuario agrupados por área, con su atajo **Alt+1…9**, y «Personalizar» (`AccesosRapidosEditor`,
+panel lateral: hasta 12, arrastrar con cursor `grab` o flechas). El inicio muestra los mismos
+accesos. De fábrica, los del rol (iguales a los de la API, `contratos/accesos-rapidos.md` §2).
+`useAccesosRapidos` es el único punto de lectura y escritura: hoy en `localStorage` por usuario,
+y pasa a `GET/PUT /api/v1/me/accesos-rapidos` cuando esté en `packages/contracts`.
+
 ## Estructura de página (`PanelPagina`)
 
 - Barra superior de vidrio: plegar menú, buscador «Buscar…» con Ctrl K, empresa, caja, campana de

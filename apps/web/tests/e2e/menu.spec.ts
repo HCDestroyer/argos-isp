@@ -70,3 +70,22 @@ test('menú por bloques: día a día suelto, encabezados y solo el grupo actual 
     await encabezado.locator('[data-prueba="boton-ayuda"]').click()
     await expect(page.locator('[data-prueba="ayuda-manual"]')).toBeVisible()
 })
+
+test('accesos rápidos: el rayo los muestra por área, Alt+número abre uno y se personalizan', async ({ page, isMobile }) => {
+    await entrar(page, 'admin@argos.test')
+    await ir(page, 'Clientes', /\/clientes$/)
+    await page.locator('[data-prueba="accesos-rapidos"]').click()
+    const menuAccesos = page.locator('[data-prueba="menu-accesos-rapidos"]')
+    await expect(menuAccesos.getByRole('link', { name: /Cobrar/ })).toBeVisible()
+    await menuAccesos.locator('[data-prueba="personalizar-accesos"]').click()
+    const editor = page.getByRole('dialog', { name: 'Personalizar accesos rápidos' })
+    // De fábrica (admin): Clientes, Servicios, Cobrar… Se sube «Cobrar» al primer lugar.
+    await editor.getByRole('button', { name: 'Subir Cobrar' }).click()
+    await editor.getByRole('button', { name: 'Subir Cobrar' }).click()
+    await editor.locator('[data-prueba="guardar-accesos"]').click()
+    await expect(editor).toBeHidden()
+    test.skip(isMobile, 'El atajo de teclado es para escritorio')
+    // «Cobrar» quedó primero: Alt+1 lo abre.
+    await page.keyboard.press('Alt+Digit1')
+    await expect(page).toHaveURL(/\/cobro$/)
+})

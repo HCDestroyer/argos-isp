@@ -25,6 +25,28 @@ function actualizarContadores() {
 }
 
 onMounted(actualizarContadores)
+
+/*
+ * Atajos de los accesos rápidos: Alt+1…9 abre el acceso de ese número (por la tecla física, así
+ * también funciona en Mac, donde Alt+número escribe otro carácter). Nunca dentro de un campo.
+ */
+const accesosRapidos = useAccesosRapidos()
+function alTeclearAcceso(evento: KeyboardEvent) {
+    if (!evento.altKey || evento.ctrlKey || evento.metaKey || !/^Digit[1-9]$/.test(evento.code)) {
+        return
+    }
+    const objetivo = evento.target as HTMLElement | null
+    if (objetivo?.closest('input, textarea, select, [contenteditable="true"]')) {
+        return
+    }
+    const seccion = accesosRapidos.accesos.value[Number(evento.code.slice(5)) - 1]
+    if (seccion) {
+        evento.preventDefault()
+        void navigateTo(seccion.ruta)
+    }
+}
+onMounted(() => window.addEventListener('keydown', alTeclearAcceso))
+onBeforeUnmount(() => window.removeEventListener('keydown', alTeclearAcceso))
 // Otra empresa activa: los pendientes de verificar son otros.
 watch(useEmpresaActiva().eleccion, actualizarContadores)
 
