@@ -38,6 +38,8 @@ interface Nodo {
 type Alineacion = 'left' | 'center' | 'right' | 'justify'
 
 interface Estilo {
+    /** tamaño base del formato (los encabezados se miden contra él) */
+    base: number
     negrita: boolean
     cursiva: boolean
     tamano: number
@@ -73,13 +75,53 @@ const BLOQUES = new Set([
     'html',
 ])
 
-const BASE: Estilo = { negrita: false, cursiva: false, tamano: 10, color: '#111827', alinear: 'left' }
-const TENUE = '#6b7280'
-const BORDE = '#d1d5db'
-const FONDO_TH = '#f3f4f6'
-const MARGEN = 48
-const RELLENO = 4
 const INTERLINEA = 1.5
+
+/** Formato de página de una plantilla: carta (la de siempre) o rollo térmico de 80 mm. */
+export type FormatoPdf = 'carta' | 'pos_80'
+
+const MM = 72 / 25.4
+
+/** Alto máximo de una página de rollo: 200 pulgadas, el límite de los lectores de PDF. */
+const ALTO_MAXIMO_ROLLO = 14400
+
+interface Diseno {
+    /** ancho de la página en pt; `alto` null = rollo continuo (el alto sale del contenido) */
+    ancho: number
+    alto: number | null
+    margen: number
+    base: Estilo
+    tenue: string
+    borde: string
+    /** fondo gris de los encabezados de tabla (no en térmica: sale como un bloque tramado) */
+    fondoTh: string | null
+    relleno: number
+}
+
+const DISENOS: Record<FormatoPdf, Diseno> = {
+    carta: {
+        ancho: 612,
+        alto: 792,
+        margen: 48,
+        base: { base: 10, negrita: false, cursiva: false, tamano: 10, color: '#111827', alinear: 'left' },
+        tenue: '#6b7280',
+        borde: '#d1d5db',
+        fondoTh: '#f3f4f6',
+        relleno: 4,
+    },
+    // 80 mm de papel (72 mm imprimibles en la mayoría de impresoras): márgenes de 3 mm, letra de
+    // 8 pt y todo en negro puro; la térmica no imprime grises ni fondos de forma legible.
+    pos_80: {
+        ancho: 80 * MM,
+        alto: null,
+        margen: 3 * MM,
+        base: { base: 8, negrita: false, cursiva: false, tamano: 8, color: '#000000', alinear: 'left' },
+        tenue: '#000000',
+        borde: '#000000',
+        fondoTh: null,
+        relleno: 2,
+    },
+}
 
 export function parsearHtml(html: string): Nodo {
     const raiz: Nodo = { tag: 'raiz', attrs: {}, hijos: [] }
@@ -113,18 +155,18 @@ function clases(nodo: Nodo): Set<string> {
 }
 
 /** Estilo del nodo a partir del heredado, su etiqueta, sus clases y su `style`. */
-function estiloDe(nodo: Nodo, heredado: Estilo): Estilo {
+function estiloDe(nodo: Nodo, heredado: Estilo, tenue: string): Estilo {
     const e: Estilo = { ...heredado }
     switch (nodo.tag) {
         case 'h1':
-            Object.assign(e, { negrita: true, tamano: 18 })
+            Object.assign(e, { negrita: true, tamano: e.base * 1.8 })
             break
         case 'h2':
-            Object.assign(e, { negrita: true, tamano: 14 })
+            Object.assign(e, { negrita: true, tamano: e.base * 1.4 })
             break
         case 'h3':
         case 'h4':
-            Object.assign(e, { negrita: true, tamano: 11.5 })
+            Object.assign(e, { negrita: true, tamano: e.base * 1.15 })
             break
         case 'strong':
         case 'b':
@@ -142,7 +184,7 @@ function estiloDe(nodo: Nodo, heredado: Estilo): Estilo {
     const c = clases(nodo)
     if (c.has('derecha')) e.alinear = 'right'
     if (c.has('centro')) e.alinear = 'center'
-    if (c.has('tenue')) e.color = TENUE
+    if (c.has('tenue')) e.color = tenue
     if (c.has('negrita')) e.negrita = true
     if (c.has('grande')) e.tamano = e.tamano * 1.3
     if (nodo.attrs.align && ['left', 'center', 'right', 'justify'].includes(nodo.attrs.align)) {
@@ -186,7 +228,7 @@ function aWinAnsi(texto: string): string {
 }
 
 /** Tramos de texto en línea de `nodo` (los bloques internos se separan con salto de línea). */
-function tramos(nodo: Nodo, estilo: Estilo, salida: Tramo[] = []): Tramo[] {
+function tramos(nodo: Nodo, estilo: Estilo, tenue: string, salida: Tramo[] = []): Tramo[] {
     for (const hijo of nodo.hijos) {
         if (typeof hijo === 'string') {
             salida.push({ texto: hijo.replace(/\s+/g, ' '), estilo })
@@ -197,12 +239,12 @@ function tramos(nodo: Nodo, estilo: Estilo, salida: Tramo[] = []): Tramo[] {
             salida.push({ texto: '\n', estilo })
             continue
         }
-        const interno = estiloDe(hijo, estilo)
+        const interno = estiloDe(hijo, estilo, tenue)
         const bloque = BLOQUES.has(hijo.tag)
         if (bloque && salida.length > 0 && !salida.at(-1)!.texto.endsWith('\n')) {
             salida.push({ texto: '\n', estilo })
         }
-        tramos(hijo, interno, salida)
+        tramos(hijo, interno, tenue, salida)
         if (bloque) salida.push({ texto: '\n', estilo })
     }
     return salida
@@ -237,8 +279,20 @@ type Doc = InstanceType<typeof PDFDocument>
 class Renderizador {
     constructor(
         private readonly doc: Doc,
+        private readonly diseno: Diseno,
         private readonly imagenes: Record<string, ImagenPdf> = {},
     ) {}
+
+    /** Páginas que se agregaron por contenido largo (el rollo se mide con una sola). */
+    saltos = 0
+
+    private estilo(nodo: Nodo, heredado: Estilo): Estilo {
+        return estiloDe(nodo, heredado, this.diseno.tenue)
+    }
+
+    private tramos(nodo: Nodo, estilo: Estilo, salida: Tramo[] = []): Tramo[] {
+        return tramos(nodo, estilo, this.diseno.tenue, salida)
+    }
 
     /** `<img src="clave">` del mapa de imágenes, como bloque; lo demás se ignora. */
     imagen(nodo: Nodo, x: number, ancho: number): void {
@@ -374,6 +428,7 @@ class Renderizador {
     saltoSiHaceFalta(alto: number): void {
         if (this.doc.y + alto > this.limiteInferior) {
             this.doc.addPage()
+            this.saltos += 1
             this.doc.y = this.doc.page.margins.top
         }
     }
@@ -403,9 +458,9 @@ class Renderizador {
                 enLinea.push({ texto: '\n', estilo })
                 continue
             }
-            const interno = estiloDe(hijo, estilo)
+            const interno = this.estilo(hijo, estilo)
             if (!BLOQUES.has(hijo.tag)) {
-                tramos({ tag: 'span', attrs: {}, hijos: [hijo] }, estilo, enLinea)
+                this.tramos({ tag: 'span', attrs: {}, hijos: [hijo] }, estilo, enLinea)
                 continue
             }
             vaciar()
@@ -417,7 +472,7 @@ class Renderizador {
                         .moveTo(x, this.doc.y)
                         .lineTo(x + ancho, this.doc.y)
                         .lineWidth(0.75)
-                        .strokeColor(BORDE)
+                        .strokeColor(this.diseno.borde)
                         .stroke()
                     this.doc.y += 8
                     break
@@ -447,7 +502,7 @@ class Renderizador {
             if (typeof item === 'string' || item.tag !== 'li') continue
             numero += 1
             const marca = nodo.tag === 'ol' ? `${numero}. ` : '• '
-            const contenido = tramos(item, estiloDe(item, estilo))
+            const contenido = this.tramos(item, this.estilo(item, estilo))
             this.saltoSiHaceFalta(this.medir(contenido, ancho - 14))
             const y = this.doc.y
             this.escribir([{ texto: marca, estilo }], x, y, 14)
@@ -495,35 +550,43 @@ class Renderizador {
                 const span = Math.max(1, Number(celda.attrs.colspan) || 1)
                 const cx = x + anchos.slice(0, columna).reduce((a, b) => a + b, 0)
                 const cAncho = anchos.slice(columna, columna + span).reduce((a, b) => a + b, 0)
-                const cEstilo = estiloDe(celda, estilo)
+                const cEstilo = this.estilo(celda, estilo)
                 celdas.push({
                     nodo: celda,
                     x: cx,
                     ancho: cAncho,
-                    contenido: tramos(celda, cEstilo),
+                    contenido: this.tramos(celda, cEstilo),
                     estilo: cEstilo,
                 })
                 columna += span
             }
+            const relleno = this.diseno.relleno
             const alto =
-                Math.max(14, ...celdas.map((c) => this.medir(c.contenido, c.ancho - RELLENO * 2))) +
-                RELLENO * 2
+                Math.max(
+                    estilo.base * 1.4,
+                    ...celdas.map((c) => this.medir(c.contenido, c.ancho - relleno * 2)),
+                ) +
+                relleno * 2
             this.saltoSiHaceFalta(alto)
             const y = this.doc.y
             const encabezado = fila.seccion === 'thead' || fila.celdas.every((c) => c.tag === 'th')
-            if (encabezado && !sinBorde) {
-                this.doc.rect(x, y, ancho, alto).fill(FONDO_TH)
+            if (encabezado && !sinBorde && this.diseno.fondoTh) {
+                this.doc.rect(x, y, ancho, alto).fill(this.diseno.fondoTh)
             }
             for (const celda of celdas) {
                 this.escribir(
                     celda.contenido,
-                    celda.x + RELLENO,
-                    y + RELLENO,
-                    celda.ancho - RELLENO * 2,
+                    celda.x + relleno,
+                    y + relleno,
+                    celda.ancho - relleno * 2,
                     celda.estilo.alinear,
                 )
                 if (conBorde) {
-                    this.doc.rect(celda.x, y, celda.ancho, alto).lineWidth(0.5).strokeColor(BORDE).stroke()
+                    this.doc
+                        .rect(celda.x, y, celda.ancho, alto)
+                        .lineWidth(0.5)
+                        .strokeColor(this.diseno.borde)
+                        .stroke()
                 }
             }
             if (!conBorde && !sinBorde) {
@@ -531,7 +594,7 @@ class Renderizador {
                     .moveTo(x, y + alto)
                     .lineTo(x + ancho, y + alto)
                     .lineWidth(0.5)
-                    .strokeColor(BORDE)
+                    .strokeColor(this.diseno.borde)
                     .stroke()
             }
             this.doc.x = x
@@ -570,13 +633,20 @@ export interface OpcionesPdf {
     comprimir?: boolean
     /** imágenes que la plantilla puede dibujar con `<img src="clave">` (el logo de la empresa) */
     imagenes?: Record<string, ImagenPdf>
+    /** tamaño de página: `carta` (por defecto) o `pos_80` (rollo de 80 mm, alto según contenido) */
+    formato?: FormatoPdf
 }
 
-/** Convierte el HTML (ya renderizado con Mustache) en un PDF tamaño carta. */
-export function htmlAPdf(html: string, opciones: OpcionesPdf = {}): Promise<Buffer> {
+/** Dibuja el documento en una página de `alto` pt; devuelve el PDF y hasta dónde llegó el contenido. */
+function dibujar(
+    html: string,
+    opciones: OpcionesPdf,
+    diseno: Diseno,
+    alto: number,
+): { listo: Promise<Buffer>; finY: number; saltos: number } {
     const doc = new PDFDocument({
-        size: 'LETTER',
-        margin: MARGEN,
+        size: [diseno.ancho, alto],
+        margin: diseno.margen,
         compress: opciones.comprimir ?? true,
         info: { Title: opciones.titulo ?? 'Documento', Producer: 'ArgosIsp', Creator: 'ArgosIsp' },
     })
@@ -588,9 +658,28 @@ export function htmlAPdf(html: string, opciones: OpcionesPdf = {}): Promise<Buff
     })
     const raiz = parsearHtml(html)
     const cuerpo = buscar(raiz, 'body') ?? raiz
-    new Renderizador(doc, opciones.imagenes).bloque(cuerpo, BASE, MARGEN, doc.page.width - MARGEN * 2)
+    const renderizador = new Renderizador(doc, diseno, opciones.imagenes)
+    renderizador.bloque(cuerpo, diseno.base, diseno.margen, diseno.ancho - diseno.margen * 2)
+    const finY = doc.y
     doc.end()
-    return listo
+    return { listo, finY, saltos: renderizador.saltos }
+}
+
+/**
+ * Convierte el HTML (ya renderizado con Mustache) en un PDF carta o de rollo de 80 mm. El rollo
+ * no tiene alto fijo: se dibuja una vez en una página de 200 pulgadas para medir el contenido y
+ * otra con el alto exacto (contenido + margen), así la impresora corta donde termina el recibo.
+ */
+export async function htmlAPdf(html: string, opciones: OpcionesPdf = {}): Promise<Buffer> {
+    const diseno = DISENOS[opciones.formato ?? 'carta']
+    if (diseno.alto !== null) return dibujar(html, opciones, diseno, diseno.alto).listo
+    const medida = dibujar(html, { ...opciones, comprimir: true }, diseno, ALTO_MAXIMO_ROLLO)
+    await medida.listo
+    const alto =
+        medida.saltos > 0
+            ? ALTO_MAXIMO_ROLLO
+            : Math.max(40 * MM, Math.ceil(medida.finY + diseno.margen + 2 * MM))
+    return dibujar(html, opciones, diseno, alto).listo
 }
 
 function buscar(nodo: Nodo, tag: string): Nodo | null {
