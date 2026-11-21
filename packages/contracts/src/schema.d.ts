@@ -1014,6 +1014,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bodegas/{id}/miembros": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Miembros vigentes de una bodega de cuadrilla (aceptados y rechazados) y su jefe
+         * @description Contrato Iris 0.11.0 §3.9 (A47): la membresía llega de Iris (cuadrilla.creada / cuadrilla.actualizada). Un miembro con aceptado = false es un miembro_rechazado (motivo: sin_vinculo, usuario_inexistente, usuario_inactivo, fuera_de_la_empresa, no_es_tecnico). 422 si la bodega no es de cuadrilla.
+         */
+        get: operations["bodegasMiembros"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bonificaciones": {
         parameters: {
             query?: never;
@@ -1103,7 +1123,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar turno de caja (esperado vs contado)
-         * @description esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.
+         * @description esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.
          */
         post: operations["cajasCerrar"];
         delete?: never;
@@ -1141,6 +1161,26 @@ export interface paths {
         };
         /** Turnos de una caja */
         get: operations["cajasTurnos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cajas/turno-actual/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumen del turno abierto: fondo, cobros por método, retiros e ingresos y lo que debe haber
+         * @description Con `caja_id`, el turno abierto de esa caja (alcance por caja: 403). Sin ella, el de la caja del usuario: la del turno que abrió él o la caja que tiene asignada con turno abierto, en la empresa activa. 404 `sin_turno_abierto` si no hay. `esperado` = fondo_inicial + cobros en efectivo (monto − retenido) − egresos en efectivo − depósitos al banco − pagos a proveedores en efectivo del turno: la misma regla del cierre (`POST /cajas/:id/cerrar`). `otros_medios`: cobros por otros medios que registró quien abrió el turno mientras estuvo abierto (no entran a la caja).
+         */
+        get: operations["cajasTurnoActualResumen"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4637,6 +4677,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventario/cobros-equipo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cola de cobros de equipo («Equipo no devuelto» y cobros propuestos desde un cambio) */
+        get: operations["inventarioCobrosEquipo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/cobros-equipo/{id}/aprobar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprobar un cobro de equipo propuesto, con su monto (cargo único al cliente)
+         * @description Cargo único al cliente del servicio con el concepto indicado o «Equipo no devuelto» de la empresa (CxC / ingreso + IVA). 409 cobro_decidido si ya se decidió; 409 si cambió la version.
+         */
+        post: operations["inventarioAprobarCobroEquipo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/cobros-equipo/{id}/rechazar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rechazar un cobro de equipo propuesto, con motivo */
+        post: operations["inventarioRechazarCobroEquipo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/cobros-equipo/pendientes-declarar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Equipos por recuperar con intentos, que esperan que una persona los declare no recuperados
+         * @description Con el número de intentos, de técnicos distintos y de contactos (la pantalla muestra cada intento con su actor, foto y ubicación en GET /inventario/unidades/:id).
+         */
+        get: operations["inventarioPendientesNoRecuperados"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventario/configuracion": {
         parameters: {
             query?: never;
@@ -4672,7 +4786,7 @@ export interface paths {
         put?: never;
         /**
          * Consumo de materiales (cuenta_consumo, por defecto 5.2.07 / 1.1.14)
-         * @description Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).
+         * @description Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Bodega de cuadrilla (Iris 0.11.0 §3.9, A47): con tecnico y sin bodega_id, cada línea sale primero de sus cuadrillas y después de la personal (409 sin_existencia con bodegas[]: solo las suyas y lo pedido); con bodega_id, solo su personal o una cuadrilla de la que es miembro en fecha (403 no_es_miembro, con fuera_de_membresia en errors[].rule si lo fue), antes de mirar existencias. Sobre una cuadrilla: tecnico por id_externo, X-Iris-Actor: usuario:<id> obligatoria (400 cabecera_iris_requerida) y el mismo miembro que el técnico (403 actor_no_coincide); el movimiento guarda actor_tecnico. Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).
          */
         post: operations["inventarioConsumir"];
         delete?: never;
@@ -5088,7 +5202,7 @@ export interface paths {
         put?: never;
         /**
          * Recibir una orden de traslado (firma digital, firma en papel o aceptación), con faltantes
-         * @description Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.
+         * @description Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Bodega de cuadrilla (Iris 0.11.0 §3.9): la recibe el jefe que tenía la cuadrilla en recibido_en (según su historial) y que sigue siendo miembro; recibido_por y X-Iris-Actor deben ser ese jefe; si no, o sin jefe (el traslado espera), 403 solo_jefe_recibe. Emite inventario.traslado_recibido.
          */
         post: operations["inventarioRecibirTraslado"];
         delete?: never;
@@ -5141,8 +5255,91 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Una unidad con su historial en el kardex */
+        /**
+         * Una unidad con su kardex, el historial de su estado, garantías e intentos de recuperación
+         * @description Panel: UnidadInventarioDetalle (kardex, historial_estados, garantias, intentos, contactos). Con el token de Iris (contrato 0.12.0 §3.10, M5): exige además inventario.ver_unidad, X-Iris-Actor usuario:<id> (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido) y responde UnidadEquipoIris: serie, MAC, modelo, estado del equipo e historial (fecha, de, a, motivo), sin costos, proveedor ni RMA; servicio_id solo del servicio actual o del de la orden (?servicio_id=). Fuera de las empresas del token: 404. La misma vista, con su esquema, en GET /inventario/unidades/:id/equipo.
+         */
         get: operations["inventarioUnidadVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/unidades/{id}/contactos-recuperacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar un contacto con el cliente para recuperar el equipo
+         * @description A48: cuenta como alternativa al mínimo de técnicos distintos para declarar el equipo no recuperado. Solo una unidad en comodato o por recuperar (409 estado_unidad_cambiado).
+         */
+        post: operations["inventarioContactoRecuperacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/unidades/{id}/declarar-no-recuperada": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Declarar un equipo no recuperado (y cobrar «Equipo no devuelto»)
+         * @description A48 (§10.7 a): lo decide una persona, nunca el técnico. Exige intentos de técnicos distintos (inventario.configuracion.recuperacion_tecnicos_minimos, 2 de fábrica) o un contacto con el cliente registrado: si no, 422 intentos_insuficientes. Baja del activo a pérdida (1.2.02 + 5.3.06 / 1.2.01, sin kardex) y la unidad queda no_recuperada. Con monto: cargo único «Equipo no devuelto» al cliente del servicio (CxC / ingreso + IVA) y el cobro aprobado en la cola. 409 estado_unidad_cambiado si no está en comodato o por recuperar.
+         */
+        post: operations["inventarioDeclararNoRecuperada"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/unidades/{id}/enviar-garantia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enviar a garantía una unidad en revisión (proveedor, RMA y vencimiento)
+         * @description A48: de revision (o la garantía abierta sin enviar de un cambio de equipo) a garantia. Sigue en su bodega y en 1.1.14: sin kardex ni asiento. 409 estado_unidad_cambiado en otro estado. Proveedor: proveedor_id (de la empresa) o proveedor_nombre (422).
+         */
+        post: operations["inventarioEnviarGarantia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/unidades/{id}/equipo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Una unidad como la ve Iris: serie, MAC, modelo, estado del equipo e historial, sin costos
+         * @description Contrato Iris 0.12.0 §3.10 (M5): sin costos, proveedor ni RMA; servicio_id del historial solo el actual o el de la orden (?servicio_id=). Con el token de Iris exige X-Iris-Actor usuario:<id> (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido). Fuera del alcance: 404.
+         */
+        get: operations["inventarioUnidadEquipo"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5165,6 +5362,26 @@ export interface paths {
          * @description No cambia su valor ni la existencia (ya contaba en la bodega): sin movimiento ni asiento, queda en audit.cambios. Otro estado: 409 unidad_no_disponible. Desde en_reparacion también se puede dar de baja (POST /inventario/bajas).
          */
         post: operations["inventarioMarcarReparada"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/unidades/{id}/resolver-garantia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver la garantía: volvió reparada, reemplazada o rechazada
+         * @description A48: reparada → disponible (usada); reemplazada → la unidad toma la serie o MAC del equipo nuevo (422 serie_duplicada), disponible y nueva, al mismo costo (la anterior queda en la garantía); rechazada → vuelve a revision (repararla o darla de baja con POST /inventario/bajas). Sin kardex ni asiento. 409 estado_unidad_cambiado si no está en garantía.
+         */
+        post: operations["inventarioResolverGarantia"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10909,6 +11126,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/equipos/{unidadId}/no-recuperado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * No se pudo recuperar el equipo: registra un intento de recuperación (nunca declara la pérdida)
+         * @description Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:no_recuperado:<orden_id>:<unidad_id>. intento_n lo calcula Argos; la unidad queda por recuperar (sin asiento). foto_ref (id opaco del adjunto de la orden) obligatoria con se_nego y equipo_perdido; ubicacion siempre (422). Uno por unidad al día: 429 demasiados_intentos. 409 unidad_no_es_del_servicio o estado_unidad_cambiado. Declarar la unidad no recuperada y cobrarla lo decide una persona (POST /inventario/unidades/:id/declarar-no-recuperada). Emite inventario.recuperacion_intentada (aviso al titular con la serie enmascarada). Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.
+         */
+        post: operations["serviciosEquipoNoRecuperado"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/equipos/{unidadId}/perdida": {
         parameters: {
             query?: never;
@@ -10923,6 +11160,26 @@ export interface paths {
          * @description Sin kardex: el activo se da de baja como retiro (pérdida en 5.3.06) y la unidad queda dada de baja. Cobrarlo al cliente es un cargo único aparte. 409 unidad_sin_comodato.
          */
         post: operations["serviciosPerdidaEquipo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/equipos/cambiar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el equipo en comodato de un servicio: sale uno y entra otro en una sola transacción
+         * @description Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:cambio:<orden_id>:<sale_unidad_id>. La que sale (en comodato en el servicio: 409 unidad_no_es_del_servicio, o estado_unidad_cambiado si ya no lo está) se devuelve a la bodega de la que entra (baja del activo sin resultado) y queda disponible (funciona), en revisión (revision, danado) o en garantía (garantia); nunca se da de baja aquí. La que entra (unidad_id, serie o mac) sale de la bodega personal del técnico o de una cuadrilla de la que es miembro (403 no_es_miembro, 409 unidad_en_otra_bodega, antes de mirar su estado) y debe estar disponible (409 estado_unidad_cambiado). funciona con motivo danado o garantia: 422. cobro_propuesto (sin monto) entra en la cola de cobros de equipo. Emite inventario.comodato_devuelto, inventario.comodato_asignado, inventario.equipo_cambiado e inventario.unidad_estado_cambiado. Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.
+         */
+        post: operations["serviciosCambiarEquipo"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12846,15 +13103,19 @@ export interface components {
             empresa_id: number;
             nombre: string;
             /**
-             * @description bodega, tecnico o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)
+             * @description bodega, tecnico, cuadrilla (la compartida de una cuadrilla de Iris, 0.11.0 §3.9) o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)
              * @enum {string}
              */
-            tipo: "bodega" | "tecnico" | "transito";
+            tipo: "bodega" | "tecnico" | "transito" | "cuadrilla";
             usuario_id: number | null;
             usuario_nombre: string | null;
             zona_id: number | null;
             router_id: number | null;
             activo: boolean;
+            /** @description Cuadrilla de Iris (solo tipo cuadrilla) */
+            cuadrilla_id_iris?: string | null;
+            /** @description Jefe actual de la cuadrilla (usuario de Argos); null sin jefe */
+            jefe_id?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -13008,6 +13269,19 @@ export interface components {
             cerrado_por?: number | null;
             abierto_por_nombre?: string | null;
             cerrado_por_nombre?: string | null;
+            /** @description Conteo del cierre por billete y moneda (null si se escribió solo el total) */
+            denominaciones?: {
+                /** @enum {string} */
+                valor: "200" | "100" | "50" | "20" | "10" | "5" | "1" | "0.50" | "0.25" | "0.10" | "0.05" | "0.01";
+                cantidad: number;
+            }[] | null;
+            /** @description Efectivo que quedó en la caja para abrir el turno siguiente */
+            fondo_siguiente?: components["schemas"]["Dinero"] | null;
+            /** @description Usuario que recibió el efectivo que no quedó de fondo */
+            entregado_a?: number | null;
+            entregado_a_nombre?: string | null;
+            /** @description contado − fondo_siguiente */
+            entregado_monto?: components["schemas"]["Dinero"] | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -13031,6 +13305,21 @@ export interface components {
             request_id: string | null;
             /** Format: date-time */
             created_at: string;
+        };
+        CambioEquipo: {
+            cambio_id: number;
+            sale: {
+                unidad_id: number;
+                /** @enum {string} */
+                estado: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+            };
+            entra: {
+                unidad_id: number;
+                /** @enum {string} */
+                estado: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+            };
+            /** @description El cobro propuesto en la cola (sin monto) */
+            cobro_propuesto_id: number | null;
         };
         CambioTitularIris: {
             id: number;
@@ -13546,6 +13835,33 @@ export interface components {
                 empresa: components["schemas"]["EmpresaRecibo"];
                 pago: components["schemas"]["Pago"];
             }[];
+        };
+        CobroEquipo: {
+            id: number;
+            empresa_id: number;
+            unidad_id: number;
+            serie: string | null;
+            mac: string | null;
+            producto_nombre: string;
+            servicio_id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            /** @enum {string} */
+            origen: "cambio_equipo" | "no_recuperado";
+            cambio_id: number | null;
+            motivo: string | null;
+            nota: string | null;
+            /** @enum {string} */
+            estado: "propuesto" | "aprobado" | "rechazado";
+            monto: components["schemas"]["Dinero"] | null;
+            factura_id: number | null;
+            decidido_por: number | null;
+            /** Format: date-time */
+            decidido_en: string | null;
+            motivo_decision: string | null;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
         };
         CobroPasarela: {
             id: number;
@@ -14147,6 +14463,8 @@ export interface components {
         ConfiguracionInventario: {
             empresa_id: number;
             traslado_firma_obligatoria: boolean;
+            /** @description Técnicos distintos con intentos para declarar un equipo no recuperado (2 de fábrica) */
+            recuperacion_tecnicos_minimos?: number;
             /** @description 0 = sin configurar (valores por defecto) */
             version: number;
         };
@@ -14415,6 +14733,15 @@ export interface components {
             saldo_valor: components["schemas"]["Dinero"];
             /** @description Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro) */
             factura_id?: number | null;
+            /** @description Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo) */
+            actor_tecnico?: string | null;
+            /** @description Usuario de Argos del técnico de la operación de Iris */
+            actor_tecnico_id?: number | null;
+            /**
+             * Format: date-time
+             * @description Hora del teléfono (fecha de Iris 0.12.0)
+             */
+            ocurrido_en?: string | null;
             /** @description Un movimiento por línea (consumo o venta), en el orden de las líneas */
             movimientos?: components["schemas"]["MovimientoInventario"][];
             /** @description Cargos al cliente de las líneas consumible_cobro (id = la factura del cargo único) */
@@ -14461,6 +14788,14 @@ export interface components {
             a_cargo: boolean;
             servicios: number[] | null;
             permisos: components["schemas"]["PermisosContacto"];
+        };
+        ContactoRecuperacion: {
+            id: number;
+            unidad_id: number;
+            servicio_id: number | null;
+            medio: string;
+            /** Format: date-time */
+            created_at: string;
         };
         ConteoInventario: {
             id: number;
@@ -15686,7 +16021,7 @@ export interface components {
             /** @description AA:BB:CC:DD:EE:FF */
             mac: string | null;
             /** @enum {string} */
-            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada";
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada" | "no_recuperada";
             /** @enum {string} */
             condicion: "nuevo" | "usado";
             bodega_id: number | null;
@@ -15698,6 +16033,11 @@ export interface components {
             /** @description Activo fijo mientras está en comodato */
             activo_id: number | null;
             compra_id: number | null;
+            /**
+             * @description Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)
+             * @enum {string}
+             */
+            estado_equipo?: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -15759,6 +16099,8 @@ export interface components {
         };
         EstadoCuenta: {
             cliente_id: number;
+            /** @description Con `?servicio_id=`: el estado de cuenta es solo de ese servicio (saldo = suma de sus movimientos; saldo a favor 0.00, porque es del cliente); null = todo el cliente */
+            servicio_id?: number | null;
             /** @description Suma del auxiliar CxC del cliente (positivo = debe) */
             saldo: components["schemas"]["Dinero"];
             /** @description Anticipos del cliente sin aplicar (se aplican a las próximas facturas) */
@@ -16093,7 +16435,7 @@ export interface components {
              * @description La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true
              * @enum {string}
              */
-            bodega_tipo: "bodega" | "tecnico" | "transito";
+            bodega_tipo: "bodega" | "tecnico" | "transito" | "cuadrilla";
             /** @description Cantidad con 3 decimales */
             cantidad: string;
             valor: components["schemas"]["Dinero"];
@@ -16785,6 +17127,18 @@ export interface components {
                 obtenido: string;
             } | null;
         };
+        IntentoRecuperacion: {
+            id: number;
+            unidad_id: number;
+            servicio_id: number;
+            intento_n: number;
+            /** @enum {string} */
+            motivo: "cliente_ausente" | "se_nego" | "equipo_perdido" | "otro";
+            /** @enum {string} */
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+            /** Format: date-time */
+            fecha: string;
+        };
         InventarioValorizado: {
             /** Format: date */
             fecha: string;
@@ -17242,8 +17596,44 @@ export interface components {
             traslados_pendientes?: components["schemas"]["OrdenTraslado"][];
             /** @description Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id= */
             kardex?: components["schemas"]["MovimientoInventario"][];
-            /** @description Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más) */
-            bodegas?: components["schemas"]["Bodega"][];
+            /** @description La bodega de arriba es de cuadrilla */
+            cuadrilla?: boolean;
+            /** @description Jefe de la cuadrilla (null sin jefe o si no es de cuadrilla) */
+            jefe?: {
+                id_externo: string;
+                nombre: string;
+            } | null;
+            /** @description Con empresa (Iris 0.11.0 §3.9): primero las cuadrillas de las que es miembro y después la personal, cada una con su contenido. Sin empresa y con bodegas en varias empresas: una Bodega por empresa (con cuadrilla y jefe) y nada más */
+            bodegas?: {
+                bodega?: components["schemas"]["Bodega"];
+                cuadrilla: boolean;
+                jefe: {
+                    id_externo: string;
+                    nombre: string;
+                } | null;
+                existencias?: components["schemas"]["ExistenciaInventario"][];
+                unidades?: components["schemas"]["UnidadInventario"][];
+                traslados_pendientes?: components["schemas"]["OrdenTraslado"][];
+                kardex?: components["schemas"]["MovimientoInventario"][];
+                id: number;
+                empresa_id: number;
+                nombre: string;
+            }[];
+        };
+        MiembrosCuadrilla: {
+            bodega_id: number;
+            cuadrilla_id_iris: string | null;
+            version: number;
+            jefe_id: number | null;
+            miembros: {
+                iris_usuario_id: string;
+                usuario_id: number | null;
+                nombre: string | null;
+                aceptado: boolean;
+                motivo: string | null;
+                /** Format: date-time */
+                desde: string;
+            }[];
         };
         MigracionAaaRouter: {
             router_id: number;
@@ -17418,6 +17808,15 @@ export interface components {
             saldo_valor: components["schemas"]["Dinero"];
             /** @description Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro) */
             factura_id?: number | null;
+            /** @description Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo) */
+            actor_tecnico?: string | null;
+            /** @description Usuario de Argos del técnico de la operación de Iris */
+            actor_tecnico_id?: number | null;
+            /**
+             * Format: date-time
+             * @description Hora del teléfono (fecha de Iris 0.12.0)
+             */
+            ocurrido_en?: string | null;
         };
         MovimientoPuntos: {
             id: number;
@@ -17506,7 +17905,7 @@ export interface components {
          * @description Nombre de un permiso del ACL (= nombre de la acción)
          * @enum {string}
          */
-        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.cobrar_equipo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.enviar_garantia" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.registrar_contacto_recuperacion" | "inventario.resolver_garantia" | "inventario.sincronizar_cuadrilla" | "inventario.trasladar" | "inventario.ver" | "inventario.ver_unidad" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_equipo" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -17655,7 +18054,7 @@ export interface components {
             bodega_destino_id: number;
             bodega_destino_nombre: string;
             /** @enum {string} */
-            bodega_destino_tipo: "bodega" | "tecnico";
+            bodega_destino_tipo: "bodega" | "tecnico" | "cuadrilla";
             /** @description Técnico de la bodega destino; null si es una bodega */
             usuario_destino_id: number | null;
             usuario_destino_nombre: string | null;
@@ -17709,7 +18108,7 @@ export interface components {
             bodega_destino_id: number;
             bodega_destino_nombre: string;
             /** @enum {string} */
-            bodega_destino_tipo: "bodega" | "tecnico";
+            bodega_destino_tipo: "bodega" | "tecnico" | "cuadrilla";
             /** @description Técnico de la bodega destino; null si es una bodega */
             usuario_destino_id: number | null;
             usuario_destino_nombre: string | null;
@@ -18039,6 +18438,21 @@ export interface components {
             allowed_ips: string[];
             /** @description Redes descartadas y por qué (traslape, red del túnel, excluidas) */
             avisos: string[];
+        };
+        PendienteNoRecuperado: {
+            unidad_id: number;
+            empresa_id: number;
+            serie: string | null;
+            mac: string | null;
+            producto_nombre: string;
+            servicio_id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            intentos: number;
+            tecnicos_distintos: number;
+            contactos: number;
+            /** Format: date-time */
+            ultimo_intento: string;
         };
         PerfilQos: {
             id: number;
@@ -21119,6 +21533,67 @@ export interface components {
             con_sesion_desde: number;
             sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
         };
+        ResumenTurnoCaja: {
+            caja_id: number;
+            caja_nombre: string;
+            empresa_id: number;
+            turno_id: number;
+            /** Format: date-time */
+            abierto_en: string;
+            abierto_por: number | null;
+            abierto_por_nombre: string | null;
+            /** Format: date-time */
+            cerrado_en: string | null;
+            fondo_inicial: components["schemas"]["Dinero"];
+            /** @description Cobros vigentes del turno: en efectivo y por otros medios del cajero */
+            cobros: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+                por_metodo: {
+                    metodo: string;
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                }[];
+            };
+            /** @description Cobros en efectivo (monto − retenido) */
+            efectivo_cobrado: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+            };
+            /** @description Cobros por otros medios que registró el cajero mientras el turno estuvo abierto */
+            otros_medios: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+            };
+            /** @description Efectivo que entró a la caja (sin el fondo) */
+            ingresos: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+                cobros_efectivo: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+            };
+            /** @description Efectivo que salió: egresos, depósitos al banco y pagos a proveedores */
+            retiros: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+                egresos: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+                depositos: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+                pagos_proveedores: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+            };
+            /** @description Debe haber en efectivo: fondo + ingresos − retiros */
+            esperado: components["schemas"]["Dinero"];
+        };
         RetencionCompra: {
             impuesto_codigo: string;
             /** @enum {string} */
@@ -22105,6 +22580,28 @@ export interface components {
             /** @description Todos los movimientos (un par por unidad de serie) */
             movimientos?: components["schemas"]["MovimientoInventario"][];
         };
+        UnidadEquipoIris: {
+            id: number;
+            empresa_id: number;
+            producto_id: number;
+            modelo: string;
+            serie: string | null;
+            mac: string | null;
+            /** @enum {string} */
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+            servicio_id: number | null;
+            historial: {
+                /** Format: date-time */
+                fecha: string;
+                /** @enum {string|null} */
+                de: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada" | null;
+                /** @enum {string} */
+                a: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+                motivo: string | null;
+                /** @description Solo el servicio actual de la unidad o el de la orden en curso (?servicio_id=) */
+                servicio_id: number | null;
+            }[];
+        };
         UnidadInventario: {
             id: number;
             empresa_id: number;
@@ -22115,7 +22612,7 @@ export interface components {
             /** @description AA:BB:CC:DD:EE:FF */
             mac: string | null;
             /** @enum {string} */
-            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada";
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada" | "no_recuperada";
             /** @enum {string} */
             condicion: "nuevo" | "usado";
             bodega_id: number | null;
@@ -22127,6 +22624,11 @@ export interface components {
             /** @description Activo fijo mientras está en comodato */
             activo_id: number | null;
             compra_id: number | null;
+            /**
+             * @description Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)
+             * @enum {string}
+             */
+            estado_equipo?: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -22134,7 +22636,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        UnidadInventarioHistorial: {
+        UnidadInventarioDetalle: {
             id: number;
             empresa_id: number;
             producto_id: number;
@@ -22144,7 +22646,7 @@ export interface components {
             /** @description AA:BB:CC:DD:EE:FF */
             mac: string | null;
             /** @enum {string} */
-            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada";
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada" | "no_recuperada";
             /** @enum {string} */
             condicion: "nuevo" | "usado";
             bodega_id: number | null;
@@ -22156,6 +22658,11 @@ export interface components {
             /** @description Activo fijo mientras está en comodato */
             activo_id: number | null;
             compra_id: number | null;
+            /**
+             * @description Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)
+             * @enum {string}
+             */
+            estado_equipo: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -22185,6 +22692,166 @@ export interface components {
                 /** Format: date-time */
                 created_at: string;
             }[];
+            /** @description Cada cambio del estado del equipo */
+            historial_estados: {
+                /** Format: date-time */
+                fecha: string;
+                /** @enum {string|null} */
+                de: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada" | null;
+                /** @enum {string} */
+                a: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+                motivo: string | null;
+                servicio_id: number | null;
+                origen_externo_tipo?: string | null;
+                origen_externo_id?: string | null;
+            }[];
+            garantias: {
+                id: number;
+                proveedor_id: number | null;
+                proveedor_nombre: string | null;
+                rma: string | null;
+                /** Format: date */
+                vence_en: string | null;
+                /** Format: date-time */
+                enviada_en: string | null;
+                /** @enum {string} */
+                origen: "cambio_equipo" | "panel";
+                /** Format: date-time */
+                abierta_en: string;
+                /** @enum {string|null} */
+                resultado: "reparada" | "reemplazada" | "rechazada" | "baja" | null;
+                /** Format: date-time */
+                resuelta_en: string | null;
+                serie_anterior: string | null;
+                mac_anterior: string | null;
+                nota: string | null;
+            }[];
+            intentos: {
+                id: number;
+                servicio_id: number;
+                intento_n: number;
+                /** @enum {string} */
+                motivo: "cliente_ausente" | "se_nego" | "equipo_perdido" | "otro";
+                /** @description Id opaco del adjunto de la orden en Iris (se abre por autologin) */
+                foto_ref: string | null;
+                lat: string;
+                lng: string;
+                precision_m: string;
+                nota: string | null;
+                /** Format: date-time */
+                fecha: string;
+                actor_tecnico: string | null;
+                actor_tecnico_id: number | null;
+                actor_tecnico_nombre: string | null;
+                origen_externo_id: string | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+            contactos: {
+                id: number;
+                servicio_id: number | null;
+                medio: string;
+                nota: string;
+                registrado_por: number | null;
+                registrado_por_nombre: string | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+        };
+        UnidadInventarioHistorial: {
+            id: number;
+            empresa_id: number;
+            producto_id: number;
+            producto_sku: string;
+            producto_nombre: string;
+            serie: string | null;
+            /** @description AA:BB:CC:DD:EE:FF */
+            mac: string | null;
+            /** @enum {string} */
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada" | "no_recuperada";
+            /** @enum {string} */
+            condicion: "nuevo" | "usado";
+            bodega_id: number | null;
+            bodega_nombre: string | null;
+            /** @description Costo específico (al volver de comodato, su valor en libros) */
+            costo: components["schemas"]["Dinero"];
+            servicio_id: number | null;
+            cliente_id: number | null;
+            /** @description Activo fijo mientras está en comodato */
+            activo_id: number | null;
+            compra_id: number | null;
+            /**
+             * @description Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)
+             * @enum {string}
+             */
+            estado_equipo?: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            historial: {
+                id: number;
+                /** @enum {string} */
+                tipo: "entrada_compra" | "reverso_compra" | "devolucion_proveedor" | "venta" | "reverso_venta" | "consumo" | "traslado" | "asignacion_comodato" | "devolucion_comodato" | "ajuste_conteo" | "ajuste" | "baja" | "saldo_inicial" | "premio" | "reverso_premio";
+                /** Format: date */
+                fecha: string;
+                bodega_id: number;
+                bodega_nombre: string;
+                /** @description Cantidad con 3 decimales */
+                cantidad: string;
+                /** @description Monto con signo (+ entra, − sale) */
+                costo_total: components["schemas"]["Dinero"];
+                servicio_id: number | null;
+                asiento_id: number | null;
+                origen_tipo: string | null;
+                origen_id: number | null;
+                /** @enum {string|null} */
+                origen_externo_tipo?: "iris_orden" | null;
+                origen_externo_id?: string | null;
+                motivo: string | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+        };
+        UnidadNoRecuperada: {
+            id: number;
+            empresa_id: number;
+            producto_id: number;
+            producto_sku: string;
+            producto_nombre: string;
+            serie: string | null;
+            /** @description AA:BB:CC:DD:EE:FF */
+            mac: string | null;
+            /** @enum {string} */
+            estado: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada" | "no_recuperada";
+            /** @enum {string} */
+            condicion: "nuevo" | "usado";
+            bodega_id: number | null;
+            bodega_nombre: string | null;
+            /** @description Costo específico (al volver de comodato, su valor en libros) */
+            costo: components["schemas"]["Dinero"];
+            servicio_id: number | null;
+            cliente_id: number | null;
+            /** @description Activo fijo mientras está en comodato */
+            activo_id: number | null;
+            compra_id: number | null;
+            /**
+             * @description Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)
+             * @enum {string}
+             */
+            estado_equipo: "disponible" | "en_comodato" | "por_recuperar" | "revision" | "garantia" | "dada_de_baja" | "no_recuperada" | "vendida" | "anulada" | "devuelta_proveedor" | "entregada";
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description El cobro «Equipo no devuelto» (con monto) */
+            cobro_id: number | null;
+            /** @description La factura del cargo único del cobro */
+            factura_id: number | null;
         };
         UnionRouters: {
             /** @description El router que queda */
@@ -26745,7 +27412,7 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
-                tipo?: "bodega" | "tecnico" | "transito";
+                tipo?: "bodega" | "tecnico" | "transito" | "cuadrilla";
                 activo?: boolean;
                 usuario_id?: number;
             };
@@ -27073,6 +27740,55 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bodegasMiembros: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Miembros de la cuadrilla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MiembrosCuadrilla"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -27410,10 +28126,23 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
-                     * @description Monto con hasta 2 decimales, como string
+                     * @description Total contado; sin él, la suma de `denominaciones`
                      * @example 150.00
                      */
-                    contado: string;
+                    contado?: string | null;
+                    /** @description Conteo por billete y moneda (Q200 … 1¢) */
+                    denominaciones?: {
+                        /** @enum {string} */
+                        valor: "200" | "100" | "50" | "20" | "10" | "5" | "1" | "0.50" | "0.25" | "0.10" | "0.05" | "0.01";
+                        cantidad: number;
+                    }[] | null;
+                    /**
+                     * @description Efectivo que queda en la caja para el turno siguiente (≤ contado)
+                     * @example 150.00
+                     */
+                    fondo_siguiente?: string | null;
+                    /** @description Usuario que recibe el resto (obligatorio si contado − fondo_siguiente > 0) */
+                    entregado_a?: number | null;
                     /** @description Obligatorio si hay diferencia entre esperado y contado */
                     motivo?: string | null;
                 };
@@ -27617,6 +28346,56 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cajasTurnoActualResumen: {
+        parameters: {
+            query?: {
+                /** @description Caja; sin ella, la del turno abierto del usuario (su caja) */
+                caja_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen del turno */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenTurnoCaja"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cajas.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -29015,6 +29794,8 @@ export interface operations {
             query?: {
                 /** @description Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance */
                 empresa_id?: number;
+                /** @description Solo el saldo, las facturas y la parte de cada movimiento de ese servicio del cliente (sin el desglose de los otros); 404 si el servicio no es del cliente */
+                servicio_id?: number;
             };
             header?: never;
             path: {
@@ -41301,6 +42082,281 @@ export interface operations {
             };
         };
     };
+    inventarioCobrosEquipo: {
+        parameters: {
+            query?: {
+                estado?: "propuesto" | "aprobado" | "rechazado";
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de cobros */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CobroEquipo"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioAprobarCobroEquipo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    concepto_id?: number | null;
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Cobro aprobado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobroEquipo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.cobrar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioRechazarCobroEquipo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Cobro rechazado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobroEquipo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.cobrar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioPendientesNoRecuperados: {
+        parameters: {
+            query?: {
+                estado?: "propuesto" | "aprobado" | "rechazado";
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pendientes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendienteNoRecuperado"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     inventarioConfiguracion: {
         parameters: {
             query?: {
@@ -41367,6 +42423,8 @@ export interface operations {
                     /** @description Por defecto la empresa activa */
                     empresa_id?: number | null;
                     traslado_firma_obligatoria: boolean;
+                    /** @description Iris 0.12.0 §3.10: técnicos distintos con intentos de recuperación para declarar un equipo no recuperado (2 de fábrica); sin él se conserva */
+                    recuperacion_tecnicos_minimos?: number | null;
                     /** @description 0 la primera vez */
                     version: number;
                 };
@@ -41482,11 +42540,13 @@ export interface operations {
                     /** @description Instalación o reparación en la que se usó (misma empresa); obligatorio para cobrar o prestar en comodato */
                     servicio_id?: number | null;
                     motivo?: string | null;
-                    /**
-                     * Format: date
-                     * @description Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy
-                     */
+                    /** @description Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy. Desde Iris 0.12.0 también la hora del teléfono (RFC 3339), con recibido_en_iris */
                     fecha?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy
+                     */
+                    recibido_en_iris?: string | null;
                     /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
                     origen_tipo?: "iris_orden" | null;
                     /**
@@ -43412,7 +44472,7 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
-                estado?: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada";
+                estado?: "disponible" | "en_comodato" | "por_recuperar" | "en_reparacion" | "vendida" | "dada_de_baja" | "anulada" | "devuelta_proveedor" | "entregada" | "no_recuperada";
                 producto_id?: number;
                 bodega_id?: number;
                 servicio_id?: number;
@@ -43468,7 +44528,10 @@ export interface operations {
     };
     inventarioUnidadVer: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Iris (M5): el servicio de la orden en curso; su id se muestra en el historial */
+                servicio_id?: number;
+            };
             header?: never;
             path: {
                 id: number;
@@ -43483,7 +44546,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UnidadInventarioHistorial"];
+                    "application/json": components["schemas"]["UnidadInventarioDetalle"];
                 };
             };
             /** @description No autenticado */
@@ -43506,6 +44569,320 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioContactoRecuperacion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    medio: "llamada" | "whatsapp" | "correo" | "visita" | "oficina" | "otro";
+                    nota: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Contacto registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactoRecuperacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.registrar_contacto_recuperacion; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioDeclararNoRecuperada: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                    /**
+                     * @description Cobro «Equipo no devuelto» con IVA incluido (> 0); sin él solo se declara
+                     * @example 150.00
+                     */
+                    monto?: string | null;
+                    /** @description Concepto del cargo; por defecto «Equipo no devuelto» de la empresa */
+                    concepto_id?: number | null;
+                    /** Format: date */
+                    fecha?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Unidad no recuperada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnidadNoRecuperada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.cobrar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioEnviarGarantia: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    proveedor_id?: number | null;
+                    proveedor_nombre?: string | null;
+                    rma: string;
+                    /** Format: date */
+                    vence_en: string;
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Unidad en garantía */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnidadInventario"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.enviar_garantia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioUnidadEquipo: {
+        parameters: {
+            query?: {
+                /** @description Iris (M5): el servicio de la orden en curso; su id se muestra en el historial */
+                servicio_id?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unidad */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnidadEquipoIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.ver_unidad */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -43554,6 +44931,88 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso inventario.marcar_reparada; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioResolverGarantia: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    resultado: "reparada" | "reemplazada" | "rechazada";
+                    /** @description reemplazada: la serie del equipo nuevo */
+                    serie?: string | null;
+                    /** @description reemplazada: la MAC del equipo nuevo */
+                    mac?: string | null;
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Unidad */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnidadInventario"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.resolver_garantia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -61102,7 +62561,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.cobrar_equipo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.enviar_garantia" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.registrar_contacto_recuperacion" | "inventario.resolver_garantia" | "inventario.sincronizar_cuadrilla" | "inventario.trasladar" | "inventario.ver" | "inventario.ver_unidad" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_equipo" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -61160,7 +62619,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.cobrar_equipo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.enviar_garantia" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.registrar_contacto_recuperacion" | "inventario.resolver_garantia" | "inventario.sincronizar_cuadrilla" | "inventario.trasladar" | "inventario.ver" | "inventario.ver_unidad" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_equipo" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -65955,11 +67414,13 @@ export interface operations {
                     unidad_id?: number;
                     /** @description Serie de la unidad en la empresa del servicio, sin distinguir mayúsculas (contrato Iris §3); en lugar de `unidad_id` */
                     serie?: string;
-                    /**
-                     * Format: date
-                     * @description Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)
-                     */
+                    /** @description Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad). Desde Iris 0.12.0 también la hora del teléfono, con recibido_en_iris */
                     fecha?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy
+                     */
+                    recibido_en_iris?: string | null;
                     /** @description Fase D: la bodega de la que debe salir (409 unidad_en_otra_bodega si está en otra) */
                     bodega_id?: number | null;
                     /** @description Fase D: sin bodega_id, la unidad debe estar en la bodega de este técnico */
@@ -66064,8 +67525,13 @@ export interface operations {
                     /** @description Por defecto usado */
                     condicion?: ("nuevo" | "usado") | null;
                     en_reparacion?: boolean | null;
-                    /** Format: date */
+                    /** @description Fecha de la devolución (por defecto hoy); desde Iris 0.12.0 también la hora del teléfono */
                     fecha?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy
+                     */
+                    recibido_en_iris?: string | null;
                     motivo?: string | null;
                     /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
                     origen_tipo?: "iris_orden" | null;
@@ -66134,6 +67600,122 @@ export interface operations {
             };
         };
     };
+    serviciosEquipoNoRecuperado: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                unidadId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    motivo: "cliente_ausente" | "se_nego" | "equipo_perdido" | "otro";
+                    /** @description Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido */
+                    foto_ref?: string | null;
+                    ubicacion: {
+                        lat: number;
+                        lng: number;
+                        precision_m: number;
+                    };
+                    /** @description Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs */
+                    nota?: string | null;
+                    tecnico?: {
+                        /** @description Id del usuario de Argos del técnico (el id_externo del vínculo en Iris) */
+                        id_externo?: string | null;
+                        /** @description Correo del usuario de Argos del técnico (sin distinguir mayúsculas) */
+                        correo?: string | null;
+                    } | null;
+                    /** @description Hora del teléfono (RFC 3339), con recibido_en_iris */
+                    fecha?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy
+                     */
+                    recibido_en_iris?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Intento registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntentoRecuperacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.cambiar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     serviciosPerdidaEquipo: {
         parameters: {
             query?: never;
@@ -66183,6 +67765,125 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso inventario.declarar_perdida_comodato; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosCambiarEquipo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    sale: {
+                        unidad_id: number;
+                    };
+                    entra: {
+                        unidad_id?: number | null;
+                        serie?: string | null;
+                        mac?: string | null;
+                    };
+                    /** @enum {string} */
+                    motivo: "danado" | "actualizacion" | "garantia" | "otro";
+                    /**
+                     * @description funciona (vuelve disponible), revision o danado (a revisión), garantia (a garantía). funciona no vale con motivo danado o garantia
+                     * @enum {string}
+                     */
+                    destino_sale: "funciona" | "revision" | "garantia" | "danado";
+                    /** @description Sin monto: entra en la cola de cobros de equipo (inventario.cobrar_equipo) */
+                    cobro_propuesto?: {
+                        motivo: string;
+                        /** @description Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs */
+                        nota?: string | null;
+                    } | null;
+                    /** @description Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs */
+                    nota?: string | null;
+                    /** @description El técnico (id_externo); con el token de Iris, por defecto el miembro de cuadrilla de X-Iris-Actor */
+                    tecnico?: {
+                        /** @description Id del usuario de Argos del técnico (el id_externo del vínculo en Iris) */
+                        id_externo?: string | null;
+                        /** @description Correo del usuario de Argos del técnico (sin distinguir mayúsculas) */
+                        correo?: string | null;
+                    } | null;
+                    /** @description Hora del teléfono (RFC 3339), con recibido_en_iris */
+                    fecha?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy
+                     */
+                    recibido_en_iris?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Cambio hecho */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CambioEquipo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.cambiar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -68077,7 +69778,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.guardar_mapeo_extracto" | "bancos.importar_extracto" | "bancos.importar_extracto_archivo" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.cobrar_equipo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.enviar_garantia" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.registrar_contacto_recuperacion" | "inventario.resolver_garantia" | "inventario.sincronizar_cuadrilla" | "inventario.trasladar" | "inventario.ver" | "inventario.ver_unidad" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "prospectos.registrar" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_equipo" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

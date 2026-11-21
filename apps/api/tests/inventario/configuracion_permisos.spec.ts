@@ -104,6 +104,7 @@ test.group('inventario: configuración con los privilegios de la API (argosisp_a
             assert.deepEqual(await configuracionInventario(1, trx), {
                 empresa_id: 1,
                 traslado_firma_obligatoria: true,
+                recuperacion_tecnicos_minimos: 2,
                 version: 0,
             })
             const guardada = await new ConfigurarInventario().execute(
@@ -111,7 +112,12 @@ test.group('inventario: configuración con los privilegios de la API (argosisp_a
                 ctx,
                 { trx },
             )
-            assert.deepEqual(guardada, { empresa_id: 1, traslado_firma_obligatoria: false, version: 1 })
+            assert.deepEqual(guardada, {
+                empresa_id: 1,
+                traslado_firma_obligatoria: false,
+                recuperacion_tecnicos_minimos: 2,
+                version: 1,
+            })
             const otra = await new ConfigurarInventario().execute(
                 { traslado_firma_obligatoria: true, version: 1 },
                 ctx,

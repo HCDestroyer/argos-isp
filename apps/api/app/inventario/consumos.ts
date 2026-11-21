@@ -1,6 +1,6 @@
 import type { Transaccion } from '#shared/domain_action'
-import { NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
-import { dec, redondear } from '#ledger/dinero'
+import { Conflicto, NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { dec, redondear, type Dec } from '#ledger/dinero'
 import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTA_CONSUMO_POR_DEFECTO } from '#inventario/productos'
 import {
@@ -25,6 +25,15 @@ import {
     type TecnicoExterno,
 } from '#inventario/tecnicos'
 import type { Modalidad } from '#inventario/tipos_producto'
+import {
+    accesoDelTecnico,
+    esInstante,
+    exigirActorDeCuadrilla,
+    exigirBodegaDelTecnico,
+    idIrisDelActor,
+    momentoDeLaOperacion,
+} from '#inventario/cuadrillas'
+import { fijarActorTecnico } from '#inventario/actor_tecnico'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 
 /**
@@ -57,7 +66,12 @@ export interface DatosConsumo {
     tecnico?: TecnicoExterno | null
     servicio_id?: number | null
     motivo?: string | null
+    /** fecha del consumo (día) o, desde Iris 0.12.0, la hora del teléfono (RFC 3339) */
     fecha?: string | null
+    /** hora del servidor de Iris al aceptar el lote (ventana de §3.10) */
+    recibido_en_iris?: string | null
+    /** `X-Iris-Actor` (de la cabecera, nunca del cuerpo) */
+    iris_actor?: string | null
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
 }
@@ -86,11 +100,70 @@ function error(campo: string, message: string, rule: string): ValidacionFallida 
     return new ValidacionFallida([{ field: campo, message, rule }])
 }
 
-/** Bodega del consumo: la indicada o la del técnico de la orden; 422 `bodega_id` sin ninguna. */
-async function bodegaDelConsumo(t: Transaccion, datos: DatosConsumo, empresaId: number): Promise<number> {
-    if (datos.bodega_id) return datos.bodega_id
-    if (datos.tecnico) return bodegaDelTecnico(t.trx, await resolverTecnico(t, datos.tecnico), empresaId)
-    throw error('bodega_id', 'Indica la bodega (o el técnico de la orden)', 'required')
+/** 409 `sin_existencia` (A47 §3.9 j): solo las bodegas del técnico y las cantidades de lo pedido. */
+export class SinExistencia extends Problema {
+    constructor(
+        readonly bodegas: Array<{
+            bodega_id: number
+            nombre: string
+            cuadrilla: boolean
+            lineas: Array<{ producto_id: number; pedido: string; existencia: string }>
+        }>,
+    ) {
+        super(
+            409,
+            'sin_existencia',
+            'Sin existencia',
+            'Ninguna bodega del técnico (su cuadrilla o la personal) tiene lo pedido',
+        )
+    }
+
+    override toJSON() {
+        return { ...super.toJSON(), bodegas: this.bodegas }
+    }
+}
+
+/**
+ * Bodegas del consumo antes de mirar existencias: la indicada (con `tecnico`, solo su personal o una
+ * cuadrilla de la que es miembro: 403 `no_es_miembro`), o las del técnico (primero sus cuadrillas, después
+ * la personal). Sobre una cuadrilla exige el actor (`X-Iris-Actor`) y fija quién usó el material.
+ */
+async function bodegasDelConsumo(
+    t: Transaccion,
+    datos: DatosConsumo,
+    empresaId: number,
+): Promise<{ fija: number | null; candidatas: number[] }> {
+    if (!datos.tecnico) {
+        if (datos.bodega_id) return { fija: datos.bodega_id, candidatas: [datos.bodega_id] }
+        throw error('bodega_id', 'Indica la bodega (o el técnico de la orden)', 'required')
+    }
+    const usuarioId = await resolverTecnico(t, datos.tecnico)
+    const momento = momentoDeLaOperacion(datos)
+    const acceso = await accesoDelTecnico(t.trx, usuarioId, empresaId, momento.instante)
+    let candidatas: number[]
+    if (datos.bodega_id) {
+        await exigirBodegaDelTecnico(t, datos.bodega_id, acceso, empresaId)
+        candidatas = [datos.bodega_id]
+    } else {
+        if (acceso.bodegas.length === 0) {
+            // sin cuadrilla ni personal: el error de siempre
+            await bodegaDelTecnico(t.trx, usuarioId, empresaId)
+        }
+        candidatas = acceso.bodegas
+    }
+    let actor: string | null = null
+    for (const id of candidatas) {
+        if (acceso.cuadrillas.includes(id)) actor = await exigirActorDeCuadrilla(t, id, datos, acceso)
+    }
+    fijarActorTecnico(t, {
+        actor:
+            actor ??
+            (idIrisDelActor(datos.iris_actor) ? `usuario:${idIrisDelActor(datos.iris_actor)}` : null),
+        usuarioId,
+        ocurridoEn: momento.ocurridoEn,
+    })
+    // una sola bodega posible (sin cuadrilla): como siempre, con 409 `existencia_insuficiente`
+    return { fija: datos.bodega_id ?? (candidatas.length === 1 ? candidatas[0]! : null), candidatas }
 }
 
 /** Empresa del consumo: la del servicio, o la de la bodega o el primer producto. */
@@ -137,6 +210,7 @@ export async function aplicarConsumos(
     origenExterno: OrigenExterno | null,
     campoLinea: (i: number, campo: string) => string,
 ): Promise<ResultadoConsumos> {
+    const datosOriginales = datos
     if (lineas.length === 0) throw error('lineas', 'Indica al menos una línea', 'required')
     const empresaId = await empresaDelConsumo(t, datos, lineas)
     t.fijarEmpresa(empresaId)
@@ -148,8 +222,19 @@ export async function aplicarConsumos(
             .first()
         if (!servicio) throw new NoEncontrado(`El servicio ${datos.servicio_id} no existe en esta empresa`)
     }
-    const bodegaId = await bodegaDelConsumo(t, datos, empresaId)
-    const bodega = await bodegaMovible(t, bodegaId, empresaId)
+    // Iris 0.12.0: con `recibido_en_iris` (o una fecha con hora), la fecha del kardex sale de la ventana
+    const fechaKardex =
+        datos.recibido_en_iris || esInstante(datos.fecha)
+            ? momentoDeLaOperacion(datos).fechaKardex
+            : datos.fecha
+    datos = { ...datos, fecha: fechaKardex }
+    const { fija, candidatas } = await bodegasDelConsumo(
+        t,
+        { ...datos, fecha: datosOriginales.fecha },
+        empresaId,
+    )
+    const bodegas = new Map<number, Awaited<ReturnType<typeof bodegaMovible>>>()
+    for (const id of candidatas) bodegas.set(id, await bodegaMovible(t, id, empresaId))
 
     // 1. cada línea: producto, modalidad y lo que necesita (422 por línea, todas a la vez)
     interface Plan {
@@ -163,6 +248,8 @@ export async function aplicarConsumos(
         cantidad: string
         precio: string | null
         concepto: number | null
+        /** la bodega de la que sale esta línea */
+        bodegaId: number
     }
     const planes: Plan[] = []
     const errores: ErrorCampo[] = []
@@ -291,9 +378,11 @@ export async function aplicarConsumos(
                 continue
             }
         }
-        planes.push({ i, producto, unidadId, cantidad, precio, concepto })
+        planes.push({ i, producto, unidadId, cantidad, precio, concepto, bodegaId: fija ?? 0 })
     }
     if (errores.length > 0) throw new ValidacionFallida(errores)
+    if (fija === null) await elegirBodegas(t, planes, candidatas, bodegas)
+    const bodegaDe = (p: { bodegaId: number }) => bodegas.get(p.bodegaId)!
     const hayVenta = planes.some((p) => p.producto.modalidad === 'consumible_cobro')
     if (hayVenta && datos.fecha && datos.fecha !== hoyGuatemala()) {
         throw error('fecha', 'Un cobro va con la fecha de hoy', 'no_aplica')
@@ -310,13 +399,13 @@ export async function aplicarConsumos(
         for (const p of gastos) {
             const cantidad = dec(p.cantidad)
             const costo = costoSalida(
-                await saldoDe(t, p.producto.id, bodega.id),
+                await saldoDe(t, p.producto.id, bodegaDe(p).id),
                 cantidad,
                 p.producto,
-                bodega.id,
+                bodegaDe(p).id,
             )
-            await exigirPromedioSinCambiosDesde(t, p.producto, bodega.id, fecha)
-            await exigirExistenciaDesde(t, p.producto, bodega.id, fecha, cantidad, costo)
+            await exigirPromedioSinCambiosDesde(t, p.producto, bodegaDe(p).id, fecha)
+            await exigirExistenciaDesde(t, p.producto, bodegaDe(p).id, fecha, cantidad, costo)
             const id = await registrarMovimientoConAsiento(
                 t,
                 {
@@ -324,7 +413,7 @@ export async function aplicarConsumos(
                     tipo: 'consumo',
                     fecha,
                     producto: p.producto,
-                    bodegaId: bodega.id,
+                    bodegaId: bodegaDe(p).id,
                     cantidad: cantidad.neg(),
                     costoTotal: costo.neg(),
                     servicioId: datos.servicio_id ?? null,
@@ -333,7 +422,7 @@ export async function aplicarConsumos(
                 },
                 {
                     contrapartida: p.producto.cuenta_consumo ?? CUENTA_CONSUMO_POR_DEFECTO,
-                    descripcion: `Consumo de ${p.producto.sku} · ${p.producto.nombre} (${bodega.nombre})${datos.servicio_id ? ` · servicio ${datos.servicio_id}` : ''}`,
+                    descripcion: `Consumo de ${p.producto.sku} · ${p.producto.nombre} (${bodegaDe(p).nombre})${datos.servicio_id ? ` · servicio ${datos.servicio_id}` : ''}`,
                 },
             )
             movimientos.set(p.i, id)
@@ -356,7 +445,7 @@ export async function aplicarConsumos(
                     cantidad: p.cantidad,
                     precio_unitario: dec(p.precio!).toFixed(2),
                     producto_id: p.producto.id,
-                    bodega_id: bodega.id,
+                    bodega_id: bodegaDe(p).id,
                     unidad_id: p.unidadId,
                 })),
             },
@@ -388,5 +477,72 @@ export async function aplicarConsumos(
                   monto: redondear(dec(p.precio!).times(dec(p.cantidad))).toFixed(2),
               }))
             : [],
+    }
+}
+
+/**
+ * Sin `bodega_id` (A47 §3.9): cada línea sale de la primera bodega del técnico que la cubre, primero sus
+ * cuadrillas y después la personal. Una unidad de serie, de la bodega donde está (409
+ * `unidad_en_otra_bodega` si no es una de las suyas). Si una línea no cabe en ninguna: 409
+ * `sin_existencia` con solo sus bodegas y lo pedido.
+ */
+async function elegirBodegas(
+    t: Transaccion,
+    planes: Array<{ producto: { id: number }; unidadId: number | null; cantidad: string; bodegaId: number }>,
+    candidatas: number[],
+    bodegas: Map<number, { id: number; nombre: string; tipo: string }>,
+): Promise<void> {
+    const pedidos = new Map<number, Dec>()
+    for (const p of planes) {
+        if (p.unidadId) continue
+        pedidos.set(p.producto.id, (pedidos.get(p.producto.id) ?? dec('0')).plus(dec(p.cantidad)))
+    }
+    const existencias = new Map<string, Dec>()
+    for (const id of candidatas) {
+        for (const productoId of pedidos.keys()) {
+            const saldo = await saldoDe(t, productoId, id)
+            existencias.set(`${id}:${productoId}`, saldo.cantidad)
+        }
+    }
+    const faltan = new Set<number>()
+    for (const p of planes) {
+        if (p.unidadId) {
+            const unidad = await t.trx
+                .from('inventario.unidades')
+                .where('id', p.unidadId)
+                .select('bodega_id')
+                .first()
+            const donde =
+                unidad?.bodega_id === null || unidad?.bodega_id === undefined
+                    ? null
+                    : Number(unidad.bodega_id)
+            if (donde === null || !candidatas.includes(donde)) {
+                throw new Conflicto(
+                    `La unidad ${p.unidadId} no está en la bodega del técnico ni en la de su cuadrilla`,
+                    'unidad_en_otra_bodega',
+                    'Unidad en otra bodega',
+                )
+            }
+            p.bodegaId = donde
+            continue
+        }
+        const pedido = pedidos.get(p.producto.id)!
+        const elegida = candidatas.find((id) => existencias.get(`${id}:${p.producto.id}`)!.gte(pedido))
+        if (elegida === undefined) faltan.add(p.producto.id)
+        else p.bodegaId = elegida
+    }
+    if (faltan.size > 0) {
+        throw new SinExistencia(
+            candidatas.map((id) => ({
+                bodega_id: id,
+                nombre: bodegas.get(id)!.nombre,
+                cuadrilla: bodegas.get(id)!.tipo === 'cuadrilla',
+                lineas: [...pedidos.entries()].map(([productoId, pedido]) => ({
+                    producto_id: productoId,
+                    pedido: pedido.toString(),
+                    existencia: existencias.get(`${id}:${productoId}`)!.toString(),
+                })),
+            })),
+        )
     }
 }

@@ -1104,6 +1104,11 @@ export const EstadoCuenta = definirEsquema(
     objeto(
         {
             cliente_id: id,
+            servicio_id: {
+                ...nulable(id),
+                description:
+                    'Con `?servicio_id=`: el estado de cuenta es solo de ese servicio (saldo = suma de sus movimientos; saldo a favor 0.00, porque es del cliente); null = todo el cliente',
+            },
             saldo: { ...Dinero, description: 'Suma del auxiliar CxC del cliente (positivo = debe)' },
             saldo_a_favor: {
                 ...Dinero,
@@ -1120,7 +1125,7 @@ export const EstadoCuenta = definirEsquema(
                     'Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo',
             },
         },
-        ['saldo_a_favor', 'empresas'],
+        ['saldo_a_favor', 'empresas', 'servicio_id'],
     ),
 )
 

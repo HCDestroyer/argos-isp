@@ -5,6 +5,10 @@ import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { prepararEmpresas } from '#tests/contabilidad/ayudas_contabilidad'
 import { crearClienteFila } from '#tests/core/fabricas'
+import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
+import RegistrarPago from '#billing/actions/registrar_pago'
+import AnularPago from '#billing/actions/anular_pago'
+import AnularFactura from '#billing/actions/anular_factura'
 
 /**
  * Pedido A4 de Iris (`contratos/iris.md` §5.1): el cargo único de una orden de trabajo lleva
@@ -37,6 +41,78 @@ async function partidasDeFactura(facturaId: number) {
 
 test.group('Facturas · cargo único desde una orden de Iris (pedido A4)', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('A36: factura.emitida/anulada y pago.registrado/anulado llevan origen_tipo y origen_id de la orden', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const clienteId = await crearClienteFila()
+        const visita = await idDe('billing.conceptos_cargo', e.B, 'Visita técnica')
+        const orden = randomUUID()
+        const ctx = { ...e.ctx, empresaId: e.B }
+        const cargo = await new EmitirCargoUnico().execute(
+            {
+                cliente_id: clienteId,
+                empresa_id: e.B,
+                lineas: [{ concepto_id: visita, precio_unitario: '112.00' }],
+                origen_tipo: 'iris_orden',
+                origen_id: orden,
+            },
+            ctx,
+        )
+        const facturaId = Number(cargo.id)
+        const evento = async (nombre: string, clave: string, id: number) => {
+            const fila = await db
+                .from('audit.outbox')
+                .where('evento', nombre)
+                .whereRaw(`(payload->>'${clave}')::bigint = ?`, [id])
+                .orderBy('id', 'desc')
+                .firstOrFail()
+            return fila.payload as Record<string, unknown>
+        }
+        assert.containSubset(await evento('factura.emitida', 'factura_id', facturaId), {
+            origen_tipo: 'iris_orden',
+            origen_id: orden,
+            estado: 'emitida',
+            total: '112.00',
+            saldo: '112.00',
+            moneda: 'GTQ',
+            numero: null,
+        })
+        const pago = await new RegistrarPago().execute(
+            { cliente_id: clienteId, metodo: 'caja', monto: '50.00', empresa_id: e.B },
+            ctx,
+        )
+        assert.containSubset(await evento('pago.registrado', 'pago_id', pago.id), {
+            factura_id: facturaId,
+            origen_tipo: 'iris_orden',
+            origen_id: orden,
+            facturas_iris: [{ factura_id: facturaId, origen_id: orden, monto: '50.00' }],
+        })
+        await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, ctx)
+        assert.containSubset(await evento('pago.anulado', 'pago_id', pago.id), {
+            factura_id: facturaId,
+            origen_tipo: 'iris_orden',
+            origen_id: orden,
+        })
+        await new AnularFactura().execute({ factura_id: facturaId, motivo: 'orden cancelada' }, ctx)
+        assert.containSubset(await evento('factura.anulada', 'factura_id', facturaId), {
+            origen_tipo: 'iris_orden',
+            origen_id: orden,
+            estado: 'anulada',
+            saldo: '0.00',
+        })
+        // una factura sin orden no lleva nada de Iris
+        const sinOrden = await new EmitirCargoUnico().execute(
+            {
+                cliente_id: clienteId,
+                empresa_id: e.B,
+                lineas: [{ concepto_id: visita, precio_unitario: '56.00' }],
+            },
+            ctx,
+        )
+        assert.notProperty(await evento('factura.emitida', 'factura_id', Number(sinOrden.id)), 'origen_tipo')
+    })
 
     test('con origen: en la factura, la respuesta, el detalle y la auditoría; idempotente por iris:cargo:<orden>; mismo asiento', async ({
         assert,

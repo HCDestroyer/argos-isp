@@ -7129,7 +7129,8 @@
               "enum": [
                 "bodega",
                 "tecnico",
-                "transito"
+                "transito",
+                "cuadrilla"
               ]
             }
           },
@@ -7720,6 +7721,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bodegas/{id}/miembros": {
+      "get": {
+        "operationId": "bodegasMiembros",
+        "summary": "Miembros vigentes de una bodega de cuadrilla (aceptados y rechazados) y su jefe",
+        "description": "Contrato Iris 0.11.0 §3.9 (A47): la membresía llega de Iris (cuadrilla.creada / cuadrilla.actualizada). Un miembro con aceptado = false es un miembro_rechazado (motivo: sin_vinculo, usuario_inexistente, usuario_inactivo, fuera_de_la_empresa, no_es_tecnico). 422 si la bodega no es de cuadrilla.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Miembros de la cuadrilla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiembrosCuadrilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/bonificaciones": {
       "get": {
         "operationId": "bonificacionesListar",
@@ -8291,7 +8365,7 @@
       "post": {
         "operationId": "cajasCerrar",
         "summary": "Cerrar turno de caja (esperado vs contado)",
-        "description": "esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.",
+        "description": "esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.",
         "tags": [
           "cajas"
         ],
@@ -8333,12 +8407,74 @@
                 "type": "object",
                 "properties": {
                   "contado": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Total contado; sin él, la suma de `denominaciones`",
                     "examples": [
                       "150.00"
                     ]
+                  },
+                  "denominaciones": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "valor": {
+                          "type": "string",
+                          "enum": [
+                            "200",
+                            "100",
+                            "50",
+                            "20",
+                            "10",
+                            "5",
+                            "1",
+                            "0.50",
+                            "0.25",
+                            "0.10",
+                            "0.05",
+                            "0.01"
+                          ]
+                        },
+                        "cantidad": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1000000
+                        }
+                      },
+                      "required": [
+                        "valor",
+                        "cantidad"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 12,
+                    "description": "Conteo por billete y moneda (Q200 … 1¢)"
+                  },
+                  "fondo_siguiente": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Efectivo que queda en la caja para el turno siguiente (≤ contado)",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "entregado_a": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Usuario que recibe el resto (obligatorio si contado − fondo_siguiente > 0)"
                   },
                   "motivo": {
                     "type": [
@@ -8350,9 +8486,7 @@
                     "description": "Obligatorio si hay diferencia entre esperado y contado"
                   }
                 },
-                "required": [
-                  "contado"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -8690,6 +8824,80 @@
           },
           "404": {
             "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/turno-actual/resumen": {
+      "get": {
+        "operationId": "cajasTurnoActualResumen",
+        "summary": "Resumen del turno abierto: fondo, cobros por método, retiros e ingresos y lo que debe haber",
+        "description": "Con `caja_id`, el turno abierto de esa caja (alcance por caja: 403). Sin ella, el de la caja del usuario: la del turno que abrió él o la caja que tiene asignada con turno abierto, en la empresa activa. 404 `sin_turno_abierto` si no hay. `esperado` = fondo_inicial + cobros en efectivo (monto − retenido) − egresos en efectivo − depósitos al banco − pagos a proveedores en efectivo del turno: la misma regla del cierre (`POST /cajas/:id/cerrar`). `otros_medios`: cobros por otros medios que registró quien abrió el turno mientras estuvo abierto (no entran a la caja).",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "description": "Caja; sin ella, la del turno abierto del usuario (su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen del turno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenTurnoCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11364,6 +11572,16 @@
             "in": "query",
             "required": false,
             "description": "Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo el saldo, las facturas y la parte de cada movimiento de ese servicio del cliente (sin el desglose de los otros); 404 si el servicio no es del cliente",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -33994,6 +34212,524 @@
         "x-implementado": true
       }
     },
+    "/api/v1/inventario/cobros-equipo": {
+      "get": {
+        "operationId": "inventarioCobrosEquipo",
+        "summary": "Cola de cobros de equipo («Equipo no devuelto» y cobros propuestos desde un cambio)",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "propuesto",
+                "aprobado",
+                "rechazado"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de cobros",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CobroEquipo"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/cobros-equipo/{id}/aprobar": {
+      "post": {
+        "operationId": "inventarioAprobarCobroEquipo",
+        "summary": "Aprobar un cobro de equipo propuesto, con su monto (cargo único al cliente)",
+        "description": "Cargo único al cliente del servicio con el concepto indicado o «Equipo no devuelto» de la empresa (CxC / ingreso + IVA). 409 cobro_decidido si ya se decidió; 409 si cambió la version.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "concepto_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "monto"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cobro aprobado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobroEquipo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.cobrar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.cobrar_equipo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/cobros-equipo/{id}/rechazar": {
+      "post": {
+        "operationId": "inventarioRechazarCobroEquipo",
+        "summary": "Rechazar un cobro de equipo propuesto, con motivo",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cobro rechazado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobroEquipo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.cobrar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.cobrar_equipo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/cobros-equipo/pendientes-declarar": {
+      "get": {
+        "operationId": "inventarioPendientesNoRecuperados",
+        "summary": "Equipos por recuperar con intentos, que esperan que una persona los declare no recuperados",
+        "description": "Con el número de intentos, de técnicos distintos y de contactos (la pantalla muestra cada intento con su actor, foto y ubicación en GET /inventario/unidades/:id).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "propuesto",
+                "aprobado",
+                "rechazado"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pendientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendienteNoRecuperado"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/inventario/configuracion": {
       "get": {
         "operationId": "inventarioConfiguracion",
@@ -34113,6 +34849,15 @@
                   "traslado_firma_obligatoria": {
                     "type": "boolean"
                   },
+                  "recuperacion_tecnicos_minimos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "Iris 0.12.0 §3.10: técnicos distintos con intentos de recuperación para declarar un equipo no recuperado (2 de fábrica); sin él se conserva"
+                  },
                   "version": {
                     "type": "integer",
                     "minimum": 0,
@@ -34188,7 +34933,7 @@
       "post": {
         "operationId": "inventarioConsumir",
         "summary": "Consumo de materiales (cuenta_consumo, por defecto 5.2.07 / 1.1.14)",
-        "description": "Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
+        "description": "Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Bodega de cuadrilla (Iris 0.11.0 §3.9, A47): con tecnico y sin bodega_id, cada línea sale primero de sus cuadrillas y después de la personal (409 sin_existencia con bodegas[]: solo las suyas y lo pedido); con bodega_id, solo su personal o una cuadrilla de la que es miembro en fecha (403 no_es_miembro, con fuera_de_membresia en errors[].rule si lo fue), antes de mirar existencias. Sobre una cuadrilla: tecnico por id_externo, X-Iris-Actor: usuario:<id> obligatoria (400 cabecera_iris_requerida) y el mismo miembro que el técnico (403 actor_no_coincide); el movimiento guarda actor_tecnico. Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
         "tags": [
           "inventario"
         ],
@@ -34397,9 +35142,17 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date",
-                    "description": "Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy"
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy. Desde Iris 0.12.0 también la hora del teléfono (RFC 3339), con recibido_en_iris"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
                   },
                   "origen_tipo": {
                     "anyOf": [
@@ -37632,7 +38385,7 @@
       "post": {
         "operationId": "inventarioRecibirTraslado",
         "summary": "Recibir una orden de traslado (firma digital, firma en papel o aceptación), con faltantes",
-        "description": "Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.",
+        "description": "Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Bodega de cuadrilla (Iris 0.11.0 §3.9): la recibe el jefe que tenía la cuadrilla en recibido_en (según su historial) y que sigue siendo miembro; recibido_por y X-Iris-Actor deben ser ese jefe; si no, o sin jefe (el traslado espera), 403 solo_jefe_recibe. Emite inventario.traslado_recibido.",
         "tags": [
           "inventario"
         ],
@@ -38112,7 +38865,8 @@
                 "dada_de_baja",
                 "anulada",
                 "devuelta_proveedor",
-                "entregada"
+                "entregada",
+                "no_recuperada"
               ]
             }
           },
@@ -38221,7 +38975,8 @@
     "/api/v1/inventario/unidades/{id}": {
       "get": {
         "operationId": "inventarioUnidadVer",
-        "summary": "Una unidad con su historial en el kardex",
+        "summary": "Una unidad con su kardex, el historial de su estado, garantías e intentos de recuperación",
+        "description": "Panel: UnidadInventarioDetalle (kardex, historial_estados, garantias, intentos, contactos). Con el token de Iris (contrato 0.12.0 §3.10, M5): exige además inventario.ver_unidad, X-Iris-Actor usuario:<id> (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido) y responde UnidadEquipoIris: serie, MAC, modelo, estado del equipo e historial (fecha, de, a, motivo), sin costos, proveedor ni RMA; servicio_id solo del servicio actual o del de la orden (?servicio_id=). Fuera de las empresas del token: 404. La misma vista, con su esquema, en GET /inventario/unidades/:id/equipo.",
         "tags": [
           "inventario"
         ],
@@ -38242,6 +38997,16 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Iris (M5): el servicio de la orden en curso; su id se muestra en el historial",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -38250,7 +39015,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnidadInventarioHistorial"
+                  "$ref": "#/components/schemas/UnidadInventarioDetalle"
                 }
               }
             }
@@ -38284,9 +39049,553 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/contactos-recuperacion": {
+      "post": {
+        "operationId": "inventarioContactoRecuperacion",
+        "summary": "Registrar un contacto con el cliente para recuperar el equipo",
+        "description": "A48: cuenta como alternativa al mínimo de técnicos distintos para declarar el equipo no recuperado. Solo una unidad en comodato o por recuperar (409 estado_unidad_cambiado).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "medio": {
+                    "type": "string",
+                    "enum": [
+                      "llamada",
+                      "whatsapp",
+                      "correo",
+                      "visita",
+                      "oficina",
+                      "otro"
+                    ]
+                  },
+                  "nota": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "medio",
+                  "nota"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contacto registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactoRecuperacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.registrar_contacto_recuperacion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.registrar_contacto_recuperacion",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/declarar-no-recuperada": {
+      "post": {
+        "operationId": "inventarioDeclararNoRecuperada",
+        "summary": "Declarar un equipo no recuperado (y cobrar «Equipo no devuelto»)",
+        "description": "A48 (§10.7 a): lo decide una persona, nunca el técnico. Exige intentos de técnicos distintos (inventario.configuracion.recuperacion_tecnicos_minimos, 2 de fábrica) o un contacto con el cliente registrado: si no, 422 intentos_insuficientes. Baja del activo a pérdida (1.2.02 + 5.3.06 / 1.2.01, sin kardex) y la unidad queda no_recuperada. Con monto: cargo único «Equipo no devuelto» al cliente del servicio (CxC / ingreso + IVA) y el cobro aprobado en la cola. 409 estado_unidad_cambiado si no está en comodato o por recuperar.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "monto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Cobro «Equipo no devuelto» con IVA incluido (> 0); sin él solo se declara",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "concepto_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Concepto del cargo; por defecto «Equipo no devuelto» de la empresa"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unidad no recuperada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadNoRecuperada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.cobrar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.cobrar_equipo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/enviar-garantia": {
+      "post": {
+        "operationId": "inventarioEnviarGarantia",
+        "summary": "Enviar a garantía una unidad en revisión (proveedor, RMA y vencimiento)",
+        "description": "A48: de revision (o la garantía abierta sin enviar de un cambio de equipo) a garantia. Sigue en su bodega y en 1.1.14: sin kardex ni asiento. 409 estado_unidad_cambiado en otro estado. Proveedor: proveedor_id (de la empresa) o proveedor_nombre (422).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proveedor_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "proveedor_nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "rma": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "vence_en": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "rma",
+                  "vence_en"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unidad en garantía",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.enviar_garantia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.enviar_garantia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/equipo": {
+      "get": {
+        "operationId": "inventarioUnidadEquipo",
+        "summary": "Una unidad como la ve Iris: serie, MAC, modelo, estado del equipo e historial, sin costos",
+        "description": "Contrato Iris 0.12.0 §3.10 (M5): sin costos, proveedor ni RMA; servicio_id del historial solo el actual o el de la orden (?servicio_id=). Con el token de Iris exige X-Iris-Actor usuario:<id> (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido). Fuera del alcance: 404.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Iris (M5): el servicio de la orden en curso; su id se muestra en el historial",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadEquipoIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver_unidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver_unidad",
         "x-implementado": true
       }
     },
@@ -38412,6 +39721,157 @@
           }
         },
         "x-permiso": "inventario.marcar_reparada",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/resolver-garantia": {
+      "post": {
+        "operationId": "inventarioResolverGarantia",
+        "summary": "Resolver la garantía: volvió reparada, reemplazada o rechazada",
+        "description": "A48: reparada → disponible (usada); reemplazada → la unidad toma la serie o MAC del equipo nuevo (422 serie_duplicada), disponible y nueva, al mismo costo (la anterior queda en la garantía); rechazada → vuelve a revision (repararla o darla de baja con POST /inventario/bajas). Sin kardex ni asiento. 409 estado_unidad_cambiado si no está en garantía.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resultado": {
+                    "type": "string",
+                    "enum": [
+                      "reparada",
+                      "reemplazada",
+                      "rechazada"
+                    ]
+                  },
+                  "serie": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "reemplazada: la serie del equipo nuevo"
+                  },
+                  "mac": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "description": "reemplazada: la MAC del equipo nuevo"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "resultado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.resolver_garantia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.resolver_garantia",
         "x-implementado": true
       }
     },
@@ -71214,6 +72674,7 @@
                         "inventario.cancelar_traslado",
                         "inventario.cargar_saldo_inicial",
                         "inventario.cerrar_conteo",
+                        "inventario.cobrar_equipo",
                         "inventario.configurar",
                         "inventario.configurar_ia",
                         "inventario.consumir",
@@ -71222,10 +72683,15 @@
                         "inventario.dar_de_baja",
                         "inventario.declarar_perdida_comodato",
                         "inventario.devolver_comodato",
+                        "inventario.enviar_garantia",
                         "inventario.marcar_reparada",
                         "inventario.recibir_traslado",
+                        "inventario.registrar_contacto_recuperacion",
+                        "inventario.resolver_garantia",
+                        "inventario.sincronizar_cuadrilla",
                         "inventario.trasladar",
                         "inventario.ver",
+                        "inventario.ver_unidad",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.editar",
@@ -71327,6 +72793,7 @@
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
+                        "servicios.cambiar_equipo",
                         "servicios.cambiar_plan_pendiente",
                         "servicios.cambiar_titular",
                         "servicios.cancelar_plan_temporal",
@@ -71626,6 +73093,7 @@
                         "inventario.cancelar_traslado",
                         "inventario.cargar_saldo_inicial",
                         "inventario.cerrar_conteo",
+                        "inventario.cobrar_equipo",
                         "inventario.configurar",
                         "inventario.configurar_ia",
                         "inventario.consumir",
@@ -71634,10 +73102,15 @@
                         "inventario.dar_de_baja",
                         "inventario.declarar_perdida_comodato",
                         "inventario.devolver_comodato",
+                        "inventario.enviar_garantia",
                         "inventario.marcar_reparada",
                         "inventario.recibir_traslado",
+                        "inventario.registrar_contacto_recuperacion",
+                        "inventario.resolver_garantia",
+                        "inventario.sincronizar_cuadrilla",
                         "inventario.trasladar",
                         "inventario.ver",
+                        "inventario.ver_unidad",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.editar",
@@ -71739,6 +73212,7 @@
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
+                        "servicios.cambiar_equipo",
                         "servicios.cambiar_plan_pendiente",
                         "servicios.cambiar_titular",
                         "servicios.cancelar_plan_temporal",
@@ -81110,9 +82584,17 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date",
-                    "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)"
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad). Desde Iris 0.12.0 también la hora del teléfono, con recibido_en_iris"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
                   },
                   "bodega_id": {
                     "type": [
@@ -81368,8 +82850,17 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date"
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Fecha de la devolución (por defecto hoy); desde Iris 0.12.0 también la hora del teléfono"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
                   },
                   "motivo": {
                     "type": [
@@ -81475,6 +82966,267 @@
           }
         },
         "x-permiso": "inventario.devolver_comodato",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/equipos/{unidadId}/no-recuperado": {
+      "post": {
+        "operationId": "serviciosEquipoNoRecuperado",
+        "summary": "No se pudo recuperar el equipo: registra un intento de recuperación (nunca declara la pérdida)",
+        "description": "Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:no_recuperado:<orden_id>:<unidad_id>. intento_n lo calcula Argos; la unidad queda por recuperar (sin asiento). foto_ref (id opaco del adjunto de la orden) obligatoria con se_nego y equipo_perdido; ubicacion siempre (422). Uno por unidad al día: 429 demasiados_intentos. 409 unidad_no_es_del_servicio o estado_unidad_cambiado. Declarar la unidad no recuperada y cobrarla lo decide una persona (POST /inventario/unidades/:id/declarar-no-recuperada). Emite inventario.recuperacion_intentada (aviso al titular con la serie enmascarada). Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "unidadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "enum": [
+                      "cliente_ausente",
+                      "se_nego",
+                      "equipo_perdido",
+                      "otro"
+                    ]
+                  },
+                  "foto_ref": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+                    "description": "Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido"
+                  },
+                  "ubicacion": {
+                    "type": "object",
+                    "properties": {
+                      "lat": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "lng": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      },
+                      "precision_m": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100000
+                      }
+                    },
+                    "required": [
+                      "lat",
+                      "lng",
+                      "precision_m"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs"
+                  },
+                  "tecnico": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "id_externo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 30,
+                        "description": "Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)"
+                      },
+                      "correo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 254,
+                        "description": "Correo del usuario de Argos del técnico (sin distinguir mayúsculas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Hora del teléfono (RFC 3339), con recibido_en_iris"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
+                  }
+                },
+                "required": [
+                  "motivo",
+                  "ubicacion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Intento registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentoRecuperacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_equipo",
         "x-implementado": true
       }
     },
@@ -81644,6 +83396,294 @@
           }
         },
         "x-permiso": "inventario.declarar_perdida_comodato",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/equipos/cambiar": {
+      "post": {
+        "operationId": "serviciosCambiarEquipo",
+        "summary": "Cambiar el equipo en comodato de un servicio: sale uno y entra otro en una sola transacción",
+        "description": "Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:cambio:<orden_id>:<sale_unidad_id>. La que sale (en comodato en el servicio: 409 unidad_no_es_del_servicio, o estado_unidad_cambiado si ya no lo está) se devuelve a la bodega de la que entra (baja del activo sin resultado) y queda disponible (funciona), en revisión (revision, danado) o en garantía (garantia); nunca se da de baja aquí. La que entra (unidad_id, serie o mac) sale de la bodega personal del técnico o de una cuadrilla de la que es miembro (403 no_es_miembro, 409 unidad_en_otra_bodega, antes de mirar su estado) y debe estar disponible (409 estado_unidad_cambiado). funciona con motivo danado o garantia: 422. cobro_propuesto (sin monto) entra en la cola de cobros de equipo. Emite inventario.comodato_devuelto, inventario.comodato_asignado, inventario.equipo_cambiado e inventario.unidad_estado_cambiado. Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sale": {
+                    "type": "object",
+                    "properties": {
+                      "unidad_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "unidad_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "entra": {
+                    "type": "object",
+                    "properties": {
+                      "unidad_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1
+                      },
+                      "serie": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 100
+                      },
+                      "mac": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 30
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "enum": [
+                      "danado",
+                      "actualizacion",
+                      "garantia",
+                      "otro"
+                    ]
+                  },
+                  "destino_sale": {
+                    "type": "string",
+                    "enum": [
+                      "funciona",
+                      "revision",
+                      "garantia",
+                      "danado"
+                    ],
+                    "description": "funciona (vuelve disponible), revision o danado (a revisión), garantia (a garantía). funciona no vale con motivo danado o garantia"
+                  },
+                  "cobro_propuesto": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "motivo": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 100
+                      },
+                      "nota": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 500,
+                        "description": "Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs"
+                      }
+                    },
+                    "required": [
+                      "motivo"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Sin monto: entra en la cola de cobros de equipo (inventario.cobrar_equipo)"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs"
+                  },
+                  "tecnico": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "id_externo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 30,
+                        "description": "Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)"
+                      },
+                      "correo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 254,
+                        "description": "Correo del usuario de Argos del técnico (sin distinguir mayúsculas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "El técnico (id_externo); con el token de Iris, por defecto el miembro de cuadrilla de X-Iris-Actor"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Hora del teléfono (RFC 3339), con recibido_en_iris"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
+                  }
+                },
+                "required": [
+                  "sale",
+                  "entra",
+                  "motivo",
+                  "destino_sale"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cambio hecho",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CambioEquipo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_equipo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_equipo",
         "x-implementado": true
       }
     },
@@ -85014,6 +87054,7 @@
                             "inventario.cancelar_traslado",
                             "inventario.cargar_saldo_inicial",
                             "inventario.cerrar_conteo",
+                            "inventario.cobrar_equipo",
                             "inventario.configurar",
                             "inventario.configurar_ia",
                             "inventario.consumir",
@@ -85022,10 +87063,15 @@
                             "inventario.dar_de_baja",
                             "inventario.declarar_perdida_comodato",
                             "inventario.devolver_comodato",
+                            "inventario.enviar_garantia",
                             "inventario.marcar_reparada",
                             "inventario.recibir_traslado",
+                            "inventario.registrar_contacto_recuperacion",
+                            "inventario.resolver_garantia",
+                            "inventario.sincronizar_cuadrilla",
                             "inventario.trasladar",
                             "inventario.ver",
+                            "inventario.ver_unidad",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.editar",
@@ -85127,6 +87173,7 @@
                             "servicios.adicional_cortesia",
                             "servicios.agregar_adicional",
                             "servicios.cambiar_empresa",
+                            "servicios.cambiar_equipo",
                             "servicios.cambiar_plan_pendiente",
                             "servicios.cambiar_titular",
                             "servicios.cancelar_plan_temporal",
@@ -91704,9 +93751,10 @@
             "enum": [
               "bodega",
               "tecnico",
-              "transito"
+              "transito",
+              "cuadrilla"
             ],
-            "description": "bodega, tecnico o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)"
+            "description": "bodega, tecnico, cuadrilla (la compartida de una cuadrilla de Iris, 0.11.0 §3.9) o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)"
           },
           "usuario_id": {
             "type": [
@@ -91737,6 +93785,21 @@
           },
           "activo": {
             "type": "boolean"
+          },
+          "cuadrilla_id_iris": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cuadrilla de Iris (solo tipo cuadrilla)"
+          },
+          "jefe_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Jefe actual de la cuadrilla (usuario de Argos); null sin jefe"
           },
           "version": {
             "type": "integer",
@@ -92400,6 +94463,78 @@
               "null"
             ]
           },
+          "denominaciones": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "valor",
+                "cantidad"
+              ],
+              "properties": {
+                "valor": {
+                  "type": "string",
+                  "enum": [
+                    "200",
+                    "100",
+                    "50",
+                    "20",
+                    "10",
+                    "5",
+                    "1",
+                    "0.50",
+                    "0.25",
+                    "0.10",
+                    "0.05",
+                    "0.01"
+                  ]
+                },
+                "cantidad": {
+                  "type": "integer"
+                }
+              }
+            },
+            "description": "Conteo del cierre por billete y moneda (null si se escribió solo el total)"
+          },
+          "fondo_siguiente": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Efectivo que quedó en la caja para abrir el turno siguiente"
+          },
+          "entregado_a": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que recibió el efectivo que no quedó de fondo"
+          },
+          "entregado_a_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entregado_monto": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "contado − fondo_siguiente"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -92484,6 +94619,87 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CambioEquipo": {
+        "type": "object",
+        "required": [
+          "cambio_id",
+          "sale",
+          "entra",
+          "cobro_propuesto_id"
+        ],
+        "properties": {
+          "cambio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sale": {
+            "type": "object",
+            "required": [
+              "unidad_id",
+              "estado"
+            ],
+            "properties": {
+              "unidad_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "disponible",
+                  "en_comodato",
+                  "por_recuperar",
+                  "revision",
+                  "garantia",
+                  "dada_de_baja",
+                  "no_recuperada",
+                  "vendida",
+                  "anulada",
+                  "devuelta_proveedor",
+                  "entregada"
+                ]
+              }
+            }
+          },
+          "entra": {
+            "type": "object",
+            "required": [
+              "unidad_id",
+              "estado"
+            ],
+            "properties": {
+              "unidad_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "disponible",
+                  "en_comodato",
+                  "por_recuperar",
+                  "revision",
+                  "garantia",
+                  "dada_de_baja",
+                  "no_recuperada",
+                  "vendida",
+                  "anulada",
+                  "devuelta_proveedor",
+                  "entregada"
+                ]
+              }
+            }
+          },
+          "cobro_propuesto_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "El cobro propuesto en la cola (sin monto)"
           }
         }
       },
@@ -94387,6 +96603,150 @@
               }
             },
             "description": "Un pago por empresa con su marca (las del alcance del usuario)"
+          }
+        }
+      },
+      "CobroEquipo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "unidad_id",
+          "serie",
+          "mac",
+          "producto_nombre",
+          "servicio_id",
+          "cliente_id",
+          "cliente_nombre",
+          "origen",
+          "cambio_id",
+          "motivo",
+          "nota",
+          "estado",
+          "monto",
+          "factura_id",
+          "decidido_por",
+          "decidido_en",
+          "motivo_decision",
+          "version",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "cambio_equipo",
+              "no_recuperado"
+            ]
+          },
+          "cambio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "propuesto",
+              "aprobado",
+              "rechazado"
+            ]
+          },
+          "monto": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "factura_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo_decision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -96568,6 +98928,10 @@
           "traslado_firma_obligatoria": {
             "type": "boolean"
           },
+          "recuperacion_tecnicos_minimos": {
+            "type": "integer",
+            "description": "Técnicos distintos con intentos para declarar un equipo no recuperado (2 de fábrica)"
+          },
           "version": {
             "type": "integer",
             "description": "0 = sin configurar (valores por defecto)"
@@ -97611,6 +99975,29 @@
             "minimum": 1,
             "description": "Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)"
           },
+          "actor_tecnico": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo)"
+          },
+          "actor_tecnico_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario de Argos del técnico de la operación de Iris"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hora del teléfono (fecha de Iris 0.12.0)"
+          },
           "movimientos": {
             "type": "array",
             "items": {
@@ -97811,6 +100198,40 @@
           },
           "permisos": {
             "$ref": "#/components/schemas/PermisosContacto"
+          }
+        }
+      },
+      "ContactoRecuperacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "unidad_id",
+          "servicio_id",
+          "medio",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "medio": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -102856,7 +105277,8 @@
               "dada_de_baja",
               "anulada",
               "devuelta_proveedor",
-              "entregada"
+              "entregada",
+              "no_recuperada"
             ]
           },
           "condicion": {
@@ -102911,6 +105333,23 @@
               "null"
             ],
             "minimum": 1
+          },
+          "estado_equipo": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ],
+            "description": "Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)"
           },
           "version": {
             "type": "integer",
@@ -103102,6 +105541,14 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Con `?servicio_id=`: el estado de cuenta es solo de ese servicio (saldo = suma de sus movimientos; saldo a favor 0.00, porque es del cliente); null = todo el cliente"
           },
           "saldo": {
             "$ref": "#/components/schemas/Dinero",
@@ -104448,7 +106895,8 @@
             "enum": [
               "bodega",
               "tecnico",
-              "transito"
+              "transito",
+              "cuadrilla"
             ],
             "description": "La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true"
           },
@@ -106947,6 +109395,64 @@
           }
         }
       },
+      "IntentoRecuperacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "unidad_id",
+          "servicio_id",
+          "intento_n",
+          "motivo",
+          "estado",
+          "fecha"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "intento_n": {
+            "type": "integer"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "cliente_ausente",
+              "se_nego",
+              "equipo_perdido",
+              "otro"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "InventarioValorizado": {
         "type": "object",
         "required": [
@@ -108798,12 +111304,180 @@
             },
             "description": "Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id="
           },
+          "cuadrilla": {
+            "type": "boolean",
+            "description": "La bodega de arriba es de cuadrilla"
+          },
+          "jefe": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id_externo",
+              "nombre"
+            ],
+            "properties": {
+              "id_externo": {
+                "type": "string"
+              },
+              "nombre": {
+                "type": "string"
+              }
+            },
+            "description": "Jefe de la cuadrilla (null sin jefe o si no es de cuadrilla)"
+          },
           "bodegas": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Bodega"
+              "type": "object",
+              "required": [
+                "cuadrilla",
+                "jefe",
+                "id",
+                "empresa_id",
+                "nombre"
+              ],
+              "properties": {
+                "bodega": {
+                  "$ref": "#/components/schemas/Bodega"
+                },
+                "cuadrilla": {
+                  "type": "boolean"
+                },
+                "jefe": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "id_externo",
+                    "nombre"
+                  ],
+                  "properties": {
+                    "id_externo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "existencias": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExistenciaInventario"
+                  }
+                },
+                "unidades": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnidadInventario"
+                  }
+                },
+                "traslados_pendientes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrdenTraslado"
+                  }
+                },
+                "kardex": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MovimientoInventario"
+                  }
+                },
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                }
+              }
             },
-            "description": "Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más)"
+            "description": "Con empresa (Iris 0.11.0 §3.9): primero las cuadrillas de las que es miembro y después la personal, cada una con su contenido. Sin empresa y con bodegas en varias empresas: una Bodega por empresa (con cuadrilla y jefe) y nada más"
+          }
+        }
+      },
+      "MiembrosCuadrilla": {
+        "type": "object",
+        "required": [
+          "bodega_id",
+          "cuadrilla_id_iris",
+          "version",
+          "jefe_id",
+          "miembros"
+        ],
+        "properties": {
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuadrilla_id_iris": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "jefe_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "miembros": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "iris_usuario_id",
+                "usuario_id",
+                "nombre",
+                "aceptado",
+                "motivo",
+                "desde"
+              ],
+              "properties": {
+                "iris_usuario_id": {
+                  "type": "string"
+                },
+                "usuario_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "aceptado": {
+                  "type": "boolean"
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "desde": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       },
@@ -109483,6 +112157,29 @@
             ],
             "minimum": 1,
             "description": "Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)"
+          },
+          "actor_tecnico": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo)"
+          },
+          "actor_tecnico_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario de Argos del técnico de la operación de Iris"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hora del teléfono (fecha de Iris 0.12.0)"
           }
         }
       },
@@ -109945,6 +112642,7 @@
           "inventario.cancelar_traslado",
           "inventario.cargar_saldo_inicial",
           "inventario.cerrar_conteo",
+          "inventario.cobrar_equipo",
           "inventario.configurar",
           "inventario.configurar_ia",
           "inventario.consumir",
@@ -109953,10 +112651,15 @@
           "inventario.dar_de_baja",
           "inventario.declarar_perdida_comodato",
           "inventario.devolver_comodato",
+          "inventario.enviar_garantia",
           "inventario.marcar_reparada",
           "inventario.recibir_traslado",
+          "inventario.registrar_contacto_recuperacion",
+          "inventario.resolver_garantia",
+          "inventario.sincronizar_cuadrilla",
           "inventario.trasladar",
           "inventario.ver",
+          "inventario.ver_unidad",
           "ip.resolver",
           "ipv6.crear",
           "ipv6.editar",
@@ -110058,6 +112761,7 @@
           "servicios.adicional_cortesia",
           "servicios.agregar_adicional",
           "servicios.cambiar_empresa",
+          "servicios.cambiar_equipo",
           "servicios.cambiar_plan_pendiente",
           "servicios.cambiar_titular",
           "servicios.cancelar_plan_temporal",
@@ -110249,6 +112953,7 @@
           "Cancelar una orden de traslado en tránsito (todo vuelve al origen)",
           "Cargar el saldo inicial de un producto en una bodega",
           "Cerrar un conteo físico (ajusta faltantes y sobrantes con su asiento)",
+          "Declarar un equipo no recuperado y decidir los cobros de equipo (Equipo no devuelto y cobros propuestos)",
           "Configurar el inventario de la empresa (firma obligatoria al recibir traslados)",
           "Configurar la IA que lee facturas de compra (proveedor, modelo y clave)",
           "Registrar consumo de materiales en una instalación o reparación",
@@ -110257,10 +112962,15 @@
           "Dar de baja existencias dañadas, robadas u obsoletas",
           "Declarar perdido un equipo en comodato (baja del activo a pérdida)",
           "Recibir de vuelta un equipo en comodato (baja del activo sin resultado)",
+          "Enviar a garantía del proveedor una unidad en revisión (proveedor, RMA y vencimiento)",
           "Devolver a disponible una unidad en reparación",
           "Recibir una orden de traslado (firma digital, firma en papel o aceptación), marcando faltantes",
+          "Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)",
+          "Resolver la garantía de una unidad: volvió reparada, reemplazada o rechazada",
+          "Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)",
           "Trasladar existencias entre bodegas o técnicos",
           "Ver productos, bodegas, existencias y el kardex",
+          "Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor",
           "Resolver una IP a su servicio",
           "Crear bloques y pools IPv6",
           "Editar bloques y pools IPv6",
@@ -110362,6 +113072,7 @@
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
           "Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado",
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
+          "Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación",
           "Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)",
           "Pasar un servicio pendiente de instalación a otro titular (Argos decide si es un cliente existente por documento y nombre)",
           "Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)",
@@ -110949,7 +113660,8 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico"
+              "tecnico",
+              "cuadrilla"
             ]
           },
           "usuario_destino_id": {
@@ -111196,7 +113908,8 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico"
+              "tecnico",
+              "cuadrilla"
             ]
           },
           "usuario_destino_id": {
@@ -112587,6 +115300,72 @@
               "type": "string"
             },
             "description": "Redes descartadas y por qué (traslape, red del túnel, excluidas)"
+          }
+        }
+      },
+      "PendienteNoRecuperado": {
+        "type": "object",
+        "required": [
+          "unidad_id",
+          "empresa_id",
+          "serie",
+          "mac",
+          "producto_nombre",
+          "servicio_id",
+          "cliente_id",
+          "cliente_nombre",
+          "intentos",
+          "tecnicos_distintos",
+          "contactos",
+          "ultimo_intento"
+        ],
+        "properties": {
+          "unidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "tecnicos_distintos": {
+            "type": "integer"
+          },
+          "contactos": {
+            "type": "integer"
+          },
+          "ultimo_intento": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -124778,6 +127557,241 @@
           }
         }
       },
+      "ResumenTurnoCaja": {
+        "type": "object",
+        "required": [
+          "caja_id",
+          "caja_nombre",
+          "empresa_id",
+          "turno_id",
+          "abierto_en",
+          "abierto_por",
+          "abierto_por_nombre",
+          "cerrado_en",
+          "fondo_inicial",
+          "cobros",
+          "efectivo_cobrado",
+          "otros_medios",
+          "ingresos",
+          "retiros",
+          "esperado"
+        ],
+        "properties": {
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "turno_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "abierto_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "abierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fondo_inicial": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cobros": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "por_metodo"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "por_metodo": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "metodo",
+                    "cantidad",
+                    "monto"
+                  ],
+                  "properties": {
+                    "metodo": {
+                      "type": "string"
+                    },
+                    "cantidad": {
+                      "type": "integer"
+                    },
+                    "monto": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Cobros vigentes del turno: en efectivo y por otros medios del cajero"
+          },
+          "efectivo_cobrado": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "Cobros en efectivo (monto − retenido)"
+          },
+          "otros_medios": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "Cobros por otros medios que registró el cajero mientras el turno estuvo abierto"
+          },
+          "ingresos": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "cobros_efectivo"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "cobros_efectivo": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              }
+            },
+            "description": "Efectivo que entró a la caja (sin el fondo)"
+          },
+          "retiros": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "egresos",
+              "depositos",
+              "pagos_proveedores"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "egresos": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              },
+              "depositos": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              },
+              "pagos_proveedores": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              }
+            },
+            "description": "Efectivo que salió: egresos, depósitos al banco y pagos a proveedores"
+          },
+          "esperado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Debe haber en efectivo: fondo + ingresos − retiros"
+          }
+        }
+      },
       "RetencionCompra": {
         "type": "object",
         "required": [
@@ -125034,6 +128048,7 @@
               "inventario.cancelar_traslado",
               "inventario.cargar_saldo_inicial",
               "inventario.cerrar_conteo",
+              "inventario.cobrar_equipo",
               "inventario.configurar",
               "inventario.configurar_ia",
               "inventario.consumir",
@@ -125042,10 +128057,15 @@
               "inventario.dar_de_baja",
               "inventario.declarar_perdida_comodato",
               "inventario.devolver_comodato",
+              "inventario.enviar_garantia",
               "inventario.marcar_reparada",
               "inventario.recibir_traslado",
+              "inventario.registrar_contacto_recuperacion",
+              "inventario.resolver_garantia",
+              "inventario.sincronizar_cuadrilla",
               "inventario.trasladar",
               "inventario.ver",
+              "inventario.ver_unidad",
               "ip.resolver",
               "ipv6.crear",
               "ipv6.editar",
@@ -125147,6 +128167,7 @@
               "servicios.adicional_cortesia",
               "servicios.agregar_adicional",
               "servicios.cambiar_empresa",
+              "servicios.cambiar_equipo",
               "servicios.cambiar_plan_pendiente",
               "servicios.cambiar_titular",
               "servicios.cancelar_plan_temporal",
@@ -125325,6 +128346,7 @@
               "inventario.recibir_traslado",
               "inventario.trasladar",
               "inventario.ver",
+              "inventario.ver_unidad",
               "ip.resolver",
               "ipv6.crear",
               "ipv6.editar",
@@ -125356,6 +128378,7 @@
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
+              "servicios.cambiar_equipo",
               "servicios.cambiar_plan_pendiente",
               "servicios.cambiar_titular",
               "servicios.completar_datos",
@@ -125467,8 +128490,11 @@
               "inventario.contar",
               "inventario.crear_traslado",
               "inventario.dar_de_baja",
+              "inventario.enviar_garantia",
               "inventario.marcar_reparada",
               "inventario.recibir_traslado",
+              "inventario.registrar_contacto_recuperacion",
+              "inventario.resolver_garantia",
               "inventario.ver",
               "lealtad.ajustar",
               "lealtad.canjear",
@@ -129198,6 +132224,140 @@
           }
         }
       },
+      "UnidadEquipoIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "modelo",
+          "serie",
+          "mac",
+          "estado",
+          "servicio_id",
+          "historial"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "modelo": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ]
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "historial": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fecha",
+                "de",
+                "a",
+                "motivo",
+                "servicio_id"
+              ],
+              "properties": {
+                "fecha": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "de": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "disponible",
+                    "en_comodato",
+                    "por_recuperar",
+                    "revision",
+                    "garantia",
+                    "dada_de_baja",
+                    "no_recuperada",
+                    "vendida",
+                    "anulada",
+                    "devuelta_proveedor",
+                    "entregada"
+                  ]
+                },
+                "a": {
+                  "type": "string",
+                  "enum": [
+                    "disponible",
+                    "en_comodato",
+                    "por_recuperar",
+                    "revision",
+                    "garantia",
+                    "dada_de_baja",
+                    "no_recuperada",
+                    "vendida",
+                    "anulada",
+                    "devuelta_proveedor",
+                    "entregada"
+                  ]
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Solo el servicio actual de la unidad o el de la orden en curso (?servicio_id=)"
+                }
+              }
+            }
+          }
+        }
+      },
       "UnidadInventario": {
         "type": "object",
         "required": [
@@ -129264,7 +132424,8 @@
               "dada_de_baja",
               "anulada",
               "devuelta_proveedor",
-              "entregada"
+              "entregada",
+              "no_recuperada"
             ]
           },
           "condicion": {
@@ -129320,6 +132481,23 @@
             ],
             "minimum": 1
           },
+          "estado_equipo": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ],
+            "description": "Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -129335,7 +132513,7 @@
           }
         }
       },
-      "UnidadInventarioHistorial": {
+      "UnidadInventarioDetalle": {
         "type": "object",
         "required": [
           "id",
@@ -129354,10 +132532,15 @@
           "cliente_id",
           "activo_id",
           "compra_id",
+          "estado_equipo",
           "version",
           "created_at",
           "updated_at",
-          "historial"
+          "historial",
+          "historial_estados",
+          "garantias",
+          "intentos",
+          "contactos"
         ],
         "properties": {
           "id": {
@@ -129402,7 +132585,8 @@
               "dada_de_baja",
               "anulada",
               "devuelta_proveedor",
-              "entregada"
+              "entregada",
+              "no_recuperada"
             ]
           },
           "condicion": {
@@ -129457,6 +132641,23 @@
               "null"
             ],
             "minimum": 1
+          },
+          "estado_equipo": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ],
+            "description": "Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)"
           },
           "version": {
             "type": "integer",
@@ -129589,6 +132790,794 @@
                 }
               }
             }
+          },
+          "historial_estados": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fecha",
+                "de",
+                "a",
+                "motivo",
+                "servicio_id"
+              ],
+              "properties": {
+                "fecha": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "de": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "disponible",
+                    "en_comodato",
+                    "por_recuperar",
+                    "revision",
+                    "garantia",
+                    "dada_de_baja",
+                    "no_recuperada",
+                    "vendida",
+                    "anulada",
+                    "devuelta_proveedor",
+                    "entregada"
+                  ]
+                },
+                "a": {
+                  "type": "string",
+                  "enum": [
+                    "disponible",
+                    "en_comodato",
+                    "por_recuperar",
+                    "revision",
+                    "garantia",
+                    "dada_de_baja",
+                    "no_recuperada",
+                    "vendida",
+                    "anulada",
+                    "devuelta_proveedor",
+                    "entregada"
+                  ]
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "origen_externo_tipo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "origen_externo_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "Cada cambio del estado del equipo"
+          },
+          "garantias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "proveedor_id",
+                "proveedor_nombre",
+                "rma",
+                "vence_en",
+                "enviada_en",
+                "origen",
+                "abierta_en",
+                "resultado",
+                "resuelta_en",
+                "serie_anterior",
+                "mac_anterior",
+                "nota"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "proveedor_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "proveedor_nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "rma": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "vence_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "enviada_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "origen": {
+                  "type": "string",
+                  "enum": [
+                    "cambio_equipo",
+                    "panel"
+                  ]
+                },
+                "abierta_en": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "resultado": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "reparada",
+                    "reemplazada",
+                    "rechazada",
+                    "baja"
+                  ]
+                },
+                "resuelta_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "serie_anterior": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "mac_anterior": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nota": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "intentos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "servicio_id",
+                "intento_n",
+                "motivo",
+                "foto_ref",
+                "lat",
+                "lng",
+                "precision_m",
+                "nota",
+                "fecha",
+                "actor_tecnico",
+                "actor_tecnico_id",
+                "actor_tecnico_nombre",
+                "origen_externo_id",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "intento_n": {
+                  "type": "integer"
+                },
+                "motivo": {
+                  "type": "string",
+                  "enum": [
+                    "cliente_ausente",
+                    "se_nego",
+                    "equipo_perdido",
+                    "otro"
+                  ]
+                },
+                "foto_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Id opaco del adjunto de la orden en Iris (se abre por autologin)"
+                },
+                "lat": {
+                  "type": "string"
+                },
+                "lng": {
+                  "type": "string"
+                },
+                "precision_m": {
+                  "type": "string"
+                },
+                "nota": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "actor_tecnico": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "actor_tecnico_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "actor_tecnico_nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "origen_externo_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "contactos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "servicio_id",
+                "medio",
+                "nota",
+                "registrado_por",
+                "registrado_por_nombre",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "medio": {
+                  "type": "string"
+                },
+                "nota": {
+                  "type": "string"
+                },
+                "registrado_por": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "registrado_por_nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UnidadInventarioHistorial": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "serie",
+          "mac",
+          "estado",
+          "condicion",
+          "bodega_id",
+          "bodega_nombre",
+          "costo",
+          "servicio_id",
+          "cliente_id",
+          "activo_id",
+          "compra_id",
+          "version",
+          "created_at",
+          "updated_at",
+          "historial"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "AA:BB:CC:DD:EE:FF"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "en_reparacion",
+              "vendida",
+              "dada_de_baja",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada",
+              "no_recuperada"
+            ]
+          },
+          "condicion": {
+            "type": "string",
+            "enum": [
+              "nuevo",
+              "usado"
+            ]
+          },
+          "bodega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Costo específico (al volver de comodato, su valor en libros)"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Activo fijo mientras está en comodato"
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado_equipo": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ],
+            "description": "Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "historial": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "tipo",
+                "fecha",
+                "bodega_id",
+                "bodega_nombre",
+                "cantidad",
+                "costo_total",
+                "servicio_id",
+                "asiento_id",
+                "origen_tipo",
+                "origen_id",
+                "motivo",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "entrada_compra",
+                    "reverso_compra",
+                    "devolucion_proveedor",
+                    "venta",
+                    "reverso_venta",
+                    "consumo",
+                    "traslado",
+                    "asignacion_comodato",
+                    "devolucion_comodato",
+                    "ajuste_conteo",
+                    "ajuste",
+                    "baja",
+                    "saldo_inicial",
+                    "premio",
+                    "reverso_premio"
+                  ]
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "bodega_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "bodega_nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "Cantidad con 3 decimales"
+                },
+                "costo_total": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Monto con signo (+ entra, − sale)"
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "asiento_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "origen_tipo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "origen_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "origen_externo_tipo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "iris_orden"
+                  ]
+                },
+                "origen_externo_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UnidadNoRecuperada": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "serie",
+          "mac",
+          "estado",
+          "condicion",
+          "bodega_id",
+          "bodega_nombre",
+          "costo",
+          "servicio_id",
+          "cliente_id",
+          "activo_id",
+          "compra_id",
+          "estado_equipo",
+          "version",
+          "created_at",
+          "updated_at",
+          "cobro_id",
+          "factura_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "AA:BB:CC:DD:EE:FF"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "en_reparacion",
+              "vendida",
+              "dada_de_baja",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada",
+              "no_recuperada"
+            ]
+          },
+          "condicion": {
+            "type": "string",
+            "enum": [
+              "nuevo",
+              "usado"
+            ]
+          },
+          "bodega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Costo específico (al volver de comodato, su valor en libros)"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Activo fijo mientras está en comodato"
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado_equipo": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "revision",
+              "garantia",
+              "dada_de_baja",
+              "no_recuperada",
+              "vendida",
+              "anulada",
+              "devuelta_proveedor",
+              "entregada"
+            ],
+            "description": "Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "El cobro «Equipo no devuelto» (con monto)"
+          },
+          "factura_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "La factura del cargo único del cobro"
           }
         }
       },

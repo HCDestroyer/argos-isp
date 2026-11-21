@@ -27,6 +27,8 @@ import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
+import { exigirContactoIris } from '#billing/contacto_iris'
+
 import { dimensionesDeBonificacion, listarBonificaciones, verBonificacion } from '#billing/bonificaciones'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
@@ -183,6 +185,12 @@ async function empresasDeConsulta(ids: number[] | null): Promise<number[]> {
     if (ids !== null) return ids
     const filas = (await db.from('core.empresas').orderBy('id').select('id')) as Array<{ id: number }>
     return filas.map((f) => Number(f.id))
+}
+
+/** Cliente dueño de un servicio (404 si no existe: ya lo revisó `exigirServicio`). */
+async function clienteDelServicio(servicioId: number): Promise<number> {
+    const fila = await db.from('core.servicios').where('id', servicioId).select('cliente_id').firstOrFail()
+    return Number(fila.cliente_id)
 }
 
 const plantillas: Ruta[] = [
@@ -755,6 +763,12 @@ const promesas: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: Promesa },
         handler: async (ctx, { cuerpo }) => {
             await exigirServicio(ctx, cuerpo.servicio_id)
+            // Iris 0.10.1 §7.1 y §7.4: una promesa pedida por un contacto (permiso `pagar`)
+            await exigirContactoIris(ctx, {
+                cliente_id: await clienteDelServicio(cuerpo.servicio_id),
+                servicio_id: cuerpo.servicio_id,
+                permiso: 'pagar',
+            })
             const canal = canalPromesaIris(ctx) ?? (await canalPromesa(ctx, cuerpo.canal))
             return new CrearPromesaPago().execute(
                 // `monto` es obsoleto: se ignora (la promesa cubre todo lo vencido)
@@ -919,6 +933,12 @@ const comprobantes: Ruta[] = [
                     ].filter((e) => e !== false),
                 )
             }
+            // Iris 0.10.1 §7.1 y §7.2: un comprobante pedido por un contacto (permiso `pagar`)
+            await exigirContactoIris(ctx, {
+                cliente_id: cuerpo.cliente_id,
+                servicio_id: cuerpo.servicio_id ?? null,
+                permiso: 'pagar',
+            })
             const archivo = await archivoComprobante(ctx)
             return new RegistrarComprobante().execute(
                 {
@@ -1755,7 +1775,17 @@ const estadoCuenta: Ruta[] = [
         handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
             await exigirCliente(ctx, id)
-            return leerEstadoCuenta(id, empresasEstadoCuenta(ctx, query.empresa_id))
+            // Iris 0.10.1 §7.1: lo pide un contacto (permiso `consultar`, solo sus servicios)
+            await exigirContactoIris(ctx, {
+                cliente_id: id,
+                servicio_id: query.servicio_id ?? null,
+                permiso: 'consultar',
+            })
+            return leerEstadoCuenta(
+                id,
+                empresasEstadoCuenta(ctx, query.empresa_id),
+                query.servicio_id ?? null,
+            )
         },
     }),
 ]

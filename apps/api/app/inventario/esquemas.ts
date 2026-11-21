@@ -15,9 +15,10 @@ import {
 } from '#shared/openapi/esquemas'
 import { SEGUIMIENTOS } from '#inventario/productos'
 import { MODALIDADES } from '#inventario/tipos_producto'
-import { TIPOS_BODEGA, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
+import { TIPOS_BODEGA_DESTINO, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
+import { ESTADOS_EQUIPO } from '#inventario/equipos'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 import { ESTADOS_ORDEN_TRASLADO, METODOS_RECEPCION } from '#inventario/ordenes_traslado'
@@ -72,21 +73,49 @@ export const Producto = definirEsquema(
 
 export const Bodega = definirEsquema(
     'Bodega',
-    objeto({
-        id,
-        empresa_id: id,
-        nombre: texto,
-        tipo: {
-            ...enumerado(TIPOS_BODEGA_VISTA),
-            description:
-                'bodega, tecnico o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            nombre: texto,
+            tipo: {
+                ...enumerado(TIPOS_BODEGA_VISTA),
+                description:
+                    'bodega, tecnico, cuadrilla (la compartida de una cuadrilla de Iris, 0.11.0 §3.9) o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)',
+            },
+            usuario_id: nulable(id),
+            usuario_nombre: nulable(texto),
+            zona_id: nulable(id),
+            router_id: nulable(id),
+            activo: booleano,
+            cuadrilla_id_iris: { ...nulable(texto), description: 'Cuadrilla de Iris (solo tipo cuadrilla)' },
+            jefe_id: {
+                ...nulable(id),
+                description: 'Jefe actual de la cuadrilla (usuario de Argos); null sin jefe',
+            },
+            ...auditable,
         },
-        usuario_id: nulable(id),
-        usuario_nombre: nulable(texto),
-        zona_id: nulable(id),
-        router_id: nulable(id),
-        activo: booleano,
-        ...auditable,
+        ['cuadrilla_id_iris', 'jefe_id'],
+    ),
+)
+
+export const MiembrosCuadrilla = definirEsquema(
+    'MiembrosCuadrilla',
+    objeto({
+        bodega_id: id,
+        cuadrilla_id_iris: nulable(texto),
+        version: entero,
+        jefe_id: nulable(id),
+        miembros: lista(
+            objeto({
+                iris_usuario_id: texto,
+                usuario_id: nulable(id),
+                nombre: nulable(texto),
+                aceptado: booleano,
+                motivo: nulable(texto),
+                desde: instante,
+            }),
+        ),
     }),
 )
 
@@ -167,12 +196,27 @@ const camposMovimiento = {
         description:
             'Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)',
     },
+    actor_tecnico: {
+        ...nulable(texto),
+        description: 'Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo)',
+    },
+    actor_tecnico_id: { ...nulable(id), description: 'Usuario de Argos del técnico de la operación de Iris' },
+    ocurrido_en: { ...nulable(instante), description: 'Hora del teléfono (fecha de Iris 0.12.0)' },
 }
+
+const OPCIONALES_MOVIMIENTO = [
+    'origen_externo_tipo',
+    'origen_externo_id',
+    'factura_id',
+    'actor_tecnico',
+    'actor_tecnico_id',
+    'ocurrido_en',
+]
 
 export const MovimientoInventario = definirEsquema(
     'MovimientoInventario',
     // siempre presentes (null sin orden); opcionales en el esquema hasta que los fixtures del panel los lleven
-    objeto(camposMovimiento, ['origen_externo_tipo', 'origen_externo_id', 'factura_id']),
+    objeto(camposMovimiento, OPCIONALES_MOVIMIENTO),
 )
 
 /** Respuesta de `POST /inventario/consumos` (fase D): el movimiento de la primera línea más el lote. */
@@ -191,7 +235,7 @@ export const ConsumoInventario = definirEsquema(
                     'Cargos al cliente de las líneas consumible_cobro (id = la factura del cargo único)',
             },
         },
-        ['origen_externo_tipo', 'origen_externo_id', 'factura_id', 'movimientos', 'cargos'],
+        [...OPCIONALES_MOVIMIENTO, 'movimientos', 'cargos'],
     ),
 )
 
@@ -228,47 +272,60 @@ const camposUnidad = {
     cliente_id: nulable(id),
     activo_id: { ...nulable(id), description: 'Activo fijo mientras está en comodato' },
     compra_id: nulable(id),
+    estado_equipo: {
+        ...enumerado(ESTADOS_EQUIPO),
+        description:
+            'Estado del equipo (Iris 0.12.0 §3.10): como estado, salvo en_reparacion, que es revision o garantia (con una garantía abierta)',
+    },
     ...auditable,
 }
 
-export const Unidad = definirEsquema('UnidadInventario', objeto(camposUnidad))
+export const Unidad = definirEsquema('UnidadInventario', objeto(camposUnidad, ['estado_equipo']))
+
+const HistorialKardexUnidad = lista(
+    objeto(
+        {
+            id,
+            tipo: enumerado(TIPOS_MOVIMIENTO),
+            fecha,
+            bodega_id: id,
+            bodega_nombre: texto,
+            cantidad: Cantidad,
+            costo_total: DineroConSigno,
+            servicio_id: nulable(id),
+            asiento_id: nulable(id),
+            origen_tipo: nulable(texto),
+            origen_id: nulable(id),
+            origen_externo_tipo: nulable(enumerado(ORIGENES_EXTERNOS)),
+            origen_externo_id: nulable(texto),
+            motivo: nulable(texto),
+            created_at: instante,
+        },
+        ['origen_externo_tipo', 'origen_externo_id'],
+    ),
+)
 
 export const UnidadConHistorial = definirEsquema(
     'UnidadInventarioHistorial',
-    objeto({
-        ...camposUnidad,
-        historial: lista(
-            objeto(
-                {
-                    id,
-                    tipo: enumerado(TIPOS_MOVIMIENTO),
-                    fecha,
-                    bodega_id: id,
-                    bodega_nombre: texto,
-                    cantidad: Cantidad,
-                    costo_total: DineroConSigno,
-                    servicio_id: nulable(id),
-                    asiento_id: nulable(id),
-                    origen_tipo: nulable(texto),
-                    origen_id: nulable(id),
-                    origen_externo_tipo: nulable(enumerado(ORIGENES_EXTERNOS)),
-                    origen_externo_id: nulable(texto),
-                    motivo: nulable(texto),
-                    created_at: instante,
-                },
-                ['origen_externo_tipo', 'origen_externo_id'],
-            ),
-        ),
-    }),
+    objeto(
+        {
+            ...camposUnidad,
+            historial: HistorialKardexUnidad,
+        },
+        ['estado_equipo'],
+    ),
 )
 
 export const EquipoServicio = definirEsquema(
     'EquipoServicio',
-    objeto({
-        ...camposUnidad,
-        valor_libros: { ...nulable(texto), description: 'Costo − depreciación acumulada del activo' },
-        fecha_asignacion: nulable(fecha),
-    }),
+    objeto(
+        {
+            ...camposUnidad,
+            valor_libros: { ...nulable(texto), description: 'Costo − depreciación acumulada del activo' },
+            fecha_asignacion: nulable(fecha),
+        },
+        ['estado_equipo'],
+    ),
 )
 
 const CostoUnitario = { type: 'string', description: 'Costo unitario con 6 decimales' }
@@ -374,7 +431,7 @@ const camposOrdenTraslado = {
     bodega_origen_nombre: texto,
     bodega_destino_id: id,
     bodega_destino_nombre: texto,
-    bodega_destino_tipo: enumerado(TIPOS_BODEGA),
+    bodega_destino_tipo: enumerado(TIPOS_BODEGA_DESTINO),
     usuario_destino_id: {
         ...nulable(id),
         description: 'Técnico de la bodega destino; null si es una bodega',
@@ -448,11 +505,19 @@ export const OrdenTrasladoDetalle = definirEsquema(
 
 export const ConfiguracionInventario = definirEsquema(
     'ConfiguracionInventario',
-    objeto({
-        empresa_id: id,
-        traslado_firma_obligatoria: booleano,
-        version: { ...entero, description: '0 = sin configurar (valores por defecto)' },
-    }),
+    objeto(
+        {
+            empresa_id: id,
+            traslado_firma_obligatoria: booleano,
+            recuperacion_tecnicos_minimos: {
+                ...entero,
+                description:
+                    'Técnicos distintos con intentos para declarar un equipo no recuperado (2 de fábrica)',
+            },
+            version: { ...entero, description: '0 = sin configurar (valores por defecto)' },
+        },
+        ['recuperacion_tecnicos_minimos'],
+    ),
 )
 
 export const TipoProducto = definirEsquema(
@@ -609,13 +674,43 @@ export const MiBodega = definirEsquema(
                 description:
                     'Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id=',
             },
+            cuadrilla: { ...booleano, description: 'La bodega de arriba es de cuadrilla' },
+            jefe: {
+                ...nulable(objeto({ id_externo: texto, nombre: texto })),
+                description: 'Jefe de la cuadrilla (null sin jefe o si no es de cuadrilla)',
+            },
             bodegas: {
-                ...lista(Bodega),
+                ...lista(
+                    objeto(
+                        {
+                            bodega: Bodega,
+                            cuadrilla: booleano,
+                            jefe: nulable(objeto({ id_externo: texto, nombre: texto })),
+                            existencias: lista(Existencia),
+                            unidades: lista(Unidad),
+                            traslados_pendientes: lista(OrdenTraslado),
+                            kardex: lista(MovimientoInventario),
+                            id: id,
+                            empresa_id: id,
+                            nombre: texto,
+                        },
+                        ['bodega', 'existencias', 'unidades', 'traslados_pendientes', 'kardex'],
+                    ),
+                ),
                 description:
-                    'Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más)',
+                    'Con empresa (Iris 0.11.0 §3.9): primero las cuadrillas de las que es miembro y después la personal, cada una con su contenido. Sin empresa y con bodegas en varias empresas: una Bodega por empresa (con cuadrilla y jefe) y nada más',
             },
         },
-        ['bodega', 'existencias', 'unidades', 'traslados_pendientes', 'kardex', 'bodegas'],
+        [
+            'bodega',
+            'existencias',
+            'unidades',
+            'traslados_pendientes',
+            'kardex',
+            'bodegas',
+            'cuadrilla',
+            'jefe',
+        ],
     ),
 )
 
@@ -636,5 +731,193 @@ export const Tecnico = definirEsquema(
                 nombre: { ...texto, description: 'Nombre de la bodega (contrato Iris 0.6.4, A22)' },
             }),
         ),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| A48 · equipos del cliente (contrato Iris 0.12.0 §3.10)
+|--------------------------------------------------------------------------
+*/
+
+const EstadoHistorial = objeto(
+    {
+        fecha: instante,
+        de: nulable(enumerado(ESTADOS_EQUIPO)),
+        a: enumerado(ESTADOS_EQUIPO),
+        motivo: nulable(texto),
+        servicio_id: nulable(id),
+        origen_externo_tipo: nulable(texto),
+        origen_externo_id: nulable(texto),
+    },
+    ['origen_externo_tipo', 'origen_externo_id'],
+)
+
+export const UnidadDetalle = definirEsquema(
+    'UnidadInventarioDetalle',
+    objeto({
+        ...camposUnidad,
+        historial: HistorialKardexUnidad,
+        historial_estados: { ...lista(EstadoHistorial), description: 'Cada cambio del estado del equipo' },
+        garantias: lista(
+            objeto({
+                id,
+                proveedor_id: nulable(id),
+                proveedor_nombre: nulable(texto),
+                rma: nulable(texto),
+                vence_en: nulable(fecha),
+                enviada_en: nulable(instante),
+                origen: enumerado(['cambio_equipo', 'panel']),
+                abierta_en: instante,
+                resultado: nulable(enumerado(['reparada', 'reemplazada', 'rechazada', 'baja'])),
+                resuelta_en: nulable(instante),
+                serie_anterior: nulable(texto),
+                mac_anterior: nulable(texto),
+                nota: nulable(texto),
+            }),
+        ),
+        intentos: lista(
+            objeto({
+                id,
+                servicio_id: id,
+                intento_n: entero,
+                motivo: enumerado(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro']),
+                foto_ref: {
+                    ...nulable(texto),
+                    description: 'Id opaco del adjunto de la orden en Iris (se abre por autologin)',
+                },
+                lat: texto,
+                lng: texto,
+                precision_m: texto,
+                nota: nulable(texto),
+                fecha: instante,
+                actor_tecnico: nulable(texto),
+                actor_tecnico_id: nulable(id),
+                actor_tecnico_nombre: nulable(texto),
+                origen_externo_id: nulable(texto),
+                created_at: instante,
+            }),
+        ),
+        contactos: lista(
+            objeto({
+                id,
+                servicio_id: nulable(id),
+                medio: texto,
+                nota: texto,
+                registrado_por: nulable(id),
+                registrado_por_nombre: nulable(texto),
+                created_at: instante,
+            }),
+        ),
+    }),
+)
+
+/** Lo que ve Iris de una unidad (M5): sin costos, proveedor ni RMA. */
+export const UnidadEquipoIris = definirEsquema(
+    'UnidadEquipoIris',
+    objeto({
+        id,
+        empresa_id: id,
+        producto_id: id,
+        modelo: texto,
+        serie: nulable(texto),
+        mac: nulable(texto),
+        estado: enumerado(ESTADOS_EQUIPO),
+        servicio_id: nulable(id),
+        historial: lista(
+            objeto({
+                fecha: instante,
+                de: nulable(enumerado(ESTADOS_EQUIPO)),
+                a: enumerado(ESTADOS_EQUIPO),
+                motivo: nulable(texto),
+                servicio_id: {
+                    ...nulable(id),
+                    description:
+                        'Solo el servicio actual de la unidad o el de la orden en curso (?servicio_id=)',
+                },
+            }),
+        ),
+    }),
+)
+
+export const CambioEquipo = definirEsquema(
+    'CambioEquipo',
+    objeto({
+        cambio_id: id,
+        sale: objeto({ unidad_id: id, estado: enumerado(ESTADOS_EQUIPO) }),
+        entra: objeto({ unidad_id: id, estado: enumerado(ESTADOS_EQUIPO) }),
+        cobro_propuesto_id: { ...nulable(id), description: 'El cobro propuesto en la cola (sin monto)' },
+    }),
+)
+
+export const IntentoRecuperacion = definirEsquema(
+    'IntentoRecuperacion',
+    objeto({
+        id,
+        unidad_id: id,
+        servicio_id: id,
+        intento_n: entero,
+        motivo: enumerado(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro']),
+        estado: enumerado(ESTADOS_EQUIPO),
+        fecha: instante,
+    }),
+)
+
+export const ContactoRecuperacion = definirEsquema(
+    'ContactoRecuperacion',
+    objeto({ id, unidad_id: id, servicio_id: nulable(id), medio: texto, created_at: instante }),
+)
+
+export const CobroEquipo = definirEsquema(
+    'CobroEquipo',
+    objeto({
+        id,
+        empresa_id: id,
+        unidad_id: id,
+        serie: nulable(texto),
+        mac: nulable(texto),
+        producto_nombre: texto,
+        servicio_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        origen: enumerado(['cambio_equipo', 'no_recuperado']),
+        cambio_id: nulable(id),
+        motivo: nulable(texto),
+        nota: nulable(texto),
+        estado: enumerado(['propuesto', 'aprobado', 'rechazado']),
+        monto: nulable(Dinero),
+        factura_id: nulable(id),
+        decidido_por: nulable(id),
+        decidido_en: nulable(instante),
+        motivo_decision: nulable(texto),
+        version: entero,
+        created_at: instante,
+    }),
+)
+
+export const PendienteNoRecuperado = definirEsquema(
+    'PendienteNoRecuperado',
+    objeto({
+        unidad_id: id,
+        empresa_id: id,
+        serie: nulable(texto),
+        mac: nulable(texto),
+        producto_nombre: texto,
+        servicio_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        intentos: entero,
+        tecnicos_distintos: entero,
+        contactos: entero,
+        ultimo_intento: instante,
+    }),
+)
+
+export const UnidadNoRecuperada = definirEsquema(
+    'UnidadNoRecuperada',
+    objeto({
+        ...camposUnidad,
+        cobro_id: { ...nulable(id), description: 'El cobro «Equipo no devuelto» (con monto)' },
+        factura_id: { ...nulable(id), description: 'La factura del cargo único del cobro' },
     }),
 )

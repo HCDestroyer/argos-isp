@@ -12,6 +12,7 @@ import {
     Caja,
     Diario,
     CajaTurno,
+    ResumenTurnoCaja,
     CategoriaEgreso,
     CierrePeriodo,
     Cuenta,
@@ -41,6 +42,7 @@ import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
 import { autorizarLecturaDeCaja } from '#ledger/lectura_caja'
+import { SinTurnoAbierto, resumenTurnoAbierto } from '#ledger/resumen_turno'
 import bancos from '#start/routes/bancos'
 import compras from '#start/routes/compras'
 import activos from '#start/routes/activos'
@@ -106,15 +108,51 @@ const cajas: Ruta[] = [
         cuerpo: v.cerrarCajaValidator,
         idempotente: true,
         descripcion:
-            'esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.',
+            'esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.',
         respuesta: { status: 200, descripcion: 'Turno cerrado', esquema: CajaTurno },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             exigirAcceso(ctx, await existeCaja(id))
             return new CerrarCaja().execute(
-                { caja_id: id, contado: cuerpo.contado, motivo: cuerpo.motivo },
+                {
+                    caja_id: id,
+                    contado: cuerpo.contado,
+                    motivo: cuerpo.motivo,
+                    denominaciones: cuerpo.denominaciones,
+                    fondo_siguiente: cuerpo.fondo_siguiente,
+                    entregado_a: cuerpo.entregado_a,
+                },
                 ctx.contextoAccion(),
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cajas/turno-actual/resumen',
+        operacion: 'cajasTurnoActualResumen',
+        resumen:
+            'Resumen del turno abierto: fondo, cobros por método, retiros e ingresos y lo que debe haber',
+        etiqueta: 'cajas',
+        permiso: 'cajas.ver',
+        query: v.resumenTurnoValidator,
+        descripcion:
+            'Con `caja_id`, el turno abierto de esa caja (alcance por caja: 403). Sin ella, el de la caja del usuario: la del turno que abrió él o la caja que tiene asignada con turno abierto, en la empresa activa. 404 `sin_turno_abierto` si no hay. `esperado` = fondo_inicial + cobros en efectivo (monto − retenido) − egresos en efectivo − depósitos al banco − pagos a proveedores en efectivo del turno: la misma regla del cierre (`POST /cajas/:id/cerrar`). `otros_medios`: cobros por otros medios que registró quien abrió el turno mientras estuvo abierto (no entran a la caja).',
+        respuesta: { status: 200, descripcion: 'Resumen del turno', esquema: ResumenTurnoCaja },
+        handler: async (ctx, { query }) => {
+            let cajaId = query.caja_id ?? null
+            if (cajaId !== null) exigirAcceso(ctx, await existeCaja(cajaId))
+            else {
+                cajaId = await cajaDelCajero(
+                    ctx.auth.user?.id ?? null,
+                    ctx.alcance,
+                    undefined,
+                    ctx.empresa?.activa ?? null,
+                )
+                if (cajaId === null) {
+                    throw new SinTurnoAbierto(null)
+                }
+            }
+            return resumenTurnoAbierto(cajaId)
         },
     }),
     definirRuta({
