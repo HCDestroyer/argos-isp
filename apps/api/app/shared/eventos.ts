@@ -1105,6 +1105,33 @@ export interface CatalogoEventos {
         activa: boolean
         creada: boolean
     }
+    /**
+     * Gestión de cobro registrada (decisión del PM 8, contrato Iris 0.13.0). Solo informativa:
+     * nunca cambia servicio, facturas ni promesas. Sin nota, montos ni teléfonos. `origen: iris` si la
+     * registró Iris (notify no avisa); `iris_gestion_id` es el UUID v7 de Iris (null desde el panel).
+     */
+    'gestion_cobro.registrada': {
+        gestion_id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        contacto_id: number | null
+        tipo: string
+        resultado: string
+        ocurrido_en: string
+        origen_tipo: string
+        origen_id: string | null
+        origen: 'iris' | null
+        iris_gestion_id: string | null
+    }
+    /** Se adjuntó el archivo de una gestión (una sola vez; nunca el contenido). */
+    'gestion_cobro.adjunto_agregado': {
+        gestion_id: number
+        empresa_id: number
+        cliente_id: number
+        tipo_archivo: string
+        tamano: number
+    }
     'cartera.castigada': {
         castigo_id: number
         empresa_id: number
@@ -1614,6 +1641,8 @@ export const EVENTOS = [
     'banco.extracto_importado',
     'banco.conciliado',
     'cuenta_bancaria.cambiada',
+    'gestion_cobro.registrada',
+    'gestion_cobro.adjunto_agregado',
     'cartera.castigada',
     'compra.registrada',
     'compra.anulada',

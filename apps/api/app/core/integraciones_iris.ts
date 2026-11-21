@@ -76,7 +76,14 @@ export const PERMISOS_IRIS_CONTRATO = [
     'clientes.registrar_identidad',
     'servicios.completar_datos',
     'servicios.cambiar_titular',
+    // gestiones de cobro (contrato 0.13.0, decisión del PM 8; A3): llamadas y visitas de Iris
+    'gestiones_cobro.registrar',
 ] as const
+
+/** Permiso que el contrato 0.13.0 suma al usuario técnico Iris (migración de los tokens vigentes). */
+export const PERMISOS_IRIS_0130 = ['gestiones_cobro.registrar'] as const satisfies ReadonlyArray<
+    (typeof PERMISOS_IRIS_CONTRATO)[number]
+>
 
 /** Permisos que el contrato 0.12.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
 export const PERMISOS_IRIS_0120 = [

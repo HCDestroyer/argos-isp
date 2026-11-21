@@ -28,6 +28,7 @@ import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { exigirContactoIris } from '#billing/contacto_iris'
+import cobranza from '#start/routes/cobranza'
 
 import { dimensionesDeBonificacion, listarBonificaciones, verBonificacion } from '#billing/bonificaciones'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
@@ -1802,4 +1803,5 @@ export default [
     ...bancos,
     ...catalogosCargo,
     ...estadoCuenta,
+    ...cobranza,
 ]

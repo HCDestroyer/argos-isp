@@ -13,6 +13,7 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import { RESULTADOS_GESTION, TIPOS_GESTION } from '#billing/gestiones_cobro'
 
 /**
  * Schemas de respuesta de cobros y bancos (contrato de localización fiscal §10.3 y §10.9, fase 4).
@@ -372,6 +373,20 @@ export const CastigoCartera = definirEsquema(
         registrado_por: nulable(id),
         created_at: instante,
         facturas: lista(objeto({ factura_id: id, monto: Dinero, iva: Dinero })),
+        gestiones: {
+            ...lista(
+                objeto({
+                    id,
+                    tipo: enumerado(TIPOS_GESTION),
+                    resultado: enumerado(RESULTADOS_GESTION),
+                    ocurrido_en: instante,
+                    servicio_id: nulable(id),
+                    tiene_adjunto: booleano,
+                }),
+            ),
+            description:
+                'Gestiones de cobro del cliente en la empresa registradas hasta el castigo, de la más reciente a la más vieja (evidencia; decisión del PM 8)',
+        },
     }),
 )
 
