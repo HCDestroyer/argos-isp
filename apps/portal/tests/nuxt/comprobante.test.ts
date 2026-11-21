@@ -3,7 +3,8 @@ import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fijarComprobanteFixture, fijarEmpresaFixture, fijarSesionFixture } from '~~/fixtures'
 import { EMPRESA_FIXTURE } from '~~/fixtures/empresa'
-import SubirComprobante from '~/components/comprobante/Subir.vue'
+import FormularioComprobante from '~/components/comprobante/Formulario.vue'
+import PaginaComprobante from '~/pages/comprobante.vue'
 import PaginaCorte from '~/pages/corte.vue'
 import PaginaCuenta from '~/pages/cuenta.vue'
 
@@ -28,11 +29,15 @@ async function esperar() {
     }
 }
 
-/** Una sola cuenta: el formulario la deja elegida y no hay que abrir el `USelect`. */
-async function montarModal(props: Record<string, unknown> = {}) {
+/**
+ * El formulario vive en su página (`/comprobante`), ya no en un modal: se monta dentro del documento
+ * para leerlo con `document.querySelector` como antes. Una sola cuenta: el formulario la deja
+ * elegida y no hay que abrir el `USelect`.
+ */
+async function montarFormulario(props: Record<string, unknown> = {}) {
     fijarEmpresaFixture({ ...EMPRESA_FIXTURE, cuentas_deposito: [EMPRESA_FIXTURE.cuentas_deposito[0]!] })
     clearNuxtData(clave => clave.startsWith('portal:empresa'))
-    const wrapper = await montar(SubirComprobante, { props: { open: true, ...props } })
+    const wrapper = await montar(FormularioComprobante, { props, attachTo: document.body })
     await esperar()
     return wrapper
 }
@@ -133,9 +138,9 @@ describe('esquema del comprobante', () => {
     })
 })
 
-describe('modal "Subir comprobante de pago"', () => {
+describe('página "Subir comprobante de pago"', () => {
     it('cámara y galería: acepta foto o PDF y la cámara se pide solo con "Tomar foto"', async () => {
-        await montarModal()
+        await montarFormulario()
         const selector = document.querySelector<HTMLInputElement>('input[type="file"]')!
         expect(selector.accept).toBe('image/*,application/pdf')
         expect(selector.hasAttribute('capture')).toBe(false)
@@ -152,7 +157,7 @@ describe('modal "Subir comprobante de pago"', () => {
     })
 
     it('vista previa del archivo elegido, con nombre y tamaño', async () => {
-        await montarModal()
+        await montarFormulario()
         adjuntar(archivo('boleta.pdf', 'application/pdf', 2 * 1024 * 1024))
         await esperar()
         const vista = document.querySelector('[data-testid="comprobante-vista-previa"]')!.textContent ?? ''
@@ -161,7 +166,7 @@ describe('modal "Subir comprobante de pago"', () => {
     })
 
     it('recibido: "Recibimos tu comprobante, lo revisaremos" con el resumen', async () => {
-        const wrapper = await montarModal()
+        const wrapper = await montarFormulario()
         await llenarYEnviar()
         const emitido = wrapper.emitted('enviado')?.[0]?.[0] as ComprobantePortal
         expect(emitido).toMatchObject({ estado: 'pendiente', monto: '275.00', referencia: '845120377' })
@@ -173,7 +178,7 @@ describe('modal "Subir comprobante de pago"', () => {
 
     it('409 referencia duplicada: el mensaje va en el campo referencia', async () => {
         fijarComprobanteFixture('duplicada')
-        const wrapper = await montarModal()
+        const wrapper = await montarFormulario()
         await llenarYEnviar()
         expect(wrapper.emitted('enviado')).toBeUndefined()
         expect(texto()).toContain('Ya recibimos un pago o comprobante con esa referencia')
@@ -182,14 +187,14 @@ describe('modal "Subir comprobante de pago"', () => {
 
     it('422 de la API en el archivo: se muestra en su campo', async () => {
         fijarComprobanteFixture('archivo')
-        await montarModal()
+        await montarFormulario()
         await llenarYEnviar()
         expect(texto()).toContain('Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.')
     })
 
     it('422 cuenta de otra empresa: lo explica arriba, marca la cuenta y no se envía', async () => {
         fijarComprobanteFixture('otra_empresa')
-        const wrapper = await montarModal()
+        const wrapper = await montarFormulario()
         await llenarYEnviar()
         expect(wrapper.emitted('enviado')).toBeUndefined()
         const aviso = document.querySelector('[data-testid="comprobante-error-envio"]')?.textContent ?? ''
@@ -199,7 +204,7 @@ describe('modal "Subir comprobante de pago"', () => {
     })
 
     it('archivo no permitido: no se envía', async () => {
-        const wrapper = await montarModal()
+        const wrapper = await montarFormulario()
         await llenarYEnviar(archivo('boleta.heic', 'image/heic'))
         expect(wrapper.emitted('enviado')).toBeUndefined()
         expect(texto()).toContain('Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.')
@@ -207,7 +212,7 @@ describe('modal "Subir comprobante de pago"', () => {
 
     it('cuentas de destino con el número completo a la vista (nada truncado en el teléfono)', async () => {
         clearNuxtData(clave => clave.startsWith('portal:empresa'))
-        await montar(SubirComprobante, { props: { open: true } })
+        await montar(FormularioComprobante, { attachTo: document.body })
         await esperar()
         const cuentas = document.querySelector('[data-testid="comprobante-cuentas"]')!.textContent ?? ''
         expect(cuentas).toContain('Banco Industrial · Monetaria Red Altiplano')
@@ -219,7 +224,7 @@ describe('modal "Subir comprobante de pago"', () => {
     it('sin cuentas para depósito: lo dice y no muestra el formulario', async () => {
         fijarEmpresaFixture({ ...EMPRESA_FIXTURE, cuentas_deposito: [] })
         clearNuxtData(clave => clave.startsWith('portal:empresa'))
-        await montar(SubirComprobante, { props: { open: true } })
+        await montar(FormularioComprobante, { attachTo: document.body })
         await esperar()
         expect(document.querySelector('[data-testid="comprobante-sin-cuentas"]')).not.toBeNull()
         expect(document.querySelector('form')).toBeNull()
@@ -237,6 +242,22 @@ describe('comprobantes en /corte y /cuenta', () => {
         expect(boton.exists()).toBe(true)
         expect(boton.attributes('disabled')).toBeUndefined()
         expect(wrapper.text()).not.toContain('estará disponible pronto')
+    })
+
+    it('la página: título, volver a donde estaba y el formulario con zona para soltar el archivo', async () => {
+        fijarEmpresaFixture({ ...EMPRESA_FIXTURE, cuentas_deposito: [EMPRESA_FIXTURE.cuentas_deposito[0]!] })
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
+        const wrapper = await montar(PaginaComprobante, { route: '/comprobante?volver=/cuenta?seccion=pagar', attachTo: document.body })
+        await esperar()
+        expect(wrapper.find('h1').text()).toBe('Subir comprobante de pago')
+        expect(wrapper.find('[data-testid="comprobante-volver"]').attributes('href')).toBe('/cuenta?seccion=pagar')
+        const soltar = wrapper.find('[data-testid="comprobante-soltar"]')
+        expect(soltar.attributes('data-cursor')).toBe('grab')
+    })
+
+    it('/cuenta: «Subir comprobante» lleva a la página con el servicio, la empresa y la vuelta', () => {
+        expect(rutaComprobante(7, 2)).toBe('/comprobante?servicio=7&empresa=2&volver=%2Fcuenta%3Fseccion%3Dpagar')
+        expect(rutaComprobante()).toBe('/comprobante?volver=%2Fcuenta%3Fseccion%3Dpagar')
     })
 
     it('/cuenta: lista con estado y el motivo del rechazo', async () => {

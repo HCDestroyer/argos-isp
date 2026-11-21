@@ -179,9 +179,10 @@ function usarGrupo(grupo: GrupoEmpresa | null) {
     }
 }
 const estadoGeneral = computed(() => estadoMasUrgente(cuenta.value?.servicios ?? []))
+/** La factura pendiente más urgente (banner del inicio). */
+const proxima = computed(() => cuenta.value ? proximoVencimiento(cuenta.value) : null)
 
 const verPromesa = ref(false)
-const verComprobante = ref(false)
 const verDeposito = ref(false)
 const servicioPromesa = ref<number | undefined>(undefined)
 const promesa = ref<PromesaSolicitada | null>(null)
@@ -202,7 +203,7 @@ function alAcceso(grupo: GrupoEmpresa, accion: NonNullable<AccesoRapido['accion'
         void navigateTo('/cuenta?seccion=pagar')
     }
     else if (accion === 'comprobante') {
-        verComprobante.value = true
+        void navigateTo(rutaComprobante(servicioComprobante.value, empresaModal.value))
     }
     else if (accion === 'deposito') {
         verDeposito.value = true
@@ -294,6 +295,8 @@ watch(() => route.hash, async (hash) => {
                 :monto-adeudado="cuenta.monto_adeudado"
                 :estado="estadoGeneral"
                 :actualizando="actualizando"
+                :destacado="seccion === 'inicio'"
+                :proxima="proxima ? proxima.factura : null"
                 @actualizar="actualizar"
             />
 
@@ -338,117 +341,133 @@ watch(() => route.hash, async (hash) => {
                         :actions="[{ label: 'Cómo reactivar mi servicio', icon: 'i-lucide-wifi', color: 'neutral', variant: 'outline', to: '/corte' }]"
                         data-testid="aviso-reactivar"
                     />
-                    <CuentaInicioEmpresa
-                        v-for="(grupo, indice) in grupos"
-                        :key="grupo.clave"
-                        :grupo="grupo"
-                        :mostrar-marca="variasEmpresas"
-                        :telegram="telegramDelGrupo(grupo, indice)"
-                        :ruta-telegram="rutaTelegramDelGrupo(grupo)"
-                        :promesa-por-servicio="promesaPorServicio"
-                        @accion="alAcceso(grupo, $event)"
-                        @pedir-promesa="pedirPromesa"
-                    />
-                    <PuntosResumen />
-                    <PromoPromociones lugar="portal_inicio" />
+                    <CuentaIndicadores :cuenta="cuenta" />
+                    <!-- Escritorio: servicios y accesos a la izquierda, lo último a la derecha. -->
+                    <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+                        <div class="flex min-w-0 flex-col gap-6 lg:col-span-2">
+                            <CuentaInicioEmpresa
+                                v-for="(grupo, indice) in grupos"
+                                :key="grupo.clave"
+                                :grupo="grupo"
+                                :mostrar-marca="variasEmpresas"
+                                :telegram="telegramDelGrupo(grupo, indice)"
+                                :ruta-telegram="rutaTelegramDelGrupo(grupo)"
+                                :promesa-por-servicio="promesaPorServicio"
+                                @accion="alAcceso(grupo, $event)"
+                                @pedir-promesa="pedirPromesa"
+                            />
+                        </div>
+                        <aside
+                            class="flex min-w-0 flex-col gap-6"
+                            aria-label="Lo último de tu cuenta"
+                        >
+                            <CuentaRecientes :key="`recientes-${recargas}`" />
+                            <PromoPromociones lugar="portal_inicio" />
+                        </aside>
+                    </div>
                 </div>
 
                 <div
                     v-else-if="seccion === 'pagar'"
                     key="pagar"
-                    class="flex flex-col gap-6"
+                    class="grid gap-6 lg:grid-cols-2 lg:items-start"
                     data-testid="seccion-pagar"
                 >
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-pagar"
-                    >
-                        <h2
-                            id="titulo-pagar"
-                            class="text-lg font-semibold text-highlighted"
+                    <!-- Escritorio: pagar y promesas a la izquierda; comprobantes y pagos a la derecha. -->
+                    <div class="flex min-w-0 flex-col gap-6">
+                        <section
+                            class="flex flex-col gap-3"
+                            aria-labelledby="titulo-pagar"
                         >
-                            Pagar
-                        </h2>
-                        <UCard v-if="servicioPago !== undefined">
-                            <div class="flex flex-col gap-3">
-                                <UFormField
-                                    v-if="opcionesPago.length > 1"
-                                    label="¿Qué servicio quieres pagar en línea?"
-                                >
-                                    <USelect
-                                        :model-value="servicioPago"
-                                        :items="opcionesPago"
-                                        class="w-full"
-                                        data-testid="servicio-a-pagar"
-                                        @update:model-value="servicioElegido = Number($event)"
+                            <h2
+                                id="titulo-pagar"
+                                class="text-lg font-semibold text-highlighted"
+                            >
+                                Pagar
+                            </h2>
+                            <UCard v-if="servicioPago !== undefined">
+                                <div class="flex flex-col gap-3">
+                                    <UFormField
+                                        v-if="opcionesPago.length > 1"
+                                        label="¿Qué servicio quieres pagar en línea?"
+                                    >
+                                        <USelect
+                                            :model-value="servicioPago"
+                                            :items="opcionesPago"
+                                            class="w-full"
+                                            data-testid="servicio-a-pagar"
+                                            @update:model-value="servicioElegido = Number($event)"
+                                        />
+                                    </UFormField>
+                                    <PagoEnLinea
+                                        :servicio-id="servicioPago"
+                                        :empresa-id="grupoPago?.empresa.id"
+                                        id-ayuda="pagar-en-linea-ayuda-cuenta"
                                     />
-                                </UFormField>
-                                <PagoEnLinea
-                                    :servicio-id="servicioPago"
-                                    :empresa-id="grupoPago?.empresa.id"
-                                    id-ayuda="pagar-en-linea-ayuda-cuenta"
-                                />
-                            </div>
-                        </UCard>
-                        <p
-                            v-else
-                            class="text-sm text-muted"
-                            data-testid="sin-saldo"
+                                </div>
+                            </UCard>
+                            <p
+                                v-else
+                                class="text-sm text-muted"
+                                data-testid="sin-saldo"
+                            >
+                                No tienes saldo pendiente.
+                            </p>
+                            <UButton
+                                v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
+                                :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
+                                icon="i-lucide-landmark"
+                                color="neutral"
+                                variant="outline"
+                                size="lg"
+                                block
+                                data-testid="deposito-pagar"
+                                @click="usarGrupo(grupoPago); verDeposito = true"
+                            />
+                        </section>
+                        <section
+                            class="flex flex-col gap-3"
+                            aria-labelledby="titulo-promesas"
                         >
-                            No tienes saldo pendiente.
-                        </p>
-                        <UButton
-                            v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
-                            :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
-                            icon="i-lucide-landmark"
-                            color="neutral"
-                            variant="outline"
-                            size="lg"
-                            block
-                            data-testid="deposito-pagar"
-                            @click="usarGrupo(grupoPago); verDeposito = true"
+                            <h2
+                                id="titulo-promesas"
+                                class="flex items-center gap-1 text-sm font-semibold text-highlighted"
+                            >
+                                Promesas de pago
+                                <PortalAyuda clave="promesa" />
+                            </h2>
+                            <CuentaPromesas :key="`promesas-${recargas}`" />
+                        </section>
+                    </div>
+                    <div class="flex min-w-0 flex-col gap-6">
+                        <CuentaComprobantes
+                            :key="`comprobantes-${recargas}`"
+                            :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
+                            :empresa-id="grupoPago?.empresa.id"
                         />
-                    </section>
-
-                    <CuentaComprobantes
-                        :key="`comprobantes-${recargas}`"
-                        :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
-                        :empresa-id="grupoPago?.empresa.id"
-                    />
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-pagos"
-                    >
-                        <h2
-                            id="titulo-pagos"
-                            class="text-sm font-semibold text-highlighted"
+                        <section
+                            class="flex flex-col gap-3"
+                            aria-labelledby="titulo-pagos"
                         >
-                            Pagos registrados
-                        </h2>
-                        <CuentaPagos :key="`pagos-${recargas}`" />
-                    </section>
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-promesas"
-                    >
-                        <h2
-                            id="titulo-promesas"
-                            class="text-sm font-semibold text-highlighted"
-                        >
-                            Promesas de pago
-                        </h2>
-                        <CuentaPromesas :key="`promesas-${recargas}`" />
-                    </section>
+                            <h2
+                                id="titulo-pagos"
+                                class="text-sm font-semibold text-highlighted"
+                            >
+                                Pagos registrados
+                            </h2>
+                            <CuentaPagos :key="`pagos-${recargas}`" />
+                        </section>
+                    </div>
                 </div>
 
                 <div
                     v-else-if="seccion === 'facturas'"
                     key="facturas"
-                    class="flex flex-col gap-6"
+                    class="grid gap-6 lg:grid-cols-3 lg:items-start"
                     data-testid="seccion-facturas"
                 >
                     <section
-                        class="flex flex-col gap-3"
+                        class="flex min-w-0 flex-col gap-3 lg:col-span-2"
                         aria-labelledby="titulo-facturas"
                     >
                         <h2
@@ -460,7 +479,7 @@ watch(() => route.hash, async (hash) => {
                         <CuentaFacturas :key="`facturas-${recargas}`" />
                     </section>
                     <section
-                        class="flex flex-col gap-3"
+                        class="flex min-w-0 flex-col gap-3"
                         aria-labelledby="titulo-notas-credito"
                         data-testid="seccion-notas-credito"
                     >
@@ -488,63 +507,68 @@ watch(() => route.hash, async (hash) => {
                 <div
                     v-else
                     key="cuenta"
-                    class="flex flex-col gap-4"
+                    class="grid gap-4 lg:grid-cols-2 lg:items-start lg:gap-6"
                     data-testid="seccion-cuenta"
                 >
-                    <h2 class="text-lg font-semibold text-highlighted">
+                    <h2 class="text-lg font-semibold text-highlighted lg:col-span-2">
                         Mi cuenta
                     </h2>
-                    <template v-if="telegramPorEmpresa">
+                    <!-- Escritorio: datos de contacto a la izquierda; avisos y sesión a la derecha. -->
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <CuentaContacto
+                            :contacto="cuenta.cliente"
+                            @actualizado="contactoActualizado"
+                        />
+                    </div>
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <template v-if="telegramPorEmpresa">
+                            <CuentaTelegram
+                                v-for="propio in telegramPorEmpresa"
+                                :id="`telegram-${propio.empresa.id}`"
+                                :key="propio.empresa.id"
+                                :vinculado="propio.vinculado"
+                                :empresa="propio.empresa"
+                                @cambio="refresh(); telegram.cargar()"
+                            />
+                        </template>
                         <CuentaTelegram
-                            v-for="propio in telegramPorEmpresa"
-                            :id="`telegram-${propio.empresa.id}`"
-                            :key="propio.empresa.id"
-                            :vinculado="propio.vinculado"
-                            :empresa="propio.empresa"
+                            v-else
+                            id="telegram"
+                            :vinculado="cuenta.cliente.telegram_vinculado"
                             @cambio="refresh(); telegram.cargar()"
                         />
-                    </template>
-                    <CuentaTelegram
-                        v-else
-                        id="telegram"
-                        :vinculado="cuenta.cliente.telegram_vinculado"
-                        @cambio="refresh(); telegram.cargar()"
-                    />
-                    <CuentaWhatsapp :key="`whatsapp-${recargas}`" />
-                    <CuentaContacto
-                        :contacto="cuenta.cliente"
-                        @actualizado="contactoActualizado"
-                    />
-                    <UButton
-                        label="Cambiar contraseña"
-                        icon="i-lucide-key-round"
-                        color="neutral"
-                        variant="outline"
-                        size="lg"
-                        to="/cambiar-contrasena"
-                        block
-                        data-testid="ir-cambiar-contrasena"
-                    />
-                    <UButton
-                        label="Ayuda y contacto"
-                        icon="i-lucide-headset"
-                        color="neutral"
-                        variant="outline"
-                        size="lg"
-                        to="/contacto"
-                        block
-                    />
-                    <UButton
-                        label="Salir"
-                        icon="i-lucide-log-out"
-                        color="neutral"
-                        variant="ghost"
-                        size="lg"
-                        block
-                        :loading="saliendo"
-                        data-testid="salir"
-                        @click="salir"
-                    />
+                        <CuentaWhatsapp :key="`whatsapp-${recargas}`" />
+                        <UButton
+                            label="Cambiar contraseña"
+                            icon="i-lucide-key-round"
+                            color="neutral"
+                            variant="outline"
+                            size="lg"
+                            to="/cambiar-contrasena"
+                            block
+                            data-testid="ir-cambiar-contrasena"
+                        />
+                        <UButton
+                            label="Ayuda y contacto"
+                            icon="i-lucide-headset"
+                            color="neutral"
+                            variant="outline"
+                            size="lg"
+                            to="/contacto"
+                            block
+                        />
+                        <UButton
+                            label="Salir"
+                            icon="i-lucide-log-out"
+                            color="neutral"
+                            variant="ghost"
+                            size="lg"
+                            block
+                            :loading="saliendo"
+                            data-testid="salir"
+                            @click="salir"
+                        />
+                    </div>
                 </div>
             </Transition>
         </template>
@@ -553,12 +577,6 @@ watch(() => route.hash, async (hash) => {
             v-model:open="verPromesa"
             :servicio-id="servicioPromesa"
             @resultado="promesaResuelta"
-        />
-        <ComprobanteSubir
-            v-model:open="verComprobante"
-            :servicio-id="servicioComprobante"
-            :empresa-id="empresaModal"
-            @enviado="recargas += 1"
         />
         <CorteDatosDeposito
             v-model:open="verDeposito"

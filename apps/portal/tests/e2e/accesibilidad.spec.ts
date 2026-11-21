@@ -71,6 +71,19 @@ for (const tema of ['light', 'dark'] as const) {
             await revisar(page, 'contacto')
         })
 
+        test('otros presets del admin (esmeralda, naranja) sin violaciones de axe', async ({ page }) => {
+            // `?tema=` en fixtures: la apariencia pública con ese preset (los que usan el tono 700).
+            for (const preset of ['esmeralda', 'naranja'] as const) {
+                await page.goto(`/corte?tema=${preset}`)
+                await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+                await expect(page.locator('html')).toHaveAttribute('data-tema', preset)
+                await revisar(page, `corte (${preset})`)
+                await page.goto(`/entrar?tema=${preset}`)
+                await page.getByRole('heading', { level: 1 }).first().waitFor()
+                await revisar(page, `entrar (${preset})`)
+            }
+        })
+
         test('políticas públicas (privacidad, términos, eliminar datos) sin violaciones de axe ni desborde', async ({ page }) => {
             for (const [ruta, titulo] of [
                 ['/privacidad', 'Política de privacidad'],
@@ -157,6 +170,21 @@ for (const tema of ['light', 'dark'] as const) {
                 await revisar(page, `cuenta (${nombre}): pagar`)
                 await seccion(page, 'Facturas', 'seccion-facturas')
                 await revisar(page, `cuenta (${nombre}): facturas`)
+                // Detalle de una factura en el drawer (sin salir de la lista).
+                await page.getByTestId('factura').first().click()
+                await page.getByTestId('detalle').waitFor()
+                await revisar(page, `cuenta (${nombre}): detalle de factura`)
+                await page.keyboard.press('Escape')
+                await page.getByTestId('detalle').waitFor({ state: 'detached' })
+                // Subir comprobante: página propia; «Volver» regresa a «Pagar».
+                await seccion(page, 'Pagar', 'seccion-pagar')
+                await page.getByTestId('cuenta-subir-comprobante').click()
+                await page.getByTestId('comprobante-formulario').waitFor()
+                await revisar(page, `cuenta (${nombre}): subir comprobante`)
+                const anchoComprobante = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+                expect(anchoComprobante).toBeLessThanOrEqual(0)
+                await page.getByTestId('comprobante-volver').click()
+                await page.getByTestId('seccion-pagar').waitFor()
                 await seccion(page, 'Cuenta', 'seccion-cuenta')
                 if (cuenta) {
                     await expect(page.locator('[data-testid^="telegram-empresa-"]')).toHaveCount(2)

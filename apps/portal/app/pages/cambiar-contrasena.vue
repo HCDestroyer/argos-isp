@@ -88,18 +88,12 @@ async function salir() {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-highlighted">
-                {{ obligatoria ? 'Elige tu contraseña' : 'Cambiar contraseña' }}
-            </h1>
-            <p class="mt-1 text-sm text-muted">
-                {{ obligatoria
-                    ? 'Entraste con la contraseña que te dio la empresa. Para cuidar tu cuenta, elige una propia antes de seguir.'
-                    : 'Escribe tu contraseña actual y la nueva.' }}
-            </p>
-        </div>
-
+    <PortalAcceso
+        :titulo="obligatoria ? 'Elige tu contraseña' : 'Cambiar contraseña'"
+        :descripcion="obligatoria
+            ? 'Entraste con la contraseña que te dio la empresa. Para cuidar tu cuenta, elige una propia antes de seguir.'
+            : 'Escribe tu contraseña actual y la nueva.'"
+    >
         <UAlert
             v-if="errorSesion"
             color="error"
@@ -140,6 +134,7 @@ async function salir() {
                 >
                     <PortalCampoContrasena
                         v-model="estado.actual"
+                        icon="i-lucide-lock"
                         testid="campo-actual"
                     />
                 </UFormField>
@@ -152,6 +147,7 @@ async function salir() {
                     <PortalCampoContrasena
                         v-model="estado.nueva"
                         autocomplete="new-password"
+                        icon="i-lucide-lock"
                         testid="campo-nueva"
                     />
                 </UFormField>
@@ -163,6 +159,7 @@ async function salir() {
                     <PortalCampoContrasena
                         v-model="estado.confirmacion"
                         autocomplete="new-password"
+                        icon="i-lucide-lock"
                         testid="campo-confirmacion"
                     />
                 </UFormField>
@@ -196,5 +193,5 @@ async function salir() {
             to="/cuenta"
             class="self-center"
         />
-    </div>
+    </PortalAcceso>
 </template>

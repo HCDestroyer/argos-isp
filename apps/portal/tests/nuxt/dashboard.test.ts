@@ -1,3 +1,4 @@
+import { espiarApi } from './espiarApi'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -201,7 +202,7 @@ describe('/cuenta: inicio y secciones', () => {
 
     it('"Actualizar" vuelve a leer la cuenta', async () => {
         fijarSesionFixture(true)
-        const get = vi.spyOn(useApi(), 'GET')
+        const get = espiarApi('GET')
         const wrapper = await montarCuenta()
         get.mockClear()
         await wrapper.find('[data-testid="actualizar-cuenta"]').trigger('click')
@@ -247,7 +248,7 @@ describe('/corte y la sesión', () => {
     }
 
     it('sin pista de sesión no pide la cuenta (ni un 401 por visita)', async () => {
-        const get = vi.spyOn(useApi(), 'GET')
+        const get = espiarApi('GET')
         const wrapper = await montarCorte()
         expect((get.mock.calls as unknown as [string][]).some(([ruta]) => ruta === '/api/v1/portal/cuenta')).toBe(false)
         expect(wrapper.find('[data-testid="ver-mi-cuenta"]').text()).toContain('Ver mi cuenta')
