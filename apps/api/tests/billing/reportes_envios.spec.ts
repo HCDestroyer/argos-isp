@@ -394,7 +394,7 @@ test.group('billing · envíos programados de reportes', (group) => {
         const ejecutado = await db
             .from('audit.outbox')
             .where('evento', 'reportes.envio_ejecutado')
-            .whereRaw(`(payload->>'corrida_id')::bigint = ?`, [r.corrida_id])
+            .whereRaw(`(payload->>'corrida_id')::bigint = ?`, [r.corrida_id!])
             .first()
         assert.deepInclude(ejecutado.payload, { enviados: 3, omitidos: 2, fallidos: 0, empresa_id: E })
         const despues = await db.from('billing.reportes_envios').where('id', envio.id).first()

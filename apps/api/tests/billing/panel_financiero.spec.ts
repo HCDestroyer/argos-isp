@@ -325,7 +325,7 @@ test.group('billing · panel financiero', (group) => {
         await db.transaction((trx) =>
             instalarPaquete(trx, paqueteDePais('GT'), E, { instaladaPor: null, hoy: '2026-11-21' }),
         )
-        const datos = await datosFiscales(E)
+        const datos = await datosFiscales(E, undefined)
         assert.deepEqual(resolver(datos.filas, 'pc_alertas', '2026-11-21')?.valor, [
             '80.00',
             '95.00',
