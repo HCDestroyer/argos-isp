@@ -129,10 +129,10 @@ test('teléfono: isla abajo con Inicio, 2 accesos, Avisos y «Más» con el men�
     await isla.locator('[data-acceso="clientes"]').click()
     await expect(page).toHaveURL(/\/clientes$/)
     await expect(isla.locator('[data-acceso="clientes"]')).toHaveAttribute('aria-current', 'page')
-    // Lo último de la lista queda por encima de la isla: el contenido reserva su alto.
-    const reserva = await page.locator('.panel-cuerpo').evaluate(el => Number.parseFloat(getComputedStyle(el).paddingBottom))
-    const alto = (await isla.boundingBox())?.height ?? 0
-    expect(reserva).toBeGreaterThan(alto)
+    // El contenedor que se desplaza termina encima de la isla: nada queda debajo de ella.
+    const cuerpo = await page.locator('.panel-cuerpo').boundingBox()
+    const cajaIsla = await isla.boundingBox()
+    expect(cuerpo!.y + cuerpo!.height).toBeLessThanOrEqual(cajaIsla!.y)
     // «Más»: menú completo a pantalla completa con el buscador y «Personalizar mis accesos».
     await botonMasIsla(page).click()
     const menuCompleto = page.getByRole('dialog', { name: 'Menú' })

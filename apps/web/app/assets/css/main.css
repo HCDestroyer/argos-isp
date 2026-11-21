@@ -984,7 +984,8 @@
  *
  * - `--ax-isla-reserva`: alto que la isla le quita al fondo de la pantalla (68 px de isla + 12 px de
  *   aire + el área segura del iPhone). Vale 0 en escritorio, en el login y con la isla oculta. Lo usan
- *   el contenido (`.panel-cuerpo`), las barras de acción y los avisos emergentes (`app.config.ts`).
+ *   el contenedor del contenido (`.panel-cuerpo`, termina encima de la isla), la acción fija y los
+ *   avisos emergentes (`app.config.ts`).
  * - `.panel-barra-accion`: la acción principal fija de una pantalla (`PanelBarraAccion`) queda como
  *   otra isla justo encima de la de navegación, sin taparla ni quedar tapada; desde `lg`, en su lugar.
  * - `.menu-movil`: el menú completo («Más») a pantalla completa, respetando las áreas seguras.
@@ -1049,13 +1050,17 @@
         --ax-isla-reserva: calc(5rem + env(safe-area-inset-bottom));
     }
 
-    /* El desplazamiento sigue dentro del contenedor; lo último queda por encima de la isla. */
+    /*
+     * El contenedor que se desplaza termina encima de la isla: nada queda debajo de ella y lo que
+     * se pega abajo dentro de él (`FormularioAcciones`, `sticky bottom-0`) se detiene encima sin
+     * cálculos propios. Con una acción fija, el contenido gana además el aire de esa barra.
+     */
     .panel-cuerpo {
-        padding-bottom: calc(var(--ax-isla-reserva) + 1rem);
+        margin-bottom: var(--ax-isla-reserva);
     }
 
     .panel-cuerpo:has(.panel-barra-accion) {
-        padding-bottom: calc(var(--ax-isla-reserva) + 5rem);
+        padding-bottom: 5rem;
     }
 
     .panel-barra-accion {

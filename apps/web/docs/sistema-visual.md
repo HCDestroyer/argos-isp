@@ -103,9 +103,10 @@ Pedido del PM (como la barra del portal; tablero `MarcoMovil` en `.claude/diseno
 - En el teléfono el encabezado lleva la marca a la izquierda y, a la derecha, caja, sistema y la
   cuenta; los accesos y los avisos se mudan a la isla.
 - `--ax-isla-reserva` (`main.css`) es el alto que la isla le quita a la pantalla (0 en escritorio):
-  lo usan el contenido (`.panel-cuerpo`, el desplazamiento sigue dentro del contenedor), la barra
-  de acciones de los formularios (`FormularioAcciones`, se detiene encima de la isla), la acción
-  fija de cada pantalla (`PanelBarraAccion`) y los avisos emergentes (`toaster` en `app.config.ts`).
+  el contenedor que se desplaza (`.panel-cuerpo`) termina encima de la isla, así que nada queda
+  debajo y la barra de los formularios (`FormularioAcciones`, `sticky bottom-0`) se detiene encima
+  sola; también lo usan la acción fija de cada pantalla (`PanelBarraAccion`) y los avisos
+  emergentes (`toaster` en `app.config.ts`).
 - **Acción principal fija** (`PanelBarraAccion`, por ejemplo «Promesa» y «Cobrar Q …» de la ficha del
   cliente): otra isla de vidrio justo encima de la de navegación, sin taparla; el contenido gana su
   aire. Desde `lg` va en su lugar, dentro del flujo.

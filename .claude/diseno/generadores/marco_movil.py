@@ -54,7 +54,7 @@ INICIO = f'''<div style="display:{{{{v.inicio}}}};flex-direction:column;gap:12px
 <div style="display:flex;gap:8px;margin-top:12px"><span class="btn" style="background:#fff;color:#4338CA">{svg(I["cobrar"],16)}Cobrar</span><span class="btn" style="border-color:rgba(255,255,255,.6);color:#fff">Revisar comprobantes</span></div></section>
 <section class="card" style="padding:14px"><div class="mu" style="font-size:12px">Facturado del mes</div><b class="num" style="font-size:24px">Q 98,450.00</b><div class="mu" style="font-size:12px;margin-top:4px">Cobrado 62 % · octubre 2026</div></section>
 <section class="card" style="padding:14px"><div class="mu" style="font-size:12px">Cobros de hoy</div><b class="num" style="font-size:24px">Q 4,380.00</b><div class="mu" style="font-size:12px;margin-top:4px">19 pagos</div></section>
-<section class="card" style="padding:14px"><div class="mu" style="font-size:12px">Cartera vencida</div><b class="num" style="font-size:24px">Q 15,840.50</b><div class="mu" style="font-size:12px;margin-top:4px">lo último queda encima de la isla</div></section>
+<section class="card" style="padding:14px"><div class="mu" style="font-size:12px">Cartera vencida</div><b class="num" style="font-size:24px">Q 15,840.50</b><div class="mu" style="font-size:12px;margin-top:4px">la lista termina encima de la isla</div></section>
 </div>'''
 
 CLIENTES = f'''<div style="display:{{{{v.clientes}}}};flex-direction:column;gap:12px">
@@ -169,7 +169,7 @@ a{{color:#4338CA}}a:hover{{color:#3730A3}}
 <div class="marco {{{{tema}}}}">
 <div style="position:absolute;inset:0;display:flex;flex-direction:column">
 {encabezado()}
-<div style="flex:1;overflow:auto;padding:4px 12px {{{{v.reserva}}}}">
+<div style="flex:1;min-height:0;overflow:auto;padding:4px 12px {{{{v.reserva}}}};margin-bottom:92px">
 {INICIO}
 {CLIENTES}
 {FICHA}
@@ -188,7 +188,7 @@ const v = {{ inicio: 'none', clientes: 'none', ficha: 'none', mas: 'none' }};
 v[p === 'mas' ? 'mas' : p] = 'flex';
 if (p === 'mas') {{ v.inicio = 'flex'; }}
 v.barra = p === 'ficha' ? 'flex' : 'none';
-v.reserva = p === 'ficha' ? '172px' : '108px';
+v.reserva = p === 'ficha' ? '80px' : '16px';
 const activo = p === 'ficha' ? 'clientes' : p;
 const c = {{}};
 ['inicio', 'clientes', 'cobrar', 'avisos', 'mas'].forEach((k) => {{ c[k] = (k === activo ? 'on' : '') + (k === 'cobrar' ? ' ex' : ''); }});
