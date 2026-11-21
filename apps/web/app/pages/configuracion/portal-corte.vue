@@ -332,6 +332,7 @@ onMounted(cargar)
                 <div class="flex w-full flex-wrap justify-end gap-2">
                     <UButton
                         label="Cancelar"
+                        :icon="ICONOS.cancelar"
                         color="neutral"
                         variant="ghost"
                         :disabled="enviando"

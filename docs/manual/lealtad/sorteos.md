@@ -9,7 +9,7 @@ pantallas:
 
 Sorteos entre los clientes, hechos de forma que un notario o un delegado de la Gobernación pueda darlos por buenos: bases publicadas y selladas, lista de participantes con su huella, un resultado que nadie puede ajustar y que cualquiera puede recalcular, acta en PDF y entrega de premios con constancia.
 
-Menú: **Cobros → Sorteos**.
+Menú: **Clientes y lealtad → Sorteos**.
 
 ## Quién la usa
 

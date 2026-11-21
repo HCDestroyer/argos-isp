@@ -26,7 +26,7 @@ La configuración y la operación con Recurrente están en el [runbook de pago e
 - **Ver:** `pagos.ver` (`admin`, `cajero`, `soporte`, `contabilidad`, `lectura`).
 - **Conciliar un día a mano:** `facturas.generar` (`admin`, `contabilidad`).
 
-Se llega desde **Cobros → Conciliación de la pasarela**.
+Se llega desde **Facturación → Conciliación de la pasarela**.
 
 ## Qué ves
 

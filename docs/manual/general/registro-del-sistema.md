@@ -1,5 +1,7 @@
 ---
 orden: 6
+pantallas:
+    - /sistema/registro
 ---
 
 # Registro del sistema

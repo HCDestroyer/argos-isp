@@ -9,7 +9,7 @@ pantallas:
 
 Los reportes de cartera, ingresos, cobranza, cajas, IVA, promesas, altas y bajas, egresos, bonificaciones y cuentas por pagar. Cada uno se filtra, muestra sus totales y se descarga en CSV o Excel con los mismos filtros.
 
-Está en **Reportes y bitácora → Reportes**. La página muestra una tarjeta por reporte; pulsa una para abrirlo. La tarjeta **Lealtad** abre el reporte del programa de puntos, que tiene su propia página.
+Está en **Reportes → Reportes**. La página muestra una tarjeta por reporte; pulsa una para abrirlo. La tarjeta **Lealtad** abre el reporte del programa de puntos, que tiene su propia página.
 
 ## Quién la usa
 

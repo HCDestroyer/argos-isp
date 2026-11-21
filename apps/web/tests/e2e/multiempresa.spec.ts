@@ -1,24 +1,19 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, empresaActiva, entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Multiempresa con fixtures de dos empresas: ArgosNet (1) y Fibra del Sur (2, las sucursales de los
  * clientes 3 y 11). El admin tiene alcance global (selector con "Todas"); el cajero, solo la 1.
  */
-function selector(page: Page) {
-    return page.locator('[data-prueba="selector-empresa"]:visible').first()
-}
 
 test('el admin elige una empresa y la lista de servicios muestra solo los suyos', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Servicios', /\/servicios/)
-    await expect(selector(page)).toContainText('Todas las empresas')
+    await expect(empresaActiva(page)).toContainText('Todas las empresas')
     await page.getByPlaceholder('Usuario PPP, IP o nombre del cliente').fill('comercial')
     await expect(page.getByRole('link', { name: 'comercial.el3', exact: true })).toBeVisible()
 
-    await selector(page).click()
-    await page.getByRole('option', { name: /Fibra del Sur/ }).click()
-    await expect(selector(page)).toContainText('Fibra del Sur')
+    await elegirEmpresa(page, /Fibra del Sur/)
     await expect(page.getByRole('link', { name: 'comercial.el3-b', exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: 'comercial.el3', exact: true })).toHaveCount(0)
 })
@@ -56,7 +51,9 @@ test('notificaciones: la prueba de correo muestra el error real y la empresa her
 test('el cajero tiene una sola empresa: no ve el selector', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     await ir(page, 'Cobrar', /\/cobro/)
-    await expect(page.locator('[data-prueba="selector-empresa"]')).toHaveCount(0)
+    await expect(empresaActiva(page)).toHaveCount(0)
+    await page.locator('[data-prueba="menu-usuario"]').click()
+    await expect(page.getByRole('menuitemcheckbox', { name: /Todas las empresas|ArgosNet/ })).toHaveCount(0)
 })
 
 test('cobro repartido: un pago por empresa y el recibo con una sección por empresa', async ({ page }) => {

@@ -10,7 +10,7 @@ pantallas:
 
 El catálogo de lo que el ISP compra, guarda, presta o vende: cable, conectores, routers, ONU, antenas. Cada producto dice cómo se lleva (por cantidad o por serie) y qué pasa cuando se usa con un servicio (se presta, se gasta o se cobra).
 
-Menú: **Inventario → Productos** y **Inventario → Tipos de producto**.
+Menú: **Inventario → Catálogos y kardex → Productos** y **Inventario → Catálogos y kardex → Tipos de producto**.
 
 ## Quién la usa
 
@@ -88,7 +88,7 @@ Errores frecuentes: SKU repetido en el lote o ya existente en la empresa, tipo i
 
 ## Tipos de producto
 
-Menú: **Inventario → Tipos de producto**.
+Menú: **Inventario → Catálogos y kardex → Tipos de producto**.
 
 Un tipo agrupa productos y define el seguimiento y la modalidad que toma un producto nuevo. Vienen tres de fábrica: «Equipo» (por serie, comodato), «Material» y «Otro» (por cantidad, gasto).
 

@@ -1,5 +1,7 @@
 ---
 orden: 7
+pantallas:
+    - /sistema/almacenamiento
 ---
 
 # Almacenamiento

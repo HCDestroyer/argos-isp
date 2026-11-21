@@ -8,7 +8,7 @@ pantallas:
 
 El libro contable de la empresa: cada factura, pago, egreso, compra o cierre de caja deja aquí su asiento de doble partida. Desde esta pantalla consultas el diario y el mayor, ves el balance y el estado de resultados, cierras los meses y el ejercicio, y compruebas que nadie alteró el libro.
 
-Está en **Contabilidad → Libro**.
+Está en **Contabilidad y fiscal → Libro**.
 
 ::: tip El libro no se edita
 Ningún asiento se modifica ni se borra. Todo error se corrige con un asiento nuevo (un reverso o la anulación del documento que lo generó), y el original queda como estaba.

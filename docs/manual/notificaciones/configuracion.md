@@ -18,7 +18,7 @@ Los textos de cada aviso no se cambian aquí, sino en [Plantillas de avisos](./p
 
 Sin `notificaciones.configurar` ves todo, pero los campos están bloqueados y no aparece «Guardar». Sin `notificaciones.probar` no aparecen los botones «Enviar prueba».
 
-Menú: **Configuración → Notificaciones**.
+Menú: **Configuración → Notificaciones e integraciones → Notificaciones**.
 
 ## Qué ves
 

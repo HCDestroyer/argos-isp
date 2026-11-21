@@ -1,7 +1,8 @@
 /**
- * Barra lateral compacta (solo iconos) o expandida, recordada por usuario en `localStorage`.
- * El almacenamiento puede no existir o lanzar (ventana privada, datos bloqueados): entonces la
- * barra arranca expandida y la preferencia solo dura la visita.
+ * Menú lateral compacto (rail de iconos con etiqueta corta y menús flotantes por área) o expandido
+ * (con nombres y grupos en acordeón), recordado por usuario en `localStorage`. Por defecto, el rail
+ * (pedido del PM: «que respire»). Sin almacenamiento (ventana privada, datos bloqueados) arranca en
+ * rail y la preferencia solo dura la visita.
  */
 const PREFIJO = 'argos_menu_compacto:'
 
@@ -11,13 +12,13 @@ export function claveMenuCompacto(usuarioId: number | string): string {
 
 export function leerMenuCompacto(usuarioId: number | string | null | undefined): boolean {
     if (usuarioId === null || usuarioId === undefined) {
-        return false
+        return true
     }
     try {
-        return window.localStorage.getItem(claveMenuCompacto(usuarioId)) === '1'
+        return window.localStorage.getItem(claveMenuCompacto(usuarioId)) !== '0'
     }
     catch {
-        return false
+        return true
     }
 }
 

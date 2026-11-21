@@ -220,8 +220,6 @@ const cuentaDestino = computed<number | undefined>({
     },
 })
 
-const itemsMetodo: SelectItem[] = METODOS_COBRO.map(m => ({ label: m.etiqueta, value: m.metodo, icon: m.icono }))
-
 const montoValido = computed(() => /^\d{1,12}(\.\d{1,2})?$/.test(estado.monto.trim()))
 
 /**
@@ -1111,8 +1109,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                 />
                 <div class="flex flex-wrap gap-2">
                     <UButton
-                        label="Imprimir"
-                        icon="i-lucide-printer"
+                        label="Imprimir recibo"
+                        :icon="ICONOS.imprimir"
                         @click="imprimir"
                     />
                     <ImprimirConPlantilla
@@ -1124,12 +1122,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         @imprimir="abrirReciboPdf"
                     />
                     <UButton
-                        label="Nuevo cobro"
+                        label="Siguiente cliente"
                         icon="i-lucide-rotate-ccw"
                         color="neutral"
                         variant="outline"
+                        aria-keyshortcuts="Escape"
                         @click="nuevoCobro"
-                    />
+                    >
+                        <template #trailing>
+                            <UKbd value="Esc" />
+                        </template>
+                    </UButton>
                 </div>
             </div>
 
@@ -1219,16 +1222,33 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         Quedará debiendo {{ formatearQuetzales(restante) }}.
                     </p>
 
+                    <!-- Método en fichas con icono (sistema visual Argos): un toque, sin abrir una lista. -->
                     <UFormField
                         label="Método"
                         name="metodo"
                         required
                     >
-                        <USelect
-                            v-model="estado.metodo"
-                            :items="itemsMetodo"
-                            class="w-full"
-                        />
+                        <div
+                            class="grid grid-cols-2 gap-2"
+                            role="group"
+                            aria-label="Método de pago"
+                            data-prueba="metodos-cobro"
+                        >
+                            <UButton
+                                v-for="opcion in METODOS_COBRO"
+                                :key="opcion.metodo"
+                                :label="opcion.etiqueta"
+                                :icon="opcion.icono"
+                                :color="estado.metodo === opcion.metodo ? 'primary' : 'neutral'"
+                                :variant="estado.metodo === opcion.metodo ? 'soft' : 'outline'"
+                                :aria-pressed="estado.metodo === opcion.metodo"
+                                size="sm"
+                                class="justify-start rounded-lg"
+                                :class="estado.metodo === opcion.metodo ? 'ring ring-primary/50' : ''"
+                                :ui="{ label: 'truncate' }"
+                                @click="estado.metodo = opcion.metodo"
+                            />
+                        </div>
                     </UFormField>
 
                     <UAlert

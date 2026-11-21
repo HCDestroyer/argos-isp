@@ -9,7 +9,7 @@ pantallas:
 
 Dos pantallas de consulta: el tablero resume cómo va la empresa en lo fiscal (lo del mes y del año) y el comparador simula cuánto ISR pagaría en cada régimen. Ninguna guarda ni presenta nada.
 
-Están en **Contabilidad → Tablero fiscal** y **Contabilidad → Comparador de regímenes**.
+Están en **Contabilidad y fiscal → Tablero fiscal** y **Contabilidad y fiscal → Comparador de regímenes**.
 
 ## Quién la usa
 
@@ -62,7 +62,7 @@ Una simulación de referencia con los datos del libro y los parámetros vigentes
 Con menos de 12 meses leídos, las cifras se anualizan (× 12 ÷ meses).
 
 ::: tip Cambiar de régimen
-Esta pantalla no cambia el régimen. El cambio se hace en [Configuración → Fiscal](./configuracion-fiscal.md#regimen-de-isr): rige desde el 1 de enero y se avisa a la SAT en diciembre.
+Esta pantalla no cambia el régimen. El cambio se hace en [Configuración → Empresa y fiscal → Fiscal](./configuracion-fiscal.md#regimen-de-isr): rige desde el 1 de enero y se avisa a la SAT en diciembre.
 :::
 
 ## Relacionado

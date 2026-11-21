@@ -10,7 +10,7 @@ pantallas:
 
 Las facturas de tus proveedores: con su IVA como crédito fiscal (o al costo), sus retenciones, si se pagaron al contado o quedan al crédito, y su saldo. Cada compra deja su asiento y entra al libro de compras del mes de su IVA.
 
-Está en **Compras → Compras**.
+Está en **Finanzas → Compras → Compras**.
 
 ## Quién la usa
 

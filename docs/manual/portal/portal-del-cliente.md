@@ -63,7 +63,7 @@ Para quitarlo: «Desvincular Telegram» y confirmar.
 
 ## Ver los datos de depósito
 
-«Ver datos de depósito» muestra las cuentas de la empresa con un botón para copiar el número, y las instrucciones de pago. Se configuran en el panel en **Configuración → Contacto y pagos** y **Configuración → Cuentas bancarias**. Solo aparecen las cuentas activas en quetzales: las cuentas en dólares no se muestran al cliente.
+«Ver datos de depósito» muestra las cuentas de la empresa con un botón para copiar el número, y las instrucciones de pago. Se configuran en el panel en **Configuración → Empresa y fiscal → Contacto y pagos** y **Configuración → Facturación y cobro → Cuentas bancarias**. Solo aparecen las cuentas activas en quetzales: las cuentas en dólares no se muestran al cliente.
 
 ![Datos para depósito con las cuentas de la empresa](/capturas/portal/02-datos-deposito.png)
 
@@ -81,7 +81,7 @@ Desde la página de corte («Subir comprobante») o desde **Pagar** en Mi cuenta
 
 ![Comprobante recibido, en revisión](/capturas/portal/06-comprobante-recibido.png)
 
-El comprobante queda **En revisión** y aparece en el panel en **Cobros → Comprobantes**. Cuando alguien lo aprueba, el pago se abona y, si el servicio estaba suspendido, se reactiva. Si se rechaza, el cliente ve «No pudimos aprobarlo» con el motivo en **Pagar** y puede subirlo de nuevo. Cómo se revisa: [Comprobantes](../cobros/comprobantes.md).
+El comprobante queda **En revisión** y aparece en el panel en **Comprobantes**. Cuando alguien lo aprueba, el pago se abona y, si el servicio estaba suspendido, se reactiva. Si se rechaza, el cliente ve «No pudimos aprobarlo» con el motivo en **Pagar** y puede subirlo de nuevo. Cómo se revisa: [Comprobantes](../cobros/comprobantes.md).
 
 ::: tip «Ya deposité y sigo cortado»
 El depósito cuenta cuando se aprueba el comprobante. Si el cliente no puede subirlo, regístralo tú en caja.
@@ -110,7 +110,7 @@ Si la empresa tiene pasarela, el cliente toca «Pagar en línea» y paga con tar
 
 ## Contacto
 
-La página **Contacto** muestra los teléfonos (con botón para llamar), WhatsApp, correo, horario y dirección que configuraste en **Configuración → Contacto y pagos**. Si no hay ninguno configurado, dice «No hay datos de contacto para mostrar».
+La página **Contacto** muestra los teléfonos (con botón para llamar), WhatsApp, correo, horario y dirección que configuraste en **Configuración → Empresa y fiscal → Contacto y pagos**. Si no hay ninguno configurado, dice «No hay datos de contacto para mostrar».
 
 ## Sorteos
 
@@ -133,7 +133,7 @@ Desde la conexión (sin código de 6 dígitos) el cliente solo ve su primer nomb
 | «No pudimos consultar tu servicio» / «No pudimos cargar tu cuenta» | El sistema no respondió. Que toque «Reintentar». Si dura, avisa a soporte técnico                                                                    |
 | «Demasiadas consultas»                                             | Que espere un minuto                                                                                                                                 |
 | «No pudimos identificar tu servicio»                               | Ver [Página de corte](./pagina-de-corte.md#cliente-no-identificado)                                                                                  |
-| «No hay cuentas para depósito disponibles»                         | La empresa no tiene cuentas configuradas para depósito; el cliente no puede subir comprobante. Configúralas en **Configuración → Cuentas bancarias** |
+| «No hay cuentas para depósito disponibles»                         | La empresa no tiene cuentas configuradas para depósito; el cliente no puede subir comprobante. Configúralas en **Configuración → Facturación y cobro → Cuentas bancarias** |
 | «No necesitas una promesa de pago»                                 | No tiene facturas vencidas                                                                                                                           |
 
 ## Relacionado

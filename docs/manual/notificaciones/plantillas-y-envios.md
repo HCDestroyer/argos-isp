@@ -14,7 +14,7 @@ En esta pantalla decides qué dice cada aviso que reciben tus clientes, cuándo 
 - **Editar plantillas y recordatorios:** permiso `notificaciones.editar`. Solo lo trae `admin`. Sin él no aparece el lápiz de editar.
 - El filtro por cliente de la pestaña «Envíos» y el nombre de cada cliente necesitan además `clientes.ver`.
 
-Menú: **Configuración → Plantillas de avisos**. Tiene tres pestañas: «Plantillas», «Recordatorios» y «Envíos».
+Menú: **Configuración → Notificaciones e integraciones → Plantillas de avisos**. Tiene tres pestañas: «Plantillas», «Recordatorios» y «Envíos».
 
 ## Cómo sale un aviso
 

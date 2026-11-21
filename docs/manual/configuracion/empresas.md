@@ -35,10 +35,10 @@ Las empresas (NIT) con las que factura tu instalación de ArgosIsp: sus datos fi
 - **Permisos:** `empresas.crear` («Nueva empresa») y `empresas.editar` («Editar»).
 - **Campos:**
     - **NIT** (no se puede repetir entre empresas activas).
-    - **Establecimiento (SAT):** al editar se cambia en **Configuración → Fiscal → Establecimientos**.
+    - **Establecimiento (SAT):** al editar se cambia en **Configuración → Empresa y fiscal → Fiscal → Establecimientos**.
     - **País:** al crear la empresa se instala el paquete fiscal de ese país.
     - **Razón social** y **Nombre comercial** (el que ven los clientes y el selector de empresa).
-    - **Régimen de ISR:** al editar se cambia en **Configuración → Fiscal**, con su vigencia y el aviso a la SAT.
+    - **Régimen de ISR:** al editar se cambia en **Configuración → Empresa y fiscal → Fiscal**, con su vigencia y el aviso a la SAT.
     - **Dirección fiscal**, **Municipio** y **Departamento.**
     - **Teléfono**, **WhatsApp**, **Correo**, **Sitio web** y **Horario de atención.**
     - **Color de marca:** solo para el PDF y el correo.
