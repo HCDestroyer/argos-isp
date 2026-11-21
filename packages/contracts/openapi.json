@@ -29534,6 +29534,492 @@
         "x-implementado": true
       }
     },
+    "/api/v1/inicio": {
+      "get": {
+        "operationId": "inicioVer",
+        "summary": "Pantalla de inicio del usuario (panel financiero o día a día)",
+        "description": "Orden: la elegida por el usuario → la de sus roles (con varios, gana el panel financiero) → la de fábrica (admin y dueño: panel financiero; los demás: día a día). Sin panel_financiero.ver siempre es día a día (motivo sin_permiso).",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InicioUsuario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "inicioElegir",
+        "summary": "Elegir mi pantalla de inicio (null = la de mi rol)",
+        "description": "Solo el propio usuario. 422 inicio_sin_permiso si pide el panel financiero sin panel_financiero.ver.",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inicio": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "panel_financiero",
+                          "dia_a_dia"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null = quitar la elección (vuelve a la de su rol o la de fábrica)"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InicioUsuario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inicio/roles": {
+      "get": {
+        "operationId": "inicioRoles",
+        "summary": "Pantalla de inicio de cada rol",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Roles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InicioRol"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inicio.configurar_rol",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inicio.configurar_rol",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inicio/roles/{id}": {
+      "put": {
+        "operationId": "inicioConfigurarRol",
+        "summary": "Elegir la pantalla de inicio de un rol (null = la de fábrica)",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inicio": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "panel_financiero",
+                          "dia_a_dia"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null = quitar la elección (vuelve a la de su rol o la de fábrica)"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inicio del rol",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InicioRol"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inicio.configurar_rol; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inicio.configurar_rol",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inicio/usuarios/{id}": {
+      "put": {
+        "operationId": "inicioConfigurarUsuario",
+        "summary": "Elegir la pantalla de inicio de otro usuario (null = la de su rol)",
+        "description": "422 inicio_sin_permiso si el usuario no tiene panel_financiero.ver.",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inicio": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "panel_financiero",
+                          "dia_a_dia"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null = quitar la elección (vuelve a la de su rol o la de fábrica)"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inicio del usuario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InicioUsuario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inicio.configurar_usuario; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inicio.configurar_usuario",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/horus": {
       "get": {
         "operationId": "horusConectorVer",
@@ -57050,6 +57536,330 @@
         "x-implementado": true
       }
     },
+    "/api/v1/panel-financiero": {
+      "get": {
+        "operationId": "panelFinanciero",
+        "summary": "Panel financiero: ingreso mensual recurrente, bajas, ingreso promedio y efectivo disponible",
+        "description": "Una sección por empresa (la activa; con empresas=todas y alcance global, todas y `total`). Cada sección es un bloque: `ok` con sus cifras o `error` con su problema RFC 9457 y sin cifras (nunca ceros en su lugar). `efectivo` solo viene con libro.ver. 403 si el permiso tiene alcance por router, zona o caja. Definiciones: **ingreso mensual recurrente (MRR)** = por cada servicio activo o limitado, el precio efectivo del plan (precio especial o el del plan; con plan temporal, el temporal) − la mejora de lealtad + cargos recurrentes + adicionales cobrados, IVA incluido; **ingreso promedio por servicio (ARPU)** = MRR / servicios; **bajas (churn)** = servicios retirados o suspendidos más de `dias_baja` días (60 de fábrica), con fecha de baja en el mes; un servicio reactivado deja de contar; **tasa de bajas** = bajas / servicios al inicio del mes × 100; **efectivo disponible** = saldo del libro de Cajas (1.1.01.*) y Bancos (1.1.02.*).",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "mes",
+            "in": "query",
+            "required": false,
+            "description": "Mes YYYY-MM (por defecto el mes en curso de Guatemala; un mes futuro = el actual)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Panel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelFinanciero"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso panel_financiero.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "panel_financiero.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/panel-financiero/ajustes": {
+      "get": {
+        "operationId": "panelFinancieroAjustes",
+        "summary": "Ajustes del panel financiero de la empresa activa",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesPanelFinanciero"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso panel_financiero.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "panel_financiero.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "panelFinancieroConfigurar",
+        "summary": "Cambiar los ajustes del panel financiero (días de suspensión para contar una baja)",
+        "description": "De la empresa activa (422 empresa_requerida sin ella). 409 si version cambió.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dias_baja": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "description": "Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica)"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "dias_baja",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesPanelFinanciero"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso panel_financiero.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "panel_financiero.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/panel-financiero/alertas": {
+      "get": {
+        "operationId": "panelFinancieroAlertas",
+        "summary": "Alertas del panel: integridad del libro, cierres pendientes, FEL, vencimientos y pequeño contribuyente",
+        "description": "Por empresa. Libro (libro.ver): `integridad_libro` (la cadena de sellos se rompió: libro.integridad_rota) y `cierres_pendientes` (meses terminados con asientos sin cerrar). Fiscal (fiscal.ver): `contingencia_fel`, `fel_desactivada` (FEL obligatoria y apagada), `vencimientos_fiscales` (obligaciones que vencen en 7 días o vencidas) y `limite_pequeno_contribuyente` (facturado del año frente al límite; aviso al primer umbral de pc_alertas, 80 % de fábrica, y crítico desde el siguiente, 95 %). Sin el permiso de un grupo, sus tipos no se revisan ni aparecen. Una revisión que falla va en `errores` con su problema, nunca como «sin alertas».",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alertas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertasPanel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso panel_financiero.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "panel_financiero.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/pasarela/cobros": {
       "get": {
         "operationId": "pasarelaListarCobros",
@@ -70309,7 +71119,7 @@
       "get": {
         "operationId": "reportesAltasBajas",
         "summary": "Altas, bajas, suspensiones y reactivaciones por mes",
-        "description": "Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -70338,13 +71148,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -70444,11 +71255,11 @@
         "x-implementado": true
       }
     },
-    "/api/v1/reportes/bonificaciones": {
+    "/api/v1/reportes/bajas": {
       "get": {
-        "operationId": "reportesBonificaciones",
-        "summary": "Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)",
-        "description": "Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "operationId": "reportesBajas",
+        "summary": "Bajas de servicios (churn) por mes y tasa de bajas",
+        "description": "Por mes (12 por defecto): altas, bajas (retiros y suspensiones largas), servicios al inicio del mes y tasa. Los meses pasados se recalculan con el estado de hoy: un servicio reactivado deja de contar. Definiciones: **ingreso mensual recurrente (MRR)** = por cada servicio activo o limitado, el precio efectivo del plan (precio especial o el del plan; con plan temporal, el temporal) − la mejora de lealtad + cargos recurrentes + adicionales cobrados, IVA incluido; **ingreso promedio por servicio (ARPU)** = MRR / servicios; **bajas (churn)** = servicios retirados o suspendidos más de `dias_baja` días (60 de fábrica), con fecha de baja en el mes; un servicio reactivado deja de contar; **tasa de bajas** = bajas / servicios al inicio del mes × 100; **efectivo disponible** = saldo del libro de Cajas (1.1.01.*) y Bancos (1.1.02.*). Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -70477,13 +71288,127 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Mes inicial (cualquier día); por defecto hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Mes final; por defecto hoy",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteBajas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso panel_financiero.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "panel_financiero.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/bonificaciones": {
+      "get": {
+        "operationId": "reportesBonificaciones",
+        "summary": "Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)",
+        "description": "Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -70594,7 +71519,7 @@
       "get": {
         "operationId": "reportesCarteraVencida",
         "summary": "Cartera vencida por antigüedad (0-30, 31-60, 61-90, +90 días)",
-        "description": "Saldo pendiente de cada factura por días de atraso al corte, agrupado por cliente, zona, router o plan. El total cuadra con el saldo del auxiliar CxC. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Saldo pendiente de cada factura por días de atraso al corte, agrupado por cliente, zona, router o plan. El total cuadra con el saldo del auxiliar CxC. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -70623,13 +71548,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -70741,11 +71667,65 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/catalogo": {
+      "get": {
+        "operationId": "reportesCatalogo",
+        "summary": "Catálogo de reportes que puedo ver, con mis favoritos primero y mis vistas guardadas",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catálogo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReporteCatalogo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/cierres-caja": {
       "get": {
         "operationId": "reportesCierresCaja",
         "summary": "Cierres de caja: esperado, contado y diferencia por turno",
-        "description": "Turnos cerrados en el rango (por defecto el mes en curso). Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Turnos cerrados en el rango (por defecto el mes en curso). Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -70774,13 +71754,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -70883,7 +71864,7 @@
       "get": {
         "operationId": "reportesCobranzaDiaria",
         "summary": "Cobranza por día, método y caja",
-        "description": "Por defecto el mes en curso. Los anulados van aparte. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Por defecto el mes en curso. Los anulados van aparte. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -70912,13 +71893,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -71116,11 +72098,317 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/correos-externos": {
+      "get": {
+        "operationId": "reportesCorreosExternos",
+        "summary": "Correos externos aprobados por el admin para recibir reportes contables",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "reporte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 60
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Correos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CorreoExternoReportes"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.programar_envio",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.programar_envio",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "reportesAprobarCorreoExterno",
+        "summary": "Aprobar un correo externo (contador, socio) para reportes contables programados",
+        "description": "Solo admin. Si ya existía retirado, se reactiva; si está activo, solo cambia el nombre.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "correo": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "correo",
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Correo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorreoExternoReportes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.aprobar_correo_externo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.aprobar_correo_externo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/correos-externos/{id}/retirar": {
+      "post": {
+        "operationId": "reportesRetirarCorreoExterno",
+        "summary": "Retirar un correo externo de la lista aprobada",
+        "description": "Deja de recibir desde el siguiente envío (la corrida lo omite con correo_retirado). No se borra.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Correo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorreoExternoReportes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.retirar_correo_externo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.retirar_correo_externo",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/cuentas-por-pagar": {
       "get": {
         "operationId": "reportesCuentasPorPagar",
         "summary": "Antigüedad de proveedores (por vencer, 1-30, 31-60, 61-90, +90 días)",
-        "description": "Saldo pendiente de cada compra al crédito por días desde su vencimiento al corte, por proveedor. El total cuadra con 2.1.03 (check cxp_antiguedad). Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.",
+        "description": "Saldo pendiente de cada compra al crédito por días desde su vencimiento al corte, por proveedor. El total cuadra con 2.1.03 (check cxp_antiguedad). Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -71154,7 +72442,8 @@
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -71229,7 +72518,7 @@
       "get": {
         "operationId": "reportesEgresos",
         "summary": "Egresos por categoría y mes",
-        "description": "Egresos vigentes (sin anular) por mes contable. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Egresos vigentes (sin anular) por mes contable. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -71258,13 +72547,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -71364,6 +72654,687 @@
           }
         },
         "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/envios": {
+      "get": {
+        "operationId": "reportesEnvios",
+        "summary": "Envíos programados de reportes",
+        "description": "De las empresas de la petición; los consolidados solo con alcance global.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "reporte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 60
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envíos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EnvioReporte"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.programar_envio",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.programar_envio",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "reportesProgramarEnvio",
+        "summary": "Programar el envío de un reporte por correo",
+        "description": "De la empresa activa, o de todas con consolidado=true (alcance global). Destinatarios: usuarios activos o correos de la lista aprobada; a un correo externo solo va un reporte compartible sin datos personales de clientes con esos filtros (422 no_compartible). Quien programa debe poder ver el reporte (403). En cada envío se vuelve a revisar el permiso, el alcance y la empresa de cada destinatario.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reporte": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "maxLength": 60
+                  },
+                  "consolidado": {
+                    "description": "true = todas las empresas (solo con alcance global); si no, la empresa activa",
+                    "type": "boolean"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "filtros": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "formato": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "xlsx",
+                      "csv"
+                    ]
+                  },
+                  "frecuencia": {
+                    "type": "string",
+                    "enum": [
+                      "diaria",
+                      "semanal",
+                      "mensual"
+                    ]
+                  },
+                  "dia": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 28,
+                    "description": "semanal: 1 (lunes) a 7 (domingo); mensual: 1 a 28; diaria: null"
+                  },
+                  "hora": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23,
+                    "description": "Hora de Guatemala"
+                  },
+                  "destinatarios": {
+                    "type": "object",
+                    "properties": {
+                      "usuarios": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "maxItems": 50,
+                        "uniqueItems": true
+                      },
+                      "correos_externos": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Ids de la lista aprobada (GET /reportes/correos-externos)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Al menos un usuario o un correo de la lista aprobada"
+                  }
+                },
+                "required": [
+                  "reporte",
+                  "nombre",
+                  "formato",
+                  "frecuencia",
+                  "hora",
+                  "destinatarios"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Envío",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvioReporte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.programar_envio; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.programar_envio",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/envios/{id}": {
+      "get": {
+        "operationId": "reportesVerEnvio",
+        "summary": "Ver un envío programado",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envío",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvioReporte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.programar_envio",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.programar_envio",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "reportesEditarEnvio",
+        "summary": "Editar, pausar o reanudar un envío programado",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "filtros": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "formato": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "xlsx",
+                      "csv"
+                    ]
+                  },
+                  "frecuencia": {
+                    "type": "string",
+                    "enum": [
+                      "diaria",
+                      "semanal",
+                      "mensual"
+                    ]
+                  },
+                  "dia": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 28,
+                    "description": "semanal: 1 (lunes) a 7 (domingo); mensual: 1 a 28; diaria: null"
+                  },
+                  "hora": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23,
+                    "description": "Hora de Guatemala"
+                  },
+                  "destinatarios": {
+                    "type": "object",
+                    "properties": {
+                      "usuarios": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "maxItems": 50,
+                        "uniqueItems": true
+                      },
+                      "correos_externos": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Ids de la lista aprobada (GET /reportes/correos-externos)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Al menos un usuario o un correo de la lista aprobada"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "formato",
+                  "frecuencia",
+                  "hora",
+                  "destinatarios",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Envío",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvioReporte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.editar_envio; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.editar_envio",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/envios/{id}/corridas": {
+      "get": {
+        "operationId": "reportesCorridasEnvio",
+        "summary": "Últimas corridas de un envío programado: quién lo recibió y por qué se omitió a los demás",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Corridas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CorridaEnvioReporte"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.programar_envio",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.programar_envio",
         "x-implementado": true
       }
     },
@@ -71503,7 +73474,7 @@
       "get": {
         "operationId": "reportesFacturadoCobrado",
         "summary": "Facturado vs cobrado por periodo de factura",
-        "description": "Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -71532,13 +73503,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -71672,11 +73644,231 @@
         "x-implementado": true
       }
     },
-    "/api/v1/reportes/ingresos": {
+    "/api/v1/reportes/favoritos/{reporte}": {
+      "put": {
+        "operationId": "reportesMarcarFavorito",
+        "summary": "Marcar un reporte como favorito",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reporte",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Favorito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "favorito": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "favorito"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "reportesQuitarFavorito",
+        "summary": "Quitar un reporte de favoritos",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reporte",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Favorito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "favorito": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "favorito"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/indicadores-financieros": {
       "get": {
-        "operationId": "reportesIngresos",
-        "summary": "Ingresos (pagos vigentes) por periodo y método",
-        "description": "Por mes (o día con agrupar=dia) de Guatemala. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "operationId": "reportesIndicadoresFinancieros",
+        "summary": "Indicadores financieros por empresa: MRR, ARPU, bajas del mes y efectivo",
+        "description": "Una fila por empresa con las cifras del panel. Las columnas de efectivo vienen vacías sin libro.ver. 403 con el permiso recortado por alcance. Definiciones: **ingreso mensual recurrente (MRR)** = por cada servicio activo o limitado, el precio efectivo del plan (precio especial o el del plan; con plan temporal, el temporal) − la mejora de lealtad + cargos recurrentes + adicionales cobrados, IVA incluido; **ingreso promedio por servicio (ARPU)** = MRR / servicios; **bajas (churn)** = servicios retirados o suspendidos más de `dias_baja` días (60 de fábrica), con fecha de baja en el mes; un servicio reactivado deja de contar; **tasa de bajas** = bajas / servicios al inicio del mes × 100; **efectivo disponible** = saldo del libro de Cajas (1.1.01.*) y Bancos (1.1.02.*). Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -71705,13 +73897,115 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
+              ]
+            }
+          },
+          {
+            "name": "mes",
+            "in": "query",
+            "required": false,
+            "description": "Mes YYYY-MM (por defecto el mes en curso de Guatemala; un mes futuro = el actual)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteIndicadoresFinancieros"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso panel_financiero.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "panel_financiero.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/ingresos": {
+      "get": {
+        "operationId": "reportesIngresos",
+        "summary": "Ingresos (pagos vigentes) por periodo y método",
+        "description": "Por mes (o día con agrupar=dia) de Guatemala. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -71963,7 +74257,7 @@
       "get": {
         "operationId": "reportesIva",
         "summary": "IVA del periodo (débito fiscal) por mes contable",
-        "description": "Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -71980,13 +74274,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -72171,7 +74466,7 @@
       "get": {
         "operationId": "reportesPromesas",
         "summary": "Promesas: creadas, cumplidas, incumplidas y tasa de cumplimiento",
-        "description": "Por mes de creación y canal, con su estado actual. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "description": "Por mes de creación y canal, con su estado actual. Con `formato=csv`, `formato=xlsx` o `formato=pdf` responde el archivo (Content-Type text/csv, de Excel o application/pdf; Content-Disposition attachment) con la fila de totales al final. El PDF lleva el logo y el nombre de la empresa (o «Consolidado»), los filtros usados y la fecha de generación.",
         "tags": [
           "reportes"
         ],
@@ -72200,13 +74495,14 @@
             "name": "formato",
             "in": "query",
             "required": false,
-            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "description": "json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)",
             "schema": {
               "type": "string",
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           },
@@ -72449,6 +74745,447 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/vistas": {
+      "get": {
+        "operationId": "reportesVistas",
+        "summary": "Mis vistas guardadas de reportes",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vistas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VistaReporte"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "reportesGuardarVista",
+        "summary": "Guardar una vista de un reporte (filtros y columnas con nombre)",
+        "description": "Los filtros se validan con los del reporte (422 en filtros.<campo>); formato y empresas no se guardan. 409 vista_repetida si ya tiene una con ese nombre en el reporte.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reporte": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "maxLength": 60
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "filtros": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "description": "Filtros del reporte (se validan con los del reporte)"
+                  },
+                  "columnas": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "maxLength": 60
+                    },
+                    "maxItems": 60
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "reporte",
+                  "nombre",
+                  "filtros"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vista",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaReporte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/vistas/{id}": {
+      "put": {
+        "operationId": "reportesEditarVista",
+        "summary": "Editar una vista guardada propia",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reporte": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "maxLength": 60
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "filtros": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "description": "Filtros del reporte (se validan con los del reporte)"
+                  },
+                  "columnas": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "maxLength": 60
+                    },
+                    "maxItems": 60
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "reporte",
+                  "nombre",
+                  "filtros"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaReporte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "reportesEliminarVista",
+        "summary": "Borrar una vista guardada propia",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Borrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eliminada": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "eliminada"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/roles": {
       "get": {
         "operationId": "rolesListar",
@@ -72666,6 +75403,8 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "inicio.configurar_rol",
+                        "inicio.configurar_usuario",
                         "inventario.abrir_conteo",
                         "inventario.adjuntar_documento_traslado",
                         "inventario.ajustar",
@@ -72736,6 +75475,8 @@
                         "pagos.cerrar_diferencia",
                         "pagos.registrar",
                         "pagos.ver",
+                        "panel_financiero.configurar",
+                        "panel_financiero.ver",
                         "planes.crear",
                         "planes.editar",
                         "planes.sincronizar",
@@ -72771,6 +75512,10 @@
                         "redes.editar",
                         "redes.migrar",
                         "redes.ver",
+                        "reportes.aprobar_correo_externo",
+                        "reportes.editar_envio",
+                        "reportes.programar_envio",
+                        "reportes.retirar_correo_externo",
                         "reportes.ver",
                         "roles.crear",
                         "roles.editar",
@@ -73085,6 +75830,8 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "inicio.configurar_rol",
+                        "inicio.configurar_usuario",
                         "inventario.abrir_conteo",
                         "inventario.adjuntar_documento_traslado",
                         "inventario.ajustar",
@@ -73155,6 +75902,8 @@
                         "pagos.cerrar_diferencia",
                         "pagos.registrar",
                         "pagos.ver",
+                        "panel_financiero.configurar",
+                        "panel_financiero.ver",
                         "planes.crear",
                         "planes.editar",
                         "planes.sincronizar",
@@ -73190,6 +75939,10 @@
                         "redes.editar",
                         "redes.migrar",
                         "redes.ver",
+                        "reportes.aprobar_correo_externo",
+                        "reportes.editar_envio",
+                        "reportes.programar_envio",
+                        "reportes.retirar_correo_externo",
                         "reportes.ver",
                         "roles.crear",
                         "roles.editar",
@@ -87046,6 +89799,8 @@
                             "horus.probar",
                             "horus.revocar_token",
                             "horus.ver",
+                            "inicio.configurar_rol",
+                            "inicio.configurar_usuario",
                             "inventario.abrir_conteo",
                             "inventario.adjuntar_documento_traslado",
                             "inventario.ajustar",
@@ -87116,6 +89871,8 @@
                             "pagos.cerrar_diferencia",
                             "pagos.registrar",
                             "pagos.ver",
+                            "panel_financiero.configurar",
+                            "panel_financiero.ver",
                             "planes.crear",
                             "planes.editar",
                             "planes.sincronizar",
@@ -87151,6 +89908,10 @@
                             "redes.editar",
                             "redes.migrar",
                             "redes.ver",
+                            "reportes.aprobar_correo_externo",
+                            "reportes.editar_envio",
+                            "reportes.programar_envio",
+                            "reportes.retirar_correo_externo",
                             "reportes.ver",
                             "roles.crear",
                             "roles.editar",
@@ -89946,6 +92707,32 @@
           }
         }
       },
+      "AjustesPanelFinanciero": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "dias_baja",
+          "fabrica",
+          "version"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dias_baja": {
+            "type": "integer",
+            "description": "Días de suspensión para contar una baja (60 de fábrica)"
+          },
+          "fabrica": {
+            "type": "boolean",
+            "description": "true si la empresa nunca los cambió"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "AlcancesToken": {
         "type": "object",
         "additionalProperties": false,
@@ -89981,6 +92768,131 @@
               "minimum": 1
             },
             "description": "Solo estas cajas"
+          }
+        }
+      },
+      "AlertasPanel": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "generado_en",
+          "revisados",
+          "empresas"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revisados": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "integridad_libro",
+                "cierres_pendientes",
+                "contingencia_fel",
+                "fel_desactivada",
+                "vencimientos_fiscales",
+                "limite_pequeno_contribuyente"
+              ]
+            },
+            "description": "Tipos revisados: los del libro (integridad_libro, cierres_pendientes) con libro.ver; los fiscales con fiscal.ver"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "empresa",
+                "alertas",
+                "errores"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "alertas": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "tipo",
+                      "nivel",
+                      "titulo",
+                      "detalle",
+                      "datos"
+                    ],
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "integridad_libro",
+                          "cierres_pendientes",
+                          "contingencia_fel",
+                          "fel_desactivada",
+                          "vencimientos_fiscales",
+                          "limite_pequeno_contribuyente"
+                        ]
+                      },
+                      "nivel": {
+                        "type": "string",
+                        "enum": [
+                          "aviso",
+                          "critico"
+                        ]
+                      },
+                      "titulo": {
+                        "type": "string"
+                      },
+                      "detalle": {
+                        "type": "string"
+                      },
+                      "datos": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                },
+                "errores": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "tipo",
+                      "error"
+                    ],
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "integridad_libro",
+                          "cierres_pendientes",
+                          "contingencia_fel",
+                          "fel_desactivada",
+                          "vencimientos_fiscales",
+                          "limite_pequeno_contribuyente"
+                        ]
+                      },
+                      "error": {
+                        "$ref": "#/components/schemas/Problem"
+                      }
+                    }
+                  },
+                  "description": "Revisiones que no se pudieron hacer: su alerta no se sabe (nunca se da por buena)"
+                }
+              }
+            }
           }
         }
       },
@@ -91599,6 +94511,106 @@
           }
         }
       },
+      "BloqueBajasMes": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "mes",
+              "dias_baja",
+              "bajas",
+              "retiros",
+              "suspendidos",
+              "altas",
+              "vigentes",
+              "base",
+              "tasa"
+            ],
+            "properties": {
+              "mes": {
+                "type": "string",
+                "description": "Mes YYYY-MM"
+              },
+              "dias_baja": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica, por empresa); null en el total si las empresas tienen días distintos"
+              },
+              "bajas": {
+                "type": "integer",
+                "description": "Bajas (churn) del mes: servicios retirados o suspendidos más de dias_baja días, con fecha de baja en el mes y hasta hoy. Un servicio reactivado deja de contar"
+              },
+              "retiros": {
+                "type": "integer",
+                "description": "Bajas por retiro"
+              },
+              "suspendidos": {
+                "type": "integer",
+                "description": "Bajas por suspensión larga (siguen suspendidos)"
+              },
+              "altas": {
+                "type": "integer",
+                "description": "Servicios cuyo primer día facturable cae en el mes"
+              },
+              "vigentes": {
+                "type": "integer",
+                "description": "Servicios que cuentan hoy: activos, limitados y suspendidos que aún no son baja"
+              },
+              "base": {
+                "type": "integer",
+                "description": "Servicios al inicio del mes = vigentes + bajas desde el inicio del mes − altas desde el inicio del mes"
+              },
+              "tasa": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Tasa de bajas (churn) % = bajas / base × 100, con 2 decimales; null con base 0"
+              }
+            },
+            "description": "Bajas del mes (solo con estado ok)"
+          }
+        }
+      },
       "BloqueComparadorComparacion": {
         "type": "object",
         "required": [
@@ -92481,6 +95493,106 @@
           }
         }
       },
+      "BloqueEfectivoDisponible": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "cajas",
+              "bancos",
+              "total",
+              "cuentas"
+            ],
+            "properties": {
+              "cajas": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Saldo en el libro de las subcuentas de Cajas (1.1.01.*) a hoy"
+              },
+              "bancos": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Saldo en el libro de las subcuentas de Bancos (1.1.02.*) a hoy"
+              },
+              "total": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Efectivo disponible = cajas + bancos (saldo del libro, no del extracto)"
+              },
+              "cuentas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "cuenta_id",
+                    "codigo",
+                    "nombre",
+                    "tipo",
+                    "saldo"
+                  ],
+                  "properties": {
+                    "cuenta_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "codigo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "caja",
+                        "banco"
+                      ]
+                    },
+                    "saldo": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  }
+                },
+                "description": "Detalle por cuenta (vacío en el total consolidado)"
+              }
+            },
+            "description": "Efectivo disponible (solo con estado ok)"
+          }
+        }
+      },
       "BloqueFacturado": {
         "type": "object",
         "required": [
@@ -92861,6 +95973,96 @@
               }
             },
             "description": "Reserva de incobrables (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueIngresoRecurrente": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "servicios",
+              "planes",
+              "descuentos",
+              "cargos_recurrentes",
+              "adicionales",
+              "mrr",
+              "arpu"
+            ],
+            "properties": {
+              "servicios": {
+                "type": "integer",
+                "description": "Servicios que cuentan: estado activo o limitado"
+              },
+              "planes": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Suma del precio efectivo del plan de esos servicios (precio especial del servicio o el del plan vigente; con un plan temporal activo, el temporal), IVA incluido"
+              },
+              "descuentos": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Mejora de plan por puntos de lealtad que no se cobra (plan temporal de lealtad: se cobra el plan original)"
+              },
+              "cargos_recurrentes": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Cargos recurrentes activos de esos servicios, IVA incluido"
+              },
+              "adicionales": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Adicionales cobrados vigentes y no bloqueados (streaming, IP pública…), IVA incluido"
+              },
+              "mrr": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Ingreso mensual recurrente (MRR): lo que se cobra al mes por un periodo completo de los servicios activos y limitados, IVA incluido = planes − descuentos + cargos_recurrentes + adicionales. Sin mora, prorrateo, cargos únicos ni canjes de un solo mes"
+              },
+              "arpu": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Ingreso promedio por servicio (ARPU) = mrr / servicios, con 2 decimales; null sin servicios"
+              }
+            },
+            "description": "Ingreso mensual recurrente (solo con estado ok)"
           }
         }
       },
@@ -100557,6 +103759,166 @@
           }
         }
       },
+      "CorreoExternoReportes": {
+        "type": "object",
+        "required": [
+          "id",
+          "correo",
+          "nombre",
+          "activo",
+          "aprobado_por",
+          "aprobado_en",
+          "retirado_por",
+          "retirado_en",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "correo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "aprobado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "aprobado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retirado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "retirado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
+      "CorridaEnvioReporte": {
+        "type": "object",
+        "required": [
+          "id",
+          "envio_id",
+          "programado_para",
+          "enviados",
+          "omitidos",
+          "fallidos",
+          "resultados",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "envio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programado_para": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enviados": {
+            "type": "integer"
+          },
+          "omitidos": {
+            "type": "integer"
+          },
+          "fallidos": {
+            "type": "integer"
+          },
+          "resultados": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "destinatario_id",
+                "tipo",
+                "usuario_id",
+                "correo_externo_id",
+                "estado",
+                "motivo",
+                "detalle"
+              ],
+              "properties": {
+                "destinatario_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "usuario",
+                    "correo_externo"
+                  ]
+                },
+                "usuario_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "correo_externo_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "enviado",
+                    "omitido",
+                    "fallido"
+                  ]
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "sin_permiso, alcance_parcial, sin_acceso_empresa, usuario_inactivo, sin_correo, correo_retirado, no_compartible, sin_responsable, filtros_invalidos, sin_smtp, error_envio"
+                },
+                "detalle": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CorridasFacturacion": {
         "type": "object",
         "required": [
@@ -105209,6 +108571,168 @@
           }
         }
       },
+      "EnvioReporte": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "reporte",
+          "filtros",
+          "formato",
+          "frecuencia",
+          "dia",
+          "hora",
+          "activo",
+          "proximo_en",
+          "ultimo_envio_en",
+          "creado_por",
+          "destinatarios",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = consolidado de todas las empresas"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "reporte": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "formato": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "xlsx",
+              "csv"
+            ]
+          },
+          "frecuencia": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "dia": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "hora": {
+            "type": "integer",
+            "description": "Hora de Guatemala (0 a 23)"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "proximo_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ultimo_envio_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "destinatarios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "tipo",
+                "usuario_id",
+                "correo_externo_id",
+                "nombre",
+                "correo",
+                "retirado"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "usuario",
+                    "correo_externo"
+                  ]
+                },
+                "usuario_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "correo_externo_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "correo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "retirado": {
+                  "type": "boolean",
+                  "description": "El correo externo se retiró de la lista: no recibe"
+                }
+              }
+            }
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EquipoServicio": {
         "type": "object",
         "required": [
@@ -109281,6 +112805,120 @@
           }
         }
       },
+      "InicioRol": {
+        "type": "object",
+        "required": [
+          "role_id",
+          "rol",
+          "inicio",
+          "origen",
+          "version"
+        ],
+        "properties": {
+          "role_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rol": {
+            "type": "string"
+          },
+          "inicio": {
+            "type": "string",
+            "enum": [
+              "panel_financiero",
+              "dia_a_dia"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "rol",
+              "fabrica"
+            ]
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "InicioUsuario": {
+        "type": "object",
+        "required": [
+          "inicio",
+          "origen",
+          "rol",
+          "elegido",
+          "motivo",
+          "disponibles",
+          "version"
+        ],
+        "properties": {
+          "inicio": {
+            "type": "string",
+            "enum": [
+              "panel_financiero",
+              "dia_a_dia"
+            ],
+            "description": "Pantalla con la que abre el panel"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "usuario",
+              "rol",
+              "fabrica"
+            ]
+          },
+          "rol": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rol que decidió (origen rol o fábrica)"
+          },
+          "elegido": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "panel_financiero",
+              "dia_a_dia"
+            ],
+            "description": "Lo que eligió el usuario (null = sigue a su rol)"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "sin_permiso"
+            ],
+            "description": "sin_permiso: pedía el panel financiero y no tiene panel_financiero.ver"
+          },
+          "disponibles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "panel_financiero",
+                "dia_a_dia"
+              ]
+            }
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "version de la elección propia (null sin elección)"
+          }
+        }
+      },
       "IntegridadLibro": {
         "type": "object",
         "required": [
@@ -112634,6 +116272,8 @@
           "horus.probar",
           "horus.revocar_token",
           "horus.ver",
+          "inicio.configurar_rol",
+          "inicio.configurar_usuario",
           "inventario.abrir_conteo",
           "inventario.adjuntar_documento_traslado",
           "inventario.ajustar",
@@ -112704,6 +116344,8 @@
           "pagos.cerrar_diferencia",
           "pagos.registrar",
           "pagos.ver",
+          "panel_financiero.configurar",
+          "panel_financiero.ver",
           "planes.crear",
           "planes.editar",
           "planes.sincronizar",
@@ -112739,6 +116381,10 @@
           "redes.editar",
           "redes.migrar",
           "redes.ver",
+          "reportes.aprobar_correo_externo",
+          "reportes.editar_envio",
+          "reportes.programar_envio",
+          "reportes.retirar_correo_externo",
           "reportes.ver",
           "roles.crear",
           "roles.editar",
@@ -112945,6 +116591,8 @@
           "Probar la conexión con Horus Flow con la configuración guardada",
           "Revocar el token de una integración",
           "Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)",
+          "Elegir la pantalla de inicio de un rol (panel financiero o día a día)",
+          "Elegir la pantalla de inicio de otro usuario",
           "Abrir un conteo físico de una bodega",
           "Adjuntar el papel firmado (foto o escaneo) de una orden recibida en papel",
           "Ajustar existencias a mano (con motivo)",
@@ -113015,6 +116663,8 @@
           "Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)",
           "Registrar pagos",
           "Ver pagos",
+          "Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja)",
+          "Ver el panel financiero: ingreso mensual recurrente, bajas, ingreso promedio, efectivo (con libro.ver) y alertas",
           "Crear planes",
           "Editar planes e implementaciones por router",
           "Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers",
@@ -113050,6 +116700,10 @@
           "Editar redes IPv4: nombre, red, gateway, rango y DNS",
           "Pasar redes IPv4 a otro router (con sus servicios, si además tiene servicios.editar)",
           "Ver redes IPv4",
+          "Aprobar un correo externo (contador, socio) para recibir reportes contables programados; solo admin",
+          "Editar, pausar o reanudar un envío programado de reportes",
+          "Programar el envío de un reporte por correo a usuarios con permiso o a correos externos aprobados",
+          "Retirar un correo externo de la lista aprobada; solo admin",
           "Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard",
           "Crear roles",
           "Editar roles y sus permisos",
@@ -115038,6 +118692,84 @@
             "type": "string",
             "pattern": "^#[0-9A-F]{6}$",
             "description": "Primario en modo oscuro (AA contra #0B0F1A)"
+          }
+        }
+      },
+      "PanelFinanciero": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "mes",
+          "generado_en",
+          "empresas",
+          "total"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "mes": {
+            "type": "string",
+            "description": "Mes de las bajas (YYYY-MM)"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "empresa"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string",
+                  "description": "Nombre comercial"
+                },
+                "ingresos": {
+                  "$ref": "#/components/schemas/BloqueIngresoRecurrente",
+                  "description": "Ingreso mensual recurrente (MRR) e ingreso promedio (ARPU)"
+                },
+                "bajas": {
+                  "$ref": "#/components/schemas/BloqueBajasMes",
+                  "description": "Bajas (churn) y su tasa en el mes pedido"
+                },
+                "efectivo": {
+                  "$ref": "#/components/schemas/BloqueEfectivoDisponible",
+                  "description": "Efectivo disponible en cajas y bancos. Solo con libro.ver; sin él la sección no viene"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [],
+            "properties": {
+              "ingresos": {
+                "$ref": "#/components/schemas/BloqueIngresoRecurrente",
+                "description": "Ingreso mensual recurrente (MRR) e ingreso promedio (ARPU)"
+              },
+              "bajas": {
+                "$ref": "#/components/schemas/BloqueBajasMes",
+                "description": "Bajas (churn) y su tasa en el mes pedido"
+              },
+              "efectivo": {
+                "$ref": "#/components/schemas/BloqueEfectivoDisponible",
+                "description": "Efectivo disponible en cajas y bancos. Solo con libro.ver; sin él la sección no viene"
+              }
+            },
+            "description": "Suma de las empresas (solo con empresas=todas). Si una empresa falló en una sección, esa sección del total es error y no trae cifras"
           }
         }
       },
@@ -122671,6 +126403,169 @@
           }
         }
       },
+      "ReporteBajas": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "altas",
+                "bajas",
+                "retiros",
+                "suspendidos",
+                "base",
+                "tasa",
+                "dias_baja"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "periodo": {
+                  "type": "string"
+                },
+                "altas": {
+                  "type": "integer"
+                },
+                "bajas": {
+                  "type": "integer"
+                },
+                "retiros": {
+                  "type": "integer"
+                },
+                "suspendidos": {
+                  "type": "integer"
+                },
+                "base": {
+                  "type": "integer"
+                },
+                "tasa": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Porcentaje 0–100 con 2 decimales"
+                },
+                "dias_baja": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "altas",
+              "bajas",
+              "retiros",
+              "suspendidos",
+              "base",
+              "tasa",
+              "dias_baja"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "altas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bajas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "retiros": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "suspendidos": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "base": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tasa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dias_baja": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ReporteBonificaciones": {
         "type": "object",
         "required": [
@@ -123037,6 +126932,63 @@
           "generado_en": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReporteCatalogo": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "titulo",
+          "descripcion",
+          "ruta",
+          "permiso",
+          "compartible",
+          "formatos",
+          "favorito",
+          "vistas"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "ruta": {
+            "type": "string",
+            "description": "GET bajo /api/v1 que lo genera (con formato=csv|xlsx|pdf da el archivo)"
+          },
+          "permiso": {
+            "type": "string"
+          },
+          "compartible": {
+            "type": "boolean",
+            "description": "Reporte contable que se puede enviar a correos externos aprobados (sin datos personales de clientes; algunos filtros lo impiden)"
+          },
+          "formatos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx",
+                "pdf"
+              ]
+            }
+          },
+          "favorito": {
+            "type": "boolean"
+          },
+          "vistas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VistaReporte"
+            }
           }
         }
       },
@@ -124008,6 +127960,217 @@
                 ]
               },
               "cobrado_importado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteIndicadoresFinancieros": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicios",
+                "mrr",
+                "arpu",
+                "bajas",
+                "tasa_bajas",
+                "efectivo_cajas",
+                "efectivo_bancos",
+                "efectivo_total"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "servicios": {
+                  "type": "integer"
+                },
+                "mrr": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "arpu": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "bajas": {
+                  "type": "integer"
+                },
+                "tasa_bajas": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Porcentaje 0–100 con 2 decimales"
+                },
+                "efectivo_cajas": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "efectivo_bancos": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "efectivo_total": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "servicios",
+              "mrr",
+              "arpu",
+              "bajas",
+              "tasa_bajas",
+              "efectivo_cajas",
+              "efectivo_bancos",
+              "efectivo_total"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "servicios": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "mrr": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "arpu": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "bajas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tasa_bajas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "efectivo_cajas": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "efectivo_bancos": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "efectivo_total": {
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/Dinero"
@@ -128040,6 +132203,8 @@
               "horus.probar",
               "horus.revocar_token",
               "horus.ver",
+              "inicio.configurar_rol",
+              "inicio.configurar_usuario",
               "inventario.abrir_conteo",
               "inventario.adjuntar_documento_traslado",
               "inventario.ajustar",
@@ -128110,6 +132275,8 @@
               "pagos.cerrar_diferencia",
               "pagos.registrar",
               "pagos.ver",
+              "panel_financiero.configurar",
+              "panel_financiero.ver",
               "planes.crear",
               "planes.editar",
               "planes.sincronizar",
@@ -128145,6 +132312,10 @@
               "redes.editar",
               "redes.migrar",
               "redes.ver",
+              "reportes.aprobar_correo_externo",
+              "reportes.editar_envio",
+              "reportes.programar_envio",
+              "reportes.retirar_correo_externo",
               "reportes.ver",
               "roles.crear",
               "roles.editar",
@@ -128517,6 +132688,8 @@
               "pagos.cerrar_diferencia",
               "pagos.registrar",
               "pagos.ver",
+              "panel_financiero.configurar",
+              "panel_financiero.ver",
               "planes.ver",
               "plantillas.asignar_sin_plantilla",
               "plantillas.crear",
@@ -128533,6 +132706,8 @@
               "promesas.ver",
               "proveedores.editar",
               "proveedores.ver",
+              "reportes.editar_envio",
+              "reportes.programar_envio",
               "reportes.ver",
               "servicios.ver",
               "sorteos.entregar",
@@ -128580,6 +132755,7 @@
               "libros.ver",
               "notificaciones.ver",
               "pagos.ver",
+              "panel_financiero.ver",
               "planes.ver",
               "plantillas.ver",
               "portal_corte.ver",
@@ -136088,6 +140264,55 @@
                 "description": "Hijos en estado activo; con 0 el padre queda en el pico de un hijo"
               }
             }
+          }
+        }
+      },
+      "VistaReporte": {
+        "type": "object",
+        "required": [
+          "id",
+          "reporte",
+          "nombre",
+          "filtros",
+          "columnas",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reporte": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

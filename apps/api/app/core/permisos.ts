@@ -200,6 +200,19 @@ export const PERMISOS = {
     'egresos.registrar_sin_limite':
         'Registrar egresos de cualquier caja, banco o cuenta, sin el tope egreso_cajero_maximo ni motivo obligatorio',
     'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
+    // panel financiero y reportes (A3, decisiones del PM 2, 4, 6 y 12; contratos/reportes.md)
+    'panel_financiero.ver':
+        'Ver el panel financiero: ingreso mensual recurrente, bajas, ingreso promedio, efectivo (con libro.ver) y alertas',
+    'panel_financiero.configurar':
+        'Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja)',
+    'inicio.configurar_rol': 'Elegir la pantalla de inicio de un rol (panel financiero o día a día)',
+    'inicio.configurar_usuario': 'Elegir la pantalla de inicio de otro usuario',
+    'reportes.programar_envio':
+        'Programar el envío de un reporte por correo a usuarios con permiso o a correos externos aprobados',
+    'reportes.editar_envio': 'Editar, pausar o reanudar un envío programado de reportes',
+    'reportes.aprobar_correo_externo':
+        'Aprobar un correo externo (contador, socio) para recibir reportes contables programados; solo admin',
+    'reportes.retirar_correo_externo': 'Retirar un correo externo de la lista aprobada; solo admin',
     // Cobros y bancos (localización fiscal §10.3 y §10.9, fase 4; los endpoints son de A3)
     'cobros.configurar':
         'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
@@ -711,6 +724,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.registrar_sin_limite',
             'egresos.anular',
             'reportes.ver',
+            'panel_financiero.ver',
+            'panel_financiero.configurar',
+            'reportes.programar_envio',
+            'reportes.editar_envio',
             'bitacora.ver',
             'cobros.configurar',
             'cobros.liquidar',

@@ -1368,6 +1368,59 @@ export interface CatalogoEventos {
             motivo: string | null
         }
     }
+    /**
+     * Panel financiero y reportes (A3, `contratos/reportes.md`). `panel_financiero.ajustes_cambiados`:
+     * ajustes del panel de una empresa (hoy `dias_baja`, decisión 4 del PM).
+     */
+    'panel_financiero.ajustes_cambiados': {
+        empresa_id: number
+        campos: string[]
+        dias_baja: number
+    }
+    /** Pantalla de inicio de un rol o de un usuario (decisión 2 del PM); null = la de fábrica o la del rol. */
+    'inicio.cambiado': {
+        alcance: 'rol' | 'usuario'
+        role_id: number | null
+        usuario_id: number | null
+        de: 'panel_financiero' | 'dia_a_dia' | null
+        a: 'panel_financiero' | 'dia_a_dia' | null
+    }
+    /** Favoritos y vistas guardadas del catálogo de reportes de un usuario. */
+    'reportes.preferencias_cambiadas': {
+        usuario_id: number
+        tipo: 'favorito' | 'vista'
+        accion: 'agregado' | 'quitado' | 'guardada' | 'eliminada'
+        reporte: string
+        vista_id: number | null
+    }
+    /** Lista de correos externos aprobados por el admin (decisión 6). Nunca la dirección. */
+    'reportes.correo_externo_cambiado': {
+        correo_externo_id: number
+        accion: 'aprobado' | 'reactivado' | 'retirado'
+        envios_afectados: number
+    }
+    /** Envío programado creado, editado, pausado o reanudado. `campos`: solo nombres. */
+    'reportes.envio_cambiado': {
+        envio_id: number
+        empresa_id: number | null
+        reporte: string
+        accion: 'creado' | 'editado' | 'pausado' | 'reanudado'
+        campos: string[]
+        activo: boolean
+        proximo_en: string
+    }
+    /** Una corrida de un envío programado: cuántos recibieron el reporte, cuántos se omitieron o fallaron. */
+    'reportes.envio_ejecutado': {
+        envio_id: number
+        corrida_id: number
+        empresa_id: number | null
+        reporte: string
+        formato: 'pdf' | 'xlsx' | 'csv'
+        programado_para: string
+        enviados: number
+        omitidos: number
+        fallidos: number
+    }
 }
 
 /**
@@ -1655,6 +1708,12 @@ export const EVENTOS = [
     'horus.estado_seguridad_cambiado',
     'horus.router_estado_cambiado',
     'horus.servicio_infra_cambiado',
+    'panel_financiero.ajustes_cambiados',
+    'inicio.cambiado',
+    'reportes.preferencias_cambiadas',
+    'reportes.correo_externo_cambiado',
+    'reportes.envio_cambiado',
+    'reportes.envio_ejecutado',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>
