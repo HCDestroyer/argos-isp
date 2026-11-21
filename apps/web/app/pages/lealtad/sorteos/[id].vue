@@ -297,15 +297,84 @@ onMounted(() => {
         id="sorteo"
         :titulo="sorteo?.nombre ?? 'Sorteo'"
         icono="i-lucide-ticket"
+        :descripcion="sorteo ? [sorteo.descripcion, `Sorteo #${sorteo.id}`, sorteo.fecha_sorteo ? formatearFechaHora(sorteo.fecha_sorteo) : null, sorteo.lugar].filter(Boolean).join(' · ') : undefined"
     >
-        <template #acciones>
+        <template
+            v-if="sorteo"
+            #acciones
+        >
             <UButton
-                to="/lealtad/sorteos"
-                icon="i-lucide-arrow-left"
-                label="Sorteos"
+                v-if="puedeEditar"
+                label="Editar"
+                icon="i-lucide-pencil"
                 color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
+                variant="outline"
+                data-prueba="editar-sorteo"
+                @click="editando = true"
+            />
+            <UButton
+                v-if="puedePublicar"
+                label="Publicar bases"
+                icon="i-lucide-scroll-text"
+                data-prueba="publicar-bases"
+                @click="abrirConfirmacion('publicar')"
+            />
+            <UButton
+                v-if="puedeAbrir"
+                label="Abrir participación"
+                icon="i-lucide-ticket"
+                data-prueba="abrir-participacion"
+                @click="abrirConfirmacion('abrir')"
+            />
+            <UButton
+                v-if="puedeCerrarCorte"
+                label="Cerrar corte"
+                icon="i-lucide-list-checks"
+                data-prueba="cerrar-corte"
+                @click="abrirConfirmacion('cerrar')"
+            />
+            <UButton
+                v-if="puedeEjecutar"
+                label="Ejecutar sorteo"
+                icon="i-lucide-trophy"
+                data-prueba="ejecutar-sorteo"
+                @click="ejecutando = true"
+            />
+            <UButton
+                v-if="puedeExportar"
+                label="Participantes CSV"
+                icon="i-lucide-file-down"
+                color="neutral"
+                variant="outline"
+                :loading="exportando === 'csv'"
+                data-prueba="exportar-participantes-csv"
+                @click="exportar('csv')"
+            />
+            <UButton
+                v-if="puedeExportar"
+                label="Participantes XLSX"
+                icon="i-lucide-file-spreadsheet"
+                color="neutral"
+                variant="outline"
+                :loading="exportando === 'xlsx'"
+                data-prueba="exportar-participantes-xlsx"
+                @click="exportar('xlsx')"
+            />
+            <UButton
+                v-if="puedeCerrarActa"
+                label="Cerrar acta"
+                icon="i-lucide-file-signature"
+                data-prueba="cerrar-acta"
+                @click="cerrandoActa = true"
+            />
+            <UButton
+                v-if="puedeCancelar"
+                label="Cancelar sorteo"
+                icon="i-lucide-ban"
+                color="error"
+                variant="outline"
+                data-prueba="cancelar-sorteo"
+                @click="cancelando = true"
             />
         </template>
 
@@ -325,110 +394,8 @@ onMounted(() => {
         </div>
         <div
             v-else
-            class="flex flex-col gap-6"
+            class="flex flex-col gap-4"
         >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex min-w-0 flex-col gap-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h2 class="text-xl font-semibold text-highlighted">
-                            {{ sorteo.nombre }}
-                        </h2>
-                        <SorteoEstadoBadge
-                            :estado="sorteo.estado"
-                            data-prueba="sorteo-estado"
-                        />
-                    </div>
-                    <p class="text-sm text-muted">
-                        Sorteo #{{ sorteo.id }}<template v-if="sorteo.fecha_sorteo">
-                            · {{ formatearFechaHora(sorteo.fecha_sorteo) }}
-                        </template><template v-if="sorteo.lugar">
-                            · {{ sorteo.lugar }}
-                        </template>
-                    </p>
-                    <p
-                        v-if="sorteo.descripcion"
-                        class="text-sm text-default"
-                    >
-                        {{ sorteo.descripcion }}
-                    </p>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <UButton
-                        v-if="puedeEditar"
-                        label="Editar"
-                        icon="i-lucide-pencil"
-                        color="neutral"
-                        variant="outline"
-                        data-prueba="editar-sorteo"
-                        @click="editando = true"
-                    />
-                    <UButton
-                        v-if="puedePublicar"
-                        label="Publicar bases"
-                        icon="i-lucide-scroll-text"
-                        data-prueba="publicar-bases"
-                        @click="abrirConfirmacion('publicar')"
-                    />
-                    <UButton
-                        v-if="puedeAbrir"
-                        label="Abrir participación"
-                        icon="i-lucide-ticket"
-                        data-prueba="abrir-participacion"
-                        @click="abrirConfirmacion('abrir')"
-                    />
-                    <UButton
-                        v-if="puedeCerrarCorte"
-                        label="Cerrar corte"
-                        icon="i-lucide-list-checks"
-                        data-prueba="cerrar-corte"
-                        @click="abrirConfirmacion('cerrar')"
-                    />
-                    <UButton
-                        v-if="puedeEjecutar"
-                        label="Ejecutar sorteo"
-                        icon="i-lucide-trophy"
-                        data-prueba="ejecutar-sorteo"
-                        @click="ejecutando = true"
-                    />
-                    <UButton
-                        v-if="puedeExportar"
-                        label="Participantes CSV"
-                        icon="i-lucide-file-down"
-                        color="neutral"
-                        variant="outline"
-                        :loading="exportando === 'csv'"
-                        data-prueba="exportar-participantes-csv"
-                        @click="exportar('csv')"
-                    />
-                    <UButton
-                        v-if="puedeExportar"
-                        label="Participantes XLSX"
-                        icon="i-lucide-file-spreadsheet"
-                        color="neutral"
-                        variant="outline"
-                        :loading="exportando === 'xlsx'"
-                        data-prueba="exportar-participantes-xlsx"
-                        @click="exportar('xlsx')"
-                    />
-                    <UButton
-                        v-if="puedeCerrarActa"
-                        label="Cerrar acta"
-                        icon="i-lucide-file-signature"
-                        data-prueba="cerrar-acta"
-                        @click="cerrandoActa = true"
-                    />
-                    <UButton
-                        v-if="puedeCancelar"
-                        label="Cancelar sorteo"
-                        icon="i-lucide-ban"
-                        color="error"
-                        variant="outline"
-                        data-prueba="cancelar-sorteo"
-                        @click="cancelando = true"
-                    />
-                </div>
-            </div>
-
             <UAlert
                 v-if="sorteo.estado === 'cancelado'"
                 color="neutral"
@@ -456,7 +423,17 @@ onMounted(() => {
                 description="Antes de esa fecha la API no cierra el corte (422 corte_no_vencido)."
             />
 
-            <SorteoPasos :sorteo="sorteo" />
+            <div class="surface-card flex flex-col gap-3 rounded-[1.375rem] p-3 sm:flex-row sm:items-center sm:p-4">
+                <SorteoEstadoBadge
+                    :estado="sorteo.estado"
+                    class="self-start sm:self-center"
+                    data-prueba="sorteo-estado"
+                />
+                <SorteoPasos
+                    :sorteo="sorteo"
+                    class="min-w-0 flex-1"
+                />
+            </div>
 
             <div
                 v-if="sorteo.estado !== 'cancelado'"
@@ -505,228 +482,232 @@ onMounted(() => {
                 data-prueba="sorteo-problema-accion"
             />
 
-            <UPageCard
-                v-if="ejecutado"
-                title="Resultado"
-                :description="`Ejecutado el ${sorteo.ejecutado_en ? formatearFechaHora(sorteo.ejecutado_en) : '—'} con ${sorteo.participantes} participantes y ${sorteo.boletos} boletos.`"
-                icon="i-lucide-trophy"
-                variant="subtle"
-                data-prueba="sorteo-resultado"
-            >
-                <div
-                    v-if="puedeNotificar"
-                    class="mb-4 flex flex-wrap gap-2"
-                >
-                    <UButton
-                        v-if="puedeNotificar"
-                        :label="`Notificar ganadores (${porNotificar.length})`"
-                        icon="i-lucide-send"
-                        size="sm"
-                        data-prueba="notificar-ganadores"
-                        @click="notificando = true"
-                    />
-                </div>
-                <SorteoResultado
-                    :sorteo="sorteo"
-                    :puede-entregar="puedeEntregar"
-                    :puede-anular-entrega="puedeAnularEntrega"
-                    :puede-no-reclamado="puedeNoReclamado"
-                    @entregar="ganadorAEntregar = $event"
-                    @anular-entrega="ganadorAAnular = $event"
-                    @no-reclamado="ganadorNoReclamado = $event"
-                />
-            </UPageCard>
-
-            <UPageCard
-                v-if="sorteo.acta_hash"
-                title="Acta"
-                :description="sorteo.acta_cerrada_en ? `Cerrada el ${formatearFechaHora(sorteo.acta_cerrada_en)}. El PDF se generó una sola vez; su SHA-256 lo identifica.` : 'El PDF se generó una sola vez; su SHA-256 lo identifica.'"
-                icon="i-lucide-file-signature"
-                variant="subtle"
-                data-prueba="sorteo-acta"
-            >
-                <div class="flex flex-col gap-3">
-                    <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <DatoFicha
-                            etiqueta="SHA-256 del acta"
-                            :valor="sorteo.acta_hash"
-                            mono
-                            class="min-w-0 [&_dd]:break-all"
-                            data-prueba="acta-hash"
-                        />
-                        <DatoFicha
-                            etiqueta="Constancia del notario o delegado"
-                            :valor="sorteo.acta_constancia ?? null"
-                        />
-                    </dl>
-                    <UButton
-                        v-if="puede('sorteos.ver')"
-                        label="Descargar acta (PDF)"
-                        icon="i-lucide-file-down"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                        class="self-start"
-                        :loading="descargandoActa"
-                        data-prueba="descargar-acta"
-                        @click="descargarActa"
-                    />
-                </div>
-            </UPageCard>
-
-            <UPageCard
-                title="Premios"
-                :description="sorteo.premios.length ? `${titularesSorteo(sorteo.premios)} titulares y ${sorteo.suplentes} suplentes · valor total ${formatearQuetzales(valorPremiosSorteo(sorteo.premios))}` : 'Aún sin premios.'"
-                icon="i-lucide-gift"
-                variant="subtle"
-            >
-                <div
-                    v-if="sorteo.premios.length"
-                    class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-                    data-prueba="sorteo-premios"
-                >
-                    <SorteoPremioTarjeta
-                        v-for="premio in sorteo.premios"
-                        :key="premio.id"
-                        :sorteo-id="sorteo.id"
-                        :premio="premio"
-                        :catalogo="nombreCatalogo(premio)"
-                        :puede-subir-imagen="puedeSubirImagen"
-                        @subir-imagen="premioImagen = $event"
-                    />
-                </div>
-            </UPageCard>
-
-            <UPageCard
-                title="Checklist legal"
-                description="Lo que exige la ley para cada paso, con su evidencia."
-                icon="i-lucide-scale"
-                variant="subtle"
-                data-prueba="sorteo-checklist"
-            >
-                <SorteoRequisitos
-                    :sorteo-id="sorteo.id"
-                    :archivos="sorteo.archivos ?? []"
-                    :requisitos="sorteo.requisitos"
-                    :puede-marcar="puedeMarcar"
-                    :faltantes="faltantes"
-                    @marcar="requisitoAMarcar = $event"
-                />
-            </UPageCard>
-
-            <div class="grid gap-6 lg:grid-cols-2">
-                <UPageCard
-                    title="Bases"
-                    icon="i-lucide-scroll-text"
-                    variant="subtle"
-                >
-                    <dl class="grid grid-cols-1 gap-3">
-                        <DatoFicha
-                            etiqueta="Mecánica"
-                            :valor="typeof sorteo.bases.mecanica === 'string' ? sorteo.bases.mecanica : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Regla de participación (la ve el cliente)"
-                            :valor="typeof sorteo.bases.regla_participacion === 'string' ? sorteo.bases.regla_participacion : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Plazo para reclamar"
-                            :valor="typeof sorteo.bases.plazo_reclamo_dias === 'number' ? `${sorteo.bases.plazo_reclamo_dias} días` : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Premios no reclamados"
-                            :valor="typeof sorteo.bases.no_reclamados === 'string' ? sorteo.bases.no_reclamados : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Publicación de resultados"
-                            :valor="typeof sorteo.bases.publicacion_resultados === 'string' ? sorteo.bases.publicacion_resultados : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Fuente del valor público"
-                            :valor="typeof sorteo.bases.fuente_valor_publico === 'string' ? sorteo.bases.fuente_valor_publico : null"
-                            data-prueba="sorteo-fuente-valor"
-                        />
-                        <DatoFicha
-                            etiqueta="Resolución de la Gobernación"
-                            :valor="typeof sorteo.bases.resolucion_gobernacion === 'string' ? sorteo.bases.resolucion_gobernacion : null"
-                        />
-                        <DatoFicha
-                            v-if="sorteo.bases_hash"
-                            etiqueta="Hash de las bases (SHA-256)"
-                            :valor="sorteo.bases_hash"
-                            mono
-                            class="min-w-0 [&_dd]:break-all"
-                        />
-                        <DatoFicha
-                            v-if="sorteo.compromiso"
-                            etiqueta="Compromiso de la semilla"
-                            :valor="sorteo.compromiso"
-                            mono
-                            class="min-w-0 [&_dd]:break-all"
-                            data-prueba="sorteo-compromiso"
-                        />
-                    </dl>
-                    <UButton
-                        v-if="sorteo.bases_hash"
-                        :to="useSorteos().urlPublica(sorteo.id, 'bases')"
-                        target="_blank"
-                        rel="noopener"
-                        label="Bases públicas"
-                        icon="i-lucide-external-link"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        class="mt-3 self-start"
-                    />
-                </UPageCard>
-
-                <UPageCard
-                    title="Participación"
-                    icon="i-lucide-users"
-                    variant="subtle"
-                >
-                    <dl class="grid grid-cols-2 gap-3">
-                        <DatoFicha
-                            etiqueta="Participan desde"
-                            :valor="sorteo.inscripcion_desde ? formatearFecha(sorteo.inscripcion_desde) : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Corte"
-                            :valor="sorteo.corte_en ? formatearFechaHora(sorteo.corte_en) : null"
-                        />
-                        <DatoFicha
-                            etiqueta="Boletos por servicio"
-                            :valor="sorteo.criterios.boletos_por_servicio"
-                        />
-                        <DatoFicha
-                            etiqueta="Boletos por puntos"
-                            :valor="sorteo.criterios.admite_canje ? 'Sí' : 'No'"
-                        />
-                        <template v-if="sorteo.lista_hash">
-                            <DatoFicha
-                                etiqueta="Participantes"
-                                :valor="sorteo.participantes"
-                                data-prueba="sorteo-participantes"
-                            />
-                            <DatoFicha
-                                etiqueta="Boletos"
-                                :valor="sorteo.boletos"
-                            />
-                            <DatoFicha
-                                etiqueta="Hash de la lista"
-                                :valor="sorteo.lista_hash"
-                                mono
-                                class="col-span-2 min-w-0 [&_dd]:break-all"
-                            />
-                        </template>
-                    </dl>
-                    <p
-                        v-if="!sorteo.lista_hash"
-                        class="mt-3 text-xs text-muted"
+            <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+                <div class="flex min-w-0 flex-col gap-4">
+                    <UPageCard
+                        v-if="ejecutado"
+                        title="Resultado"
+                        :description="`Ejecutado el ${sorteo.ejecutado_en ? formatearFechaHora(sorteo.ejecutado_en) : '—'} con ${sorteo.participantes} participantes y ${sorteo.boletos} boletos.`"
+                        icon="i-lucide-trophy"
+                        variant="subtle"
+                        data-prueba="sorteo-resultado"
                     >
-                        Sin inscripción: al cerrar el corte participan los clientes con servicios activos y sin facturas vencidas{{ sorteo.criterios.admite_canje ? ', más los boletos canjeados con puntos' : '' }}.
-                    </p>
-                </UPageCard>
+                        <div
+                            v-if="puedeNotificar"
+                            class="mb-4 flex flex-wrap gap-2"
+                        >
+                            <UButton
+                                v-if="puedeNotificar"
+                                :label="`Notificar ganadores (${porNotificar.length})`"
+                                icon="i-lucide-send"
+                                size="sm"
+                                data-prueba="notificar-ganadores"
+                                @click="notificando = true"
+                            />
+                        </div>
+                        <SorteoResultado
+                            :sorteo="sorteo"
+                            :puede-entregar="puedeEntregar"
+                            :puede-anular-entrega="puedeAnularEntrega"
+                            :puede-no-reclamado="puedeNoReclamado"
+                            @entregar="ganadorAEntregar = $event"
+                            @anular-entrega="ganadorAAnular = $event"
+                            @no-reclamado="ganadorNoReclamado = $event"
+                        />
+                    </UPageCard>
+
+                    <UPageCard
+                        title="Premios"
+                        :description="sorteo.premios.length ? `${titularesSorteo(sorteo.premios)} titulares y ${sorteo.suplentes} suplentes · valor total ${formatearQuetzales(valorPremiosSorteo(sorteo.premios))}` : 'Aún sin premios.'"
+                        icon="i-lucide-gift"
+                        variant="subtle"
+                    >
+                        <div
+                            v-if="sorteo.premios.length"
+                            class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                            data-prueba="sorteo-premios"
+                        >
+                            <SorteoPremioTarjeta
+                                v-for="premio in sorteo.premios"
+                                :key="premio.id"
+                                :sorteo-id="sorteo.id"
+                                :premio="premio"
+                                :catalogo="nombreCatalogo(premio)"
+                                :puede-subir-imagen="puedeSubirImagen"
+                                @subir-imagen="premioImagen = $event"
+                            />
+                        </div>
+                    </UPageCard>
+
+                    <div class="grid gap-6 lg:grid-cols-2">
+                        <UPageCard
+                            title="Bases"
+                            icon="i-lucide-scroll-text"
+                            variant="subtle"
+                        >
+                            <dl class="grid grid-cols-1 gap-3">
+                                <DatoFicha
+                                    etiqueta="Mecánica"
+                                    :valor="typeof sorteo.bases.mecanica === 'string' ? sorteo.bases.mecanica : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Regla de participación (la ve el cliente)"
+                                    :valor="typeof sorteo.bases.regla_participacion === 'string' ? sorteo.bases.regla_participacion : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Plazo para reclamar"
+                                    :valor="typeof sorteo.bases.plazo_reclamo_dias === 'number' ? `${sorteo.bases.plazo_reclamo_dias} días` : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Premios no reclamados"
+                                    :valor="typeof sorteo.bases.no_reclamados === 'string' ? sorteo.bases.no_reclamados : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Publicación de resultados"
+                                    :valor="typeof sorteo.bases.publicacion_resultados === 'string' ? sorteo.bases.publicacion_resultados : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Fuente del valor público"
+                                    :valor="typeof sorteo.bases.fuente_valor_publico === 'string' ? sorteo.bases.fuente_valor_publico : null"
+                                    data-prueba="sorteo-fuente-valor"
+                                />
+                                <DatoFicha
+                                    etiqueta="Resolución de la Gobernación"
+                                    :valor="typeof sorteo.bases.resolucion_gobernacion === 'string' ? sorteo.bases.resolucion_gobernacion : null"
+                                />
+                                <DatoFicha
+                                    v-if="sorteo.bases_hash"
+                                    etiqueta="Hash de las bases (SHA-256)"
+                                    :valor="sorteo.bases_hash"
+                                    mono
+                                    class="min-w-0 [&_dd]:break-all"
+                                />
+                                <DatoFicha
+                                    v-if="sorteo.compromiso"
+                                    etiqueta="Compromiso de la semilla"
+                                    :valor="sorteo.compromiso"
+                                    mono
+                                    class="min-w-0 [&_dd]:break-all"
+                                    data-prueba="sorteo-compromiso"
+                                />
+                            </dl>
+                            <UButton
+                                v-if="sorteo.bases_hash"
+                                :to="useSorteos().urlPublica(sorteo.id, 'bases')"
+                                target="_blank"
+                                rel="noopener"
+                                label="Bases públicas"
+                                icon="i-lucide-external-link"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                class="mt-3 self-start"
+                            />
+                        </UPageCard>
+
+                        <UPageCard
+                            title="Participación"
+                            icon="i-lucide-users"
+                            variant="subtle"
+                        >
+                            <dl class="grid grid-cols-2 gap-3">
+                                <DatoFicha
+                                    etiqueta="Participan desde"
+                                    :valor="sorteo.inscripcion_desde ? formatearFecha(sorteo.inscripcion_desde) : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Corte"
+                                    :valor="sorteo.corte_en ? formatearFechaHora(sorteo.corte_en) : null"
+                                />
+                                <DatoFicha
+                                    etiqueta="Boletos por servicio"
+                                    :valor="sorteo.criterios.boletos_por_servicio"
+                                />
+                                <DatoFicha
+                                    etiqueta="Boletos por puntos"
+                                    :valor="sorteo.criterios.admite_canje ? 'Sí' : 'No'"
+                                />
+                                <template v-if="sorteo.lista_hash">
+                                    <DatoFicha
+                                        etiqueta="Participantes"
+                                        :valor="sorteo.participantes"
+                                        data-prueba="sorteo-participantes"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Boletos"
+                                        :valor="sorteo.boletos"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Hash de la lista"
+                                        :valor="sorteo.lista_hash"
+                                        mono
+                                        class="col-span-2 min-w-0 [&_dd]:break-all"
+                                    />
+                                </template>
+                            </dl>
+                            <p
+                                v-if="!sorteo.lista_hash"
+                                class="mt-3 text-xs text-muted"
+                            >
+                                Sin inscripción: al cerrar el corte participan los clientes con servicios activos y sin facturas vencidas{{ sorteo.criterios.admite_canje ? ', más los boletos canjeados con puntos' : '' }}.
+                            </p>
+                        </UPageCard>
+                    </div>
+                </div>
+                <div class="flex min-w-0 flex-col gap-4">
+                    <UPageCard
+                        title="Lo que pide la ley"
+                        description="Cada paso con su evidencia."
+                        icon="i-lucide-scale"
+                        variant="subtle"
+                        data-prueba="sorteo-checklist"
+                    >
+                        <SorteoRequisitos
+                            :sorteo-id="sorteo.id"
+                            :archivos="sorteo.archivos ?? []"
+                            :requisitos="sorteo.requisitos"
+                            :puede-marcar="puedeMarcar"
+                            :faltantes="faltantes"
+                            @marcar="requisitoAMarcar = $event"
+                        />
+                    </UPageCard>
+                    <UPageCard
+                        v-if="sorteo.acta_hash"
+                        title="Acta"
+                        :description="sorteo.acta_cerrada_en ? `Cerrada el ${formatearFechaHora(sorteo.acta_cerrada_en)}. El PDF se generó una sola vez; su SHA-256 lo identifica.` : 'El PDF se generó una sola vez; su SHA-256 lo identifica.'"
+                        icon="i-lucide-file-signature"
+                        variant="subtle"
+                        data-prueba="sorteo-acta"
+                    >
+                        <div class="flex flex-col gap-3">
+                            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <DatoFicha
+                                    etiqueta="SHA-256 del acta"
+                                    :valor="sorteo.acta_hash"
+                                    mono
+                                    class="min-w-0 [&_dd]:break-all"
+                                    data-prueba="acta-hash"
+                                />
+                                <DatoFicha
+                                    etiqueta="Constancia del notario o delegado"
+                                    :valor="sorteo.acta_constancia ?? null"
+                                />
+                            </dl>
+                            <UButton
+                                v-if="puede('sorteos.ver')"
+                                label="Descargar acta (PDF)"
+                                icon="i-lucide-file-down"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                class="self-start"
+                                :loading="descargandoActa"
+                                data-prueba="descargar-acta"
+                                @click="descargarActa"
+                            />
+                        </div>
+                    </UPageCard>
+                </div>
             </div>
 
             <ConfirmacionModal

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { TableColumn } from '@nuxt/ui'
+import type { TabsItem } from '@nuxt/ui'
 
 /**
  * Plantillas de facturación (A3, tarea 8 del brief): lista con su ciclo, corte, mora, FEL y
@@ -12,6 +12,11 @@ import type { TableColumn } from '@nuxt/ui'
  * (`plantillas.asignar_sin_plantilla`) en la cabecera, con la de por defecto, y en cada fila vigente;
  * si «Genera 1 · vence 15» existe pero otra es la de por defecto, un aviso ofrece «Marcar como por
  * defecto» (`PUT` con `por_defecto` y `version`, `plantillas.editar`).
+ *
+ * Rediseño (tablero OperPlantillasFacturacion): a la izquierda las plantillas con buscador; a la
+ * derecha la abierta con pestañas «Ciclo y corte» y «Promesas y reconexión», la línea «Así corre
+ * el mes de un cliente» y sus reglas. El formulario completo (más de 8 campos) se abre en el panel
+ * lateral («Editar plantilla»).
  */
 definePageMeta({ permiso: 'plantillas.ver' })
 
@@ -96,183 +101,351 @@ async function marcarPorDefecto(plantilla: PlantillaFacturacion) {
     void cargar()
 }
 
-const columnas: TableColumn<PlantillaFacturacion>[] = [
-    { accessorKey: 'nombre', header: 'Plantilla', meta: { class: { td: 'whitespace-normal' } } },
-    { id: 'corte', header: 'Corte', meta: { class: { th: 'hidden lg:table-cell', td: 'hidden lg:table-cell whitespace-normal' } } },
-    { id: 'mora', header: 'Mora', meta: SOLO_ANCHO },
-    { id: 'promesas', header: 'Promesas', meta: { class: { th: 'hidden md:table-cell', td: 'hidden md:table-cell whitespace-normal' } } },
-    { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
+const route = useRoute()
+const busqueda = ref('')
+const visibles = computed(() => {
+    const texto = busqueda.value.trim().toLocaleLowerCase('es')
+    return plantillas.value.filter(p => !texto || p.nombre.toLocaleLowerCase('es').includes(texto))
+})
+const abiertaId = ref(Number(route.query.id) || 0)
+const abierta = computed(() => plantillas.value.find(p => p.id === abiertaId.value) ?? null)
+watch(plantillas, (lista) => {
+    if (!lista.some(p => p.id === abiertaId.value)) {
+        abiertaId.value = (lista.find(p => p.por_defecto) ?? lista[0])?.id ?? 0
+    }
+})
+
+/** Pestaña del editor: `?seccion=promesas` llega desde Promesas («Reglas por plantilla»). */
+const seccion = ref<'ciclo' | 'promesas'>(route.query.seccion === 'promesas' ? 'promesas' : 'ciclo')
+const secciones: TabsItem[] = [
+    { label: 'Ciclo y corte', value: 'ciclo', icon: 'i-lucide-calendar' },
+    { label: 'Promesas y reconexión', value: 'promesas', icon: 'i-lucide-hand' },
 ]
+
+/** Puntos de «Así corre el mes de un cliente» (el corte va por facturas vencidas, no por días). */
+interface PuntoMes { etiqueta: string, valor: string, tono: string }
+function lineaDelMes(plantilla: PlantillaFacturacion): PuntoMes[] {
+    const emite = plantilla.ciclo === 'aniversario' ? 'Inst.' : String(plantilla.dia ?? '—')
+    const vence = plantilla.ciclo === 'aniversario' ? `+${plantilla.dias_gracia}` : String((plantilla.dia ?? 1) + plantilla.dias_gracia)
+    const puntos: PuntoMes[] = [
+        { etiqueta: 'Emite', valor: emite, tono: 'tono-marca' },
+        { etiqueta: plantilla.dias_gracia ? `Vence (${plantilla.dias_gracia} d)` : 'Vence', valor: vence, tono: 'tono-2' },
+    ]
+    if (plantilla.facturas_para_limitar > 0) {
+        puntos.push({ etiqueta: `Limita (${plantilla.facturas_para_limitar} venc.)`, valor: `${plantilla.facturas_para_limitar}`, tono: 'tono-aviso' })
+    }
+    puntos.push({ etiqueta: `Suspende (${plantilla.facturas_para_cortar} venc.)`, valor: `${plantilla.facturas_para_cortar}`, tono: 'tono-error' })
+    return puntos
+}
+
+function nombreEstadoPlantilla(plantilla: PlantillaFacturacion): { etiqueta: string, color: 'primary' | 'neutral' | 'warning' } | null {
+    if (plantilla.retirada_en) {
+        return { etiqueta: 'Retirada', color: 'neutral' }
+    }
+    return plantilla.por_defecto ? { etiqueta: 'Por defecto', color: 'primary' } : null
+}
 </script>
 
 <template>
     <PanelPagina
         id="plantillas"
-        titulo="Plantillas"
+        titulo="Plantillas de facturación"
         icono="i-lucide-file-cog"
+        descripcion="Cuándo se emite, cuándo vence, cuándo se corta y qué promesas se aceptan. Cada servicio usa una."
     >
         <template #acciones>
+            <UButton
+                v-if="puedeAsignar && porDefecto"
+                label="Asignar a servicios sin plantilla"
+                icon="i-lucide-list-checks"
+                color="neutral"
+                variant="outline"
+                size="lg"
+                class="boton-flotante"
+                data-prueba="asignar-sin-plantilla"
+                @click="abrirAsignar(porDefecto)"
+            />
             <UButton
                 v-if="puede('plantillas.crear')"
                 label="Nueva plantilla"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand px-5"
                 data-prueba="nueva-plantilla"
                 @click="abrir(null)"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <p class="text-sm text-muted">
-                    Cada servicio factura con una plantilla: ciclo, días de gracia, cuándo limitar y suspender, recargo por mora, cuándo certificar con FEL y qué promesas de pago acepta.
-                </p>
-                <UButton
-                    v-if="puedeAsignar && porDefecto"
-                    label="Asignar a servicios sin plantilla"
-                    icon="i-lucide-list-checks"
-                    color="neutral"
-                    variant="outline"
-                    class="shrink-0 self-start"
-                    data-prueba="asignar-sin-plantilla"
-                    @click="abrirAsignar(porDefecto)"
-                />
-            </div>
+        <UAlert
+            v-if="!problema && fabricaSinMarcar && puede('plantillas.editar')"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-star"
+            :title="`${fabricaSinMarcar.nombre} no es la plantilla por defecto`"
+            :description="porDefecto ? `Ahora lo es ${porDefecto.nombre}. La de por defecto la reciben los servicios sin plantilla.` : 'Ninguna está marcada. La de por defecto la reciben los servicios sin plantilla.'"
+            :actions="[{ label: 'Marcar como por defecto', icon: 'i-lucide-star', color: 'warning', variant: 'outline', loading: marcando, onClick: () => marcarPorDefecto(fabricaSinMarcar!) }]"
+            data-prueba="marcar-por-defecto"
+        />
 
-            <UAlert
-                v-if="!problema && fabricaSinMarcar && puede('plantillas.editar')"
-                color="warning"
-                variant="subtle"
-                icon="i-lucide-star"
-                :title="`${fabricaSinMarcar.nombre} no es la plantilla por defecto`"
-                :description="porDefecto ? `Ahora lo es ${porDefecto.nombre}. La de por defecto la reciben los servicios sin plantilla.` : 'Ninguna está marcada. La de por defecto la reciben los servicios sin plantilla.'"
-                :actions="[{ label: 'Marcar como por defecto', icon: 'i-lucide-star', color: 'warning', variant: 'outline', loading: marcando, onClick: () => marcarPorDefecto(fabricaSinMarcar!) }]"
-                data-prueba="marcar-por-defecto"
-            />
+        <ProblemaAlerta
+            v-if="problema"
+            :problema="problema"
+            :reintentar="cargar"
+            :reintentando="cargando"
+        />
 
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
-            <UTable
-                v-else
-                :data="plantillas"
-                :columns="columnas"
-                :loading="cargando"
-                :ui="{ td: 'py-3' }"
+        <div
+            v-else
+            class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]"
+        >
+            <!-- Plantillas. -->
+            <section
+                class="surface-card flex min-h-0 flex-col overflow-hidden rounded-[1.375rem] lg:max-h-[calc(100dvh-11rem)]"
                 data-prueba="tabla-plantillas"
             >
-                <template #nombre-cell="{ row }">
-                    <div
-                        class="flex min-w-0 flex-col gap-0.5"
-                        :data-plantilla="row.original.id"
+                <div class="border-b border-(--ax-borde) p-3">
+                    <UInput
+                        v-model="busqueda"
+                        icon="i-lucide-search"
+                        placeholder="Buscar plantilla…"
+                        aria-label="Buscar plantilla"
+                        class="w-full"
+                    />
+                </div>
+                <USkeleton
+                    v-if="cargando && !plantillas.length"
+                    class="m-3 h-40"
+                />
+                <ul class="flex min-h-0 flex-col divide-y divide-(--ax-borde) overflow-y-auto">
+                    <li
+                        v-for="plantilla in visibles"
+                        :key="plantilla.id"
+                        :data-plantilla="plantilla.id"
                     >
-                        <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                            {{ row.original.nombre }}
+                        <UButton
+                            color="neutral"
+                            variant="ghost"
+                            class="w-full items-start gap-2 rounded-none px-4 py-3 text-start"
+                            :class="plantilla.id === abiertaId ? CLASE_FILA_ELEGIDA : ''"
+                            :aria-pressed="plantilla.id === abiertaId"
+                            @click="abiertaId = plantilla.id"
+                        >
+                            <span class="flex min-w-0 flex-1 flex-col">
+                                <span class="font-semibold text-highlighted">{{ plantilla.nombre }}</span>
+                                <span class="text-xs font-normal text-muted">{{ resumenCiclo(plantilla) }}</span>
+                                <span class="text-xs font-normal text-muted">{{ resumenMora(plantilla) }}</span>
+                            </span>
                             <UBadge
-                                v-if="row.original.por_defecto"
+                                v-if="nombreEstadoPlantilla(plantilla)"
+                                :label="nombreEstadoPlantilla(plantilla)?.etiqueta"
+                                :color="nombreEstadoPlantilla(plantilla)?.color"
+                                variant="subtle"
+                                size="sm"
+                                :data-prueba="plantilla.por_defecto ? 'plantilla-defecto' : undefined"
+                            />
+                        </UButton>
+                    </li>
+                    <li
+                        v-if="!cargando && !visibles.length"
+                        class="p-4"
+                    >
+                        <UEmpty
+                            icon="i-lucide-file-cog"
+                            :title="busqueda ? 'Ninguna plantilla coincide' : 'Todavía no hay plantillas'"
+                            :description="busqueda ? undefined : 'Crea al menos una antes de dar de alta servicios (o de importar desde Mikrowisp).'"
+                            variant="naked"
+                        />
+                    </li>
+                </ul>
+            </section>
+
+            <!-- La plantilla abierta. -->
+            <section
+                v-if="abierta"
+                class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem] lg:max-h-[calc(100dvh-11rem)]"
+                data-prueba="plantilla-abierta"
+            >
+                <header class="flex flex-wrap items-center gap-3 border-b border-(--ax-borde) p-4">
+                    <div class="flex min-w-0 flex-1 flex-col">
+                        <h2 class="flex flex-wrap items-center gap-2 text-lg font-bold text-highlighted">
+                            {{ abierta.nombre }}
+                            <UBadge
+                                v-if="abierta.por_defecto"
                                 label="Por defecto"
-                                icon="i-lucide-star"
                                 color="primary"
                                 variant="subtle"
                                 size="sm"
-                                data-prueba="plantilla-defecto"
                             />
-                            <UBadge
-                                :label="`FEL: ${CERTIFICAR_AL[row.original.certificar_al].etiqueta.toLowerCase()}`"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                            />
-                        </span>
-                        <span class="text-xs text-muted">{{ resumenCiclo(row.original) }}</span>
-                        <span class="text-xs text-muted lg:hidden">{{ resumenCorte(row.original) }}</span>
-                        <span class="text-xs text-muted sm:hidden">{{ resumenMora(row.original) }}</span>
-                        <span class="text-xs text-muted md:hidden">{{ resumenPromesas(row.original.reglas_promesa) }}</span>
-                        <span
-                            class="text-xs text-muted md:hidden"
-                            data-prueba="resumen-reconexion"
-                        >{{ resumenReconexionTemporal(row.original.reglas_promesa) }}</span>
-                        <span
-                            v-if="row.original.reglas_promesa.mismas_reglas_ia_operador"
-                            class="text-xs text-muted md:hidden"
-                            data-prueba="plantilla-mismas-reglas"
-                        >IA: mismas reglas que operador</span>
+                        </h2>
+                        <p class="text-[0.8125rem] text-muted">
+                            Última edición: {{ formatearFechaHora(abierta.updated_at) }} · versión {{ abierta.version }}
+                        </p>
                     </div>
-                </template>
-                <template #corte-cell="{ row }">
-                    <span class="text-sm">{{ resumenCorte(row.original) }}</span>
-                </template>
-                <template #mora-cell="{ row }">
-                    <span class="whitespace-nowrap text-sm">{{ resumenMora(row.original) }}</span>
-                </template>
-                <template #promesas-cell="{ row }">
-                    <div class="flex flex-col gap-1">
-                        <span class="text-sm">{{ resumenPromesas(row.original.reglas_promesa) }}</span>
-                        <span
-                            class="text-xs text-muted"
-                            data-prueba="resumen-reconexion"
-                        >{{ resumenReconexionTemporal(row.original.reglas_promesa) }}</span>
-                        <div
-                            v-if="row.original.reglas_promesa.habilitadas"
-                            class="flex flex-wrap gap-1"
+                    <OperPestanas
+                        v-model="seccion"
+                        :items="secciones"
+                        etiqueta="Secciones de la plantilla"
+                        class="w-auto"
+                    />
+                </header>
+
+                <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 [&>*]:shrink-0">
+                    <template v-if="seccion === 'ciclo'">
+                        <section
+                            class="rounded-2xl border border-(--ax-borde) p-4"
+                            aria-labelledby="titulo-mes"
                         >
-                            <UBadge
-                                v-for="canal in CANALES_REGLAS.filter(c => limitesEfectivosCanal(row.original.reglas_promesa, c).permitido && limitesEfectivosCanal(row.original.reglas_promesa, c).requiere_aprobacion)"
-                                :key="canal"
-                                :label="`${CANALES_PROMESA[canal]}: con aprobación`"
-                                color="warning"
-                                variant="subtle"
-                                size="sm"
+                            <h3
+                                id="titulo-mes"
+                                class="mb-4 flex items-center gap-2 text-xs font-semibold tracking-[0.06em] text-muted uppercase"
+                            >
+                                <UIcon
+                                    name="i-lucide-eye"
+                                    class="size-4"
+                                />
+                                Así corre el mes de un cliente
+                            </h3>
+                            <ol
+                                class="relative flex items-start justify-between gap-2"
+                                data-prueba="linea-del-mes"
+                            >
+                                <span
+                                    class="absolute inset-x-6 top-5 h-1 rounded-full bg-gradient-to-r from-primary/30 via-warning/40 to-error/40"
+                                    aria-hidden="true"
+                                />
+                                <li
+                                    v-for="punto in lineaDelMes(abierta)"
+                                    :key="punto.etiqueta"
+                                    class="relative z-10 flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center"
+                                >
+                                    <span
+                                        class="pastilla-tono flex size-10 items-center justify-center rounded-full bg-(--ax-tarjeta) text-sm font-bold ring-2 ring-current"
+                                        :class="punto.tono"
+                                    >{{ punto.valor }}</span>
+                                    <span class="text-xs font-semibold text-highlighted">{{ punto.etiqueta }}</span>
+                                </li>
+                            </ol>
+                        </section>
+
+                        <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                            <DatoFicha
+                                etiqueta="Día de emisión"
+                                :valor="resumenCiclo(abierta)"
                             />
+                            <DatoFicha
+                                etiqueta="Días para pagar"
+                                :valor="abierta.dias_gracia === 0 ? 'Vence el mismo día' : `${abierta.dias_gracia} días`"
+                            />
+                            <DatoFicha
+                                etiqueta="Hora de corte"
+                                :valor="`${abierta.hora_corte.slice(0, 5)} h`"
+                            />
+                            <DatoFicha
+                                etiqueta="Limitar velocidad"
+                                :valor="abierta.facturas_para_limitar === 0 ? 'Nunca limita' : `Con ${abierta.facturas_para_limitar} ${abierta.facturas_para_limitar === 1 ? 'factura vencida' : 'facturas vencidas'}`"
+                            />
+                            <DatoFicha
+                                etiqueta="Suspender"
+                                :valor="`Con ${abierta.facturas_para_cortar} ${abierta.facturas_para_cortar === 1 ? 'factura vencida' : 'facturas vencidas'}`"
+                            />
+                            <DatoFicha
+                                etiqueta="Recargo por mora"
+                                :valor="resumenMora(abierta)"
+                            />
+                            <DatoFicha
+                                etiqueta="Factura electrónica"
+                                :valor="`Certificar ${CERTIFICAR_AL[abierta.certificar_al].etiqueta.toLowerCase()}`"
+                            />
+                            <DatoFicha
+                                etiqueta="Prorrateo del primer mes"
+                                :valor="abierta.prorrateo ? 'Sí' : 'No'"
+                            />
+                        </dl>
+                    </template>
+
+                    <template v-else>
+                        <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <DatoFicha
+                                etiqueta="Promesas de pago"
+                                :valor="resumenPromesas(abierta.reglas_promesa)"
+                            />
+                            <DatoFicha
+                                etiqueta="Reconexión temporal"
+                                :valor="resumenReconexionTemporal(abierta.reglas_promesa)"
+                                data-prueba="resumen-reconexion"
+                            />
+                        </dl>
+                        <section
+                            v-if="abierta.reglas_promesa.habilitadas"
+                            class="flex flex-col gap-2"
+                        >
+                            <h3 class="text-xs font-semibold tracking-[0.06em] text-muted uppercase">
+                                Por canal
+                            </h3>
+                            <ul class="flex flex-col divide-y divide-(--ax-borde) rounded-2xl border border-(--ax-borde)">
+                                <li
+                                    v-for="canal in CANALES_REGLAS"
+                                    :key="canal"
+                                    class="flex items-center justify-between gap-3 px-4 py-2.5"
+                                >
+                                    <span class="text-sm font-semibold text-highlighted">{{ CANALES_PROMESA[canal] }}</span>
+                                    <UBadge
+                                        :label="!limitesEfectivosCanal(abierta.reglas_promesa, canal).permitido ? 'No permitido' : limitesEfectivosCanal(abierta.reglas_promesa, canal).requiere_aprobacion ? 'Con aprobación' : 'Directo'"
+                                        :color="!limitesEfectivosCanal(abierta.reglas_promesa, canal).permitido ? 'neutral' : limitesEfectivosCanal(abierta.reglas_promesa, canal).requiere_aprobacion ? 'warning' : 'success'"
+                                        variant="subtle"
+                                        size="sm"
+                                    />
+                                </li>
+                            </ul>
                             <UBadge
-                                v-if="row.original.reglas_promesa.mismas_reglas_ia_operador"
+                                v-if="abierta.reglas_promesa.mismas_reglas_ia_operador"
                                 label="IA: mismas reglas que operador"
                                 color="neutral"
                                 variant="outline"
-                                size="sm"
+                                class="self-start"
                                 data-prueba="plantilla-mismas-reglas"
                             />
-                        </div>
-                    </div>
-                </template>
-                <template #acciones-cell="{ row }">
-                    <div class="flex justify-end gap-1">
-                        <UTooltip
-                            v-if="puedeAsignar && row.original.retirada_en === null"
-                            text="Asignar a servicios sin plantilla"
-                        >
-                            <UButton
-                                icon="i-lucide-list-checks"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Asignar ${row.original.nombre} a servicios sin plantilla`"
-                                :data-prueba="`asignar-sin-plantilla-${row.original.id}`"
-                                @click="abrirAsignar(row.original)"
-                            />
-                        </UTooltip>
-                        <UButton
-                            :icon="puede('plantillas.editar') ? 'i-lucide-pencil' : 'i-lucide-eye'"
-                            color="neutral"
-                            variant="ghost"
-                            size="sm"
-                            :aria-label="`${puede('plantillas.editar') ? 'Editar' : 'Ver'} ${row.original.nombre}`"
-                            :data-prueba="`editar-plantilla-${row.original.id}`"
-                            @click="abrir(row.original)"
+                        </section>
+                        <UAlert
+                            color="primary"
+                            variant="subtle"
+                            icon="i-lucide-info"
+                            description="Las promesas son por servicio y cubren todo lo vencido. El simulador de Promesas muestra la regla que aplica antes de crear una."
                         />
-                    </div>
-                </template>
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-file-cog"
-                        title="Todavía no hay plantillas"
-                        description="Crea al menos una antes de dar de alta servicios (o de importar desde Mikrowisp)."
-                        variant="naked"
+                    </template>
+                </div>
+
+                <footer class="flex flex-wrap items-center gap-3 border-t border-(--ax-borde) p-4">
+                    <p class="min-w-0 flex-1 text-xs text-muted">
+                        Los cambios aplican desde el siguiente corte; las facturas ya emitidas no cambian.
+                    </p>
+                    <UButton
+                        v-if="puedeAsignar && abierta.retirada_en === null"
+                        label="Asignar a servicios sin plantilla"
+                        icon="i-lucide-list-checks"
+                        color="neutral"
+                        variant="ghost"
+                        :data-prueba="`asignar-sin-plantilla-${abierta.id}`"
+                        @click="abrirAsignar(abierta)"
                     />
-                </template>
-            </UTable>
+                    <UButton
+                        :label="puede('plantillas.editar') ? 'Editar plantilla' : 'Ver todas las reglas'"
+                        :icon="puede('plantillas.editar') ? ICONOS.editar : ICONOS.ver"
+                        :data-prueba="`editar-plantilla-${abierta.id}`"
+                        @click="abrir(abierta)"
+                    />
+                </footer>
+            </section>
+            <div
+                v-else
+                class="surface-card hidden items-center justify-center rounded-[1.375rem] p-6 lg:flex"
+            >
+                <UEmpty
+                    icon="i-lucide-mouse-pointer-click"
+                    title="Elige una plantilla"
+                    variant="naked"
+                />
+            </div>
         </div>
 
         <PlantillaAsignarSinPlantillaModal
