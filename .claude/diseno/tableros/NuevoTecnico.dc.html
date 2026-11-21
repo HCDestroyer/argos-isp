@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Técnico en Iris, Argos activa</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A;background:#EEF0F7}
+a{color:#4338CA}a:hover{color:#3730A3}
+.paso{flex:0 0 400px;display:flex;flex-direction:column;gap:12px}
+.n{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.n .k{width:30px;height:30px;border-radius:999px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+.quien{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-left:auto;border-radius:999px;padding:3px 10px}
+.iris{background:#CCFBF1;color:#115E59}.argos{background:#EEF2FF;color:#3730A3}
+.tel{width:300px;height:560px;border-radius:30px;border:7px solid #0F172A;background:#F8FAFC;overflow:hidden;display:flex;flex-direction:column;align-self:center}
+.app{border:1px solid #E6E8F0;border-radius:16px;background:#fff;height:560px;padding:16px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:12px;padding:10px;font-size:13px}
+.ok{display:flex;gap:10px;align-items:center;font-size:13px;padding:9px 10px;border:1px solid #E6E8F0;border-radius:10px;background:#fff}
+.ok span{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:11px 14px;font-weight:600;font-size:14px}
+.flecha{flex:0 0 52px;display:flex;align-items:center;justify-content:center;color:#4F46E5;padding-top:80px}
+.nota{font-size:13px;color:#475569;line-height:1.45}
+</style>
+</helmet>
+<div style="width:2400px;height:760px;box-sizing:border-box;padding:24px 32px;display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;align-items:baseline;gap:14px"><h1 style="margin:0;font-size:26px">El técnico instala desde Iris y Argos activa todo solo</h1><span class="nota">Fibra (ONT por SmartOLT) o inalámbrico (CPE/radio, TR-069 si lo soporta). Activa el técnico desde la orden o un agente desde Iris. Las claves de SmartOLT y TR-069 solo las tiene Argos.</span></div>
+  <div style="display:flex;align-items:flex-start">
+
+    <div class="paso">
+      <div class="n"><span class="k" style="background:#0D9488">1</span>Orden de instalación<span class="quien iris">Iris · técnico</span></div>
+      <div class="tel">
+        <div style="padding:14px;background:#fff;border-bottom:1px solid #E6E8F0;font-weight:700">Orden #2231 · Instalación</div>
+        <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+          <div class="card"><b>José López</b><div style="color:#64748B">5a avenida 10-20 · Plan 50 Mbps</div></div>
+          <div class="card" style="display:flex;align-items:center;gap:10px;border-color:#5EEAD4;background:#F0FDFA"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0D9488" stroke-width="2" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg><div><b>Escanear la ONT</b><div style="color:#64748B">Serie: HWTC9A3F21C4 ✓</div></div></div>
+          <div class="card"><div style="color:#64748B;font-size:12px">Caja / puerto PON</div><b>Caja N-14 · puerto 6</b></div>
+          <div class="card"><div style="color:#64748B;font-size:12px">WiFi del cliente (opcional)</div><b>Familia_Lopez</b> · ••••••••</div>
+          <div class="btn" style="background:#0D9488;color:#fff;margin-top:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>Activar servicio</div>
+        </div>
+      </div>
+      <div class="nota">Funciona sin señal: la orden guarda los datos y los envía al volver la conexión.</div>
+    </div>
+    <div class="flecha"><svg width="40" height="24" viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h34M28 4l8 8-8 8"/></svg></div>
+
+    <div class="paso" style="flex-basis:560px">
+      <div class="n"><span class="k" style="background:linear-gradient(135deg,#4F46E5,#06B6D4)">2</span>Argos lo hace solo<span class="quien argos">Argos · automático</span></div>
+      <div class="app">
+        <b style="font-size:15px">Aprovisionamiento · servicio de José López</b>
+        <div class="ok"><span style="background:#DCFCE7;color:#166534"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>IP asignada: <b>10.20.4.18</b> (libre en Router Norte)</div>
+        <div class="ok"><span style="background:#DCFCE7;color:#166534"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>ONT autorizada en SmartOLT · perfil «50M» · VLAN 120</div>
+        <div class="ok"><span style="background:#DCFCE7;color:#166534"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Señal óptica: <b>-19.8 dBm</b> (buena)</div>
+        <div class="ok"><span style="background:#DCFCE7;color:#166534"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>WiFi configurado: Familia_Lopez</div>
+        <div class="ok" style="border-color:#C7D2FE;background:#EEF2FF"><span style="background:#4F46E5;color:#fff"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M12 6v6l4 2"/></svg></span>Activando el servicio en el router…</div>
+        <div class="card" style="margin-top:auto;background:#F8FAFC;color:#475569">Cada paso queda en la bitácora y en «comandos a la red». Si uno falla, se reintenta solo y se avisa con la causa; nada queda a medias.</div>
+      </div>
+    </div>
+    <div class="flecha"><svg width="40" height="24" viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h34M28 4l8 8-8 8"/></svg></div>
+
+    <div class="paso">
+      <div class="n"><span class="k" style="background:#0D9488">3</span>Resultado en la orden<span class="quien iris">Iris · técnico</span></div>
+      <div class="tel">
+        <div style="padding:14px;background:#fff;border-bottom:1px solid #E6E8F0;font-weight:700">Orden #2231</div>
+        <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+          <div class="card" style="display:flex;gap:10px;align-items:center;background:#F0FDF4;border-color:#BBF7D0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.6" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg><div><b>Servicio activo</b><div style="color:#166534">El cliente ya navega</div></div></div>
+          <div class="card"><div style="color:#64748B;font-size:12px">Señal de la fibra</div><b>-19.8 dBm · buena</b></div>
+          <div class="card"><div style="color:#64748B;font-size:12px">Prueba de velocidad</div><b>48.7 / 49.1 Mbps</b></div>
+          <div class="btn" style="background:#0D9488;color:#fff;margin-top:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Cerrar orden con firma</div>
+        </div>
+      </div>
+    </div>
+    <div class="flecha"><svg width="40" height="24" viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h34M28 4l8 8-8 8"/></svg></div>
+
+    <div class="paso" style="flex-basis:380px">
+      <div class="n"><span class="k" style="background:#16A34A">✓</span>Queda listo</div>
+      <div class="ok"><span style="background:#DCFCE7;color:#166534">✓</span>Servicio <b>Activo</b> en Argos, con IP y equipo</div>
+      <div class="ok"><span style="background:#DCFCE7;color:#166534">✓</span>ONT a nombre del cliente (inventario)</div>
+      <div class="ok"><span style="background:#DCFCE7;color:#166534">✓</span>Mensualidad desde que queda activo (mes completo)</div>
+      <div class="ok"><span style="background:#DCFCE7;color:#166534">✓</span>Instalación cobrada como factura única (la registra el agente o el formulario de la orden)</div>
+      <div class="ok"><span style="background:#DCFCE7;color:#166534">✓</span>El cliente ve su WiFi en el portal y puede cambiarlo</div>
+      <div class="ok"><span style="background:#FEF3C7;color:#92400E">!</span>Si algo falla: la orden muestra la causa y «Reintentar»; puede cerrarse y activarla luego un agente</div>
+      <div class="ok"><span style="background:#EEF2FF;color:#3730A3">i</span>Asistente de IA: puede ver el equipo y cambiar el WiFi solo si la empresa lo habilita y tras verificar al cliente</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2400,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Islas A · flotante expandido</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08);transition:transform .15s}
+.f:hover{transform:translateY(-1px)}
+.it{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:12px;font-size:14px;font-weight:500;color:#334155;text-decoration:none;cursor:pointer}
+.it.on{background:#EEF2FF;color:#4338CA}
+.sub{display:flex;align-items:center;padding:6px 12px 6px 42px;border-radius:9px;font-size:13px;color:#475569;text-decoration:none}
+.n{margin-left:auto;font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:18px}
+</style>
+</helmet>
+<div style="width:100%;height:900px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+  <nav class="isla" aria-label="Menú principal expandido" style="z-index:2;position:absolute;left:16px;top:16px;bottom:16px;width:244px;border-radius:22px;padding:14px 12px;box-sizing:border-box;display:flex;flex-direction:column;gap:3px">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 4px 14px"><div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#4F46E5,#06B6D4)"></div><b>Argos<span style="color:#4F46E5">Isp</span></b></div>
+    <span title="Compactar menú" aria-label="Compactar menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></span>
+    <a class="it on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a>
+    <a class="it" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día<span style="margin-left:auto;color:#94A3B8"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></a>
+    <a class="sub" href="#">Clientes</a><a class="sub" href="#">Servicios</a>
+    <a class="sub" href="#">Promesas<span class="n" style="background:#EEF2FF;color:#3730A3">4</span></a>
+    <a class="sub" href="#">Comprobantes<span class="n" style="background:#FEF3C7;color:#92400E">7</span></a>
+    <a class="it" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturación</a>
+    <a class="it" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a>
+    <a class="it" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a>
+    <a class="it" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a>
+    <a class="it" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="it" href="#" style="margin-top:auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a>
+  </nav>
+  <header style="position:absolute;left:276px;right:16px;top:16px;height:48px;display:flex;align-items:center;gap:10px">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:230px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span>
+  </header>
+  <main style="position:absolute;left:276px;right:16px;top:84px;bottom:16px;display:flex;flex-direction:column;gap:18px;padding:12px 4px">
+    <div><div style="font-size:13px;color:#64748B">Inicio · sábado 21 de noviembre</div><h1 style="margin:2px 0 0;font-size:28px">Buenos días, Ángel</h1></div>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px">
+      <div class="card"><div style="font-size:13px;color:#64748B">Cobrado hoy</div><b style="font-size:24px">Q 18,450</b></div>
+      <div class="card"><div style="font-size:13px;color:#64748B">Activos</div><b style="font-size:24px">1,284</b></div>
+      <div class="card"><div style="font-size:13px;color:#64748B">Por vencer</div><b style="font-size:24px">Q 42,300</b></div>
+      <div class="card"><div style="font-size:13px;color:#64748B">Suspendidos</div><b style="font-size:24px">47</b></div>
+    </div>
+    <div class="card" style="flex:1;display:flex;align-items:center;justify-content:center;color:#94A3B8">Contenido de la pantalla</div>
+  </main>
+  <div style="position:absolute;right:28px;bottom:28px;max-width:380px;background:#0F172A;color:#E2E8F0;border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.5"><b style="color:#fff">Menú flotante expandido.</b> Encabezado sin barra: a la izquierda lo que haces (búsqueda y accesos), a la derecha lo que vigilas (caja, sistema, avisos, tu cuenta) y aire en medio; cada botón flota solo. El botón redondo ‹ sobre el borde, a la altura del logo, lo compacta; en el compacto está en el mismo lugar (›).</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
