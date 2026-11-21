@@ -15,6 +15,7 @@ import {
     EstadoPortal,
     PlantillaDocumento,
     PlantillaDocumentoFabrica,
+    PlantillaDocumentoResumen,
     PortalContacto,
     PortalCondicionesPromesa,
     NodoPortal,
@@ -67,6 +68,12 @@ import {
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
+    editarPlantillaPorIdValidator,
+    crearPlantillaDocumentoValidator,
+    fabricaDocumentoValidator,
+    imprimirDocumentoValidator,
+    listarPlantillasDocumentoValidator,
+    versionPlantillaDocumentoValidator,
     empresaPortalValidator,
     iniciarPagoValidator,
     paginaPortalValidator,
@@ -114,6 +121,10 @@ import { estadoTelegram } from '#portal/acceso/telegram'
 import { whatsappPortal } from '#portal/whatsapp'
 import RegistrarWhatsappPortal from '#portal/actions/registrar_whatsapp'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
+import CrearPlantillaDocumento from '#portal/actions/crear_plantilla_documento'
+import PredeterminarPlantillaDocumento from '#portal/actions/predeterminar_plantilla_documento'
+import DesactivarPlantillaDocumento from '#portal/actions/desactivar_plantilla_documento'
+import ActivarPlantillaDocumento from '#portal/actions/activar_plantilla_documento'
 import EditarEmpresa from '#portal/actions/editar_empresa'
 import ConfigurarPortalCorte from '#portal/actions/configurar_portal_corte'
 import { verPortalCorte } from '#portal/corte'
@@ -125,13 +136,16 @@ import { EMPRESA_PRINCIPAL, filaEmpresa, resolverEmpresaActiva } from '#core/emp
 import { leerArchivoLogo } from '#core/logos'
 import { rechazarSiPendiente } from '#core/instalacion'
 import {
-    PLANTILLAS_BASE,
+    PLANTILLAS_FABRICA,
     VARIABLES_DOCUMENTO,
     avisoCobroPdf,
     esTipoDocumento,
+    listarPlantillas,
     notaCreditoPdf,
     pdfDesdePlantilla,
-    plantillaVigente,
+    plantillaPorId,
+    plantillaPredeterminada,
+    reciboCobroPdf,
     vistaEjemplo,
     type DocumentoPdf,
     type TipoDocumento,
@@ -225,7 +239,11 @@ function enviarXml(ctx: HttpContext, documento: XmlDte): void {
     ctx.response.send(documento.xml)
 }
 
-const PARAMETRO_TIPO = { tipo: { type: 'string', enum: ['aviso_cobro', 'nota_credito'] } }
+const PARAMETRO_TIPO = { tipo: { type: 'string', enum: ['aviso_cobro', 'nota_credito', 'recibo_cobro'] } }
+
+const SOBRE_PLANTILLA_ID =
+    'Con `?plantilla_id=` imprime con esa plantilla (activa y del mismo documento; si no, 422 en `plantilla_id`), ' +
+    'por ejemplo la de POS 80 mm; sin él, con la predeterminada.'
 
 function tipoDocumento(valor: unknown): TipoDocumento {
     if (!esTipoDocumento(valor)) throw new NoEncontrado(`No hay plantilla de documento "${String(valor)}"`)
@@ -861,11 +879,12 @@ const documentos: Ruta[] = [
         resumen: 'PDF de una nota de crédito (panel)',
         descripcion:
             'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. ' +
-            'Responde application/pdf.',
+            `${SOBRE_PLANTILLA_ID} Responde application/pdf.`,
         etiqueta: 'documentos',
         permiso: 'facturas.ver',
+        query: imprimirDocumentoValidator,
         respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
-        handler: async (ctx, { params }) => {
+        handler: async (ctx, { params, query }) => {
             const id = Number(params.notaId)
             const nota = (await db
                 .from('billing.notas_credito')
@@ -876,7 +895,7 @@ const documentos: Ruta[] = [
             } | null
             if (!nota) throw new NoEncontrado(`La nota de crédito ${id} no existe`)
             exigirAlcance(ctx.alcance, await dimensionesDeFactura(Number(nota.factura_id)))
-            enviarPdf(ctx, await notaCreditoPdf(id))
+            enviarPdf(ctx, await notaCreditoPdf(id, { plantillaId: query.plantilla_id }))
         },
     }),
     definirRuta({
@@ -885,28 +904,57 @@ const documentos: Ruta[] = [
         operacion: 'documentosAvisoCobroPdf',
         resumen: 'PDF del aviso de cobro de una factura (panel)',
         descripcion:
-            'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.',
+            'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. ' +
+            `${SOBRE_PLANTILLA_ID} Responde application/pdf.`,
         etiqueta: 'documentos',
         permiso: 'facturas.ver',
+        query: imprimirDocumentoValidator,
         respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
-        handler: async (ctx, { params }) => {
+        handler: async (ctx, { params, query }) => {
             const id = Number(params.facturaId)
             exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
-            enviarPdf(ctx, await avisoCobroPdf(id))
+            enviarPdf(ctx, await avisoCobroPdf(id, { plantillaId: query.plantilla_id }))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/documentos/recibo-cobro/:cobroId',
+        operacion: 'documentosReciboCobroPdf',
+        resumen: 'PDF del recibo de un cobro de caja (panel)',
+        descripcion:
+            'El recibo de `GET /cobros/:id` con la plantilla `recibo_cobro`: una sección por empresa con su marca y ' +
+            'su pago. Solo las secciones de las empresas del alcance del usuario (403 `empresa_no_permitida` si ' +
+            `ninguna). ${SOBRE_PLANTILLA_ID} Responde application/pdf.`,
+        etiqueta: 'documentos',
+        permiso: 'pagos.ver',
+        query: imprimirDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
+        handler: async (ctx, { params, query }) => {
+            enviarPdf(
+                ctx,
+                await reciboCobroPdf(Number(params.cobroId), {
+                    permitidas: ctx.empresa?.permitidas ?? null,
+                    alcance: ctx.alcance,
+                    plantillaId: query.plantilla_id,
+                }),
+            )
         },
     }),
     definirRuta({
         metodo: 'get',
         ruta: '/documentos/plantillas/:tipo',
         operacion: 'documentosPlantillaVer',
-        resumen: 'Plantilla HTML vigente de un documento y sus variables (editor del panel)',
+        resumen: 'Plantilla predeterminada de un documento y sus variables (editor del panel)',
+        descripcion:
+            'La predeterminada del tipo (la que usan el portal, el correo y los procesos). Sin predeterminada ' +
+            'guardada, la de fábrica en carta con `id` null y `version` 0. Las demás: `GET /plantillas-documentos`.',
         etiqueta: 'documentos',
         permiso: 'documentos.ver',
         parametros: PARAMETRO_TIPO,
         respuesta: { status: 200, descripcion: 'Plantilla', esquema: PlantillaDocumento },
         handler: async (_ctx, { params }) => {
             const tipo = tipoDocumento(params.tipo)
-            return { ...(await plantillaVigente(tipo)), variables: VARIABLES_DOCUMENTO[tipo] }
+            return { ...(await plantillaPredeterminada(tipo)), variables: VARIABLES_DOCUMENTO[tipo] }
         },
     }),
     definirRuta({
@@ -915,26 +963,34 @@ const documentos: Ruta[] = [
         operacion: 'documentosPlantillaFabrica',
         resumen: 'Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)',
         descripcion:
-            'La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado ' +
-            'otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` ' +
-            'con la `version` vigente.',
+            'La plantilla que trae esta versión de ArgosIsp en el formato pedido (`?formato=`, carta si no), con el ' +
+            'bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este ' +
+            '`html` (o `html: null` en `PUT /plantillas-documentos/:id`) con la `version` vigente.',
         etiqueta: 'documentos',
         permiso: 'documentos.ver',
         parametros: PARAMETRO_TIPO,
+        query: fabricaDocumentoValidator,
         respuesta: { status: 200, descripcion: 'Plantilla de fábrica', esquema: PlantillaDocumentoFabrica },
-        handler: async (_ctx, { params }) => {
+        handler: async (_ctx, { params, query }) => {
             const tipo = tipoDocumento(params.tipo)
-            return { tipo, html: PLANTILLAS_BASE[tipo], variables: VARIABLES_DOCUMENTO[tipo] }
+            const formato = query.formato ?? 'carta'
+            return {
+                tipo,
+                formato,
+                html: PLANTILLAS_FABRICA[tipo][formato],
+                variables: VARIABLES_DOCUMENTO[tipo],
+            }
         },
     }),
     definirRuta({
         metodo: 'put',
         ruta: '/documentos/plantillas/:tipo',
         operacion: 'documentosPlantillaEditar',
-        resumen: 'Guarda la plantilla HTML de un documento',
+        resumen: 'Guarda el HTML de la plantilla predeterminada de un documento',
         descripcion:
-            'Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la ' +
-            'de fábrica. Diff en audit.cambios.',
+            'Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 guarda la ' +
+            'de fábrica como predeterminada («Carta»). Diff en audit.cambios. Para las demás plantillas: ' +
+            '`PUT /plantillas-documentos/:id`.',
         etiqueta: 'documentos',
         permiso: 'documentos.editar',
         versionada: true,
@@ -955,15 +1011,149 @@ const documentos: Ruta[] = [
         ruta: '/documentos/plantillas/:tipo/vista-previa',
         operacion: 'documentosPlantillaVistaPrevia',
         resumen: 'PDF de prueba de una plantilla con datos de ejemplo (no guarda nada)',
-        descripcion: '422 si la plantilla no es válida. Responde application/pdf.',
+        descripcion:
+            'En el `formato` pedido (carta si no se envía; `pos_80` = rollo de 80 mm). 422 si la plantilla no es ' +
+            'válida. Responde application/pdf.',
         etiqueta: 'documentos',
         permiso: 'documentos.editar',
         parametros: PARAMETRO_TIPO,
         cuerpo: vistaPreviaDocumentoValidator,
         respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { cuerpo, params }) => {
-            const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaEjemplo(tipoDocumento(params.tipo)))
+            const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaEjemplo(tipoDocumento(params.tipo)), {
+                formato: cuerpo.formato,
+            })
             enviarPdf(ctx, { pdf, nombreArchivo: 'vista-previa.pdf' })
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/plantillas-documentos',
+        operacion: 'plantillasDocumentosListar',
+        resumen: 'Plantillas de documentos guardadas (todas o de un tipo)',
+        descripcion:
+            'Sin el HTML. Por tipo, la predeterminada primero y luego por nombre. `?activa=true` da las que se ' +
+            'ofrecen al imprimir. Son pocas: todo cabe en una página (`nextCursor` siempre null).',
+        etiqueta: 'documentos',
+        permiso: 'documentos.ver',
+        query: listarPlantillasDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'Plantillas', esquema: pagina(PlantillaDocumentoResumen) },
+        handler: async (_ctx, { query }) => {
+            const plantillas = await listarPlantillas({ tipo: query.tipo, activa: query.activa })
+            return { data: plantillas.map(({ html: _html, ...resumen }) => resumen), nextCursor: null }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/plantillas-documentos',
+        operacion: 'plantillasDocumentosCrear',
+        resumen: 'Crear otra plantilla de un documento',
+        descripcion:
+            'Desde la de fábrica de su formato (sin `html` ni `copiar_de_id`; sigue a la versión instalada hasta ' +
+            'que se edite), copiando otra del mismo tipo (`copiar_de_id`, 422 si es de otro) o con HTML propio. ' +
+            'Nace activa y no predeterminada. Nombre único por tipo (422 en `nombre`).',
+        etiqueta: 'documentos',
+        permiso: 'documentos.crear',
+        cuerpo: crearPlantillaDocumentoValidator,
+        respuesta: { status: 201, descripcion: 'Plantilla creada', esquema: PlantillaDocumento },
+        handler: async (ctx, { cuerpo }) => {
+            const plantilla = await new CrearPlantillaDocumento().execute(cuerpo, ctx.contextoAccion())
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[plantilla.tipo] }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/plantillas-documentos/:id',
+        operacion: 'plantillasDocumentosVer',
+        resumen: 'Ver una plantilla de documento con su HTML y variables',
+        etiqueta: 'documentos',
+        permiso: 'documentos.ver',
+        respuesta: { status: 200, descripcion: 'Plantilla', esquema: PlantillaDocumento },
+        handler: async (_ctx, { params }) => {
+            const plantilla = await plantillaPorId(Number(params.id))
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[plantilla.tipo] }
+        },
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/plantillas-documentos/:id',
+        operacion: 'plantillasDocumentosEditar',
+        resumen: 'Editar nombre, formato y HTML de una plantilla de documento',
+        descripcion:
+            'Valida el HTML con los datos de ejemplo en su formato (422). `html: null` vuelve a la de fábrica. ' +
+            'Nombre único por tipo (422). 409 si cambió la `version`. Diff en audit.cambios.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.editar',
+        versionada: true,
+        cuerpo: editarPlantillaPorIdValidator,
+        respuesta: { status: 200, descripcion: 'Plantilla guardada', esquema: PlantillaDocumento },
+        handler: async (ctx, { cuerpo, params }) => {
+            const plantilla = await new EditarPlantillaDocumento().execute(
+                { ...cuerpo, plantilla_id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[plantilla.tipo] }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/plantillas-documentos/:id/predeterminar',
+        operacion: 'plantillasDocumentosPredeterminar',
+        resumen: 'Marcar una plantilla como la predeterminada de su documento',
+        descripcion:
+            'La que usan el portal, el correo y los procesos automáticos; la anterior deja de serlo. Solo una ' +
+            'activa (422 `plantilla_inactiva`). 409 si cambió la `version`. Idempotente si ya lo era.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.predeterminar',
+        versionada: true,
+        cuerpo: versionPlantillaDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'Plantilla predeterminada', esquema: PlantillaDocumento },
+        handler: async (ctx, { cuerpo, params }) => {
+            const plantilla = await new PredeterminarPlantillaDocumento().execute(
+                { plantilla_id: Number(params.id), version: cuerpo.version },
+                ctx.contextoAccion(),
+            )
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[plantilla.tipo] }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/plantillas-documentos/:id/desactivar',
+        operacion: 'plantillasDocumentosDesactivar',
+        resumen: 'Desactivar una plantilla de documento',
+        descripcion:
+            'Deja de ofrecerse al imprimir (pedirla con `?plantilla_id=` responde 422). Nunca la predeterminada ' +
+            '(422 `plantilla_predeterminada`). 409 si cambió la `version`. Idempotente.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.desactivar',
+        versionada: true,
+        cuerpo: versionPlantillaDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'Plantilla desactivada', esquema: PlantillaDocumento },
+        handler: async (ctx, { cuerpo, params }) => {
+            const plantilla = await new DesactivarPlantillaDocumento().execute(
+                { plantilla_id: Number(params.id), version: cuerpo.version },
+                ctx.contextoAccion(),
+            )
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[plantilla.tipo] }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/plantillas-documentos/:id/activar',
+        operacion: 'plantillasDocumentosActivar',
+        resumen: 'Volver a activar una plantilla de documento',
+        descripcion: '409 si cambió la `version`. Idempotente.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.activar',
+        versionada: true,
+        cuerpo: versionPlantillaDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'Plantilla activada', esquema: PlantillaDocumento },
+        handler: async (ctx, { cuerpo, params }) => {
+            const plantilla = await new ActivarPlantillaDocumento().execute(
+                { plantilla_id: Number(params.id), version: cuerpo.version },
+                ctx.contextoAccion(),
+            )
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[plantilla.tipo] }
         },
     }),
 ]

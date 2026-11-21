@@ -105,9 +105,16 @@ export const editarEmpresaValidator = vine.compile(
     }),
 )
 
+const nombrePlantilla = () => vine.string().trim().minLength(1).maxLength(80)
+const formatoDocumento = () =>
+    vine
+        .enum(['carta', 'pos_80'] as const)
+        .meta({ description: 'carta o pos_80 (rollo térmico de 80 mm, alto según el contenido)' })
+const htmlPlantilla = () => vine.string().minLength(1).maxLength(100_000)
+
 export const editarPlantillaDocumentoValidator = vine.compile(
     vine.object({
-        html: vine.string().minLength(1).maxLength(100_000),
+        html: htmlPlantilla(),
         version: vine
             .number()
             .withoutDecimals()
@@ -117,7 +124,53 @@ export const editarPlantillaDocumentoValidator = vine.compile(
 )
 
 export const vistaPreviaDocumentoValidator = vine.compile(
-    vine.object({ html: vine.string().minLength(1).maxLength(100_000) }),
+    vine.object({ html: htmlPlantilla(), formato: formatoDocumento().optional() }),
+)
+
+export const fabricaDocumentoValidator = vine.compile(vine.object({ formato: formatoDocumento().optional() }))
+
+export const listarPlantillasDocumentoValidator = vine.compile(
+    vine.object({
+        tipo: vine.enum(['aviso_cobro', 'nota_credito', 'recibo_cobro'] as const).optional(),
+        activa: vine.boolean().optional(),
+    }),
+)
+
+export const crearPlantillaDocumentoValidator = vine.compile(
+    vine.object({
+        tipo: vine.enum(['aviso_cobro', 'nota_credito', 'recibo_cobro'] as const),
+        nombre: nombrePlantilla(),
+        formato: formatoDocumento().optional(),
+        copiar_de_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Copia el HTML de otra plantilla del mismo tipo' }),
+        html: htmlPlantilla()
+            .optional()
+            .meta({ description: 'HTML propio; sin él ni copiar_de_id, la de fábrica del formato' }),
+    }),
+)
+
+export const editarPlantillaPorIdValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: nombrePlantilla().optional(),
+        formato: formatoDocumento().optional(),
+        html: htmlPlantilla()
+            .nullable()
+            .optional()
+            .meta({ description: 'null vuelve a la plantilla de fábrica de su tipo y formato' }),
+    }),
+)
+
+export const versionPlantillaDocumentoValidator = vine.compile(vine.object({ version: versionEsperada() }))
+
+export const imprimirDocumentoValidator = vine.compile(
+    vine.object({
+        plantilla_id: idEntidad().optional().meta({
+            description: 'Plantilla activa del tipo con la que se imprime; sin ella, la predeterminada',
+        }),
+    }),
 )
 
 export const editarContactoValidator = vine.compile(

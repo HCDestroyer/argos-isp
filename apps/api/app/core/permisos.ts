@@ -315,8 +315,15 @@ export const PERMISOS = {
     'declaraciones.ajustar': 'Registrar o anular ajustes fiscales del ISR (cierre parcial y anual)',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
-    'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
-    'documentos.editar': 'Editar plantillas de documentos (aviso de cobro)',
+    'documentos.ver':
+        'Ver las plantillas de documentos (aviso de cobro, nota de crédito, recibo de cobro) y elegir con cuál imprimir',
+    'documentos.crear':
+        'Crear otra plantilla de un documento (carta o POS 80 mm), desde la de fábrica o copiando otra',
+    'documentos.editar': 'Editar el nombre, el formato y el HTML de una plantilla de documento',
+    'documentos.predeterminar':
+        'Elegir la plantilla predeterminada de un documento (la que usan el portal, el correo y los procesos)',
+    'documentos.desactivar': 'Desactivar una plantilla de documento (nunca la predeterminada)',
+    'documentos.activar': 'Volver a activar una plantilla de documento desactivada',
     'anuncios.ver': 'Ver los anuncios del portal y sus métricas (vistas y clics)',
     'anuncios.administrar':
         'Crear, editar, publicar y archivar los anuncios del portal y la página de corte; solo admin',
@@ -428,6 +435,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             // pedido del PM (19 nov): cobrar meses adelantados en caja; sin periodos anteriores
             'facturas.emitir_periodos',
             'pagos.ver',
+            // imprimir con otra plantilla (POS 80 mm): ver cuáles hay activas
+            'documentos.ver',
             'pagos.registrar',
             'cajas.ver',
             'cajas.abrir',
@@ -489,6 +498,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.ver',
             'facturas.emitir_cargo_unico',
             'pagos.ver',
+            // imprimir con otra plantilla (POS 80 mm): ver cuáles hay activas
+            'documentos.ver',
             'promesas.ver',
             'promesas.crear',
             'sesiones.ver',
@@ -601,6 +612,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.configurar_motivos',
             'facturas.configurar_conceptos',
             'pagos.ver',
+            // imprimir con otra plantilla (POS 80 mm): ver cuáles hay activas
+            'documentos.ver',
             'pagos.registrar',
             'pagos.anular',
             'cajas.ver',

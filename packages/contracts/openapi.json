@@ -18219,7 +18219,7 @@
       "get": {
         "operationId": "documentosAvisoCobroPdf",
         "summary": "PDF del aviso de cobro de una factura (panel)",
-        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.",
+        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Con `?plantilla_id=` imprime con esa plantilla (activa y del mismo documento; si no, 422 en `plantilla_id`), por ejemplo la de POS 80 mm; sin él, con la predeterminada. Responde application/pdf.",
         "tags": [
           "documentos"
         ],
@@ -18240,76 +18240,12 @@
               "type": "integer",
               "minimum": 1
             }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "PDF",
-            "content": {
-              "application/pdf": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso facturas.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "facturas.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/documentos/nota-credito/{notaId}": {
-      "get": {
-        "operationId": "documentosNotaCreditoPdf",
-        "summary": "PDF de una nota de crédito (panel)",
-        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. Responde application/pdf.",
-        "tags": [
-          "documentos"
-        ],
-        "security": [
-          {
-            "bearer": []
           },
           {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "notaId",
-            "in": "path",
-            "required": true,
+            "name": "plantilla_id",
+            "in": "query",
+            "required": false,
+            "description": "Plantilla activa del tipo con la que se imprime; sin ella, la predeterminada",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -18357,6 +18293,110 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/nota-credito/{notaId}": {
+      "get": {
+        "operationId": "documentosNotaCreditoPdf",
+        "summary": "PDF de una nota de crédito (panel)",
+        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. Con `?plantilla_id=` imprime con esa plantilla (activa y del mismo documento; si no, 422 en `plantilla_id`), por ejemplo la de POS 80 mm; sin él, con la predeterminada. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "notaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plantilla_id",
+            "in": "query",
+            "required": false,
+            "description": "Plantilla activa del tipo con la que se imprime; sin ella, la predeterminada",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-permiso": "facturas.ver",
@@ -18366,7 +18406,8 @@
     "/api/v1/documentos/plantillas/{tipo}": {
       "get": {
         "operationId": "documentosPlantillaVer",
-        "summary": "Plantilla HTML vigente de un documento y sus variables (editor del panel)",
+        "summary": "Plantilla predeterminada de un documento y sus variables (editor del panel)",
+        "description": "La predeterminada del tipo (la que usan el portal, el correo y los procesos). Sin predeterminada guardada, la de fábrica en carta con `id` null y `version` 0. Las demás: `GET /plantillas-documentos`.",
         "tags": [
           "documentos"
         ],
@@ -18387,7 +18428,8 @@
               "type": "string",
               "enum": [
                 "aviso_cobro",
-                "nota_credito"
+                "nota_credito",
+                "recibo_cobro"
               ]
             }
           }
@@ -18439,8 +18481,8 @@
       },
       "put": {
         "operationId": "documentosPlantillaEditar",
-        "summary": "Guarda la plantilla HTML de un documento",
-        "description": "Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la de fábrica. Diff en audit.cambios.",
+        "summary": "Guarda el HTML de la plantilla predeterminada de un documento",
+        "description": "Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 guarda la de fábrica como predeterminada («Carta»). Diff en audit.cambios. Para las demás plantillas: `PUT /plantillas-documentos/:id`.",
         "tags": [
           "documentos"
         ],
@@ -18461,7 +18503,8 @@
               "type": "string",
               "enum": [
                 "aviso_cobro",
-                "nota_credito"
+                "nota_credito",
+                "recibo_cobro"
               ]
             }
           }
@@ -18563,7 +18606,7 @@
       "get": {
         "operationId": "documentosPlantillaFabrica",
         "summary": "Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)",
-        "description": "La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` con la `version` vigente.",
+        "description": "La plantilla que trae esta versión de ArgosIsp en el formato pedido (`?formato=`, carta si no), con el bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este `html` (o `html: null` en `PUT /plantillas-documentos/:id`) con la `version` vigente.",
         "tags": [
           "documentos"
         ],
@@ -18584,7 +18627,21 @@
               "type": "string",
               "enum": [
                 "aviso_cobro",
-                "nota_credito"
+                "nota_credito",
+                "recibo_cobro"
+              ]
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "carta o pos_80 (rollo térmico de 80 mm, alto según el contenido)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "carta",
+                "pos_80"
               ]
             }
           }
@@ -18629,6 +18686,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-permiso": "documentos.ver",
@@ -18639,7 +18706,7 @@
       "post": {
         "operationId": "documentosPlantillaVistaPrevia",
         "summary": "PDF de prueba de una plantilla con datos de ejemplo (no guarda nada)",
-        "description": "422 si la plantilla no es válida. Responde application/pdf.",
+        "description": "En el `formato` pedido (carta si no se envía; `pos_80` = rollo de 80 mm). 422 si la plantilla no es válida. Responde application/pdf.",
         "tags": [
           "documentos"
         ],
@@ -18660,7 +18727,8 @@
               "type": "string",
               "enum": [
                 "aviso_cobro",
-                "nota_credito"
+                "nota_credito",
+                "recibo_cobro"
               ]
             }
           }
@@ -18676,6 +18744,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100000
+                  },
+                  "formato": {
+                    "type": "string",
+                    "enum": [
+                      "carta",
+                      "pos_80"
+                    ],
+                    "description": "carta o pos_80 (rollo térmico de 80 mm, alto según el contenido)"
                   }
                 },
                 "required": [
@@ -18740,6 +18816,100 @@
           }
         },
         "x-permiso": "documentos.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/recibo-cobro/{cobroId}": {
+      "get": {
+        "operationId": "documentosReciboCobroPdf",
+        "summary": "PDF del recibo de un cobro de caja (panel)",
+        "description": "El recibo de `GET /cobros/:id` con la plantilla `recibo_cobro`: una sección por empresa con su marca y su pago. Solo las secciones de las empresas del alcance del usuario (403 `empresa_no_permitida` si ninguna). Con `?plantilla_id=` imprime con esa plantilla (activa y del mismo documento; si no, 422 en `plantilla_id`), por ejemplo la de POS 80 mm; sin él, con la predeterminada. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cobroId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plantilla_id",
+            "in": "query",
+            "required": false,
+            "description": "Plantilla activa del tipo con la que se imprime; sin ella, la predeterminada",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
         "x-implementado": true
       }
     },
@@ -55023,6 +55193,769 @@
         "x-implementado": true
       }
     },
+    "/api/v1/plantillas-documentos": {
+      "get": {
+        "operationId": "plantillasDocumentosListar",
+        "summary": "Plantillas de documentos guardadas (todas o de un tipo)",
+        "description": "Sin el HTML. Por tipo, la predeterminada primero y luego por nombre. `?activa=true` da las que se ofrecen al imprimir. Son pocas: todo cabe en una página (`nextCursor` siempre null).",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro",
+                "nota_credito",
+                "recibo_cobro"
+              ]
+            }
+          },
+          {
+            "name": "activa",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantillas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PlantillaDocumentoResumen"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "plantillasDocumentosCrear",
+        "summary": "Crear otra plantilla de un documento",
+        "description": "Desde la de fábrica de su formato (sin `html` ni `copiar_de_id`; sigue a la versión instalada hasta que se edite), copiando otra del mismo tipo (`copiar_de_id`, 422 si es de otro) o con HTML propio. Nace activa y no predeterminada. Nombre único por tipo (422 en `nombre`).",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "aviso_cobro",
+                      "nota_credito",
+                      "recibo_cobro"
+                    ]
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "formato": {
+                    "type": "string",
+                    "enum": [
+                      "carta",
+                      "pos_80"
+                    ],
+                    "description": "carta o pos_80 (rollo térmico de 80 mm, alto según el contenido)"
+                  },
+                  "copiar_de_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Copia el HTML de otra plantilla del mismo tipo"
+                  },
+                  "html": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100000,
+                    "description": "HTML propio; sin él ni copiar_de_id, la de fábrica del formato"
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Plantilla creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-documentos/{id}": {
+      "get": {
+        "operationId": "plantillasDocumentosVer",
+        "summary": "Ver una plantilla de documento con su HTML y variables",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantilla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "plantillasDocumentosEditar",
+        "summary": "Editar nombre, formato y HTML de una plantilla de documento",
+        "description": "Valida el HTML con los datos de ejemplo en su formato (422). `html: null` vuelve a la de fábrica. Nombre único por tipo (422). 409 si cambió la `version`. Diff en audit.cambios.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "formato": {
+                    "type": "string",
+                    "enum": [
+                      "carta",
+                      "pos_80"
+                    ],
+                    "description": "carta o pos_80 (rollo térmico de 80 mm, alto según el contenido)"
+                  },
+                  "html": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100000,
+                    "description": "null vuelve a la plantilla de fábrica de su tipo y formato"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-documentos/{id}/activar": {
+      "post": {
+        "operationId": "plantillasDocumentosActivar",
+        "summary": "Volver a activar una plantilla de documento",
+        "description": "409 si cambió la `version`. Idempotente.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla activada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.activar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.activar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-documentos/{id}/desactivar": {
+      "post": {
+        "operationId": "plantillasDocumentosDesactivar",
+        "summary": "Desactivar una plantilla de documento",
+        "description": "Deja de ofrecerse al imprimir (pedirla con `?plantilla_id=` responde 422). Nunca la predeterminada (422 `plantilla_predeterminada`). 409 si cambió la `version`. Idempotente.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla desactivada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.desactivar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-documentos/{id}/predeterminar": {
+      "post": {
+        "operationId": "plantillasDocumentosPredeterminar",
+        "summary": "Marcar una plantilla como la predeterminada de su documento",
+        "description": "La que usan el portal, el correo y los procesos automáticos; la anterior deja de serlo. Solo una activa (422 `plantilla_inactiva`). 409 si cambió la `version`. Idempotente si ya lo era.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla predeterminada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.predeterminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.predeterminar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/plantillas-facturacion": {
       "get": {
         "operationId": "plantillasListar",
@@ -66880,7 +67813,11 @@
                         "declaraciones.presentar",
                         "declaraciones.revisar",
                         "declaraciones.ver",
+                        "documentos.activar",
+                        "documentos.crear",
+                        "documentos.desactivar",
                         "documentos.editar",
+                        "documentos.predeterminar",
                         "documentos.ver",
                         "egresos.anular",
                         "egresos.registrar",
@@ -67267,7 +68204,11 @@
                         "declaraciones.presentar",
                         "declaraciones.revisar",
                         "declaraciones.ver",
+                        "documentos.activar",
+                        "documentos.crear",
+                        "documentos.desactivar",
                         "documentos.editar",
+                        "documentos.predeterminar",
                         "documentos.ver",
                         "egresos.anular",
                         "egresos.registrar",
@@ -79656,7 +80597,11 @@
                             "declaraciones.presentar",
                             "declaraciones.revisar",
                             "declaraciones.ver",
+                            "documentos.activar",
+                            "documentos.crear",
+                            "documentos.desactivar",
                             "documentos.editar",
+                            "documentos.predeterminar",
                             "documentos.ver",
                             "egresos.anular",
                             "egresos.registrar",
@@ -103306,7 +104251,11 @@
           "declaraciones.presentar",
           "declaraciones.revisar",
           "declaraciones.ver",
+          "documentos.activar",
+          "documentos.crear",
+          "documentos.desactivar",
           "documentos.editar",
+          "documentos.predeterminar",
           "documentos.ver",
           "egresos.anular",
           "egresos.registrar",
@@ -103585,8 +104534,12 @@
           "Marcar una declaración como presentada en la SAT (el sistema no la envía)",
           "Marcar como revisado un borrador de declaración",
           "Ver obligaciones fiscales y borradores de declaraciones",
-          "Editar plantillas de documentos (aviso de cobro)",
-          "Ver plantillas de documentos (aviso de cobro) y sus PDF",
+          "Volver a activar una plantilla de documento desactivada",
+          "Crear otra plantilla de un documento (carta o POS 80 mm), desde la de fábrica o copiando otra",
+          "Desactivar una plantilla de documento (nunca la predeterminada)",
+          "Editar el nombre, el formato y el HTML de una plantilla de documento",
+          "Elegir la plantilla predeterminada de un documento (la que usan el portal, el correo y los procesos)",
+          "Ver las plantillas de documentos (aviso de cobro, nota de crédito, recibo de cobro) y elegir con cuál imprimir",
           "Anular egresos con asiento de reverso",
           "Registrar egresos (gastos pagados por caja, banco o cuenta bancaria)",
           "Registrar egresos de cualquier caja, banco o cuenta, sin el tope egreso_cajero_maximo ni motivo obligatorio",
@@ -107040,19 +107993,59 @@
       "PlantillaDocumento": {
         "type": "object",
         "required": [
+          "id",
           "tipo",
+          "nombre",
+          "formato",
+          "predeterminada",
+          "activa",
+          "de_fabrica",
           "html",
           "version",
+          "updated_at",
           "variables"
         ],
         "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null: la de fábrica en carta, porque el tipo aún no tiene predeterminada guardada"
+          },
           "tipo": {
             "type": "string",
             "enum": [
               "aviso_cobro",
-              "nota_credito"
+              "nota_credito",
+              "recibo_cobro"
             ],
-            "description": "aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)"
+            "description": "aviso_cobro (también la factura FEL), nota_credito (también la NCRE) o recibo_cobro (recibo de un cobro de caja)"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre para elegirla al imprimir («Carta», «POS 80 mm»); único por tipo"
+          },
+          "formato": {
+            "type": "string",
+            "enum": [
+              "carta",
+              "pos_80"
+            ],
+            "description": "carta (hoja carta) o pos_80 (rollo térmico de 80 mm; el alto sale del contenido)"
+          },
+          "predeterminada": {
+            "type": "boolean",
+            "description": "La que usan el portal, el correo y los procesos automáticos (una por tipo)"
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Se ofrece al imprimir; una desactivada no se puede pedir"
+          },
+          "de_fabrica": {
+            "type": "boolean",
+            "description": "Usa la plantilla de fábrica de su tipo y formato (sigue a la versión instalada)"
           },
           "html": {
             "type": "string",
@@ -107062,6 +108055,13 @@
             "type": "integer",
             "minimum": 0,
             "description": "0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           },
           "variables": {
             "type": "array",
@@ -107075,6 +108075,7 @@
         "type": "object",
         "required": [
           "tipo",
+          "formato",
           "html",
           "variables"
         ],
@@ -107083,9 +108084,18 @@
             "type": "string",
             "enum": [
               "aviso_cobro",
-              "nota_credito"
+              "nota_credito",
+              "recibo_cobro"
             ],
-            "description": "aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)"
+            "description": "aviso_cobro (también la factura FEL), nota_credito (también la NCRE) o recibo_cobro (recibo de un cobro de caja)"
+          },
+          "formato": {
+            "type": "string",
+            "enum": [
+              "carta",
+              "pos_80"
+            ],
+            "description": "carta (hoja carta) o pos_80 (rollo térmico de 80 mm; el alto sale del contenido)"
           },
           "html": {
             "type": "string",
@@ -107096,6 +108106,68 @@
             "items": {
               "$ref": "#/components/schemas/VariableDocumento"
             }
+          }
+        }
+      },
+      "PlantillaDocumentoResumen": {
+        "type": "object",
+        "required": [
+          "id",
+          "tipo",
+          "nombre",
+          "formato",
+          "predeterminada",
+          "activa",
+          "de_fabrica",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "aviso_cobro",
+              "nota_credito",
+              "recibo_cobro"
+            ],
+            "description": "aviso_cobro (también la factura FEL), nota_credito (también la NCRE) o recibo_cobro (recibo de un cobro de caja)"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre para elegirla al imprimir («Carta», «POS 80 mm»); único por tipo"
+          },
+          "formato": {
+            "type": "string",
+            "enum": [
+              "carta",
+              "pos_80"
+            ],
+            "description": "carta (hoja carta) o pos_80 (rollo térmico de 80 mm; el alto sale del contenido)"
+          },
+          "predeterminada": {
+            "type": "boolean",
+            "description": "La que usan el portal, el correo y los procesos automáticos (una por tipo)"
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Se ofrece al imprimir; una desactivada no se puede pedir"
+          },
+          "de_fabrica": {
+            "type": "boolean",
+            "description": "Usa la plantilla de fábrica de su tipo y formato (sigue a la versión instalada)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Envíala al editar, predeterminar o desactivar"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -117942,7 +119014,11 @@
               "declaraciones.presentar",
               "declaraciones.revisar",
               "declaraciones.ver",
+              "documentos.activar",
+              "documentos.crear",
+              "documentos.desactivar",
               "documentos.editar",
+              "documentos.predeterminar",
               "documentos.ver",
               "egresos.anular",
               "egresos.registrar",
@@ -118172,6 +119248,7 @@
               "comprobantes.registrar",
               "comprobantes.ver",
               "cuentas_bancarias.ver",
+              "documentos.ver",
               "egresos.registrar",
               "facturas.emitir_cargo_unico",
               "facturas.emitir_periodos",
@@ -118204,6 +119281,7 @@
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
               "clientes.vincular_telegram",
+              "documentos.ver",
               "facturas.emitir_cargo_unico",
               "facturas.ver",
               "inventario.ver",
@@ -118362,6 +119440,7 @@
               "declaraciones.presentar",
               "declaraciones.revisar",
               "declaraciones.ver",
+              "documentos.ver",
               "egresos.anular",
               "egresos.registrar",
               "egresos.registrar_sin_limite",

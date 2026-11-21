@@ -97,14 +97,61 @@ export const GRUPOS_VARIABLES: Record<string, string> = {
     servicio: 'Servicio',
     factura: 'Factura',
     nota: 'Nota de crédito',
+    cobro: 'Cobro',
 }
+
+/** Variables que son listas: se insertan como sección `{{#x}}…{{/x}}`. */
+const VARIABLES_LISTA = new Set(['lineas', 'secciones', 'aplicaciones'])
+
+/** Documentos con plantilla (A5), en el orden de las pestañas. */
+export const TIPOS_DOCUMENTO: { value: Schema<'PlantillaDocumento'>['tipo'], label: string, icon: string, descripcion: string }[] = [
+    { value: 'aviso_cobro', label: 'Aviso de cobro y factura', icon: 'i-lucide-receipt-text', descripcion: 'El PDF de cada factura (o factura FEL), en el portal, el correo y el panel.' },
+    { value: 'recibo_cobro', label: 'Recibo de cobro', icon: 'i-lucide-ticket', descripcion: 'El recibo que se entrega al cobrar en caja.' },
+    { value: 'nota_credito', label: 'Nota de crédito', icon: 'i-lucide-file-minus', descripcion: 'El PDF de cada nota de crédito (o NCRE).' },
+]
+
+/** Formatos de página de una plantilla. */
+export const FORMATOS_DOCUMENTO: { value: Schema<'PlantillaDocumento'>['formato'], label: string, descripcion: string }[] = [
+    { value: 'carta', label: 'Carta', descripcion: 'Hoja carta, para impresora normal o para enviar.' },
+    { value: 'pos_80', label: 'POS 80 mm', descripcion: 'Rollo de impresora térmica de 80 mm; el largo sigue al contenido.' },
+]
+
+export function etiquetaFormato(formato: Schema<'PlantillaDocumento'>['formato']): string {
+    return FORMATOS_DOCUMENTO.find(f => f.value === formato)?.label ?? formato
+}
+
+export function etiquetaTipoDocumento(tipo: Schema<'PlantillaDocumento'>['tipo']): string {
+    return TIPOS_DOCUMENTO.find(t => t.value === tipo)?.label ?? tipo
+}
+
+const nombrePlantilla = z.string().trim()
+    .min(1, 'Escribe un nombre')
+    .max(80, 'Máximo 80 caracteres')
+
+/** Espejo de `editarPlantillaPorIdValidator` (A5): nombre, formato y HTML de una plantilla. */
+export const esquemaEditarPlantilla = esquemaPlantillaDocumento.extend({
+    nombre: nombrePlantilla,
+    formato: z.enum(['carta', 'pos_80']),
+})
+
+export type SalidaEditarPlantilla = z.output<typeof esquemaEditarPlantilla>
+
+/** Espejo de `crearPlantillaDocumentoValidator` (A5); `copiar_de_id` 0 = desde la de fábrica. */
+export const esquemaNuevaPlantilla = z.object({
+    tipo: z.enum(['aviso_cobro', 'nota_credito', 'recibo_cobro']),
+    nombre: nombrePlantilla,
+    formato: z.enum(['carta', 'pos_80']),
+    copiar_de_id: z.number().int().min(0),
+})
+
+export type SalidaNuevaPlantilla = z.output<typeof esquemaNuevaPlantilla>
 
 /**
  * Texto que inserta el editor para una variable: `{{nombre}}`, o una sección
  * `{{#nombre}}…{{/nombre}}` para las listas y condiciones (descripción "Sección…" o `lineas`).
  */
 export function marcaVariable(variable: Schema<'VariableDocumento'>): { texto: string, cursor: number } {
-    const seccion = variable.nombre === 'lineas' || variable.descripcion.startsWith('Sección')
+    const seccion = VARIABLES_LISTA.has(variable.nombre) || variable.descripcion.startsWith('Sección')
     if (!seccion) {
         const texto = `{{${variable.nombre}}}`
         return { texto, cursor: texto.length }

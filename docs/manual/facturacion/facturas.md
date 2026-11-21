@@ -178,7 +178,7 @@ No se pueden emitir facturas de periodo a un servicio **retirado** (el botón no
 
 - **Permiso:** `facturas.ver`.
 - **Dónde:** botón «Aviso de cobro (PDF)» en el detalle.
-- **Qué pasa:** abre el PDF en otra pestaña. Si falla, aparece «No se pudo generar el PDF» con el motivo.
+- **Qué pasa:** abre el PDF en otra pestaña con la plantilla predeterminada. La flecha de al lado (**Imprimir con…**, permiso `documentos.ver`) deja elegir otra plantilla activa, por ejemplo «POS 80 mm» para la impresora térmica. Si falla, aparece «No se pudo generar el PDF» con el motivo.
 
 ### Emitir una nota de crédito
 
