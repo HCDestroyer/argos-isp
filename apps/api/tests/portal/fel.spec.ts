@@ -445,9 +445,12 @@ test.group('Portal · FEL', (group) => {
 })
 
 test.group('Portal · plantillas de documentos FEL', (group) => {
-    group.each.teardown(async () => {
+    // sin plantillas guardadas del tipo (la migración deja la «Carta» de fábrica): versión 0
+    const limpiar = async () => {
         await db.from('core.plantillas_documentos').where('tipo', 'nota_credito').delete()
-    })
+    }
+    group.each.setup(limpiar)
+    group.each.teardown(limpiar)
 
     test('plantilla de la nota de crédito editable y plantillas de fábrica para restaurar el bloque FEL', async ({
         client,

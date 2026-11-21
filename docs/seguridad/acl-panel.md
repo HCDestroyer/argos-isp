@@ -76,7 +76,7 @@ La API vuelve a validar todo (403); el panel no es la barrera, solo evita mostra
 | Canjes de puntos | `/lealtad/canjes` | `lealtad.ver` | Canjear `lealtad.canjear` (+ `clientes.ver` para buscar; servicios con `servicios.ver`); Revertir `lealtad.revertir_canje` | Rutas, Lectura, `pendientesPanel2.test.ts`, `e2e/pendientes-panel-2.spec.ts` |
 | Cuentas bancarias | `/configuracion/cuentas-bancarias` | `cuentas_bancarias.ver` | Nueva y Editar `cuentas_bancarias.editar` | Rutas, Lectura (+ control admin), `cuentasBancarias.test.ts` |
 | Empresa | `/configuracion/empresa` | `empresa.ver` | Guardar `empresa.editar` (formulario deshabilitado sin él) | Rutas, Lectura, `empresaDocumentos.test.ts` |
-| Plantilla del aviso | `/configuracion/aviso-cobro` | `documentos.ver` | Guardar y vista previa `documentos.editar` | Rutas, `empresaDocumentos.test.ts` |
+| Plantillas de documentos | `/configuracion/aviso-cobro`, `/configuracion/plantillas-documentos/[id]` | `documentos.ver` | Nueva (`/configuracion/plantillas-documentos/nueva`) `documentos.crear`; guardar y vista previa `documentos.editar`; predeterminar `documentos.predeterminar`; desactivar y activar `documentos.desactivar` / `documentos.activar` | Rutas, `plantillasDocumentos.test.ts`, `empresaDocumentos.test.ts` |
 | Sin permiso | `/sin-permiso` | — | Ninguna | `aclRoles.test.ts` |
 | Login | `/login` | pública | Entrar | `permisos.spec.ts` |
 

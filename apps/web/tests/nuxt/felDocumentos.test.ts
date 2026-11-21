@@ -4,7 +4,7 @@ import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
-import PaginaAviso from '~/pages/configuracion/aviso-cobro.vue'
+import PaginaEditor from '~/pages/configuracion/plantillas-documentos/[id].vue'
 import { esperar } from '../ayudas/esperar'
 
 /**
@@ -25,8 +25,8 @@ describe('FEL · plantilla del aviso y correo de contabilidad', () => {
     })
 
     function montar() {
-        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaAviso) }) })
-        return mountSuspended(conApp, { route: '/configuracion/aviso-cobro' })
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaEditor) }) })
+        return mountSuspended(conApp, { route: '/configuracion/plantillas-documentos/1' })
     }
 
     it('el editor ofrece las variables nuevas del PDF FEL', async () => {
@@ -39,7 +39,7 @@ describe('FEL · plantilla del aviso y correo de contabilidad', () => {
     })
 
     it('una plantilla guardada sin el bloque FEL avisa y lo inserta', async () => {
-        bd.plantillaAvisoCobro = { ...bd.plantillaAvisoCobro, version: 3, html: '<h1>{{empresa.nombre}}</h1>\n{{factura.lineas}}\n' }
+        bd.plantillasDocumentos[0] = { ...bd.plantillasDocumentos[0]!, version: 3, de_fabrica: false, html: '<h1>{{empresa.nombre}}</h1>\n{{factura.lineas}}\n' }
         const vista = await montar()
         await esperar(() => expect(vista.find('[data-prueba="falta-bloque-fel"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="falta-bloque-fel"]').text()).toContain('factura.fel_tipo')
