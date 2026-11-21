@@ -96,9 +96,11 @@ de cobro a contactos salen solo por WhatsApp, desde Iris.
   su caché, con el permiso de cada número (§3.5); Argos nunca manda números en el aviso.
 - **Permiso de WhatsApp por número** (§6.4): `RegistrarConsentimientoWhatsapp` y
   `POST /notificaciones/consentimientos` aceptan `telefono` (E.164). Clave
-  `argos:consentimiento:<empresa>:<cliente>:whatsapp:<h>:<ocurrido_en>` (`<h>` = primeros 16 hex del
-  sha256 del número E.164; acordado con Iris para el contrato 0.12.1), el número en claro solo en el cuerpo
-  (`telefono`), nunca en la clave, la auditoría (`***`) ni los logs; sale solo a un Iris ≥ 0.10.0 (antes espera sin gastar intentos) y no cambia el estado
+  `argos:consentimiento:<empresa>:<cliente>:whatsapp:<h>:<ocurrido_en>` (`<h>` = 16 primeros hex del
+  HMAC-SHA256 de `"consentimiento:" + número E.164` con el secreto del receptor de webhooks de Iris del
+  conector, contrato 0.12.1; sin ese secreto, 409 `iris_sin_receptor`; se calcula una sola vez al
+  registrar: si el secreto rota, el pendiente sale con la clave y los bytes guardados), el número en claro solo en el cuerpo
+  (`telefono`), nunca en la clave; ni el número ni la clave (dato personal) van a la auditoría (`***`) ni a los logs (un error de Iris que los repita se enmascara); sale solo a un Iris ≥ 0.10.0 (antes espera sin gastar intentos) y no cambia el estado
   de contacto del cliente (`notify.contacto_iris`). Queda en la línea de tiempo con el número
   enmascarado (`avisos_whatsapp_numero`).
 - **Avisos al titular** por sus canales registrados (correo y Telegram; plantillas nuevas en
