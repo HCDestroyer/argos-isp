@@ -46,3 +46,9 @@ export function tendenciaDe(valores: readonly (number | string)[]): Tendencia {
     const signo = porcentaje > 0 ? '+' : ''
     return { porcentaje, direccion, texto: `${signo}${porcentaje.toLocaleString('es-GT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %` }
 }
+
+/**
+ * Punto de estado de los círculos flotantes del encabezado (IslasA5): 8 px con borde de 2 px del
+ * fondo, a 9 px del borde superior y derecho del círculo.
+ */
+export const PUNTO_FLOTANTE = 'top-[9px] right-[9px] ring-2 lg:top-[11px] lg:right-[11px]'

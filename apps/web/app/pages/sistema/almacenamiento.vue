@@ -127,14 +127,14 @@ function porcentajeDe(bytes: number, total: number): number {
                             :aria-label="`${volumen.nombre}: ${volumen.porcentaje_usado} % usado`"
                         />
                         <p class="text-sm tabular-nums">
-                            <strong class="text-highlighted">{{ formatearTamano(volumen.usado_bytes) }}</strong> usados de {{ formatearTamano(volumen.total_bytes) }} · {{ formatearTamano(volumen.libre_bytes) }} libres ({{ volumen.porcentaje_usado }} % usado)
+                            <strong class="text-highlighted">{{ formatearTamanoSistema(volumen.usado_bytes) }}</strong> usados de {{ formatearTamanoSistema(volumen.total_bytes) }} · {{ formatearTamanoSistema(volumen.libre_bytes) }} libres ({{ volumen.porcentaje_usado }} % usado)
                         </p>
                     </template>
                     <p
                         v-else
                         class="text-sm tabular-nums"
                     >
-                        <strong class="text-highlighted">{{ formatearTamano(volumen.usado_bytes) }}</strong> en uso
+                        <strong class="text-highlighted">{{ formatearTamanoSistema(volumen.usado_bytes) }}</strong> en uso
                     </p>
                     <p
                         v-if="volumen.ruta"
@@ -168,7 +168,7 @@ function porcentajeDe(bytes: number, total: number): number {
                             id="titulo-categorias"
                             class="text-sm font-semibold text-highlighted"
                         >
-                            Archivos por tipo · {{ formatearTamano(totalArchivos) }}
+                            Archivos por tipo · {{ formatearTamanoSistema(totalArchivos) }}
                         </h2>
                         <p class="text-xs text-muted">
                             Calculado {{ haceCuanto(medicion.calculado_en) }} ({{ formatearFechaHora(medicion.calculado_en) }}, {{ medicion.origen === 'cron' ? 'cálculo diario' : 'a pedido' }})<template v-if="medicion.parcial">
@@ -197,9 +197,9 @@ function porcentajeDe(bytes: number, total: number): number {
                                 />
                             </span>
                             <span class="flex flex-wrap items-baseline gap-x-2 text-xs tabular-nums text-muted sm:justify-end">
-                                <strong class="text-sm text-highlighted">{{ formatearTamano(categoria.bytes) }}</strong>
+                                <strong class="text-sm text-highlighted">{{ formatearTamanoSistema(categoria.bytes) }}</strong>
                                 {{ categoria.archivos.toLocaleString('es-GT') }} archivos
-                                <template v-if="categoria.crecimiento_30d_bytes !== null">· +{{ formatearTamano(categoria.crecimiento_30d_bytes) }} en 30 días</template>
+                                <template v-if="categoria.crecimiento_30d_bytes !== null">· +{{ formatearTamanoSistema(categoria.crecimiento_30d_bytes) }} en 30 días</template>
                             </span>
                             <span
                                 v-if="categoria.aviso || categoria.estado !== 'completo'"
@@ -218,7 +218,7 @@ function porcentajeDe(bytes: number, total: number): number {
                             id="titulo-tablas"
                             class="text-sm font-semibold text-highlighted"
                         >
-                            Base de datos · {{ formatearTamano(medicion.base_datos.tamano_bytes) }}
+                            Base de datos · {{ formatearTamanoSistema(medicion.base_datos.tamano_bytes) }}
                         </h2>
                         <p class="text-xs text-muted">
                             Las tablas más grandes:
@@ -236,7 +236,7 @@ function porcentajeDe(bytes: number, total: number): number {
                                         :style="{ width: `${porcentajeDe(tabla.bytes, mayorTabla)}%` }"
                                     />
                                 </span>
-                                <span class="text-xs font-semibold tabular-nums text-highlighted">{{ formatearTamano(tabla.bytes) }}</span>
+                                <span class="text-xs font-semibold tabular-nums text-highlighted">{{ formatearTamanoSistema(tabla.bytes) }}</span>
                             </li>
                         </ul>
                         <p
@@ -259,15 +259,15 @@ function porcentajeDe(bytes: number, total: number): number {
                         <dl class="grid grid-cols-2 gap-3">
                             <DatoFicha
                                 etiqueta="En uso"
-                                :valor="formatearTamano(medicion.redis.usada_bytes)"
+                                :valor="formatearTamanoSistema(medicion.redis.usada_bytes)"
                             />
                             <DatoFicha
                                 etiqueta="Pico"
-                                :valor="formatearTamano(medicion.redis.pico_bytes)"
+                                :valor="formatearTamanoSistema(medicion.redis.pico_bytes)"
                             />
                             <DatoFicha
                                 etiqueta="Máximo permitido"
-                                :valor="medicion.redis.maxima_bytes ? formatearTamano(medicion.redis.maxima_bytes) : 'Sin límite'"
+                                :valor="medicion.redis.maxima_bytes ? formatearTamanoSistema(medicion.redis.maxima_bytes) : 'Sin límite'"
                             />
                         </dl>
                         <p

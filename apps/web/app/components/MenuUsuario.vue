@@ -2,9 +2,10 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 
 /**
- * Menú del usuario en la barra superior (header liviano, pedido del PM): avatar, nombre corto, rol
- * y empresa activa; dentro, la empresa (submenú, con más de una), el tema, «Mi cuenta», «Ayuda y
- * atajos», «Qué cambió» y, aparte y en rojo, «Cerrar sesión».
+ * Menú del usuario en el encabezado (diseño final, IslasA5/A6): un círculo flotante con las
+ * iniciales. El nombre, el rol y la empresa activa van dentro del menú, junto con la empresa (con
+ * más de una), el tema, «Mi cuenta», «Ayuda y atajos», «Qué cambió» y, aparte y en rojo, «Cerrar
+ * sesión».
  */
 const { usuario, logout } = useAuth()
 const colorMode = useColorMode()
@@ -53,8 +54,6 @@ const iniciales = computed(() => (usuario.value?.nombre ?? '?')
 const { eleccion, empresas, alcanceGlobal, conSelector, elegir, nombre: nombreEmpresa } = useEmpresaActiva()
 const atajosAbierto = ref(false)
 
-/** Nombre corto: el primer nombre. */
-const nombreCorto = computed(() => usuario.value?.nombre.split(/\s+/)[0] ?? '')
 const empresaActiva = computed(() => (eleccion.value === 'todas' ? 'Todas las empresas' : eleccion.value ? nombreEmpresa(eleccion.value) : null))
 
 /** Rol principal, legible («Admin», «Cajero»…). */
@@ -67,13 +66,13 @@ const items = computed<DropdownMenuItem[][]>(() => [
     [{
         type: 'label',
         label: usuario.value?.nombre ?? '',
-        description: usuario.value?.email,
+        description: [rol.value, usuario.value?.email].filter(Boolean).join(' · '),
     }],
     // Empresa activa (con más de una): opciones a la vista, sin submenú (en el teléfono un submenú
     // se sale de la pantalla).
     ...(conSelector.value
         ? [[
-                { type: 'label' as const, label: 'Empresa', icon: 'i-lucide-building-2' },
+                { type: 'label' as const, label: empresaActiva.value ? `Empresa: ${empresaActiva.value}` : 'Empresa', icon: 'i-lucide-building-2' },
                 ...(alcanceGlobal.value
                     ? [{ label: 'Todas las empresas', icon: 'i-lucide-layers', type: 'checkbox' as const, checked: eleccion.value === 'todas', onSelect: () => elegir('todas') }]
                     : []),
@@ -159,26 +158,19 @@ const items = computed<DropdownMenuItem[][]>(() => [
         <UButton
             color="neutral"
             variant="ghost"
-            class="gap-2 rounded-full py-1 ps-1 pe-2 data-[state=open]:bg-elevated"
-            aria-label="Menú de usuario"
+            class="boton-flotante boton-circulo boton-cuenta"
+            :aria-label="`Menú de usuario: ${usuario?.nombre ?? ''}`"
+            :title="usuario?.nombre"
             data-prueba="menu-usuario"
         >
-            <UAvatar
-                :text="iniciales"
-                :alt="usuario?.nombre"
-                size="sm"
-                :ui="{ root: 'bg-primary/10', fallback: 'text-primary font-semibold' }"
-            />
-            <span class="hidden min-w-0 flex-col text-start leading-tight md:flex">
-                <span class="truncate text-sm font-semibold text-highlighted">{{ nombreCorto }}</span>
-                <span class="truncate text-xs text-muted">{{ rol }}<template v-if="conSelector && empresaActiva">
-                    · <span data-prueba="empresa-activa">{{ empresaActiva }}</span>
-                </template></span>
-            </span>
-            <UIcon
-                name="i-lucide-chevron-down"
-                class="hidden size-4 shrink-0 text-dimmed md:block"
-            />
+            <span aria-hidden="true">{{ iniciales }}</span>
+            <!-- La empresa activa no se ve en el círculo (está dentro del menú); queda para lectores
+                 de pantalla y para las pruebas. -->
+            <span
+                v-if="conSelector && empresaActiva"
+                class="sr-only"
+                data-prueba="empresa-activa"
+            >{{ empresaActiva }}</span>
         </UButton>
     </UDropdownMenu>
     <QueCambioModal v-model:open="queCambioAbierto" />

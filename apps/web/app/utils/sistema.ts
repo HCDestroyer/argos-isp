@@ -46,7 +46,7 @@ export const GRUPOS_SALUD: Record<Schema<'ComponenteSalud'>['grupo'], string> = 
 }
 
 /** 1536 → «1.5 KB»; null → «—». Base 1024, con un decimal desde KB. */
-export function formatearTamano(bytes: number | null | undefined): string {
+export function formatearTamanoSistema(bytes: number | null | undefined): string {
     if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) {
         return '—'
     }

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * Accesos rápidos de un clic (pedido del PM, «más compacto»): en la barra superior solo los 2
- * primeros accesos del usuario (icono + etiqueta corta; en el teléfono solo el icono, con `title`)
- * y «Más» (rayo), con el resto por área, sus contadores y atajos Alt+N, y «Personalizar mis
+ * Accesos rápidos de un clic (diseño final, IslasA5/A6): botones flotantes sueltos en el
+ * encabezado, sin barra que los agrupe. Solo los 2 primeros accesos del usuario (icono + etiqueta;
+ * en el teléfono un círculo con el icono y `title`; Cobrar en verde) y «Más» (círculo con ⋯), con
+ * el resto por área, sus contadores y atajos Alt+N, y «Personalizar mis
  * accesos» al final. Si algo del menú tiene pendientes, «Más» muestra la suma. Sin permiso, el
  * acceso no aparece (nunca deshabilitado). Sin `UTooltip`: las pruebas montan las pantallas sin
  * el proveedor de `UApp`.
@@ -41,7 +42,7 @@ function personalizar() {
     <nav
         v-if="accesos.length"
         aria-label="Accesos rápidos"
-        class="flex min-w-0 items-center gap-0.5"
+        class="flex min-w-0 items-center gap-2"
         data-prueba="accesos-rapidos"
     >
         <UButton
@@ -52,13 +53,13 @@ function personalizar() {
             :label="seccion.etiqueta"
             color="neutral"
             variant="ghost"
-            size="sm"
             :title="indice < 9 ? `${seccion.etiqueta} (Alt+${indice + 1})` : seccion.etiqueta"
             :aria-label="seccion.etiqueta"
             active-variant="soft"
             active-color="primary"
-            class="shrink-0"
-            :ui="{ label: 'hidden md:inline', leadingIcon: 'text-primary' }"
+            class="boton-flotante boton-acceso shrink-0"
+            :class="{ 'boton-exito': seccion.id === 'cobro' }"
+            :ui="{ label: 'hidden md:inline' }"
             :data-acceso="seccion.id"
         >
             <template
@@ -86,13 +87,10 @@ function personalizar() {
                 inset
             >
                 <UButton
-                    icon="i-lucide-zap"
-                    label="Más"
+                    icon="i-lucide-ellipsis"
                     color="neutral"
                     variant="ghost"
-                    size="sm"
-                    class="shrink-0"
-                    :ui="{ label: 'hidden md:inline', leadingIcon: 'text-primary' }"
+                    class="boton-flotante boton-circulo shrink-0 data-[state=open]:bg-elevated"
                     title="Más accesos rápidos y personalizar"
                     :aria-label="pendientesMas ? `Más accesos rápidos (${pendientesMas} pendientes)` : 'Más accesos rápidos'"
                     data-prueba="mas-accesos"

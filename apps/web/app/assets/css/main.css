@@ -628,7 +628,9 @@
 }
 
 @media (min-width: 1024px) {
+    /* `z-index`: el círculo de expandir y compactar sale 14 px sobre el borde y queda encima del panel. */
     .lateral-argos {
+        z-index: 10;
         margin: 1rem 0 1rem 1rem;
         height: calc(100dvh - 2rem);
         border-radius: 1.375rem;
@@ -644,18 +646,153 @@
     }
 }
 
-.isla-pastilla {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem;
+/*
+ * Botón flotante del encabezado (diseño final, IslasA5/A6): cada control flota suelto, sin barra ni
+ * pastilla que los agrupe: fondo de tarjeta, borde fino y sombra corta. En `@layer components` para
+ * que el hover de la variante (`hover:bg-elevated`) gane. `boton-circulo`: los de solo icono (Más,
+ * caja, sistema, avisos, cuenta); `boton-pastilla`: los de icono y texto (Buscar, accesos).
+ */
+@layer components {
+    .boton-flotante {
+        background-color: var(--ax-tarjeta);
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 6px 18px -8px rgb(15 23 42 / 0.16);
+    }
+
+    .dark .boton-flotante {
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 6px 16px -8px rgb(0 0 0 / 0.6);
+    }
+}
+
+/*
+ * Fuera de la capa (ganan a las utilidades del botón): medidas, y el color de Cobrar y de la cuenta,
+ * que no cambia al pasar el puntero (el diseño solo los eleva 1 px).
+ */
+/* Medidas de IslasA5: 42 px de alto, iconos de 18 px en los círculos y 16 px en las pastillas. */
+.boton-circulo {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    justify-content: center;
     border-radius: 9999px;
-    background-color: var(--hf-glass-strong);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
-    backdrop-filter: blur(20px) saturate(150%);
+}
+
+.boton-pastilla {
+    height: 2.25rem;
+    gap: 0.4375rem;
+    padding-inline: 1rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+}
+
+@media (min-width: 64rem) {
+    .boton-circulo {
+        width: 2.625rem;
+        height: 2.625rem;
+    }
+
+    .boton-pastilla {
+        height: 2.625rem;
+    }
+}
+
+/* Acceso rápido: círculo con el icono en el teléfono, pastilla con etiqueta desde `md`. */
+.boton-acceso {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.boton-acceso [data-slot='leadingIcon'] {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+@media (min-width: 48rem) {
+    .boton-acceso {
+        width: auto;
+        gap: 0.4375rem;
+        padding-inline: 1rem;
+    }
+
+    .boton-acceso [data-slot='leadingIcon'] {
+        width: 1rem;
+        height: 1rem;
+    }
+}
+
+@media (min-width: 64rem) {
+    .boton-acceso {
+        height: 2.625rem;
+    }
+}
+
+.boton-circulo [data-slot='leadingIcon'] {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.boton-pastilla [data-slot='leadingIcon'] {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Cobrar (IslasA5): verde claro con borde verde, el único acceso con color propio. */
+.boton-exito {
+    background-color: var(--ui-color-success-100);
+    color: var(--ui-color-success-800);
     box-shadow:
-        0 0 0 1px var(--ax-borde),
-        0 8px 24px -14px rgb(30 27 75 / 0.3);
+        0 0 0 1px var(--ui-color-success-200),
+        0 6px 16px -10px rgb(30 27 75 / 0.35);
+}
+
+.dark .boton-exito {
+    background-color: color-mix(in oklab, var(--ui-color-success-400) 16%, transparent);
+    color: var(--ui-color-success-300);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-color-success-400) 35%, transparent),
+        0 6px 16px -8px rgb(0 0 0 / 0.6);
+}
+
+/* Tu cuenta (IslasA5): círculo índigo claro con las iniciales. */
+.boton-cuenta {
+    background-color: var(--ui-color-primary-100);
+    color: var(--ui-color-primary-700);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    box-shadow:
+        0 0 0 1px var(--ui-color-primary-200),
+        0 6px 16px -10px rgb(30 27 75 / 0.35);
+}
+
+.dark .boton-cuenta {
+    background-color: color-mix(in oklab, var(--ui-color-primary-400) 20%, transparent);
+    color: var(--ui-color-primary-200);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-color-primary-400) 35%, transparent),
+        0 6px 16px -8px rgb(0 0 0 / 0.6);
+}
+
+.boton-flotante {
+    transition-property: color, background-color, box-shadow, transform;
+    transition-duration: 0.15s;
+}
+
+.boton-flotante:hover {
+    transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boton-flotante:hover {
+        transform: none;
+    }
 }
 
 /* Filete de marca: línea de 2 px con el degradado (encabezado del menú, tarjeta destacada). */
@@ -785,12 +922,6 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-    .isla-pastilla {
-        background-color: var(--ui-bg);
-        -webkit-backdrop-filter: none;
-        backdrop-filter: none;
-    }
-
     .chrome-material,
     .glass-material {
         background-color: var(--ui-bg);

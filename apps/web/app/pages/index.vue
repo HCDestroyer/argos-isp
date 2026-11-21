@@ -118,6 +118,7 @@ onMounted(cargar)
         id="inicio"
         titulo="Inicio"
         icono="i-lucide-house"
+        titulo-oculto
     >
         <div class="flex flex-col gap-6">
             <!-- Bienvenida: el único bloque con el degradado de marca de fondo. El texto queda en la

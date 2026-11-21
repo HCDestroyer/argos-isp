@@ -34,12 +34,14 @@ const texto = computed(() => (estado.value ? `Sistema: ${ESTADO_GENERAL[estado.v
         :color="estado === 'caido' ? 'error' : 'warning'"
         size="md"
         inset
+        :ui="{ base: PUNTO_FLOTANTE }"
     >
         <UButton
             to="/sistema/salud"
             icon="i-lucide-activity"
             color="neutral"
             variant="ghost"
+            class="boton-flotante boton-circulo"
             :title="texto"
             :aria-label="texto"
             data-prueba="estado-sistema"

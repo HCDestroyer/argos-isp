@@ -56,37 +56,53 @@ Los tokens `--ax-*` tienen **los mismos nombres y valores que el portal** (`apps
 ## Layout «islas»
 
 El menú lateral es una isla flotante (separada 16 px del borde, radio 22 px, vidrio con
-desenfoque y sombra suave sobre el aura); el encabezado son pastillas de vidrio. Con
-`prefers-reduced-transparency` todo pasa a sólido y sin desenfoque. El encabezado tiene dos
-variantes, a la espera de la decisión del PM: `DISENO_ENCABEZADO` en `utils/diseno.ts`
-(`dos-pastillas` = IslasA2, `una-pastilla` = IslasA1); cambiar la constante es todo.
+desenfoque y sombra suave sobre el aura). El encabezado no tiene barra ni pastillas: cada control
+es un botón flotante suelto (`.boton-flotante`: fondo de tarjeta, borde fino, sombra corta y se
+eleva 1 px al pasar el puntero; `.boton-circulo` para los de solo icono y `.boton-pastilla` /
+`.boton-acceso` para los de icono y texto: 42 px de alto desde `lg`, 36 px en el teléfono, donde
+los accesos quedan en círculo). Cobrar usa `.boton-exito` (verde claro) y la cuenta
+`.boton-cuenta` (índigo claro con las iniciales). Los puntos de estado (`PUNTO_FLOTANTE`) miden
+8 px con borde de 2 px, a 9 px del borde del círculo: caja verde, sistema ámbar o rojo, avisos cian.
+Medidas de la isla (IslasA5/A6): 244 px expandida y 76 px compacta (`rem` en el layout), sin
+redimensionar; logo de 36 px; secciones sin icono alineadas con el texto del área (42 px, 13 px). Diseño final
+aprobado por el PM (maquetas IslasA5 y IslasA6). Con `prefers-reduced-transparency` todo pasa a
+sólido y sin desenfoque.
 
 ## Menú lateral (`layouts/default.vue`, `utils/navegacion.ts`)
 
-Dos modos que elige cada usuario (`useMenuCompacto`, recordado; el botón ‹/› del propio menú y el
-de plegar del encabezado lo alternan):
+Dos modos que elige cada usuario (`useMenuCompacto`, recordado). Los alterna un círculo de 28 px
+sobre el borde derecho de la isla, a la altura del logo, en el mismo lugar en los dos modos (‹
+compacta, › expande; `data-prueba="alternar-menu"`). No hay otro botón de plegar:
 
 - **Compacto (rail, de fábrica):** un icono con etiqueta corta (`GrupoSecciones.corta`) por área:
   Inicio, Día a día, Facturas, Red, Inventario, Lealtad, Finanzas, Contable, Reportes y, abajo,
   Ajustes. El área de la página se resalta y lleva un punto si algo suyo tiene pendientes. Al
   tocarla (o Enter) se abre a su derecha un menú flotante (`MenuArea`) con sus secciones agrupadas
   con separadores, iconos y contadores (Comprobantes 4, Caja «Abierta»); flechas, Tab, Enter y Esc.
-- **Expandido (~260 px):** Inicio y cada área como acordeón (solo la de la página abierta), con
-  subgrupos dentro cuando pasan de ~7 secciones, viñeta de punto y la descripción en tooltip.
+- **Expandido (244 px):** Inicio y cada área como acordeón (solo la de la página abierta; la
+  flecha y el contador del área solo cuando hace falta: flecha abierta, contador cerrada), con
+  subgrupos dentro cuando pasan de ~7 secciones y la descripción en tooltip. **Ajustes** va abajo,
+  aparte, en su propio acordeón (`data-prueba="menu-ajustes"`), como en el compacto.
 
 En el teléfono el menú es el panel lateral (drawer) en modo expandido. El buscador Ctrl/Cmd+K
 encuentra todas las secciones permitidas.
 
-## Encabezado liviano (`PanelPagina`)
+## Encabezado (`PanelPagina`)
 
-- **Izquierda:** plegar el menú, el buscador «Buscar…» (Ctrl K) y los accesos rápidos.
-- **Derecha (solo):** la caja (icono con punto verde abierta o gris cerrada; su menú dice la caja,
+Botones flotantes sueltos; en medio, aire. El título nunca va en el encabezado.
+
+- **Izquierda, «lo que haces»:** el buscador «Buscar…» (pastilla ancha con Ctrl K, desde `lg`) y
+  los accesos rápidos (2 directos, Cobrar en verde, y «Más» en círculo). En el teléfono, antes, el
+  botón que abre el menú.
+- **Derecha, «lo que vigilas»:** círculos con su punto de color: la caja (icono con punto verde abierta o gris cerrada; su menú dice la caja,
   desde cuándo, el fondo inicial, «Ir a la caja» y «Cerrar caja…» o «Abrir caja…», cada uno con su
   permiso; nunca montos en el icono), el estado del sistema (icono con punto si hay aviso, con
-  `sistema.ver_salud`), los avisos y el usuario (avatar, nombre, rol y empresa activa; dentro:
-  empresa, tema, Mi cuenta, Ayuda y atajos, Qué cambió y, aparte en rojo, Cerrar sesión).
+  `sistema.ver_salud`), los avisos y la cuenta (círculo con las iniciales; dentro: nombre, rol y correo,
+  la empresa, tema, Mi cuenta, Ayuda y atajos, Qué cambió y, aparte en rojo, Cerrar sesión).
 - **Página de una sección:** migas, título grande con el **?** del manual, descripción y acciones.
-- **Ficha o subpágina:** título en la barra; en el cuerpo, migas y las acciones a la derecha.
+- **Ficha o subpágina:** migas, título con su icono y las acciones a la derecha.
+- **Inicio** (`titulo-oculto`): el saludo de la bienvenida hace de título; el `h1` queda para
+  lectores de pantalla.
 
 ## Inicio
 
@@ -105,7 +121,7 @@ sistema (1/3), estos dos solo con sus permisos → servicios por estado y gráfi
 ## Accesos rápidos
 
 En el encabezado, a un clic: los 2 primeros accesos del usuario (icono + etiqueta; en el teléfono
-solo el icono) y «Más» (rayo) con el resto por área, contadores, atajos **Alt+1…9** y «Personalizar
+un círculo con el icono; Cobrar en verde) y «Más» (círculo con ⋯) con el resto por área, contadores, atajos **Alt+1…9** y «Personalizar
 mis accesos» (panel lateral: hasta 12, arrastrar o flechas, «Usar los de mi rol»). El inicio muestra
 los mismos. `GET/PUT /api/v1/me/accesos-rapidos` (`useAccesosRapidos`); sin lista guardada, los del
 rol; sin permiso, el acceso no aparece.

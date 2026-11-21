@@ -87,11 +87,13 @@ async function alAbrir() {
                 :color="abierta ? 'success' : 'neutral'"
                 size="md"
                 inset
+                :ui="{ base: PUNTO_FLOTANTE }"
             >
                 <UButton
                     icon="i-lucide-wallet"
                     color="neutral"
                     variant="ghost"
+                    class="boton-flotante boton-circulo"
                     :title="etiqueta"
                     :aria-label="etiqueta"
                     data-prueba="acceso-caja"

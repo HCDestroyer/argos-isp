@@ -5,23 +5,29 @@ const route = useRoute()
 
 /**
  * Estructura común de una página del panel (sistema visual Argos, `docs/sistema-visual.md`):
- * barra superior liviana (a la izquierda plegar menú, buscador Ctrl+K y accesos rápidos; a la
- * derecha solo el estado del sistema, los avisos y el usuario, con la empresa, el tema y la ayuda
- * dentro de su menú) y cuerpo con scroll que empieza con el encabezado de página.
+ * encabezado sin barra ni pastillas (diseño final aprobado por el PM, maquetas IslasA5/A6), cada
+ * control es un botón flotante suelto. A la izquierda «lo que haces»: buscador (Ctrl+K) y los
+ * accesos rápidos (2 directos y «Más»); en medio, aire; a la derecha «lo que vigilas»: caja,
+ * sistema, avisos y la cuenta (iniciales; el nombre y la empresa van dentro de su menú).
  *
- * - Página de una sección del menú (la ruta es la de la sección) o con `descripcion`: encabezado
- *   grande con migas, título, descripción y las acciones (`#acciones`) a la derecha.
- * - Ficha o subpágina: el título va en la barra superior y el cuerpo empieza con las migas hasta
- *   la sección a la que pertenece y las acciones de la pantalla a la derecha.
+ * El título nunca va en el encabezado: el cuerpo empieza con las migas y el título.
+ * - Página de una sección del menú (la ruta es la de la sección) o con `descripcion`: título
+ *   grande, descripción y las acciones (`#acciones`) a la derecha.
+ * - Ficha o subpágina: migas hasta la sección a la que pertenece, título con su icono y las
+ *   acciones a la derecha.
+ * - `tituloOculto` (Inicio): la pantalla pinta su propio saludo; el título queda solo para lectores
+ *   de pantalla.
  */
 const props = withDefaults(defineProps<{
     id: string
     titulo: string
     icono?: string
     descripcion?: string
+    tituloOculto?: boolean
 }>(), {
     icono: undefined,
     descripcion: undefined,
+    tituloOculto: false,
 })
 
 /**
@@ -55,65 +61,50 @@ const migas = computed<BreadcrumbItem[]>(() => {
 <template>
     <UDashboardPanel :id="id">
         <template #header>
-            <div class="flex shrink-0 flex-col">
-                <UDashboardNavbar
-                    :title="encabezado && DISENO_ENCABEZADO === 'dos-pastillas' ? undefined : titulo"
-                    :icon="encabezado ? undefined : icono"
-                    :ui="{
-                        root: 'h-auto min-h-(--ui-header-height) border-0 bg-transparent px-4 py-3 gap-3.5 sm:px-6',
-                        left: 'gap-3.5',
-                        right: 'gap-1.5',
-                        title: 'text-base font-semibold',
-                    }"
-                >
-                    <template #leading>
-                        <UDashboardSidebarCollapse />
-                        <!-- Islas A2: pastilla izquierda con el buscador y los accesos rápidos. -->
-                        <div
-                            v-if="DISENO_ENCABEZADO === 'dos-pastillas'"
-                            class="isla-pastilla"
-                            data-prueba="pastilla-izquierda"
-                        >
-                            <UDashboardSearchButton
-                                label="Buscar…"
-                                aria-label="Buscar sección (Ctrl+K)"
-                                class="hidden w-44 rounded-full bg-transparent ring-0 lg:inline-flex"
-                            />
-                            <AccesosRapidosBarra />
-                        </div>
-                        <span
-                            v-if="encabezado && DISENO_ENCABEZADO === 'dos-pastillas'"
-                            class="truncate font-semibold text-highlighted lg:hidden"
-                        >{{ titulo }}</span>
-                    </template>
+            <UDashboardNavbar
+                :toggle="{ color: 'neutral', variant: 'ghost', class: 'boton-flotante boton-circulo' }"
+                :ui="{
+                    root: 'h-auto min-h-0 border-0 bg-transparent px-4 pt-4 pb-1 gap-2.5 sm:px-4',
+                    left: 'min-w-0 gap-2.5',
+                    right: 'gap-2.5',
+                }"
+            >
+                <template #leading>
+                    <UDashboardSearchButton
+                        label="Buscar…"
+                        aria-label="Buscar sección (Ctrl+K)"
+                        variant="ghost"
+                        color="neutral"
+                        class="boton-flotante boton-pastilla hidden w-[14.375rem] font-medium text-dimmed lg:inline-flex"
+                        :ui="{ leadingIcon: 'size-4', trailing: 'ms-auto' }"
+                        data-prueba="buscar"
+                    >
+                        <template #trailing>
+                            <span class="text-[0.6875rem] font-medium">Ctrl K</span>
+                        </template>
+                    </UDashboardSearchButton>
+                    <AccesosRapidosBarra />
+                </template>
 
-                    <template #right>
-                        <div
-                            class="isla-pastilla"
-                            data-prueba="pastilla-derecha"
-                        >
-                            <template v-if="DISENO_ENCABEZADO === 'una-pastilla'">
-                                <UDashboardSearchButton
-                                    label="Buscar…"
-                                    aria-label="Buscar sección (Ctrl+K)"
-                                    class="hidden w-40 rounded-full bg-transparent ring-0 lg:inline-flex"
-                                />
-                                <AccesosRapidosBarra />
-                            </template>
-                            <CajaAccesoDirecto />
-                            <EstadoSistemaBoton />
-                            <AvisosBoton />
-                            <MenuUsuario />
-                        </div>
-                    </template>
-                </UDashboardNavbar>
-            </div>
+                <template #right>
+                    <CajaAccesoDirecto />
+                    <EstadoSistemaBoton />
+                    <AvisosBoton />
+                    <MenuUsuario />
+                </template>
+            </UDashboardNavbar>
         </template>
 
         <template #body>
             <AvisoFel />
+            <h1
+                v-if="tituloOculto"
+                class="sr-only"
+            >
+                {{ titulo }}
+            </h1>
             <div
-                v-if="encabezado"
+                v-else-if="encabezado"
                 class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
                 data-prueba="encabezado-pagina"
             >
@@ -121,7 +112,7 @@ const migas = computed<BreadcrumbItem[]>(() => {
                     <UBreadcrumb
                         :items="migas"
                         class="hidden sm:flex"
-                        :ui="{ link: 'text-xs', linkLeadingIcon: 'size-3.5' }"
+                        :ui="{ link: 'text-[0.8125rem]', linkLeadingIcon: 'size-3.5' }"
                     />
                     <div class="flex items-center gap-1">
                         <h1 class="text-2xl font-bold tracking-[-0.02em] text-highlighted sm:text-[1.75rem]">
@@ -143,22 +134,33 @@ const migas = computed<BreadcrumbItem[]>(() => {
                     <slot name="acciones" />
                 </div>
             </div>
-            <!-- Ficha o subpágina: migas a la izquierda y las acciones de la pantalla a la derecha (la
-                 barra superior queda para el título y lo global, así el título nunca se queda sin lugar). -->
+            <!-- Ficha o subpágina: migas encima, título con su icono a la izquierda y las acciones de la
+                 pantalla a la derecha. -->
             <div
-                v-else-if="ubicacion || $slots.acciones"
-                class="flex flex-wrap items-center justify-between gap-2"
+                v-else
+                class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+                data-prueba="encabezado-ficha"
             >
-                <UBreadcrumb
-                    v-if="ubicacion"
-                    :items="migas"
-                    class="hidden sm:flex"
-                    :ui="{ link: 'text-xs', linkLeadingIcon: 'size-3.5' }"
-                    data-prueba="migas"
-                />
+                <div class="flex min-w-0 flex-col gap-1">
+                    <UBreadcrumb
+                        v-if="ubicacion"
+                        :items="migas"
+                        class="hidden sm:flex"
+                        :ui="{ link: 'text-[0.8125rem]', linkLeadingIcon: 'size-3.5' }"
+                        data-prueba="migas"
+                    />
+                    <h1 class="flex min-w-0 items-center gap-2 text-xl font-bold tracking-[-0.02em] text-highlighted sm:text-2xl">
+                        <UIcon
+                            v-if="icono"
+                            :name="icono"
+                            class="size-5 shrink-0 text-primary sm:size-6"
+                        />
+                        <span class="min-w-0 truncate">{{ titulo }}</span>
+                    </h1>
+                </div>
                 <div
                     v-if="$slots.acciones"
-                    class="ms-auto flex flex-wrap items-center gap-2"
+                    class="flex shrink-0 flex-wrap items-center gap-2"
                 >
                     <slot name="acciones" />
                 </div>

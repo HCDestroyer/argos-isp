@@ -54,7 +54,7 @@ export async function menu(page: Page) {
  * pruebas vean cada enlace permitido. Un grupo sin secciones permitidas no existe.
  */
 export async function expandirGrupos(contenedor: Locator): Promise<void> {
-    const cerrados = contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]')
+    const cerrados = contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]')
     while (await cerrados.count()) {
         await cerrados.first().click()
     }
@@ -105,7 +105,7 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
             url: page.url(),
             dialogos: await page.getByRole('dialog').count(),
             lateralVisible: await page.locator('#dashboard-sidebar-principal').isVisible(),
-            gruposPlegados: await contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]').count().catch(() => -1),
+            gruposPlegados: await contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]').count().catch(() => -1),
             enlaceAntes: antes,
             enlaceDespues: await enlace.boundingBox({ timeout: 1000 }).catch(() => null),
         }

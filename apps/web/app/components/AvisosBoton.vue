@@ -12,13 +12,14 @@ const etiqueta = computed(() => (texto.value ? `Avisos: ${texto.value} comproban
 </script>
 
 <template>
+    <!-- IslasA5: punto cian (sin número) cuando hay pendientes; el número va en el nombre accesible y en el título. -->
     <UChip
         v-if="visible"
-        :text="texto"
         :show="Boolean(texto)"
-        size="3xl"
-        color="primary"
+        size="md"
+        color="secondary"
         inset
+        :ui="{ base: PUNTO_FLOTANTE }"
     >
         <!-- Sin UTooltip: va en la barra de todas las pantallas y las pruebas las montan sin UApp. -->
         <UButton
@@ -26,7 +27,8 @@ const etiqueta = computed(() => (texto.value ? `Avisos: ${texto.value} comproban
             icon="i-lucide-bell"
             color="neutral"
             variant="ghost"
-            :title="texto ? 'Comprobantes por verificar' : 'Nada pendiente de verificar'"
+            class="boton-flotante boton-circulo"
+            :title="texto ? `${texto} comprobantes por verificar` : 'Nada pendiente de verificar'"
             :aria-label="etiqueta"
             data-prueba="avisos"
         />

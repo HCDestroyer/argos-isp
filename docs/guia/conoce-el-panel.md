@@ -10,10 +10,10 @@ El panel es la página donde trabaja el personal del ISP. Funciona en la computa
 
 ## El menú
 
-A la izquierda, como una isla. Tiene dos formas y cada persona elige la suya (el panel la recuerda): el botón **‹ / ›** del propio menú o el de plegar en la barra de arriba la cambian.
+A la izquierda, como una isla. Tiene dos formas y cada persona elige la suya (el panel la recuerda): el botón redondo **‹ / ›** sobre el borde derecho del menú, a la altura del logo, la cambia (está en el mismo lugar en las dos formas).
 
 - **Compacto** (la de fábrica): un icono con su nombre corto por área: **Inicio**, **Día a día**, **Facturas**, **Red**, **Inventario**, **Lealtad**, **Finanzas**, **Contable**, **Reportes** y, abajo, **Ajustes**. Al tocar un área se abre a su lado un menú con sus secciones agrupadas y sus contadores (por ejemplo, **Comprobantes 4** o **Caja Abierta**). Se recorre también con el teclado: Tab, flechas, Enter y Esc.
-- **Expandido**: los nombres completos, con cada área como un grupo que se abre y se cierra; el del área donde estás se abre solo. Si dejas el puntero sobre una sección, aparece su descripción.
+- **Expandido**: los nombres completos, con cada área como un grupo que se abre y se cierra; el del área donde estás se abre solo. **Ajustes** queda abajo, aparte, como en el compacto. Si dejas el puntero sobre una sección, aparece su descripción.
 - Un punto junto a un área, o un número junto a una sección, avisa que hay algo pendiente.
 - En el teléfono el menú se abre con el botón de tres rayas de arriba, con los nombres completos.
 
@@ -21,7 +21,7 @@ Las áreas: **Día a día** (Cobrar, Caja, Clientes, Servicios, Promesas, Compro
 
 ## Accesos rápidos
 
-En la barra de arriba, a un clic: tus dos primeros accesos y **Más** (el rayo) con el resto, sus contadores y sus atajos **Alt + 1** a **Alt + 9**. **Personalizar mis accesos** elige hasta 12 y los ordena; **Usar los de mi rol** vuelve a los de fábrica (por ejemplo, el cajero: Cobrar, Caja, Clientes y Comprobantes). El **Inicio** muestra los mismos.
+Arriba, a un clic: tus dos primeros accesos y **Más** (el círculo con tres puntos) con el resto, sus contadores y sus atajos **Alt + 1** a **Alt + 9**. **Personalizar mis accesos** elige hasta 12 y los ordena; **Usar los de mi rol** vuelve a los de fábrica (por ejemplo, el cajero: Cobrar, Caja, Clientes y Comprobantes). El **Inicio** muestra los mismos.
 
 ## El buscador
 
@@ -31,7 +31,7 @@ Para buscar **clientes** usa la pantalla **Clientes** o **Cobrar**: buscan por n
 
 ## El encabezado de cada pantalla
 
-Las pantallas del menú empiezan con las migas (por dónde llegaste, por ejemplo «Inicio › Facturación › Facturas»), el **título** con el botón **?** de ayuda, una frase que dice para qué sirve y, a la derecha, sus botones (por ejemplo, «Nuevo cliente»). Las fichas (un cliente, un servicio, una factura) tienen el título en la barra de arriba y, debajo, las migas hasta su lista con los botones de la ficha a la derecha.
+Las pantallas del menú empiezan con las migas (por dónde llegaste, por ejemplo «Inicio › Facturación › Facturas»), el **título** con el botón **?** de ayuda, una frase que dice para qué sirve y, a la derecha, sus botones (por ejemplo, «Nuevo cliente»). Las fichas (un cliente, un servicio, una factura) empiezan igual: las migas hasta su lista, el título y, a la derecha, los botones de la ficha. El título nunca va en la barra de arriba.
 
 ## Listas: vista rápida y clic derecho
 
@@ -39,16 +39,16 @@ En **Clientes** y **Servicios**, un clic en la fila (fuera del nombre) abre la *
 
 ## La barra de arriba
 
-Liviana, en pastillas: a la izquierda el buscador y los accesos rápidos; a la derecha solo:
+No es una barra: cada botón flota suelto. A la izquierda, lo que haces: el buscador, tus dos accesos rápidos (**Cobrar** va en verde) y **Más** (el círculo con tres puntos). A la derecha, lo que vigilas, cada uno en un círculo:
 
 - **La caja** (si tienes `cajas.ver`): un icono de billetera con un punto verde si tu caja está abierta o gris si está cerrada. Al tocarlo dice qué caja y desde cuándo está abierta, con el fondo inicial, y ofrece **Ir a la caja** y **Cerrar caja…** o **Abrir caja…** (según tus permisos).
 - **El estado del sistema** (solo administradores): un icono con un punto si algo del servidor hay que revisar; lleva a **Salud del sistema**.
-- **La campana de avisos**: el número son los comprobantes por verificar.
-- **Tu usuario**: tu nombre, tu rol y la empresa activa. Su menú tiene la **Empresa** (si trabajas con varias), el **Tema** (claro, oscuro o como el equipo), **Mi cuenta**, **Ayuda y atajos**, **Qué cambió** y, aparte, **Cerrar sesión**.
+- **La campana de avisos**: un punto cian cuando hay comprobantes por verificar; al pasar el puntero dice cuántos.
+- **Tu cuenta**: un círculo con tus iniciales. Su menú muestra tu nombre, tu rol y tu correo, y tiene la **Empresa** (si trabajas con varias), el **Tema** (claro, oscuro o como el equipo), **Mi cuenta**, **Ayuda y atajos**, **Qué cambió** y, aparte, **Cerrar sesión**.
 
 ## La empresa activa
 
-Si tu usuario trabaja con varias empresas (varios NIT), la eliges en el menú de tu usuario (arriba a la derecha) → **Empresa**; la activa se ve bajo tu nombre.
+Si tu usuario trabaja con varias empresas (varios NIT), la eliges en el menú de tu usuario (arriba a la derecha) → **Empresa**; la activa lleva la marca y su nombre se ve en ese mismo menú.
 
 - Todo lo que ves y creas es de la empresa elegida: clientes, servicios, facturas, cajas, anuncios.
 - **«Todas las empresas»** muestra todo junto (el consolidado). Solo aparece si tu usuario tiene alcance sobre todas. Algunas cosas no se pueden crear así, como un anuncio: el panel te pide elegir una empresa.
