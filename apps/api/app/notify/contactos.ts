@@ -1,10 +1,11 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import { listarContactosCliente, verContacto, type ContactoVista } from '#core/contactos'
+import { NoEncontrado } from '#shared/errores'
 
 /**
  * Contactos del cliente para notify (contrato Iris 0.10.0 §3.5, A42). Los contactos son de A1
- * (`core.contactos_cliente`, todavía no en main): notify los lee **solo por esta interfaz**, que A1
- * registra con `fijarProveedorContactos` al arrancar. Sin proveedor, no hay contactos (los avisos
- * salen solo al titular, como antes).
+ * (`core.contactos_cliente`): notify los lee **solo por esta interfaz**; el proveedor por defecto es
+ * el del núcleo (`#core/contactos`, `PROVEEDOR_CONTACTOS_NUCLEO`).
  *
  * Para qué los usa notify:
  * - **Avisos de cobro** (`factura.vencida`, `recordatorio.*` y el corte por falta de pago): también
@@ -43,16 +44,52 @@ export interface ProveedorContactos {
     contacto(cliente: QueryClientContract, contactoId: number): Promise<ContactoAviso | null>
 }
 
-const SIN_CONTACTOS: ProveedorContactos = {
-    contactosDe: async () => [],
-    contacto: async () => null,
+/** `ContactoVista` del núcleo → lo que notify necesita. Los números adicionales del titular no cuentan. */
+function deNucleo(c: ContactoVista): ContactoAviso {
+    return {
+        contacto_id: c.contacto_id,
+        cliente_id: c.cliente_id,
+        nombre: c.nombre,
+        relacion: c.relacion,
+        es_titular: c.es_titular,
+        servicios: c.servicios,
+        permisos: c.permisos,
+        telefonos: c.telefonos
+            .filter((t) => !t.adicional)
+            .map((t) => ({ numero: t.numero, whatsapp: t.whatsapp, principal: t.principal })),
+        // el contrato (§3.5) no da correo ni Telegram a los contactos: hoy solo WhatsApp, por Iris
+        email: null,
+        telegram_chat_id: null,
+    }
 }
 
-let proveedor: ProveedorContactos = SIN_CONTACTOS
+/**
+ * Lectura de los contactos del núcleo (A1, `#core/contactos`): solo contactos vigentes (uno quitado
+ * no avisa). Lee con la conexión de la transacción del aviso, así ve el contacto recién creado.
+ */
+export const PROVEEDOR_CONTACTOS_NUCLEO: ProveedorContactos = {
+    contactosDe: async (cliente, clienteId) => {
+        const contactos = await listarContactosCliente(clienteId, cliente)
+        return contactos.map(deNucleo)
+    },
+    contacto: async (cliente, contactoId) => {
+        try {
+            return deNucleo(await verContacto(contactoId, cliente))
+        } catch (error) {
+            if (error instanceof NoEncontrado) return null
+            throw error
+        }
+    },
+}
 
-/** A1 registra aquí su lectura de `core.contactos_cliente`; sin argumento vuelve a «sin contactos». */
+let proveedor: ProveedorContactos = PROVEEDOR_CONTACTOS_NUCLEO
+
+/**
+ * Cambia el proveedor de contactos (las pruebas usan uno en memoria); sin argumento vuelve al del
+ * núcleo (`PROVEEDOR_CONTACTOS_NUCLEO`), que es el registrado por defecto.
+ */
 export function fijarProveedorContactos(p?: ProveedorContactos) {
-    proveedor = p ?? SIN_CONTACTOS
+    proveedor = p ?? PROVEEDOR_CONTACTOS_NUCLEO
 }
 
 export function proveedorContactos(): ProveedorContactos {
@@ -135,10 +172,11 @@ export async function avisoAlTitular(
         const campos = Array.isArray(payload.campos) ? payload.campos : []
         const contactoId = entero(payload.contacto_id)
         if (!contactoId) return null
+        const numerosNuevos = Number(payload.numeros_agregados ?? 0) > 0
         const plantilla =
             accion === 'creado'
                 ? EVENTO_CONTACTO_AGREGADO
-                : accion === 'editado' && campos.includes('telefonos')
+                : accion === 'editado' && (numerosNuevos || campos.includes('telefonos'))
                   ? EVENTO_CONTACTO_TELEFONO
                   : null
         if (!plantilla) return null

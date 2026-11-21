@@ -80,8 +80,11 @@ Argos no habla con Meta: el canal `whatsapp` pide el aviso a Iris (`POST <iris>/
 ## Contactos del cliente y avisos al titular (contrato Iris 0.10.0 §3.5, 0.12.0 §3.10)
 
 Los contactos son de A1 (`core.contactos_cliente`, A42). notify **no lee la tabla**: usa la interfaz
-`ProveedorContactos` de `contactos.ts` (`contactosDe(cliente_id)`, `contacto(contacto_id)`), que A1
-registra con `fijarProveedorContactos` al arrancar. Sin proveedor no hay contactos y todo sigue igual.
+`ProveedorContactos` de `contactos.ts` (`contactosDe(cliente_id)`, `contacto(contacto_id)`). El
+proveedor por defecto es `PROVEEDOR_CONTACTOS_NUCLEO` (`listarContactosCliente` y `verContacto` de
+`#core/contactos`, con la conexión de la transacción del aviso); las pruebas lo cambian con
+`fijarProveedorContactos`. Los contactos del núcleo no tienen correo ni Telegram (§3.5): hoy los avisos
+de cobro a contactos salen solo por WhatsApp, desde Iris.
 
 - **Avisos de cobro a contactos** (`factura.vencida`, `recordatorio.*` y `servicio.estado_cambiado`
   por facturas vencidas; `esAvisoDeCobro`): además del titular, a cada contacto no titular con

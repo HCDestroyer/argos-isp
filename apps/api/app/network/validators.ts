@@ -652,6 +652,13 @@ export const listarPlanesValidator = vine.compile(
         activo: vine.boolean().optional(),
         router_id: idEntidad().optional(),
         tipo: vine.enum(TIPOS_PLAN).optional(),
+        modo: vine
+            .enum(['residencial', 'empresarial'] as const)
+            .optional()
+            .meta({
+                description:
+                    'Contrato Iris 0.10.0 (A40): solo los planes aplicables a ese modo, activos y (con router_id) asignados a todos los routers o a ese router. empresarial incluye dedicado',
+            }),
     }),
 )
 

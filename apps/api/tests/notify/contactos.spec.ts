@@ -3,6 +3,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
 import { contextoPrueba } from '#tests/ayudas'
+import CrearContactoCliente from '#core/actions/crear_contacto_cliente'
 import RegistrarConsentimientoWhatsapp from '#notify/actions/registrar_consentimiento_whatsapp'
 import { ConsumidorNotify, EVENTOS_NOTIFICABLES } from '#notify/consumidor'
 import { entregarConsentimientosIris, fijarFetchConsentimientosIris } from '#notify/consentimientos'
@@ -148,6 +149,40 @@ test.group('notify · contactos del cliente', (group) => {
             }),
             0,
         )
+    })
+
+    test('con el proveedor del núcleo (A1): el alta real de un contacto avisa al titular enmascarado', async ({
+        assert,
+    }) => {
+        fijarProveedorContactos()
+        const titular = await crearCliente({ email: 'nucleo@prueba.local' })
+        await crearServicio(titular)
+        const creado = await new CrearContactoCliente().execute(
+            {
+                cliente_id: titular,
+                nombre: 'Rosa Pérez',
+                relacion: 'familiar',
+                telefonos: [{ numero: '+50255998877', whatsapp: true, principal: true }],
+            },
+            contextoPrueba(),
+        )
+        const fila = await db
+            .from('audit.outbox')
+            .where('evento', 'cliente.contactos_cambiados')
+            .whereRaw(`(payload->>'contacto_id')::bigint = ?`, [creado.contacto_id])
+            .firstOrFail()
+        const payload = typeof fila.payload === 'string' ? JSON.parse(fila.payload) : fila.payload
+        await new ConsumidorNotify(new ColaFalsa()).procesar({
+            id: Number(fila.id),
+            evento: 'cliente.contactos_cambiados',
+            payload,
+        })
+        const envios = await db.from('notify.envios').where('origen', `outbox:${fila.id}`)
+        assert.lengthOf(envios, 1)
+        assert.equal(envios[0].evento, 'contacto.agregado')
+        assert.equal(envios[0].destino, 'nucleo@prueba.local')
+        assert.include(envios[0].cuerpo, '+502 ****-8877')
+        assert.notInclude(envios[0].cuerpo, '55998877')
     })
 
     test('servicio a tu nombre (A39, existente) e intento de recuperación (A48) con la serie enmascarada', async ({

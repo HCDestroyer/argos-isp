@@ -191,7 +191,7 @@ test.group('integraciones · iris · webhooks 0.9.0 a 0.12.0', (group) => {
         assert.isNull(await reenviar(await outboxDe('pago.registrado', 'pago_id', otro.id)))
     })
 
-    test('A42: cliente.contactos_cambiados con 0.10.0, sin números; persona_cliente_id solo con 0.10.1', async ({
+    test('A42: cliente.contactos_cambiados con 0.10.0, sin números; persona_cliente_id con valor solo con 0.10.1', async ({
         assert,
     }) => {
         const muestra = {
@@ -213,6 +213,7 @@ test.group('integraciones · iris · webhooks 0.9.0 a 0.12.0', (group) => {
             contacto_id: 77,
             accion: 'editado',
             campos: ['telefonos', 'permisos'],
+            persona_cliente_id: null,
         })
         await fijarConector('0.10.1')
         const p2 = await reenviar(await eventoOutbox('cliente.contactos_cambiados', muestra))
@@ -251,6 +252,9 @@ test.group('integraciones · iris · webhooks 0.9.0 a 0.12.0', (group) => {
             motivo_codigo: 'menor_de_edad',
             origen_tipo: 'iris_orden',
             origen_id: '9130',
+            // A45 (0.10.0): código y nombre del servicio (null: el servicio de muestra no existe)
+            servicio_codigo: null,
+            servicio_nombre: null,
         })
     })
 
@@ -295,6 +299,8 @@ test.group('integraciones · iris · webhooks 0.9.0 a 0.12.0', (group) => {
             destino_sale: 'revision',
             origen: 'iris_orden',
             origen_id: '9130',
+            servicio_codigo: null,
+            servicio_nombre: null,
         })
         assert.deepEqual(
             await reenviar(await eventoOutbox('inventario.unidad_estado_cambiado', estadoUnidad)),

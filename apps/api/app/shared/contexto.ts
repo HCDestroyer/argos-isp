@@ -93,8 +93,11 @@ export interface ViaActuacion {
 export interface OrigenIris {
     /** `asistente_ia` o `usuario:<id en Iris>` */
     actor: string
-    /** id de la conversación en Iris */
-    conversacion: string
+    /**
+     * id de la conversación en Iris. null en las rutas que solo exigen `X-Iris-Actor` (contactos y
+     * la instalación de §3.4, contrato Iris 0.10.0)
+     */
+    conversacion: string | null
 }
 
 /** ¿La acción la pidió el asistente de IA de Iris? (canal de la promesa `ia`; `operador` si no). */

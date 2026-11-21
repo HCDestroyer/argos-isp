@@ -16,8 +16,16 @@ export const PERMISOS = {
     'clientes.quitar_responsable_pago': 'Quitar el responsable de pago de un cliente',
     'clientes.verificar_identidad':
         'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
+    'clientes.registrar_identidad':
+        'Registrar la identidad del titular (foto del documento, número y nombre; contrato Iris 0.10.0 §3.4.3)',
+    'clientes.ver_identidad':
+        'Ver la identidad del titular (número y foto del documento); cada vista queda auditada',
     'clientes.restaurar_contrasena_portal':
         'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
+    'contactos.buscar':
+        'Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)',
+    'contactos.gestionar':
+        'Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -42,6 +50,14 @@ export const PERMISOS = {
         'Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió',
     'servicios.activar_instalacion':
         'Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)',
+    'servicios.reservar_ip':
+        'Reservar en sitio la IP de un servicio pendiente de instalación (IP fija o amarre; vence a los 30 días)',
+    'servicios.cambiar_plan_pendiente':
+        'Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)',
+    'servicios.completar_datos':
+        'Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio',
+    'servicios.cambiar_titular':
+        'Pasar un servicio pendiente de instalación a otro titular (Argos decide si es un cliente existente por documento y nombre)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -444,6 +460,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         descripcion: 'Cobro en caja: pagos, turnos y promesas',
         permisos: [
             'clientes.ver',
+            // caja: cuentas a cargo de un contacto (contrato Iris 0.10.1 §3.8)
+            'contactos.buscar',
             'clientes.estado_cuenta',
             'clientes.asignar_responsable_pago',
             'clientes.quitar_responsable_pago',
@@ -484,6 +502,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         descripcion: 'Atención al cliente y gestión de servicios',
         permisos: [
             'clientes.ver',
+            'contactos.buscar',
+            'contactos.gestionar',
             'clientes.crear',
             'clientes.editar',
             'notificaciones.registrar_consentimiento',
@@ -503,6 +523,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.limitar',
             'servicios.quitar_limite',
             'servicios.activar_instalacion',
+            'servicios.reservar_ip',
+            'servicios.cambiar_plan_pendiente',
+            'clientes.registrar_identidad',
+            'servicios.completar_datos',
+            'servicios.cambiar_titular',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -549,6 +574,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.editar',
             // instala lo que vende Iris (contratos/instalacion.md): tiene servicios.crear
             'servicios.activar_instalacion',
+            'servicios.reservar_ip',
+            'servicios.cambiar_plan_pendiente',
+            'clientes.registrar_identidad',
+            'servicios.completar_datos',
+            'servicios.cambiar_titular',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
