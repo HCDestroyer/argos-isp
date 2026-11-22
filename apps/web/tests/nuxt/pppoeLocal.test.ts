@@ -66,6 +66,24 @@ function elegir(contenedor: string, valor: string | number, raiz: ParentNode = d
     opcion!.click()
 }
 
+/** Alta de servicio: abre el buscador de routers (`ServicioRouterSelector`) y elige uno. */
+async function elegirRouterAlta(raiz: ParentNode, id: number) {
+    const disparador = await esperar(() => {
+        const boton = raiz.querySelector<HTMLElement>('[data-prueba="selector-router-menu"]')
+        expect(boton).not.toBeNull()
+        return boton!
+    })
+    if (!document.body.querySelector('[role="option"]')) {
+        disparador.click()
+    }
+    const opcion = await esperar(() => {
+        const elemento = document.body.querySelector<HTMLElement>(`[data-router-id="${id}"]`)?.closest<HTMLElement>('[role="option"]')
+        expect(elemento, `router ${id}`).toBeTruthy()
+        return elemento!
+    })
+    opcion.click()
+}
+
 async function crearPppoe(routerId: number): Promise<Servicio> {
     const resultado = await useServicios().crear({ cliente_id: bd.clientes[0]!.id, router_id: routerId, plan_id: 1, ipv6_modo: 'ninguno', plantilla_facturacion_id: bd.plantillas[0]!.id }, nuevaClaveIdempotencia())
     if (!resultado.ok) {
@@ -91,8 +109,7 @@ describe('PPPoE sin RADIUS', () => {
             const router = routerApi(95)
             const wrapper = await mountSuspended(ServicioAltaFormulario, { props: { cliente: structuredClone(bd.clientes[0]!), compacto: true } })
             const raiz = wrapper.element.parentElement ?? wrapper.element
-            await esperar(() => expect(radio('[data-prueba="alta-servicio"]', router.id, raiz)).not.toBeNull())
-            elegir('[data-prueba="alta-servicio"]', router.id, raiz)
+            await elegirRouterAlta(raiz, router.id)
             await esperar(() => expect(raiz.querySelector('[data-prueba="router-sin-radius"]')).not.toBeNull())
             // El tipo lo define el router (`contratos/tipo-conexion-router.md`): solo lectura.
             expect(raiz.querySelector('[data-prueba="tipo-conexion"]')!.textContent).toContain('PPPoE')
@@ -107,9 +124,15 @@ describe('PPPoE sin RADIUS', () => {
             const wisp = routerApi(94, { nombre: 'RB-WISP', api_usuario: null, tiene_api_password: false, tipo_conexion: 'ip_estatica' })
             const wrapper = await mountSuspended(enApp(ServicioAltaFormulario, { cliente: structuredClone(bd.clientes[0]!), compacto: true }))
             const raiz = wrapper.element.parentElement ?? wrapper.element
-            await esperar(() => expect(radio('[data-prueba="alta-servicio"]', router.id, raiz)).not.toBeNull())
-            expect(raiz.textContent).toContain('sin RADIUS (sin credenciales de la API)')
-            elegir('[data-prueba="alta-servicio"]', router.id, raiz)
+            // La opción del buscador dice que el router no usa RADIUS y que le faltan las credenciales.
+            const disparador = await esperar(() => {
+                const boton = raiz.querySelector('[data-prueba="selector-router-menu"]') as HTMLElement | null
+                expect(boton).not.toBeNull()
+                return boton!
+            })
+            disparador.click()
+            await esperar(() => expect(document.body.querySelector(`[data-router-id="${router.id}"]`)?.textContent).toContain('sin RADIUS (sin credenciales de la API)'))
+            await elegirRouterAlta(raiz, router.id)
             const aviso = await esperar(() => {
                 const elemento = raiz.querySelector('[data-prueba="pppoe-local-requiere-api"]')
                 expect(elemento).not.toBeNull()
@@ -118,7 +141,7 @@ describe('PPPoE sin RADIUS', () => {
             expect(aviso.textContent).toContain('El router no tiene credenciales de la API: agrégalas en la ficha del router.')
             expect(aviso.querySelector('a')?.getAttribute('href')).toBe(`/routers/${router.id}`)
             // Un router IP estática no necesita las credenciales para PPPoE: el aviso se va.
-            elegir('[data-prueba="alta-servicio"]', wisp.id, raiz)
+            await elegirRouterAlta(raiz, wisp.id)
             await esperar(() => expect(raiz.querySelector('[data-prueba="pppoe-local-requiere-api"]')).toBeNull())
             expect(raiz.querySelector('[data-prueba="tipo-conexion"]')!.textContent).toContain('IP estática')
         })

@@ -28,6 +28,7 @@ const PASOS: { id: PasoAlta, nombre: string, detalle: string }[] = [
 
 const cliente = shallowRef<Cliente | null>(null)
 const pasoServicio = ref<string>('conexion')
+const resumenServicio = shallowRef<ResumenAltaServicio | null>(null)
 const conServicio = computed(() => puede('servicios.crear'))
 
 const pasoAlta = computed<PasoAlta>(() => {
@@ -195,13 +196,14 @@ async function cerrar() {
                             {{ pasoAlta === 'servicio' ? '¿Qué servicio va a tener?' : '¿Cómo se le cobra?' }}
                         </h2>
                         <p class="text-sm text-muted">
-                            {{ pasoAlta === 'servicio' ? 'Elige el router y el plan. Usuario, contraseña e IP se generan solos.' : 'Instalación, plantilla de facturación y el resumen antes de crear.' }}
+                            {{ pasoAlta === 'servicio' ? 'Elige el router y el plan. La IP es automática salvo que elijas la red o la escribas.' : 'Instalación, plantilla de facturación y el resumen antes de crear.' }}
                         </p>
                     </div>
                     <ServicioAltaFormulario
                         :cliente="cliente"
                         pasos-externos
                         @paso="pasoServicio = $event"
+                        @resumen="resumenServicio = $event"
                         @creado="alCrearServicio"
                         @cancelar="cerrar"
                     />
@@ -219,7 +221,24 @@ async function cerrar() {
                     size="sm"
                 />
                 <span class="truncate font-semibold text-highlighted">{{ cliente.nombre }}</span>
-                <span class="font-mono text-xs text-muted">{{ cliente.codigo }}</span>
+                <span class="hidden font-mono text-xs text-muted sm:inline">{{ cliente.codigo }}</span>
+                <template v-if="resumenServicio?.plan">
+                    <span
+                        class="text-dimmed"
+                        aria-hidden="true"
+                    >·</span>
+                    <span class="truncate text-muted">{{ resumenServicio.plan }}<template v-if="resumenServicio.precio"> <span class="font-semibold text-highlighted tabular-nums">{{ formatearQuetzales(resumenServicio.precio) }}/mes</span></template></span>
+                </template>
+                <template v-if="resumenServicio?.router">
+                    <span
+                        class="text-dimmed"
+                        aria-hidden="true"
+                    >·</span>
+                    <span
+                        class="truncate text-muted"
+                        data-prueba="linea-resumen-ip"
+                    >IP <span class="font-semibold text-highlighted">{{ resumenServicio.ip }}</span></span>
+                </template>
             </footer>
         </section>
     </PanelPagina>

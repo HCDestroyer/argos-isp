@@ -26,27 +26,22 @@ El alta tiene pasos numerados arriba. Puedes volver a un paso anterior haciendo 
 
 Solo si abriste el alta desde **Servicios**. Busca al cliente por nombre, NIT, teléfono, usuario PPP o IP.
 
-### 2. Conexión: router y plan
+### 2. Conexión: router, plan e IP
 
-- **Router:** donde se conecta el cliente. Define qué planes, redes y pools hay disponibles. Si solo hay un router activo, ya viene elegido. Cada opción dice su dirección, cómo controla la velocidad y si funciona sin RADIUS.
+- **Router:** donde se conecta el cliente. Define qué planes, redes y pools hay disponibles. Si solo hay un router activo, ya viene elegido. Arriba salen los **sugeridos** (los de la zona del cliente y los últimos que usaste; con 4 routers o menos, todos) para elegir de un toque; los demás se buscan por nombre, zona o tipo en la lista (en el teléfono, a pantalla completa). Cada opción dice su zona (o dirección), su tipo de conexión, si funciona sin RADIUS, si está en línea y cuántas IP libres le quedan. Un router sin IP libres (o, sin PPPoE, sin redes IPv4) aparece deshabilitado con el motivo.
 - **Plan:** solo aparecen los planes disponibles en ese router, con su precio y velocidades. Si solo hay uno, ya viene elegido.
 - **Tipo de conexión:** lo define el router (PPPoE, IP estática o DHCP con IP fija); aquí solo se muestra. Se cambia en la [ficha del router](../red/ficha-del-router.md#tipo-de-conexion).
 - **Empresa que factura:** solo si trabajas con más de una empresa. Viene sugerida (la de la zona del cliente, si no la del router, si no tu empresa activa) y puedes elegir otra de las tuyas. Las facturas del servicio salen con el NIT de esa empresa.
 
-Si el router no usa RADIUS, verás un aviso: el usuario PPPoE se crea directamente en el MikroTik y los cambios rigen cuando el cliente se reconecta.
+**IP del servicio**, debajo del plan, con tres opciones:
 
-### 3. Red: IPv4, IPv6 y acceso
+- **Automática** (de fábrica): al crear el servicio se toma la siguiente IP libre de las redes del router. En PPPoE con «Pendiente de instalación», se asigna al activar.
+- **Elegir red:** las redes del router con cuántas IP les quedan; se toma la siguiente libre de la elegida. Una red llena no se puede elegir.
+- **Escribir IP:** para una IP pública o para reglas por IP. Escribe la IP: la red se deduce sola y, si no cae en ninguna red del router, lo dice. Con el permiso `ip.resolver` verás «Libre» u «Ocupada por S-…» antes de guardar; si al crear otra la tomó, el error aparece en el mismo campo.
 
-**Servidor PPPoE.** Si el router tiene varios (uno por VLAN), elige por dónde entra el cliente, o deja «Que lo elija Argos por la red». Con uno solo, ya viene elegido. Debajo se ve el gateway que usará la sesión.
+Con IP estática o DHCP fija la IPv4 es obligatoria: «Automática» la reserva al guardar.
 
-**IPv4.**
-
-- **Automática** (por defecto): al crear el servicio se toma la siguiente IP libre de las redes del router. Puedes elegir una red en particular o dejar «Cualquier red del router».
-- **IP fija:** para una IP pública o para reglas por IP. Eliges la red y escribes la IP, que debe caer dentro de esa red.
-
-Con IP estática o DHCP fija la IPv4 es obligatoria.
-
-**IPv6.** Por defecto se muestra lo recomendado según el plan: «Automática por servicio», que le da al cliente un /64 para el enlace con el router y un prefijo para su red (/56 o /48, según el plan) tomados de los pools IPv6 del router. «Cambiar» abre todos los modos:
+**Avanzado: IPv6** (plegado). Por defecto se muestra lo recomendado según el plan: «Automática por servicio», que le da al cliente un /64 para el enlace con el router y un prefijo para su red (/56 o /48, según el plan) tomados de los pools IPv6 del router. «Cambiar» abre todos los modos:
 
 | Modo                    | Para qué                                                                                            |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
@@ -57,6 +52,12 @@ Con IP estática o DHCP fija la IPv4 es obligatoria.
 | Sin IPv6                | Solo IPv4.                                                                                          |
 
 Si el plan es solo IPv4, los modos IPv6 aparecen deshabilitados. Si el router no tiene bloques IPv6, el aviso lo dice y el servicio funciona solo con IPv4 hasta que registres un bloque.
+
+Si el router no usa RADIUS, verás un aviso: el usuario PPPoE se crea directamente en el MikroTik y los cambios rigen cuando el cliente se reconecta.
+
+### 3. Acceso PPPoE o equipo
+
+**Servidor PPPoE.** Si el router tiene varios (uno por VLAN), elige por dónde entra el cliente, o deja «Que lo elija Argos por la red». Con uno solo, ya viene elegido. Debajo se ve el gateway que usará la sesión.
 
 **Credenciales PPPoE** (solo PPPoE).
 
