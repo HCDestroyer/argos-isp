@@ -422,7 +422,6 @@ async function cobrarTramoComoCargo(
             precio: aTexto(servicio.precio),
             plan_id: servicio.plan_id,
             plan_nombre: servicio.plan_nombre,
-            ...(servicio.promocion_precio ? { promocion_velocidad: servicio.promocion_precio } : {}),
             emision_manual: {
                 motivo,
                 tramo_inicial: {

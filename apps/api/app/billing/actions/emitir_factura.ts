@@ -16,6 +16,7 @@ import { aplicarDescuentos, lineaConIva, totalesDe, type LineaCalculada } from '
 import { bloquearCliente } from '#billing/cobros'
 import { emitirDocumento } from '#billing/emision'
 import { aplicarCanjesEmitidos, descuentosParaFactura } from '#lealtad/emision'
+import { cargosPromocion, lineaPromocion, registrarCargosPromocion } from '#billing/promociones_velocidad'
 import {
     MOTIVO_CANJE,
     MOTIVO_PROMOCION,
@@ -42,6 +43,9 @@ import {
  *   cobrarse (`cobrado_desde`) se cobra según `primer_periodo`: `prorrateado`, los días desde
  *   `cobrado_desde` hasta el fin de ese periodo en la siguiente factura (o en la de ese periodo si aún
  *   no se emitió); `sin_costo`, nada. Cada línea guarda el periodo que cobra (`adicional_periodo`).
+ * - Promociones de velocidad con `precio` (`#billing/promociones_velocidad`): línea propia por la
+ *   diferencia proporcional de los días de sus tramos (sin `precio`, gratis); cada `(tramo, periodo)`
+ *   cobrado queda en `billing.promociones_cargos` y en `reglas_snapshot.promociones_velocidad`.
  * - **Nunca una factura de Q0** (decisión del PM, 19 oct): si los descuentos (mes gratis, canje,
  *   descuento del 100 %) la dejan en cero, el periodo se registra como **bonificación**
  *   (`#billing/bonificaciones`) con el motivo «Canje de lealtad» (o el pedido) y sus canjes quedan
@@ -198,6 +202,9 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         }
         // adicionales `cobrado` (contrato adicionales.md; decisiones del PM 2 y 3)
         lineas.push(...(await lineasAdicionales(t, servicio, config, input.periodo)))
+        // promociones de velocidad con `precio`: diferencia proporcional por los días de sus tramos
+        const promociones = await cargosPromocion(t, servicio, config, input.periodo)
+        lineas.push(...promociones.map((c) => lineaPromocion(c, periodo)))
         const positivas = lineas.filter((linea) => dec(linea.total).gt(0))
         if (totalesDe(positivas).total.lte(0)) {
             return { factura_id: null, creada: false, motivo: 'monto_cero' }
@@ -229,7 +236,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             precio: aTexto(servicio.precio),
             plan_id: servicio.plan_id,
             plan_nombre: servicio.plan_nombre,
-            ...(servicio.promocion_precio ? { promocion_velocidad: servicio.promocion_precio } : {}),
+            ...(promociones.length > 0 ? { promociones_velocidad: promociones } : {}),
             periodo: input.periodo,
             ...(input.manual
                 ? {
@@ -282,6 +289,11 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         })
         if (!emision.creada) return { factura_id: emision.factura_id, creada: false, motivo: 'ya_existe' }
         const facturaId = emision.factura_id!
+        await registrarCargosPromocion(
+            t,
+            { empresa_id: servicio.empresa_id, servicio_id: servicio.id, factura_id: facturaId },
+            promociones,
+        )
         await aplicarCanjesEmitidos(t, { factura_id: facturaId }, lealtad.canjes)
         return { factura_id: facturaId, creada: true, motivo: null, monto_calculado: aTexto(calculado) }
     }
