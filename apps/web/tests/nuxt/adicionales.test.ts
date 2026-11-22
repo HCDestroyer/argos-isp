@@ -262,8 +262,9 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
 
         it('lista de planes con su tipo y catálogo y motivos con sus estados', async () => {
             const planes = await mountSuspended(enApp(PaginaPlanes), { route: '/planes' })
-            await esperar(() => expect(planes.findAll('[data-tipo-plan]').length).toBe(4))
-            expect(planes.find('[data-tipo-plan="empresarial"]').text()).toBe('Empresarial')
+            // El tablero RedPlanes repite el tipo en el plan elegido de al lado: se cuentan las filas de la tabla.
+            await esperar(() => expect(planes.findAll('table [data-tipo-plan]').length).toBe(4))
+            expect(planes.find('table [data-tipo-plan="empresarial"]').text()).toBe('Empresarial')
             planes.unmount()
 
             const catalogo = await mountSuspended(enApp(PaginaAdicionales), { route: '/adicionales' })
@@ -280,7 +281,8 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
 
         it('guardar un plan dedicado asimétrico avisa con las advertencias, sin error', async () => {
             const plan = bd.planes.find(p => p.id === 1)
-            const vista = await mountSuspended(enApp(PlanFormulario, { plan: { ...plan, tipo: 'dedicado' }, open: true }))
+            // Tablero RedPlanForm: el formulario va en su página (`/planes/:id/editar`), ya no en un modal.
+            const vista = await mountSuspended(enApp(PlanFormulario, { plan: { ...plan, tipo: 'dedicado' } }), { attachTo: document.body })
             await esperar(() => expect(document.body.querySelector('#form-plan')).not.toBeNull())
             ;(document.body.querySelector('#form-plan') as HTMLFormElement).requestSubmit()
             await esperar(() => expect(useToast().toasts.value.map(t => t.title)).toContain('Plan guardado con advertencias'))
