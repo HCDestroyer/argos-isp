@@ -43,6 +43,13 @@ async function copiar(numero: string) {
             ? 'Deposita a cualquiera de estas cuentas y guarda tu comprobante.'
             : 'Así puedes pagar tu saldo.'"
     >
+        <template #title>
+            <PortalTituloModal
+                :texto="empresa ? `Datos para depósito · ${empresa.nombre}` : 'Datos para depósito'"
+                :icono="'i-lucide-landmark'"
+                :tono="'primary'"
+            />
+        </template>
         <template #body>
             <div
                 v-if="cargando"
@@ -69,7 +76,7 @@ async function copiar(numero: string) {
                 <div
                     v-for="cuenta in cuentas"
                     :key="`${cuenta.banco}-${cuenta.numero}`"
-                    class="rounded-lg border border-default p-3"
+                    class="ax-lista p-4"
                     data-testid="cuenta-deposito"
                 >
                     <div class="flex items-start justify-between gap-3">
@@ -80,7 +87,10 @@ async function copiar(numero: string) {
                             <p class="text-sm text-muted">
                                 {{ cuenta.alias }} · {{ cuenta.moneda === 'USD' ? 'Dólares' : 'Quetzales' }}
                             </p>
-                            <p class="mt-1 font-mono text-lg tabular-nums text-default break-all">
+                            <p
+                                class="mt-1 font-mono text-lg tabular-nums text-default break-all"
+                                data-cursor="copy"
+                            >
                                 {{ cuenta.numero }}
                             </p>
                         </div>
@@ -88,6 +98,9 @@ async function copiar(numero: string) {
                             icon="i-lucide-copy"
                             color="neutral"
                             variant="ghost"
+                            class="ax-pista rounded-full"
+                            data-pista="Copiar"
+                            data-cursor="copy"
                             :aria-label="`Copiar número de cuenta de ${cuenta.banco}`"
                             @click="copiar(cuenta.numero)"
                         />

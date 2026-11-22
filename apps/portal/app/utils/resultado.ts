@@ -91,6 +91,14 @@ export function mensajeProblema(problema: Problem): string {
     return problema.detail ?? problema.title
 }
 
+/**
+ * Falla de la conexión o del servidor (sin respuesta, 5xx): tiene sentido ofrecer «Reintentar» con
+ * lo mismo. Un 4xx (datos incorrectos, límite de intentos) no se arregla reintentando.
+ */
+export function esFallaTransitoria(problema: Problem): boolean {
+    return problema.status === 0 || problema.status >= 500
+}
+
 /** `errors[]` de un 422 en el formato de `UForm.setErrors()`. */
 export function erroresDeFormulario(problema: Problem): FormError[] {
     return (problema.errors ?? []).map(error => ({ name: error.field, message: error.message }))
