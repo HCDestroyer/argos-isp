@@ -388,18 +388,7 @@ onMounted(() => {
                                     />
                                 </div>
                                 <UButton
-                                    v-if="row.original.canal === 'whatsapp'"
-                                    icon="i-lucide-eye"
-                                    label="Se edita en Iris"
-                                    color="neutral"
-                                    variant="ghost"
-                                    size="sm"
-                                    :aria-label="`Ver ${nombreEvento(row.original.evento)} por WhatsApp (se edita en Iris)`"
-                                    :data-prueba="`ver-aviso-${row.original.id}`"
-                                    @click="editar(row.original)"
-                                />
-                                <UButton
-                                    v-else-if="puede('notificaciones.editar')"
+                                    v-if="puede('notificaciones.editar')"
                                     icon="i-lucide-pencil"
                                     color="neutral"
                                     variant="ghost"
