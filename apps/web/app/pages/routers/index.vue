@@ -437,6 +437,7 @@ function hace(marca: number | null): string {
                             <span
                                 class="text-xs text-muted"
                                 :title="row.original.ultimo_contacto ? formatearFechaHora(row.original.ultimo_contacto) : undefined"
+                                :data-prueba="`ultimo-contacto-${row.original.id}`"
                             >{{ detalleContactoRouter(row.original) }}</span>
                         </div>
                     </template>

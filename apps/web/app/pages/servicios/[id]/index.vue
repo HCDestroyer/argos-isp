@@ -585,7 +585,7 @@ onMounted(cargar)
                                 class="text-default underline underline-offset-2 hover:text-primary"
                             >{{ nombreCliente(servicio) }}</ULink>
                             <span>· {{ nombrePlan(servicio) }}</span>
-                            <span data-prueba="tipo-conexion">· {{ TIPOS_CONEXION[tipoConexionDe(servicio)].corta }} en {{ nombreRouter(servicio) }}</span>
+                            <span>· <span data-prueba="tipo-conexion">{{ TIPOS_CONEXION[tipoConexionDe(servicio)].corta }}</span> en {{ nombreRouter(servicio) }}</span>
                             <TipoPlanBadge
                                 :tipo="servicio.plan_tipo"
                                 class="hidden"
@@ -1069,7 +1069,7 @@ onMounted(cargar)
                             </div>
                             <SeccionSinApi
                                 titulo="Promociones de velocidad"
-                                descripcion="Duplicar la velocidad por días o en horas fijas (decisión del PM): en construcción en la API."
+                                descripcion="Duplicar la velocidad por días o en horas fijas. Disponible pronto."
                                 icono="i-lucide-zap"
                             />
                         </RedTarjeta>

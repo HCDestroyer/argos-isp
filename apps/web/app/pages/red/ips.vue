@@ -271,7 +271,7 @@ const routerDelModal = computed(() => modalRed.value?.router_id ?? (Number(route
                 <SeccionSinApi
                     v-if="fecha === 'otra' && buscado"
                     titulo="Buscar por fecha: no disponible todavía"
-                    descripcion="Decidido por el PM: por IP más fecha y hora, con permiso propio y consulta auditada. La API lo está construyendo; mientras, solo se puede saber quién la tiene hoy."
+                    descripcion="Pronto podrás buscar quién tenía una IP en una fecha y hora, con un permiso propio y la consulta registrada en la bitácora. Por ahora solo se puede saber quién la tiene hoy."
                     icono="i-lucide-calendar-clock"
                     data-prueba="ip-por-fecha-no-disponible"
                 />
