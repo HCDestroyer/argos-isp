@@ -13,7 +13,7 @@ useHead({ title: 'Reporte de conciliación · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const { enlace } = usePermisos()
+const { enlace, puede } = usePermisos()
 
 const hoy = hoyGuatemala()
 const cuentaId = ref<number | null>(Number(route.query.cuenta) || null)
@@ -58,6 +58,7 @@ onMounted(cargar)
     >
         <template #acciones>
             <UButton
+                v-if="puede('bancos.conciliar')"
                 :to="enlace('/bancos/extractos')"
                 icon="i-lucide-scale"
                 label="Conciliar"

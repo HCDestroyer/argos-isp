@@ -190,7 +190,6 @@ async function imprimirRecibo(plantillaId: number | null) {
 const itemsMas = computed<DropdownMenuItem[][]>(() => [
     ...(puedeCerrarDiferencia.value ? [[{ label: 'Cerrar diferencia', icon: 'i-lucide-scissors', onSelect: () => { diferenciaAbierta.value = true } }]] : []),
     ...(pago.value && enlace(`/clientes/${pago.value.cliente_id}`) ? [[{ label: 'Ver cliente', icon: 'i-lucide-user', to: enlace(`/clientes/${pago.value.cliente_id}?tab=cuenta`) }]] : []),
-    ...(puedeAnular.value ? [[{ label: 'Anular pago', icon: 'i-lucide-ban', color: 'error' as const, onSelect: () => { anularAbierto.value = true } }]] : []),
 ])
 </script>
 
@@ -209,6 +208,17 @@ const itemsMas = computed<DropdownMenuItem[][]>(() => [
                 :generando="generandoRecibo"
                 data-prueba="recibo-pdf"
                 @imprimir="imprimirRecibo"
+            />
+            <!-- Como «Anular factura» en OperFacturaDetalle: la anulación va a la vista, el resto en «Más». -->
+            <UButton
+                v-if="puedeAnular"
+                label="Anular pago"
+                icon="i-lucide-ban"
+                color="error"
+                variant="outline"
+                class="rounded-full"
+                data-prueba="anular-pago"
+                @click="anularAbierto = true"
             />
             <UDropdownMenu
                 v-if="itemsMas.length"
