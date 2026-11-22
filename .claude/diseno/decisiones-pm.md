@@ -33,3 +33,6 @@ Respuestas del PM a las 31 preguntas de los diseños de reportes y contabilidad 
 30. IP pública: ambas — adicional cobrado (precio en catálogo; se libera al quitar o retirar) y también incluida en algunos planes empresariales.
 31. Caídas repetidas: alerta en Argos Y ticket en Iris (uno por servicio mientras siga abierto; umbral 3 en 60 min configurable). Si es una falla general o corte (muchos servicios del mismo router, OLT, PON o zona a la vez), se abre UN ticket general en Iris que agrupa a los afectados, para que técnicos y atención al cliente sepan qué pasa; no un ticket por servicio.
 32. GenieACS va en un servidor aparte. Regla principal del PM: el crecimiento es horizontal (CLAUDE.md §14).
+33. Historial de quién tenía cada IP: la retención la controla Horus. Argos no purga ni archiva por su cuenta; su búsqueda cubre sus propias sesiones (retención configurable) y para lo histórico remite a Horus.
+34. Promociones de velocidad en routers con control por plan (PCQ o árbol): se aplican moviendo al servicio al plan destino mientras dura la promoción (días o franja) y regresándolo al terminar; con multiplicador exigen plan destino.
+35. Conectar router: «Por código» viene preseleccionado para identificar a los clientes en la página de corte (como el diseño).
