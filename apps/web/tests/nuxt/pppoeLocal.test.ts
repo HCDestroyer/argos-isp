@@ -126,7 +126,7 @@ describe('PPPoE sin RADIUS', () => {
             const raiz = wrapper.element.parentElement ?? wrapper.element
             // La opción del buscador dice que el router no usa RADIUS y que le faltan las credenciales.
             const disparador = await esperar(() => {
-                const boton = raiz.querySelector<HTMLElement>('[data-prueba="selector-router-menu"]')
+                const boton = raiz.querySelector('[data-prueba="selector-router-menu"]') as HTMLElement | null
                 expect(boton).not.toBeNull()
                 return boton!
             })
