@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir, pestanaRouter } from './ayudas'
+import { accionCliente, elegirRouter, entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Ficha del router (núcleo de routers, pedido del PM), en escritorio y teléfono: abre en «Control de
@@ -148,9 +148,9 @@ test('alta de servicio en un router con varios servidores PPPoE: se elige y se v
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
     await page.locator('table a[href^="/clientes/"]').first().click()
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
-    await alta.getByRole('radio', { name: /CCR-Mixco/ }).click()
+    await elegirRouter(page, 'CCR-Mixco')
     await alta.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     await alta.getByRole('button', { name: 'Siguiente' }).click()
     const seccion = alta.locator('[data-prueba="alta-servidor-pppoe"]')

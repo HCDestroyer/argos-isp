@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { accionCliente, elegirRouter, entrar, ir } from './ayudas'
 
 /**
  * Prueba obligatoria 2 del brief de A4: "Alta de cliente y servicio". Con fixtures: el
@@ -23,11 +23,11 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Lucía Fernanda Pruebas' }).first()).toBeVisible()
 
     // El alta del servicio se abre en un panel lateral de la ficha: no se sale del cliente.
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
 
-    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
+    await elegirRouter(page, 'RB-Centro')
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     // IPv4 automática, IPv6 recomendada, credenciales generadas y plantilla: se aceptan tal cual.
     // Conexión → Red y PPPoE → Instalación y cobro → Resumen.

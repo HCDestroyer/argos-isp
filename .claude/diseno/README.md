@@ -29,11 +29,14 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
 - **Ficha del cliente:**
   - franja compacta con contadores (saldo, próximo vencimiento, servicios) que al bajar se reduce a nombre, estado, saldo y Cobrar;
   - pestañas segmentadas dentro de la tarjeta, incluida **Contactos**, con «A cargo de sus servicios» y «Está a cargo de»;
-  - en el teléfono, la barra de abajo lleva Promesa y «Cobrar Q …».
+  - en el teléfono, la barra de abajo lleva Promesa y «Cobrar Q …»;
+  - el saldo aparece una sola vez, en la franja; acciones en la misma fila, Cobrar con el monto y menú Más (Promesa, Cargo único, Nuevo servicio, datos y edición). El aviso de mora no repite el monto ni otro Cobrar, y el Resumen muestra lo que la franja no tiene (pagado en el año, cliente desde, promesas).
 - **Alta de cliente:**
   - 3 pasos (Cliente, Servicio, Cobro) con el progreso compacto arriba y el resumen en una línea junto a los botones;
   - varios teléfonos y contactos del servicio;
   - el router va antes que el plan, y la lista de planes se filtra por modo (residencial o empresarial) y por router (todos o específico), con buscador;
+  - el router se elige con buscador y lista desplegable (igual con 2 o con 50; en el teléfono, hoja a pantalla completa), con sugeridos arriba (zona del cliente y últimos usados); cada opción dice zona, tipo de conexión, si está en línea y las IP libres; sin IP libres se ve deshabilitado con el motivo;
+  - IP del servicio con control segmentado debajo del router: Automática (de fábrica), Elegir red (con su ocupación; una llena, deshabilitada) y Escribir IP («Libre» u «Ocupada por S-…» antes de guardar; el 409 en el mismo campo); IPv6 plegada en «Avanzado: IPv6»; el resumen dice qué IP o qué modo quedó;
   - código automático del servicio (`S-000412`) y nombre opcional;
   - «Programar instalación» crea la orden en Iris; la IP se asigna al activar;
   - interruptores grandes en «Al crear el servicio»;

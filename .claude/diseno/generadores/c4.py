@@ -172,6 +172,21 @@ CSSF='''
 .pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
 .ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
 .ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.seg{display:inline-flex;gap:2px;padding:4px;border-radius:12px;background:#F1F5F9}
+.seg button{border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;padding:7px 14px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.seg button.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.1)}
+.rt{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer;border:0;background:transparent;font-family:inherit;width:100%;text-align:left;color:#0F172A}
+.rt:hover{background:#F8FAFC}.rt.on{background:#EEF2FF}.rt.off{cursor:not-allowed;opacity:.62}
+.rt .ri{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#475569;position:relative}
+.rt .dot{position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border-radius:999px;border:2px solid #fff}
+.rt .meta{font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 8px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;font-family:inherit;font-size:13px;font-weight:600;color:#334155;cursor:pointer;white-space:nowrap}
+.chip.on{border-color:#4F46E5;background:#EEF2FF;color:#3730A3}
+.chip i{width:8px;height:8px;border-radius:999px;display:inline-block}
+.redop{display:flex;align-items:center;gap:12px;border:1.5px solid #E2E8F0;border-radius:12px;padding:10px 12px;cursor:pointer;background:#fff}
+.redop.on{border-color:#4F46E5;background:#EEF2FF}.redop.off{cursor:not-allowed;background:#F8FAFC;opacity:.75}
+.bar{height:6px;border-radius:6px;background:#E2E8F0;overflow:hidden;width:90px;flex:0 0 auto}.bar span{display:block;height:100%;border-radius:6px}
+.adv{display:flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#475569;cursor:pointer;padding:6px 0}
 '''
 def campo(lab,val,req=False,cls='',ayuda='',ico=None):
     ph=' ph' if val.startswith('~') else ''
@@ -201,8 +216,50 @@ for grupo,lst in planes:
     filas_plan+=f'<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:10px 12px 4px">{grupo} · {len(lst)}</div>'
     for cod,n,vel,pr,on in lst:
         filas_plan+=f'<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;{"background:#EEF2FF;" if on else ""}"><span style="width:16px;height:16px;border-radius:999px;flex:0 0 auto;{"border:5px solid #4F46E5" if on else "border:2px solid #CBD5E1"};box-sizing:border-box"></span><b style="font-size:14px;{"color:#3730A3" if on else ""}">{n}</b><span style="font-size:12px;color:#64748B">{vel} Mbps · {cod}</span><b class="num" style="margin-left:auto;font-size:14px">{pr}<span style="font-weight:500;color:#64748B;font-size:12px">/mes</span></b></div>'
-p2=f'''<div><p class="tit">¿Qué servicio va a tener?</p><p class="subt">Elige el router y el plan. Usuario, contraseña e IP se generan solos.</p></div>
-<div class="g2">{campo('Router','Router Norte · PPPoE',True,'sel',ayuda='Sugerido por la zona del cliente; el tipo de conexión lo toma del router',ico='router')}<div class="g2" style="gap:10px">{campo('Código','S-000412','', 'auto',ayuda='Automático')}{campo('Nombre del servicio','~Casa, Negocio…',ayuda='Opcional')}</div></div>
+ROUTERS=[('Router Norte','Zona Norte · Guatemala','PPPoE',62,254,'on','zona del cliente'),
+('Torre Centro','Zona 1 · Guatemala','PPPoE',118,254,'on',''),
+('Nodo Sur','Zona 12 · Guatemala','PPPoE',9,254,'on',''),
+('Cerro Alux','Mixco','PPPoE',201,508,'on',''),
+('Nodo El Naranjo','Mixco','PPPoE',140,254,'on',''),
+('Bodega Pinula','Santa Catarina Pinula','IP estática',40,62,'on',''),
+('Torre Villa Nueva','Villa Nueva','DHCP fija',23,126,'on',''),
+('Torre San Lucas','San Lucas Sacatepéquez','PPPoE',77,254,'off','sin respuesta hace 12 min'),
+('Nodo Chinautla','Chinautla','PPPoE',96,254,'on',''),
+('Torre Fraijanes','Fraijanes','IP estática',12,30,'on',''),
+('Torre Santa Catarina','Santa Catarina Pinula','PPPoE',54,126,'on',''),
+('Nodo Amatitlán','Amatitlán','PPPoE',0,254,'on','')]
+def fila_router(n,ubi,tipo,lib,tot,lin,nota,on=False):
+    lleno=lib==0
+    dot='#16A34A' if lin=='on' else '#94A3B8'
+    est='En línea' if lin=='on' else 'Sin conexión'
+    ips=f'<span style="color:#B91C1C;font-weight:600">Sin IP libres</span>' if lleno else (f'<span style="color:#92400E;font-weight:600">{lib} de {tot} libres</span>' if lib*10<tot else f'{lib} de {tot} libres')
+    motivo=f'<div class="meta" style="color:#B91C1C;white-space:normal">Sus redes IPv4 están llenas: agrega una red en Red › Routers</div>' if lleno else ''
+    sug=f'<span class="b in" style="padding:1px 8px;font-size:11px">{nota}</span>' if nota and lin=='on' else ''
+    return f'<button class="rt{" on" if on else ""}{" off" if lleno else ""}" aria-disabled="{"true" if lleno else "false"}"><span class="ri">{s("router",16)}<span class="dot" style="background:{dot}" title="{est}"></span></span><span style="min-width:0;flex:1"><span style="display:flex;align-items:center;gap:6px"><b style="font-size:14px">{n}</b>{sug}</span><div class="meta">{ubi} · {tipo} · {est if lin=="on" else nota}</div>{motivo}</span><span style="font-size:12px;color:#475569;white-space:nowrap;text-align:right" class="num">{ips}</span></button>'
+LISTA_R=''.join(fila_router(*r,on=(i==0)) for i,r in enumerate(ROUTERS))
+CHIPS=f'''<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span style="font-size:12px;color:#64748B">Sugeridos</span><button class="chip on"><i style="background:#16A34A"></i>Router Norte<span style="font-weight:500;color:#6366F1">· zona del cliente</span></button><button class="chip"><i style="background:#16A34A"></i>Torre Centro</button><button class="chip"><i style="background:#16A34A"></i>Cerro Alux</button></div>'''
+SELR=f'''<div style="position:relative"><button onClick="{{{{alternarRouters}}}}" style="width:100%;display:flex;align-items:center;gap:10px;border:1px solid #CBD5E1;border-radius:12px;padding:8px 12px;background:#fff;font-family:inherit;cursor:pointer;text-align:left"><span class="ri" style="width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#EEF2FF;color:#4338CA;position:relative">{s('router',16)}<span style="position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border-radius:999px;border:2px solid #fff;background:#16A34A"></span></span><span style="flex:1;min-width:0"><b style="font-size:14px;color:#0F172A">Router Norte</b><div style="font-size:12px;color:#64748B">Zona Norte · PPPoE · en línea · 62 de 254 IP libres</div></span>{s('ab',16,'#94A3B8')}</button>
+<div class="card" style="display:{{{{verRouters}}}};position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:8;box-shadow:0 20px 50px rgba(15,23,42,.18);overflow:hidden">
+<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #F1F5F9;color:#94A3B8;font-size:14px">{s('bus',16)}Buscar por nombre, zona o tipo<span style="margin-left:auto;font-size:12px">12 routers</span></div>
+<div style="max-height:420px;overflow:auto;padding:4px 6px 6px">{LISTA_R}</div></div></div>'''
+REDES=[('Clientes Norte','100.64.10.0/24',62,254,True),('Clientes Norte 2','100.64.11.0/24',0,254,False),('Públicas','190.115.4.0/28',5,13,False)]
+def redop(n,cidr,lib,tot,on):
+    lleno=lib==0; pct=round((tot-lib)*100/tot)
+    col='#B91C1C' if lleno else ('#D97706' if pct>85 else '#4F46E5')
+    return f'<div class="redop{" on" if on else ""}{" off" if lleno else ""}"><span style="width:16px;height:16px;border-radius:999px;box-sizing:border-box;flex:0 0 auto;{"border:5px solid #4F46E5" if on else "border:2px solid #CBD5E1"}"></span><div style="min-width:0;flex:1"><b style="font-size:14px">{n}</b> <span class="mono" style="color:#475569">{cidr}</span><div style="font-size:12px;color:{"#B91C1C" if lleno else "#64748B"}">{"Llena: no quedan IP para entregar" if lleno else f"{lib} de {tot} libres"}</div></div><span class="bar"><span style="width:{pct}%;background:{col}"></span></span></div>'
+IPBLOQUE=f'''<div style="border:1px solid #E2E8F0;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div class="lb" style="margin:0">{s('wifi',15,'#4338CA')}IP del servicio</div>
+<div class="seg" role="radiogroup" aria-label="Cómo se asigna la IP" style="margin-left:auto"><button class="{{{{ipA}}}}" onClick="{{{{ipAuto}}}}">Automática</button><button class="{{{{ipR}}}}" onClick="{{{{ipRed}}}}">Elegir red</button><button class="{{{{ipE}}}}" onClick="{{{{ipEsc}}}}">Escribir IP</button></div></div>
+<div style="display:{{{{vIpA}}}};gap:10px;align-items:center;font-size:13px;color:#475569;background:#F8FAFC;border-radius:12px;padding:10px 12px">{s('rayo',15,'#4338CA')}<span>La siguiente libre de las redes de Router Norte (<b class="mono">100.64.10.63</b> si se activa hoy). Con «Programar instalación» se asigna al activar. En routers de IP estática o DHCP fija la IP es obligatoria: «Automática» la reserva al guardar.</span></div>
+<div style="display:{{{{vIpR}}}};flex-direction:column;gap:8px">{''.join(redop(*r) for r in REDES)}<div class="ay" style="margin:0">Se toma la siguiente IP libre de la red elegida.</div></div>
+<div style="display:{{{{vIpE}}}};flex-direction:column;gap:6px"><div style="display:flex;align-items:center;gap:10px;border:2px solid #4F46E5;border-radius:12px;padding:10px 14px;background:#fff;box-shadow:0 0 0 4px rgba(79,70,229,.1)"><span class="mono" style="font-size:18px;color:#0F172A;flex:1">100.64.10.50</span><span class="b ok">{s('check',13)}Libre</span></div>
+<div class="ay" style="margin:0">Dentro de <span class="mono">100.64.10.0/24</span> (Clientes Norte). Si otro servicio la tiene: «Ocupada por S-000123», en este mismo campo.</div></div>
+<button class="adv" onClick="{{{{alternarV6}}}}" aria-expanded="{{{{v6Abierto}}}}"><span style="display:inline-flex;transform:rotate({{{{v6Giro}}}});transition:transform .15s">{s('der',14)}</span>Avanzado: IPv6<span style="font-weight:500;color:#64748B">· de fábrica: automática por servicio (/64 + /56)</span></button>
+<div style="display:{{{{vV6}}}};flex-direction:column;gap:10px;padding-left:22px"><div class="g2">{campo('Modo IPv6','Prefijo estático','', 'sel')}{campo('Prefijo delegado','2800:98:1a00::/56','', ayuda='Solo en modo estático; los demás modos lo toman del pool')}</div></div>
+</div>'''
+p2=f'''<div><p class="tit">¿Qué servicio va a tener?</p><p class="subt">Elige el router y el plan. La IP es automática salvo que elijas la red o la escribas.</p></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="lb" style="margin:0">Router<span class="req">*</span></div>{CHIPS}{SELR}<div class="ay" style="margin:0">Busca entre todos: igual con 2 o con 50 routers. Un router sin IP libres no se puede elegir y dice por qué. El tipo de conexión lo toma del router.</div></div>
+<div class="g2">{campo('Código','S-000412','', 'auto',ayuda='Automático')}{campo('Nombre del servicio','~Casa, Negocio…',ayuda='Opcional')}</div>
 <div><div class="lb">Plan<span class="req">*</span></div>
 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12px;color:#64748B">Mostrando planes
 <span class="b in">{s('user',12)}Residenciales</span>de<span class="b in">{s('router',12)}Router Norte</span>· 6 de 23
@@ -210,7 +267,8 @@ p2=f'''<div><p class="tit">¿Qué servicio va a tener?</p><p class="subt">Elige 
 <div style="border:1px solid #CBD5E1;border-radius:14px;overflow:hidden"><div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #F1F5F9;color:#94A3B8;font-size:14px;cursor:text">{s('bus',16)}Buscar por nombre, velocidad o precio</div>
 <div style="max-height:236px;overflow:auto;padding:2px 6px 6px">{filas_plan}</div></div>
 <div class="ay">Solo salen los planes del modo del cliente (residencial o empresarial, del paso 1) asignados a todos los routers o al router elegido.</div></div>
-<div class="g3">{campo('Usuario PPPoE','jlopez412','', 'auto',ayuda='Generado; puedes cambiarlo',ico='llave')}{campo('Contraseña','••••••••','', 'auto',ayuda='Generada',ico='llave')}{campo('IP','10.20.4.18','', 'auto',ayuda='Siguiente libre; con «Programar instalación» se asigna al activar',ico='wifi')}</div>
+{IPBLOQUE}
+<div class="g2">{campo('Usuario PPPoE','jlopez412','', 'auto',ayuda='Generado; puedes cambiarlo',ico='llave')}{campo('Contraseña','••••••••','', 'auto',ayuda='Generada',ico='llave')}</div>
 <div><div class="lb">¿Cuándo empieza?</div><div class="g2">{op(True,'Ya está instalado','Queda activo y navega desde hoy · la IP se asigna ahora')}{op(False,'Programar instalación','Crea la orden en Iris. La IP se asigna al activar; el técnico confirma titular, datos y plan')}</div></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap"><span class="fc">{s('mas1',14)}Precio especial</span><span class="fc">{s('mas1',14)}IP pública o adicional</span><span class="fc">{s('mas1',14)}Otra dirección</span><span class="fc">{s('mas1',14)}MAC del equipo</span></div>'''
 sw_html=''.join([
@@ -229,7 +287,7 @@ p3=f'''<div><p class="tit">¿Cómo se le cobra?</p><p class="subt">Siempre el pr
 SW=True
 def bloque(t,filas,ico): return f'<div style="border:1px solid #EEF0F5;border-radius:14px;padding:12px 14px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">{s(ico,16,"#4338CA")}<b style="font-size:14px">{t}</b><a href="#" style="margin-left:auto;font-size:12px">Cambiar</a></div>{"".join(f"<div class=res><span>{a}</span><span>{b}</span></div>" for a,b in filas)}</div>'
 p4=f'''<div><p class="tit">Revisa y crea</p><p class="subt">Al crear: queda el cliente, el servicio activo en el router, sus facturas y la bitácora.</p></div>
-<div class="g2">{bloque('Cliente',[('Nombre','José López'),('Teléfono','5555-8890'),('NIT','4521873-K'),('Zona','Norte')],'user')}{bloque('Servicio',[('Plan','50 Mbps · Q 200.00/mes'),('Router','Router Norte · PPPoE'),('Usuario','jlopez412'),('IP','10.20.4.18')],'wifi')}</div>
+<div class="g2">{bloque('Cliente',[('Nombre','José López'),('Teléfono','5555-8890'),('NIT','4521873-K'),('Zona','Norte')],'user')}{bloque('Servicio',[('Plan','50 Mbps · Q 200.00/mes'),('Router','Router Norte · PPPoE'),('Usuario','jlopez412'),('IP','Automática (siguiente libre)')],'wifi')}</div>
 {bloque('Cobro',[('Plantilla','Emite el 1 · vence el 5'),('Primera factura','Diciembre · Q 200.00 · vence 5 dic'),('Instalación','Cargo único · Q 150.00 · vence hoy')],'cob')}
 <div style="display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:#F8FAFC"><span class="tg on" style="pointer-events:none"><i></i></span><span style="font-size:13px">Enviar mensaje de bienvenida por WhatsApp</span><span class="tg on" style="pointer-events:none;margin-left:16px"><i></i></span><span style="font-size:13px">Cobrar la instalación ahora</span></div>'''
 pasos=[('cliente','Cliente','Datos y ubicación','user'),('servicio','Servicio','Router, plan e IP','wifi'),('cobro','Cobro','Facturas e instalación','cob')]
@@ -261,7 +319,7 @@ alta=f'''{rail('dia')}
     <footer style="display:flex;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid #F1F5F9;background:#FCFCFE">
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;min-width:0;flex-wrap:wrap">
         <span class="av" style="width:28px;height:28px;border-radius:9px;font-size:11px;background:#CFFAFE;color:#0E7490">JL</span><b>José López</b>
-        <span style="color:#CBD5E1">·</span>{s('wifi',14,'#94A3B8')}50 Mbps <b class="num">Q 200/mes</b>
+        <span style="color:#CBD5E1">·</span>{s('wifi',14,'#94A3B8')}50 Mbps <b class="num">Q 200/mes</b><span style="color:#CBD5E1">·</span>IP <b>{{{{ipTexto}}}}</b>
         <span style="color:#CBD5E1">·</span>Cobra hoy <b class="num" style="color:#166534">Q 150.00</b>
       </div>
       <span style="margin-left:auto;font-size:12px;color:#94A3B8;white-space:nowrap">Borrador guardado</span>
@@ -271,7 +329,7 @@ alta=f'''{rail('dia')}
     </footer>
   </section>
 </main>
-<div style="position:absolute;right:28px;bottom:28px;max-width:330px;background:#0F172A;color:#E2E8F0;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;z-index:7"><b style="color:#fff">Alta en 3 pasos (interactiva).</b> Progreso compacto arriba, formulario centrado, resumen en una línea junto a los botones. Planes filtrados por modo del cliente y router (todos o específico), con buscador. Interruptores visibles al final del paso de cobro.</div>'''
+<div style="position:absolute;right:28px;bottom:28px;max-width:330px;background:#0F172A;color:#E2E8F0;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;z-index:7"><b style="color:#fff">Alta en 3 pasos (interactiva).</b> Router con buscador y sugeridos (sirve con 2 o con 50; sin IP libres se ve deshabilitado con el motivo). IP: Automática, Elegir red o Escribir IP (con «Libre» u «Ocupada por» al momento); IPv6 plegada en «Avanzado». Planes filtrados por modo y router.</div>'''
 logic='''class Component extends DCLogic {
 renderVals() {
 const pasos = %s;
@@ -282,6 +340,15 @@ const ir = (k) => () => this.setState({ i: k });
 return {
   v,
   pasos: pasos.map((p, k) => ({ ...p, num: k < i ? '✓' : String(k + 1), clase: k === i ? 'on' : (k < i ? 'ok' : ''), lclase: k === pasos.length - 1 ? 'fin' : (k < i ? 'ok' : ''), ir: ir(k) })),
+  ...((() => { const st = this.state || {}; const ip = st.ip || 'auto'; return {
+    ipA: ip === 'auto' ? 'on' : '', ipR: ip === 'red' ? 'on' : '', ipE: ip === 'esc' ? 'on' : '',
+    vIpA: ip === 'auto' ? 'flex' : 'none', vIpR: ip === 'red' ? 'flex' : 'none', vIpE: ip === 'esc' ? 'flex' : 'none',
+    ipAuto: () => this.setState({ ip: 'auto' }), ipRed: () => this.setState({ ip: 'red' }), ipEsc: () => this.setState({ ip: 'esc' }),
+    ipTexto: ip === 'auto' ? 'automática' : (ip === 'red' ? 'de Clientes Norte' : '100.64.10.50'),
+    verRouters: st.routers ? 'block' : 'none', alternarRouters: () => this.setState({ routers: !st.routers }),
+    hoja: st.routers ? 'flex' : 'none',
+    vV6: st.v6 ? 'flex' : 'none', v6Abierto: st.v6 ? 'true' : 'false', v6Giro: st.v6 ? '90deg' : '0deg', alternarV6: () => this.setState({ v6: !st.v6 })
+  }; })()),
   verAtras: i > 0 ? 'inline-flex' : 'none',
   verSig: i < pasos.length - 1 ? 'inline-flex' : 'none',
   verCrear: i === pasos.length - 1 ? 'inline-flex' : 'none',
@@ -295,7 +362,7 @@ open('NuevoAltaCliente.dc.html','w').write(page('Nuevo cliente',alta,1000,logic)
 
 # ---------- móvil ----------
 m_pasos='<div style="display:flex;gap:6px">'+''.join(f'<span style="flex:1;height:4px;border-radius:4px;background:{{{{p{k}}}}}"></span>' for k in range(3))+'</div>'
-def mbody(html): return html.replace('class="g2"','style="display:flex;flex-direction:column;gap:12px"').replace('class="g3"','style="display:flex;flex-direction:column;gap:10px"').replace('<span style="margin-left:auto;display:flex;gap:4px">','<span style="display:none">').replace('max-height:236px','max-height:300px')
+def mbody(html): return html.replace('display:{{verRouters}};position:absolute','display:none;position:absolute').replace('class="g2"','style="display:flex;flex-direction:column;gap:12px"').replace('class="g3"','style="display:flex;flex-direction:column;gap:10px"').replace('<span style="margin-left:auto;display:flex;gap:4px">','<span style="display:none">').replace('max-height:236px','max-height:300px')
 movil=f'''<div style="position:absolute;inset:0;display:flex;flex-direction:column">
   <div style="padding:12px 16px 10px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;gap:10px"><span class="f ci" title="Cancelar" style="width:38px;height:38px">{s('cerrar',16)}</span><div style="flex:1"><b style="font-size:16px;display:block">Nuevo cliente</b><span style="font-size:12px;color:#64748B">Paso {{{{num}}}} de 3 · {{{{nombrePaso}}}}</span></div><span class="f ci" title="Ayuda" style="width:38px;height:38px;cursor:help">{s('ayuda',17)}</span></div>
@@ -308,8 +375,14 @@ movil=f'''<div style="position:absolute;inset:0;display:flex;flex-direction:colu
       <div style="display:{{{{v.cobro}}}};flex-direction:column;gap:14px">{mbody(p3)}</div>
     </section>
   </div>
+  <div style="position:absolute;inset:0;background:#fff;z-index:20;display:{{{{hoja}}}};flex-direction:column">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px"><button class="f ci" onClick="{{{{alternarRouters}}}}" aria-label="Cerrar" style="width:38px;height:38px">{s('cerrar',16)}</button><b style="font-size:16px;flex:1">Elegir router</b><span style="font-size:12px;color:#64748B">12 routers</span></div>
+    <div style="margin:0 16px 8px;display:flex;align-items:center;gap:8px;border:2px solid #4F46E5;border-radius:12px;padding:10px 12px;color:#94A3B8;font-size:15px">{s('bus',17)}Buscar por nombre, zona o tipo</div>
+    <div style="padding:0 16px 6px">{CHIPS}</div>
+    <div style="flex:1;overflow:auto;padding:0 10px 16px">{LISTA_R}</div>
+  </div>
   <div style="position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #E6E8F0;padding:8px 12px 14px;display:flex;flex-wrap:wrap;gap:8px;box-shadow:0 -8px 24px rgba(15,23,42,.06)">
-    <div style="width:100%;font-size:12px;color:#475569;display:flex;gap:6px;align-items:center">{s('wifi',13,'#94A3B8')}50 Mbps · Q 200/mes<span style="margin-left:auto">Cobra hoy <b class="num" style="color:#166534">Q 150.00</b></span></div>
+    <div style="width:100%;font-size:12px;color:#475569;display:flex;gap:6px;align-items:center">{s('wifi',13,'#94A3B8')}50 Mbps · Q 200/mes · IP {{{{ipTexto}}}}<span style="margin-left:auto">Cobra hoy <b class="num" style="color:#166534">Q 150.00</b></span></div>
     <button class="btn o" style="padding:12px 14px;display:{{{{verAtras}}}}" onClick="{{{{atras}}}}">{s('izq',15)}Atrás</button>
     <button class="btn p" style="flex:1;justify-content:center;padding:12px;font-size:15px;display:{{{{verSig}}}}" onClick="{{{{siguiente}}}}">Siguiente{s('der',16)}</button>
     <button class="btn v" style="flex:1;justify-content:center;padding:12px;font-size:15px;display:{{{{verCrear}}}}">{s('check',16)}Crear</button>

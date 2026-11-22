@@ -87,28 +87,29 @@ Un doble clic o un reintento por mala señal no crea dos clientes.
 
 Haz clic en el nombre del cliente en la lista.
 
-Arriba, en una franja: el nombre con el estado (el de su servicio más atrasado), su código, teléfono y zona, y tres contadores: **Saldo** (en rojo si debe, con las facturas vencidas), **Próximo vencimiento** y **Servicios** (por estado, con lo que paga al mes). Si otro cliente paga por él, aparece «Paga: …» con el enlace. Si vino de una importación (por ejemplo de Mikrowisp), lo dice en letra pequeña. Al bajar, la franja se queda arriba y se reduce a nombre, estado, saldo y «Cobrar». En el teléfono, abajo quedan fijos «Promesa» y «Cobrar Q …».
+Arriba, en una sola fila: el nombre con el estado (el de su servicio más atrasado), su código, teléfono y zona; tres contadores: **Saldo** (en rojo si debe), **Próximo vencimiento** y **Servicios** (por estado); y a la derecha «Cobrar Q …» con lo que debe y el menú «Más». El saldo se muestra solo aquí: el aviso de mora y el Resumen no lo repiten. Si otro cliente paga por él, aparece «Paga: …» con el enlace. Si vino de una importación (por ejemplo de Mikrowisp), lo dice en letra pequeña. Al bajar, la franja se queda arriba y se reduce a nombre, estado, saldo y «Cobrar». En el teléfono los contadores son **Vencidas**, **Próximo** y **Servicios**, y abajo quedan fijos «Promesa» y «Cobrar Q …». Si la cuenta no se pudo leer, el contador lo dice con «Reintentar» y «Cobrar» va sin monto.
 
 ### Botones de la ficha
 
-| Botón                  | Permiso                                        | Qué hace                                                                                    |
-| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| «Cobrar»               | `pagos.registrar`                              | Abre la caja con el cliente ya elegido.                                                     |
-| Mano (Promesa de pago) | `promesas.crear`                               | Promesa para un servicio; con varios, pregunta de cuál.                                     |
-| Recibo (Cargo único)   | `facturas.emitir_cargo_unico` y `facturas.ver` | Factura algo que no es la mensualidad (venta de equipo, visita técnica).                    |
-| Más (Nuevo servicio)   | `servicios.crear`                              | Abre el [alta de servicio](alta-de-servicio.md) en un panel lateral, sin salir de la ficha. |
-| Persona (Datos)        |                                                | Abre o cierra los datos del cliente y los fiscales, con «Editar» (`clientes.editar`).       |
-| «⋯»                    |                                                | Editar y Estado de cuenta.                                                                  |
+| Botón o elemento de «Más» | Permiso                                        | Qué hace                                                                                    |
+| ------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| «Cobrar Q …»              | `pagos.registrar`                              | Abre la caja con el cliente ya elegido.                                                     |
+| Promesa de pago           | `promesas.crear`                               | Promesa para un servicio; con varios, pregunta de cuál.                                     |
+| Cargo único               | `facturas.emitir_cargo_unico` y `facturas.ver` | Factura algo que no es la mensualidad (venta de equipo, visita técnica).                    |
+| Estado de cuenta          | `clientes.estado_cuenta`                       | Va a la pestaña Facturación.                                                                |
+| Nuevo servicio            | `servicios.crear`                              | Abre el [alta de servicio](alta-de-servicio.md) en un panel lateral, sin salir de la ficha. |
+| Ver datos del cliente     |                                                | Abre o cierra los datos del cliente y los fiscales.                                         |
+| Editar cliente            | `clientes.editar`                              | Abre la edición en un panel lateral.                                                        |
 
 ### Datos del cliente
 
-Con el ícono de persona de la franja («Datos» en el teléfono): contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión; el estado de WhatsApp (con `notificaciones.ver`), el **portal del cliente** y el **responsable de pago**; y los **datos fiscales**: documento, país, retención, nombre y dirección fiscal. Si el NIT o CUI no pasó la validación, verás «NIT o CUI por corregir»: corrígelo en «Editar», porque la factura FEL lo exige válido. Sin NIT, los avisos salen a nombre de Consumidor Final (CF).
+Con «Más › Ver datos del cliente»: contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión; el estado de WhatsApp (con `notificaciones.ver`), el **portal del cliente** y el **responsable de pago**; y los **datos fiscales**: documento, país, retención, nombre y dirección fiscal. Si el NIT o CUI no pasó la validación, verás «NIT o CUI por corregir»: corrígelo en «Editar», porque la factura FEL lo exige válido. Sin NIT, los avisos salen a nombre de Consumidor Final (CF).
 
 ### Pestañas
 
 Las pestañas van dentro de la misma tarjeta que su contenido:
 
-- **Resumen:** si un servicio está suspendido o limitado, el aviso con «Cobrar» y «Promesa»; los contadores de saldo pendiente, próximo vencimiento, pagado en el año y cliente desde; sus servicios y la actividad reciente.
+- **Resumen:** si un servicio está suspendido o limitado, el aviso con «Promesa» (el monto y «Cobrar» están en la franja); los contadores de pagado en el año, cliente desde y promesas (la activa, o cuántas se cumplieron); sus servicios y la actividad reciente.
 - **Servicios** (con `servicios.ver`): cada servicio con su usuario PPP, router, plan y precio (con «precio especial» si lo tiene), direcciones IP y estado. Con varias empresas, los servicios se agrupan por empresa.
 - **Contactos** (con `contactos.buscar`): «A cargo de sus servicios», con el titular primero (sus números adicionales) y cada contacto con su relación, números (y si tiene WhatsApp), a qué servicios aplica y qué puede hacer (Consulta, Fallas, Paga, Avisos); «Agregar contacto» y quitar uno con `contactos.gestionar`. Debajo, «Está a cargo de»: servicios de otros clientes que esta persona tiene a cargo.
 - **Facturación** (con `clientes.estado_cuenta`): facturas, pagos y notas de crédito, con el número de vencidas en la pestaña. Ver [Cobros](../cobros/index.md).
