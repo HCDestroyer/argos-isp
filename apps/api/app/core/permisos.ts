@@ -236,6 +236,12 @@ export const PERMISOS = {
     'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
     'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
 
+    'equipos.ver':
+        'Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización',
+    'equipos.configurar':
+        'Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin',
+    'equipos.probar': 'Probar la conexión con SmartOLT y GenieACS con la configuración guardada',
+
     'iris.ver': 'Ver el conector con Iris (sin secretos) y los tokens de su usuario técnico (sin el valor)',
     'iris.configurar':
         'Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin',
@@ -314,7 +320,7 @@ export const PERMISOS = {
         'Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación',
     // contrato Iris 0.9.0 §12 (A32, A33, A35 y A37): equipos del cliente y bienvenida
     'servicios.aprovisionar':
-        'Aprovisionar y activar un servicio pendiente con su equipo (SmartOLT o ACS; hoy sin integración)',
+        'Aprovisionar y activar un servicio pendiente con su equipo (ONT por SmartOLT, router o CPE por el ACS TR-069)',
     'servicios.ver_equipo': 'Ver el estado del equipo del cliente (en línea, señal y firmware)',
     'servicios.cambiar_wifi': 'Cambiar el nombre o la clave del Wi-Fi del equipo del cliente',
     'servicios.reenviar_bienvenida': 'Reenviar la bienvenida de un servicio activo por sus canales',

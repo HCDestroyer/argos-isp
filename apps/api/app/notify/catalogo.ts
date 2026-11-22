@@ -89,6 +89,7 @@ const NOMBRES: Record<string, string> = {
     'contacto.telefono_agregado': 'Número de un contacto cambiado (aviso al titular)',
     'servicio.asignado_a_tu_nombre': 'Servicio asignado a tu nombre (aviso al titular)',
     'equipo.intento_recuperacion': 'Intento de recuperación del equipo (aviso al titular)',
+    'equipo.wifi_cambiado': 'Cambio del Wi-Fi del servicio (aviso al titular)',
     'soporte.ticket_resuelto': 'Ticket de soporte resuelto (Iris)',
     'soporte.ticket_cerrado': 'Ticket de soporte cerrado (Iris)',
     'soporte.ticket_respondido': 'Respuesta en un ticket de soporte (Iris)',
@@ -380,6 +381,9 @@ function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
             completada: false,
             no_procede: false,
         }
+    }
+    if (evento === 'equipo.wifi_cambiado') {
+        v.servicio = SERVICIO
     }
     if (evento === 'equipo.intento_recuperacion') {
         v.servicio = SERVICIO

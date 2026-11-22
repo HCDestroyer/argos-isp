@@ -111,6 +111,15 @@ export interface DefinicionRuta<
      * `idempotency_key_requerida` (operaciones que llaman otros sistemas, p. ej. Iris)
      */
     idempotente?: boolean | 'obligatoria'
+    /**
+     * Al repetir una `Idempotency-Key` ya completada, en vez de la respuesta guardada tal cual, la que
+     * devuelva esta función a partir de ella (p. ej. un `202 en_proceso` que ya terminó → `200` con el
+     * estado final, contrato Iris 0.9.0 §12.2). `null`: la guardada.
+     */
+    releerRepeticion?: (guardada: {
+        status: number
+        body: unknown
+    }) => Promise<{ status: number; body: unknown } | null>
     /** la edición exige `version` y puede responder 409 */
     versionada?: boolean
     /**

@@ -46,7 +46,15 @@ const CLAVE_VALIDA = /^[\x21-\x7E]{1,255}$/
  * guardada del otro.
  */
 export default class IdempotenciaMiddleware {
-    async handle(ctx: HttpContext, next: NextFn, opciones: { actorIris?: boolean } = {}) {
+    async handle(
+        ctx: HttpContext,
+        next: NextFn,
+        opciones: {
+            actorIris?: boolean
+            /** la ruta puede actualizar la respuesta guardada al repetir (`releerRepeticion` de la ruta) */
+            releerRepeticion?: (g: RespuestaGuardada) => Promise<RespuestaGuardada | null>
+        } = {},
+    ) {
         const clave = ctx.request.header('idempotency-key')
         if (clave === undefined) return next()
         if (!CLAVE_VALIDA.test(clave)) {
@@ -109,11 +117,14 @@ export default class IdempotenciaMiddleware {
                 )
             }
             ctx.response.header('Idempotent-Replayed', 'true')
-            ctx.response.status(previa.respuesta.status)
-            if (previa.respuesta.body === null || previa.respuesta.body === undefined) {
+            const respuesta =
+                (opciones.releerRepeticion && (await opciones.releerRepeticion(previa.respuesta))) ||
+                previa.respuesta
+            ctx.response.status(respuesta.status)
+            if (respuesta.body === null || respuesta.body === undefined) {
                 return ctx.response.send('')
             }
-            return ctx.response.send(previa.respuesta.body)
+            return ctx.response.send(respuesta.body)
         }
 
         try {

@@ -183,6 +183,31 @@ export interface PayloadComprobante {
     verificado_iris_actor?: string | null
 }
 
+/** Equipo del cliente (contrato Iris 0.9.0 §12). */
+export type TipoEquipoCliente = 'ont' | 'cpe_wireless' | 'router_tr069'
+export const CAUSAS_APROVISIONAMIENTO = [
+    'equipo_no_encontrado',
+    'equipo_en_uso',
+    'sin_puerto',
+    'perfil_sin_mapear',
+    'sin_ip_disponible',
+    'olt_sin_respuesta',
+    'acs_sin_respuesta',
+    'servicio_no_pendiente',
+    'otro',
+] as const
+export type CausaAprovisionamiento = (typeof CAUSAS_APROVISIONAMIENTO)[number]
+
+interface PayloadInstalacion {
+    aprovisionamiento_id: number
+    servicio_id: number
+    empresa_id: number
+    cliente_id: number
+    origen_tipo: 'iris_orden' | null
+    origen_id: string | null
+    idempotency_key: string | null
+}
+
 interface PayloadSesion {
     servicio_id: number | null
     /** null solo en una sesión de sondeo de un router sin RADIUS y sin `nas_ip` */
@@ -980,6 +1005,42 @@ export interface CatalogoEventos {
         reenvio: boolean
     }
     /**
+     * Contrato Iris 0.9.0 §12.2 (A32, A6): terminó un aprovisionamiento pedido desde Iris (uno final
+     * por aprovisionamiento). Nunca la clave Wi-Fi ni credenciales. `senal` con ONT: rx/tx en dBm.
+     */
+    'instalacion.aprovisionada': PayloadInstalacion & {
+        servicio_estado: string
+        equipo: {
+            tipo: TipoEquipoCliente
+            serie: string | null
+            mac: string | null
+            unidad_id: number | null
+        }
+        senal: { rx_dbm: number | null; tx_dbm: number | null } | null
+        activado_en: string
+    }
+    'instalacion.fallida': PayloadInstalacion & {
+        causa: CausaAprovisionamiento
+        reintentable: boolean
+        /** texto para la persona, sin secretos */
+        detalle: string | null
+    }
+    /**
+     * Contrato Iris 0.9.0 §12.4 (A35, A6): se resolvió un cambio de Wi-Fi. Nunca el SSID ni la clave.
+     * Con `aplicado`, notify avisa al titular por sus canales registrados.
+     */
+    'equipo.wifi_resuelto': {
+        solicitud_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        origen_tipo: 'iris_orden' | 'iris_ticket' | 'iris_conversacion'
+        origen_id: string
+        idempotency_key: string | null
+        estado: 'aplicado' | 'fallido'
+        causa: 'equipo_sin_gestion' | 'equipo_sin_respuesta' | 'rechazado_por_equipo' | 'otro' | null
+    }
+    /**
      * Contrato Iris 0.9.0 §12.5 (A37): se pidió reenviar la bienvenida de un servicio
      * (`servicios.reenviar_bienvenida`). Interno de notify: su worker la programa por los canales
      * pedidos (`canales` null = todos) con el origen de envíos `origen_envios`. No va a Iris (Iris recibe
@@ -1681,6 +1742,9 @@ export const EVENTOS = [
     'notificacion.enviada',
     'servicio.bienvenida_cambiada',
     'servicio.bienvenida_solicitada',
+    'instalacion.aprovisionada',
+    'instalacion.fallida',
+    'equipo.wifi_resuelto',
     'notificaciones.config_cambiada',
     'portal.config_cambiada',
     'portal.codigo_corte_emitido',

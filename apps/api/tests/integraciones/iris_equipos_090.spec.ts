@@ -11,9 +11,10 @@ import { EVENTOS_DESDE_090 } from '#integraciones/iris/envios'
 import MigracionPermisosIris090 from '#database/migrations/1795279364216_create_permisos_iris_090_s_table'
 
 /**
- * Contrato Iris 0.9.0 §12 del lado de Argos (A32, A33, A35 y A37). Sin SmartOLT ni ACS en Argos, las
- * rutas de equipos existen con la forma del contrato y responden su error de «sin capacidad»;
- * `capacidades.aprovisionamiento` sale en false. El reenvío de la bienvenida sí funciona.
+ * Contrato Iris 0.9.0 §12 del lado de Argos (A32, A33, A35 y A37) **sin SmartOLT ni ACS configurados**
+ * en la empresa: las rutas de equipos validan y responden su error de «sin capacidad» y
+ * `capacidades.aprovisionamiento` sale en false. Con las integraciones:
+ * `equipos_smartolt_genieacs.spec.ts`. El reenvío de la bienvenida funciona igual.
  */
 
 async function tokenIris() {
@@ -179,9 +180,12 @@ test.group('Iris 0.9.0 · equipos del cliente y bienvenida (§12)', (group) => {
             .first()
         assert.notInclude(JSON.stringify(auditoria.entrada), 'clave-secreta-123')
         assert.equal(auditoria.entrada.wifi, '***')
-        // GET de un aprovisionamiento: no existe ninguno
+        // GET de un aprovisionamiento que no existe: 404
         await estado(
-            client.get('/api/v1/aprovisionamientos/1').bearerToken(iris).header('X-Iris-Actor', 'usuario:57'),
+            client
+                .get('/api/v1/aprovisionamientos/999999999')
+                .bearerToken(iris)
+                .header('X-Iris-Actor', 'usuario:57'),
             404,
         )
     })
