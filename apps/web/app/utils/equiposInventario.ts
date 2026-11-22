@@ -228,7 +228,7 @@ export function lineaTiempoUnidad(unidad: DetalleApi, nombreTecnico: (id: number
         eventos.push({
             clave: `estado-${i}`,
             fecha: cambio.fecha,
-            titulo: `${ESTADOS_EQUIPO[cambio.de].etiqueta} → ${ESTADOS_EQUIPO[cambio.a].etiqueta}`,
+            titulo: cambio.de ? `${ESTADOS_EQUIPO[cambio.de].etiqueta} → ${ESTADOS_EQUIPO[cambio.a].etiqueta}` : `Alta: ${ESTADOS_EQUIPO[cambio.a].etiqueta}`,
             detalle: [motivoEnPalabras(cambio.motivo), `${servicio}${iris}`.replace(/^ · /, '')].filter(Boolean).join(' · '),
             icono: ESTADOS_EQUIPO[cambio.a].icono,
             tono: TONO_ESTADO[cambio.a] ?? 'tono-marca',
