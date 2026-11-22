@@ -203,7 +203,8 @@ interface PayloadInstalacion {
     servicio_id: number
     empresa_id: number
     cliente_id: number
-    origen_tipo: 'iris_orden' | null
+    /** `argos_panel` (0.14.3): lo inició el panel de Argos; no va a Iris */
+    origen_tipo: 'iris_orden' | 'argos_panel' | null
     origen_id: string | null
     idempotency_key: string | null
 }

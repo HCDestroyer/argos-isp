@@ -3,6 +3,7 @@
 | Rutas de facturación (A3): plantillas, facturas, pagos, promesas, estado de cuenta
 |--------------------------------------------------------------------------
 */
+import { exigeCapacidades, exigirCobroEquipo, exigirServicioIris } from '#integraciones/equipos/capacidades'
 import { exigirBodega } from '#inventario/acceso_http'
 import { definirRuta, redirigir, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
@@ -342,7 +343,11 @@ const facturas: Ruta[] = [
             for (const linea of cuerpo.lineas) {
                 if (linea.bodega_id) await exigirBodega(ctx, linea.bodega_id)
             }
-            if (cuerpo.servicio_id) await exigirServicio(ctx, cuerpo.servicio_id)
+            // contrato Iris 0.14.3 §4.3 (A6): con el token de Iris ≥ 0.14.3, un servicio fuera de su
+            // alcance responde 404 y, después del alcance, las líneas del concepto de instalación exigen
+            // la marca `cobro_equipo` (422 capacidad_no_disponible); los demás conceptos, nunca
+            const reglasIris = await exigeCapacidades(ctx)
+            if (cuerpo.servicio_id) await exigirServicioIris(ctx, cuerpo.servicio_id, reglasIris)
             else if (cuerpo.cliente_id) {
                 const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
                     throw new ValidacionFallida([
@@ -355,6 +360,7 @@ const facturas: Ruta[] = [
                 })
                 exigirAlcance(ctx.alcance, dimensiones)
             }
+            if (reglasIris) await exigirCobroEquipo(cuerpo.lineas.map((l) => l.concepto_id))
             if (cuerpo.motivo_sin_costo_id && ctx.auth.user) {
                 const alcance = await alcanceDePermiso(
                     ctx.auth.user.id,

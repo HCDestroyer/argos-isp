@@ -184,8 +184,28 @@ const capacidades = {
                     additionalProperties: false,
                 },
             },
+            equipos: {
+                type: 'array',
+                description:
+                    'Contrato Iris 0.14.3 §4.3: marcas por función, una fila por empresa del token. estado_equipo y ' +
+                    'wifi necesitan SmartOLT o el ACS probados (wifi, el ACS); bienvenida, el aviso de bienvenida con ' +
+                    'un canal configurado; cobro_equipo, el concepto de sistema de instalación activo. Con un ' +
+                    'contrato de Iris < 0.9.0, todas en false',
+                items: {
+                    type: 'object',
+                    properties: {
+                        empresa_id: { type: 'integer', minimum: 1 },
+                        estado_equipo: { type: 'boolean' },
+                        wifi: { type: 'boolean' },
+                        bienvenida: { type: 'boolean' },
+                        cobro_equipo: { type: 'boolean' },
+                    },
+                    required: ['empresa_id', 'estado_equipo', 'wifi', 'bienvenida', 'cobro_equipo'],
+                    additionalProperties: false,
+                },
+            },
         },
-        required: ['aprovisionamiento'],
+        required: ['aprovisionamiento', 'equipos'],
         additionalProperties: false,
     },
 }

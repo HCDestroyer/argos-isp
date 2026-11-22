@@ -452,7 +452,7 @@ export interface paths {
         };
         /**
          * Estado de un aprovisionamiento (contrato Iris 0.9.0 §12.2)
-         * @description `estado` `en_proceso`, `listo` o `fallido`; `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`) con su estado; `causa`, `reintentable` y `detalle` con `fallido`; `equipo { tipo, serie, mac, unidad_id, modelo, gestionado }`. Nunca el SSID ni la clave del Wi-Fi inicial. De otra empresa o inexistente: `404`.
+         * @description `estado` `en_proceso`, `listo` o `fallido`; `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`) con su estado; `causa`, `reintentable` y `detalle` con `fallido`; `equipo { tipo, serie, mac, unidad_id, modelo, gestionado }`. Nunca el SSID ni la clave del Wi-Fi inicial. De otra empresa o inexistente: `404`. `iniciado_por` (0.14.3): `argos` (panel, `origen_tipo: argos_panel`) o `iris`. Al token de Iris, uno que no inició Iris se le responde recortado: `aprovisionamiento_id`, `servicio_id`, `empresa_id`, `origen_tipo`, `origen_id: null`, `iniciado_por`, `estado`, `causa` y `actualizado_en`.
          */
         get: operations["aprovisionamientosVer"];
         put?: never;
@@ -11381,7 +11381,7 @@ export interface paths {
         put?: never;
         /**
          * Aprovisionar y activar desde la orden de Iris (contrato Iris 0.9.0 §12.2, A32)
-         * @description Asíncrono (`202 { aprovisionamiento_id, estado: en_proceso }`): el worker autoriza la ONT en SmartOLT con el perfil de su OLT y plan, configura PPPoE (si la empresa lo pide) y el Wi-Fi inicial por GenieACS, asigna IP, hace el comodato y activa el servicio; el resultado llega por `instalacion.aprovisionada` o `instalacion.fallida` y por `GET /aprovisionamientos/:id`. Repetir la misma `Idempotency-Key` (`iris:aprovisionar:<orden_id>:<intento>`) devuelve `200` con el estado final si ya terminó. Errores: `409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id`), `409 unidad_en_otra_bodega`, `422 equipo_invalido`, `422 wifi_invalido`, `422 wifi_no_disponible`, `422 aprovisionamiento_no_disponible` y `422 plan_no_permitido`. Con el token de Iris, `X-Iris-Actor` de una persona (el asistente nunca aprovisiona). La clave Wi-Fi se guarda cifrada solo hasta terminar y nunca se audita.
+         * @description Asíncrono (`202 { aprovisionamiento_id, estado: en_proceso }`): el worker autoriza la ONT en SmartOLT con el perfil de su OLT y plan, configura PPPoE (si la empresa lo pide) y el Wi-Fi inicial por GenieACS, asigna IP, hace el comodato y activa el servicio; el resultado llega por `instalacion.aprovisionada` o `instalacion.fallida` y por `GET /aprovisionamientos/:id`. Repetir la misma `Idempotency-Key` (`iris:aprovisionar:<orden_id>:<intento>`) devuelve `200` con el estado final si ya terminó. Errores: `409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id` e `iniciado_por`: `argos` | `iris`), `409 unidad_en_otra_bodega`, `422 equipo_invalido`, `422 wifi_invalido`, `422 wifi_no_disponible`, `422 aprovisionamiento_no_disponible` y `422 plan_no_permitido`. Con el token de Iris, `X-Iris-Actor` de una persona (el asistente nunca aprovisiona). La clave Wi-Fi se guarda cifrada solo hasta terminar y nunca se audita. Contrato Iris 0.14.3 (token de Iris ≥ 0.14.3): servicio fuera del token 404; `wifi` sin la marca `wifi` `422 capacidad_no_disponible`; la unidad se busca por `unidad_id`, `serie` o `mac` en todo el inventario: con `tecnico` (vínculo I1 en la empresa, si no `403 actor_desconocido`) en su bodega personal o de cuadrilla, o ya asignada al servicio; sin `tecnico`, ya asignada; en otro lugar `409 unidad_en_otra_bodega` sin decir dónde. Desde el panel de Argos: `origen_tipo: argos_panel`, `origen_id: null` y sin `instalacion.*` a Iris.
          */
         post: operations["serviciosAprovisionar"];
         delete?: never;
@@ -11421,7 +11421,7 @@ export interface paths {
         put?: never;
         /**
          * Reenviar la bienvenida del servicio (contrato Iris 0.9.0 §12.5, A37)
-         * @description Vuelve a mandar la bienvenida por los canales pedidos (`canales`; sin él, todos los configurados), con las mismas reglas que la primera. `202 { estado: en_cola }`; el resultado de cada canal llega con el webhook `servicio.bienvenida_cambiada` (`reenvio: true`). Errores: `409 servicio_no_activo`, `429 bienvenida_reciente` (antes de 10 min de la última) y `429 demasiados_reenvios` (más de 3 reenvíos por servicio en el día), los dos con `Retry-After`. `Idempotency-Key` obligatoria (`iris:bienvenida:<orden_id>:<n>`).
+         * @description Vuelve a mandar la bienvenida por los canales pedidos (`canales`; sin él, todos los configurados), con las mismas reglas que la primera. `202 { estado: en_cola }`; el resultado de cada canal llega con el webhook `servicio.bienvenida_cambiada` (`reenvio: true`). Errores: `409 servicio_no_activo`, `429 bienvenida_reciente` (antes de 10 min de la última) y `429 demasiados_reenvios` (más de 3 reenvíos por servicio en el día), los dos con `Retry-After`. `Idempotency-Key` obligatoria (`iris:bienvenida:<orden_id>:<n>`). Con el token de Iris ≥ 0.14.3: servicio de otra empresa 404 y sin la marca `bienvenida`, `422 capacidad_no_disponible`.
          */
         post: operations["serviciosReenviarBienvenida"];
         delete?: never;
@@ -11610,7 +11610,7 @@ export interface paths {
         };
         /**
          * Estado del equipo del cliente: en línea, señal y firmware (contrato Iris 0.9.0 §12.3, A33)
-         * @description Lee SmartOLT (estado y señal de la ONU) y GenieACS (último contacto, firmware, modelo y SSID). Responde la lectura guardada si tiene menos de 60 s (`leido_en`). Sin equipo gestionado (la empresa sin SmartOLT ni ACS probados, o el equipo sin registro en ninguno): `409 equipo_sin_gestion` con `extensions.equipos[]` (los equipos en comodato del inventario), sin `extensions` para el asistente de IA. Si ningún sistema responde: `503 equipo_sin_respuesta`. `ssid` es una extensión de Argos (no está en el contrato). Con el token de Iris, `X-Iris-Actor` obligatoria; con `asistente_ia` la respuesta 200 solo trae `servicio_id`, `tecnologia`, `en_linea`, `senal`, `ultimo_contacto` y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo.
+         * @description Lee SmartOLT (estado y señal de la ONU) y GenieACS (último contacto, firmware, modelo y SSID). Responde la lectura guardada si tiene menos de 60 s (`leido_en`). Sin equipo gestionado (la empresa sin SmartOLT ni ACS probados, o el equipo sin registro en ninguno): `409 equipo_sin_gestion` con `extensions.equipos[]` (los equipos en comodato del inventario), sin `extensions` para el asistente de IA. Si ningún sistema responde: `503 equipo_sin_respuesta`. `ssid` es una extensión de Argos (no está en el contrato). Con el token de Iris, `X-Iris-Actor` obligatoria; con `asistente_ia` la respuesta 200 solo trae `servicio_id`, `tecnologia`, `en_linea`, `senal`, `ultimo_contacto` y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo. Con el token de Iris ≥ 0.14.3, alcance primero (servicio de otra empresa: 404) y sin la marca `estado_equipo`, `422 capacidad_no_disponible`.
          */
         get: operations["serviciosVerEquipo"];
         put?: never;
@@ -11982,7 +11982,7 @@ export interface paths {
         put?: never;
         /**
          * Cambiar el Wi-Fi pedido desde Iris (contrato Iris 0.9.0 §12.4, A35)
-         * @description Asíncrono (`202 { solicitud_id, estado: en_proceso }` y webhook `equipo.wifi_resuelto`): el worker lo aplica por GenieACS (`setParameterValues` en TR-098 o TR-181). `409 equipo_sin_gestion` si el equipo no está en el ACS de la empresa; `429 demasiados_cambios_wifi` (con `Retry-After`) después de 3 cambios por servicio en el día de Guatemala. Con `aplicado` se avisa al titular. Valida `422 wifi_invalido` (al menos SSID o clave; SSID de 1 a 32, clave de 8 a 63) y `422 verificacion_requerida` (`verificacion { metodo, verificado_en, cliente_id }` del titular del servicio; el asistente de IA solo `codigo_telefono`, `codigo_correo` o `datos_titular` y de menos de 10 min; una persona además `presencial` o `llamada_verificada`). Con el token de Iris, `X-Iris-Actor` obligatoria y, con el asistente, `X-Iris-Conversacion`. `Idempotency-Key` obligatoria. La clave nunca se guarda, se audita ni vuelve.
+         * @description Asíncrono (`202 { solicitud_id, estado: en_proceso }` y webhook `equipo.wifi_resuelto`): el worker lo aplica por GenieACS (`setParameterValues` en TR-098 o TR-181). `409 equipo_sin_gestion` si el equipo no está en el ACS de la empresa; `429 demasiados_cambios_wifi` (con `Retry-After`) después de 3 cambios por servicio en el día de Guatemala. Con `aplicado` se avisa al titular. Valida `422 wifi_invalido` (al menos SSID o clave; SSID de 1 a 32, clave de 8 a 63) y `422 verificacion_requerida` (`verificacion { metodo, verificado_en, cliente_id }` del titular del servicio; el asistente de IA solo `codigo_telefono`, `codigo_correo` o `datos_titular` y de menos de 10 min; una persona además `presencial` o `llamada_verificada`). Con el token de Iris, `X-Iris-Actor` obligatoria y, con el asistente, `X-Iris-Conversacion`. `Idempotency-Key` obligatoria. La clave nunca se guarda, se audita ni vuelve. Con el token de Iris ≥ 0.14.3: servicio de otra empresa 404 y sin la marca `wifi`, `422 capacidad_no_disponible` (antes que `equipo_sin_gestion`).
          */
         post: operations["serviciosCambiarWifi"];
         delete?: never;
@@ -12816,8 +12816,10 @@ export interface components {
             origen_tipo: string | null;
             origen_id: string | null;
             /** @enum {string} */
+            iniciado_por: "argos" | "iris";
+            /** @enum {string} */
             estado: "en_proceso" | "listo" | "fallido";
-            pasos: {
+            pasos?: {
                 /** @enum {string} */
                 paso: "ip" | "equipo" | "wifi" | "activacion";
                 /** @enum {string} */
@@ -12826,10 +12828,10 @@ export interface components {
                 en: string | null;
             }[];
             causa: string | null;
-            reintentable: boolean;
-            detalle: string | null;
-            servicio_estado: string;
-            equipo: {
+            reintentable?: boolean;
+            detalle?: string | null;
+            servicio_estado?: string;
+            equipo?: {
                 /** @enum {string} */
                 tipo: "ont" | "cpe_wireless" | "router_tr069";
                 serie: string | null;
@@ -12838,12 +12840,12 @@ export interface components {
                 modelo: string | null;
                 gestionado: boolean;
             };
-            senal: {
+            senal?: {
                 rx_dbm: number | null;
                 tx_dbm: number | null;
             } | null;
             /** Format: date-time */
-            creado_en: string;
+            creado_en?: string;
             /** Format: date-time */
             actualizado_en: string;
         };
@@ -14012,6 +14014,14 @@ export interface components {
                     ftth: boolean;
                     wireless: boolean;
                     tr069: boolean;
+                }[];
+                /** @description Contrato Iris 0.14.3 §4.3: marcas por función, una fila por empresa del token. estado_equipo y wifi necesitan SmartOLT o el ACS probados (wifi, el ACS); bienvenida, el aviso de bienvenida con un canal configurado; cobro_equipo, el concepto de sistema de instalación activo. Con un contrato de Iris < 0.9.0, todas en false */
+                equipos: {
+                    empresa_id: number;
+                    estado_equipo: boolean;
+                    wifi: boolean;
+                    bienvenida: boolean;
+                    cobro_equipo: boolean;
                 }[];
             };
         };
@@ -16783,6 +16793,14 @@ export interface components {
                     ftth: boolean;
                     wireless: boolean;
                     tr069: boolean;
+                }[];
+                /** @description Contrato Iris 0.14.3 §4.3: marcas por función, una fila por empresa del token. estado_equipo y wifi necesitan SmartOLT o el ACS probados (wifi, el ACS); bienvenida, el aviso de bienvenida con un canal configurado; cobro_equipo, el concepto de sistema de instalación activo. Con un contrato de Iris < 0.9.0, todas en false */
+                equipos: {
+                    empresa_id: number;
+                    estado_equipo: boolean;
+                    wifi: boolean;
+                    bienvenida: boolean;
+                    cobro_equipo: boolean;
                 }[];
             };
         };

@@ -25,7 +25,7 @@ export default class ActivarAprovisionamiento extends DomainAction<{ id: number 
         t.fijarEmpresa(fila.empresa_id)
         t.fijarEntidad('aprovisionamiento', fila.id)
         const origen =
-            fila.origen_tipo && fila.origen_id
+            fila.origen_tipo === 'iris_orden' && fila.origen_id
                 ? { origen_tipo: fila.origen_tipo, origen_id: fila.origen_id }
                 : {}
 
@@ -39,15 +39,29 @@ export default class ActivarAprovisionamiento extends DomainAction<{ id: number 
                 estado: string
             } | null
             if (u?.estado === 'disponible') {
+                const origenIris =
+                    fila.origen_tipo === 'iris_orden'
+                        ? { origen_tipo: fila.origen_tipo, origen_id: fila.origen_id }
+                        : { origen_tipo: null, origen_id: null }
                 await new AsignarComodato().execute(
-                    {
-                        servicio_id: fila.servicio_id,
-                        unidad_id: unidadId,
-                        tecnico: fila.tecnico_id_externo ? { id_externo: fila.tecnico_id_externo } : null,
-                        iris_actor: fila.iris_actor,
-                        origen_tipo: fila.origen_tipo,
-                        origen_id: fila.origen_id,
-                    },
+                    // 0.14.3: la bodega ya validada al aceptar (personal o de cuadrilla del técnico
+                    // vinculado), sin volver a mirar el actor de Iris (con la orden cerrada es un agente)
+                    fila.bodega_id !== null
+                        ? {
+                              servicio_id: fila.servicio_id,
+                              unidad_id: unidadId,
+                              bodega_id: fila.bodega_id,
+                              ...origenIris,
+                          }
+                        : {
+                              servicio_id: fila.servicio_id,
+                              unidad_id: unidadId,
+                              tecnico: fila.tecnico_id_externo
+                                  ? { id_externo: fila.tecnico_id_externo }
+                                  : null,
+                              iris_actor: fila.iris_actor,
+                              ...origenIris,
+                          },
                     t.ctx,
                     { trx: t.trx },
                 )
