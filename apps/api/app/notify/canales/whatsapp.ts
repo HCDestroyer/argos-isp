@@ -61,6 +61,8 @@ export function cuerpoAvisoIris(plantilla: string, aviso: NonNullable<OpcionesEn
         variables: aviso.variables,
         canal_preferido: 'whatsapp',
         prioridad: 'normal',
+        // 0.9.0 §6.2: solo en `bienvenida_servicio` y solo si vino de una orden de Iris
+        ...(aviso.origen ? { origen: aviso.origen } : {}),
     })
 }
 

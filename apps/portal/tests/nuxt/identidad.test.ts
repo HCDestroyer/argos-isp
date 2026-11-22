@@ -9,12 +9,14 @@ import Layout from '~/layouts/default.vue'
 /** Identidad "vidrio y luz": logo y materiales del layout. */
 
 describe('logo de ArgosIsp', () => {
-    it('marca: cuadro teal 700 con radio 7/32 y trazo blanco', async () => {
+    it('marca: cuadro con el degradado índigo → cian, radio 7/32 y trazo blanco', async () => {
         const wrapper = await mountSuspended(LogoArgos)
         const rect = wrapper.find('rect')
         expect(rect.exists()).toBe(true)
         expect(rect.attributes('rx')).toBe('14')
-        expect(rect.classes()).toContain('fill-(--ui-color-primary-700)')
+        const degradado = wrapper.find('linearGradient')
+        expect(rect.attributes('fill')).toBe(`url(#${degradado.attributes('id')})`)
+        expect(degradado.findAll('stop').map(s => s.attributes('stop-color'))).toEqual(['#4f46e5', '#0e7490'])
         expect(wrapper.find('g').attributes('stroke')).toBe('white')
         expect(wrapper.attributes('aria-hidden')).toBe('true')
     })
@@ -27,7 +29,8 @@ describe('logo de ArgosIsp', () => {
 
     it('el favicon es la misma figura que la marca', () => {
         const favicon = readFileSync(resolve(process.cwd(), 'public/favicon.svg'), 'utf8')
-        expect(favicon).toContain('rx="14" fill="#0f766e"')
+        expect(favicon).toContain('rx="14" fill="url(#m)"')
+        expect(favicon).toContain('stop-color="#4f46e5"')
         for (const d of ['M5 42C14.5 27 49.5 27 59 42C49.5 57 14.5 57 5 42Z', 'M22.75 25.98A18.5 18.5 0 0 1 41.25 25.98', 'M15.31 15.29A31.5 31.5 0 0 1 48.69 15.29']) {
             expect(favicon).toContain(d)
         }

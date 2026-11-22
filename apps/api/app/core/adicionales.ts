@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import { aplicarIpPublica, tipoAdicional } from '#core/ip_publica'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { Decimal } from 'decimal.js'
 import type { Transaccion } from '#shared/domain_action'
@@ -32,6 +33,8 @@ export interface AdicionalVista {
     descripcion: string | null
     /** numeric(14,2) como string o null */
     precio_sugerido: string | null
+    /** `ip_publica` (decisión del PM 30) o `general` */
+    tipo: 'general' | 'ip_publica'
     activo: boolean
     version: number
     created_at: string
@@ -76,6 +79,8 @@ export interface AsignacionAdicionalVista {
     alta_en: string
     baja_en: string | null
     motivo_baja: string | null
+    /** adicional `ip_publica`: la IP que recibió el servicio */
+    ip_publica: string | null
     version: number
     created_at: string
     updated_at: string
@@ -109,6 +114,7 @@ const COLUMNAS_ADICIONAL = [
     'nombre',
     'descripcion',
     'precio_sugerido',
+    'tipo',
     'activo',
     'version',
     'created_at',
@@ -223,6 +229,7 @@ function consultaAsignaciones(cliente: QueryClientContract) {
             'sa.alta_en',
             'sa.baja_en',
             'sa.motivo_baja',
+            cliente.raw('host(sa.ip_publica) AS ip_publica'),
             'sa.version',
             'sa.created_at',
             'sa.updated_at',
@@ -404,6 +411,19 @@ export async function insertarAsignacion(
     origen: Origen<'servicio.adicional_agregado'>,
 ): Promise<FilaAsignacion> {
     const cobrado = datos.modalidad === 'cobrado'
+    const esIpPublica = (await tipoAdicional(t, datos.adicional_id)) === 'ip_publica'
+    if (esIpPublica) {
+        const otra = await t.trx
+            .from('core.servicios_adicionales as sa')
+            .join('core.adicionales as a', 'a.id', 'sa.adicional_id')
+            .where('sa.servicio_id', servicio.id)
+            .where('sa.estado', 'activo')
+            .where('a.tipo', 'ip_publica')
+            .first()
+        if (otra) {
+            throw new ReglaNegocio('El servicio ya tiene una IP pública', 'ip_publica_existente')
+        }
+    }
     const estadoServicio = await estadoDelServicio(t, servicio.id)
     const bloqueado = estadoServicio === 'suspendido'
     const [nueva] = (await t.trx
@@ -426,6 +446,14 @@ export async function insertarAsignacion(
             bloqueado_en: bloqueado ? t.trx.knexRawQuery('now()') : null,
         })
         .returning('id')) as Array<{ id: number }>
+    if (esIpPublica) {
+        // decisión del PM 30: el adicional «IP pública» cambia la IPv4 del servicio por una pública
+        const ip = await aplicarIpPublica(t, servicio.id, true)
+        await t.trx
+            .from('core.servicios_adicionales')
+            .where('id', nueva!.id)
+            .update({ ip_publica: ip } as Record<string, unknown>)
+    }
     const fila = await filaAsignacion(t, Number(nueva!.id))
     await t.registrarCambios({ tipo: 'servicio_adicional', id: fila.id }, null, fila)
     await t.emit('servicio.adicional_agregado', {
@@ -468,6 +496,10 @@ export async function darDeBajaAsignacion(
     const despues = await filaAsignacion(t, antes.id)
     await t.registrarCambios({ tipo: 'servicio_adicional', id: antes.id }, antes, despues)
     await t.emit('servicio.adicional_quitado', { ...payload(despues, servicio), origen, motivo })
+    // decisión del PM 30: la IP pública vuelve a la red (en el retiro la liberan las asignaciones)
+    if (origen !== 'retiro' && (await tipoAdicional(t, Number(antes.adicional_id))) === 'ip_publica') {
+        await aplicarIpPublica(t, servicio.id, false)
+    }
     return despues
 }
 

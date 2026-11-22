@@ -6,6 +6,7 @@ import { configuracionInventario } from '#inventario/ordenes_traslado'
 import { verUnidad, type UnidadVista } from '#inventario/unidades'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
 import { emitirCobroEquipo } from '#inventario/cobros_equipo'
+import { SQL_CUENTA } from '#inventario/recuperacion'
 
 /**
  * `inventario.declarar_no_recuperada` (`POST /inventario/unidades/:id/declarar-no-recuperada`, permiso
@@ -82,18 +83,23 @@ export default class DeclararNoRecuperada extends DomainAction<
         const servicioId = Number(unidad.servicio_id)
         const configuracion = await configuracionInventario(empresaId, t.trx)
         const minimo = configuracion.recuperacion_tecnicos_minimos
+        // 0.14.0 (R-02, T-1, T-8): solo intentos que cuentan (registrados en Argos, verificados con Iris o
+        // aceptados por una persona) y solo contactos registrados por una persona en el panel
         const tecnicos = (await t.trx
-            .from('inventario.intentos_recuperacion')
-            .where({ unidad_id: unidad.id, servicio_id: servicioId })
+            .from('inventario.intentos_recuperacion as i')
+            .leftJoin('inventario.verificaciones_iris as v', 'v.intento_id', 'i.id')
+            .where({ 'i.unidad_id': unidad.id, 'i.servicio_id': servicioId })
+            .whereRaw(SQL_CUENTA)
             .select(
                 t.trx.raw(
-                    'count(distinct coalesce(actor_tecnico, actor_tecnico_id::text, registrado_por::text)) as n',
+                    'count(distinct coalesce(i.actor_tecnico, i.actor_tecnico_id::text, i.registrado_por::text)) as n',
                 ),
             )
             .first()) as { n: string }
         const contactos = await t.trx
             .from('inventario.contactos_recuperacion')
             .where('unidad_id', unidad.id)
+            .whereRaw(`coalesce(actor_tipo, 'usuario') = 'usuario'`)
             .select('id')
             .first()
         if (Number(tecnicos.n) < minimo && !contactos) {
@@ -101,7 +107,7 @@ export default class DeclararNoRecuperada extends DomainAction<
                 422,
                 'intentos_insuficientes',
                 'Intentos insuficientes',
-                `Para declararla no recuperada hacen falta intentos de ${minimo} técnicos distintos (hay ${tecnicos.n}) o un contacto con el cliente registrado`,
+                `Para declararla no recuperada hacen falta intentos verificados de ${minimo} técnicos distintos (hay ${tecnicos.n}) o un contacto con el cliente registrado por una persona en Argos`,
                 [
                     {
                         field: 'unidad_id',

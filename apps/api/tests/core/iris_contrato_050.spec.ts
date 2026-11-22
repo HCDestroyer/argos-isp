@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { capacidadesIris } from '#integraciones/equipos/equipos'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { usuarioIris } from '#core/integraciones_iris'
@@ -71,7 +72,7 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
             200,
         )
         assert.include(r.body(), { version_argos: '1.6.0', contrato: CONTRATO_IRIS })
-        assert.equal(CONTRATO_IRIS, '0.8.1')
+        assert.equal(CONTRATO_IRIS, '0.12.0')
         assert.isNull(await contratoGuardado())
         assert.isFalse(await conectorAdmite('0.5.0'))
 
@@ -184,14 +185,25 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
     }) => {
         const { token: admin } = await usuarioConRoles(['admin'])
         const delPanel = await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(admin), 200)
-        assert.deepEqual(delPanel.body(), { activo: false, version_argos: '1.6.0', contrato: CONTRATO_IRIS })
+        // 0.9.0 §4.3: el estado suma `capacidades`
+        assert.deepEqual(delPanel.body(), {
+            activo: false,
+            version_argos: '1.6.0',
+            contrato: CONTRATO_IRIS,
+            capacidades: await capacidadesIris(),
+        })
 
         const r = await estado(
             client.post(`${BASE_IRIS}/conexion/canjear`).json(canje(await enlace(client, admin))),
             200,
         )
         const deIris = await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(r.body().token), 200)
-        assert.deepEqual(deIris.body(), { activo: false, version_argos: '1.6.0', contrato: CONTRATO_IRIS })
+        assert.deepEqual(deIris.body(), {
+            activo: false,
+            version_argos: '1.6.0',
+            contrato: CONTRATO_IRIS,
+            capacidades: await capacidadesIris(),
+        })
 
         const { token: lectura } = await usuarioConRoles(['lectura'])
         await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(lectura), 403)

@@ -136,6 +136,8 @@ export const EVENTO_CONTACTO_AGREGADO = 'contacto.agregado'
 export const EVENTO_CONTACTO_TELEFONO = 'contacto.telefono_agregado'
 export const EVENTO_SERVICIO_A_TU_NOMBRE = 'servicio.asignado_a_tu_nombre'
 export const EVENTO_INTENTO_RECUPERACION = 'equipo.intento_recuperacion'
+/** Contrato Iris 0.9.0 §12.4 (A35): se cambió el Wi-Fi del servicio (aviso al titular). */
+export const EVENTO_WIFI_CAMBIADO = 'equipo.wifi_cambiado'
 
 /**
  * Evento de recuperación que esperamos de A1/A3 (A48, contrato Iris §3.10): uno por intento
@@ -148,6 +150,7 @@ export const EVENTOS_AVISO_TITULAR = [
     'cliente.contactos_cambiados',
     'servicio.titular_cambiado',
     EVENTO_RECUPERACION_INTENTADA,
+    'equipo.wifi_resuelto',
 ] as const
 
 type Payload = Record<string, unknown>
@@ -203,6 +206,11 @@ export async function avisoAlTitular(
         const a = entero(payload.a_cliente_id)
         if (!a || payload.existente !== true) return null
         return { evento: EVENTO_SERVICIO_A_TU_NOMBRE, payload: { ...payload, cliente_id: a } }
+    }
+    if (evento === 'equipo.wifi_resuelto') {
+        // §12.4: después de `aplicado`, «si no fuiste tú, comunícate». Nunca el SSID ni la clave.
+        if (payload.estado !== 'aplicado' || !entero(payload.cliente_id)) return null
+        return { evento: EVENTO_WIFI_CAMBIADO, payload }
     }
     if (evento === EVENTO_RECUPERACION_INTENTADA) {
         if (!entero(payload.cliente_id) && !entero(payload.servicio_id)) return null

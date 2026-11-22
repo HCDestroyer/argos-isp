@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
@@ -55,13 +55,23 @@ async function programar(evento: string, payload: Record<string, unknown>) {
     return db.from('notify.envios').whereLike('origen', `outbox:${outboxId}%`).orderBy('id')
 }
 
-async function fijarConector(contrato: string) {
+const SECRETO_1 = 'secreto-del-receptor-de-iris-uno-0123456789'
+const SECRETO_2 = 'secreto-del-receptor-de-iris-dos-9876543210'
+
+/** HMAC esperado de la clave (contrato Iris 0.12.1 §6.4), calculado aquí sin el código de Argos. */
+function huellaEsperada(numero: string, secreto: string): string {
+    return createHmac('sha256', secreto).update(`consentimiento:${numero}`).digest('hex').slice(0, 16)
+}
+
+async function fijarConector(contrato: string, secreto: string | null = SECRETO_1) {
     await db.from('integraciones.iris_conector').delete()
     await db.table('integraciones.iris_conector').insert({
         id: 1,
         activo: true,
         url_base: 'https://iris.example.test',
         token_cifrado: cifrar(`iris_pat_${'Qw3Er4Ty'.repeat(5)}`),
+        webhook_salida_url: 'https://iris.example.test/api/v1/integraciones/argosisp/webhook/c-1',
+        webhook_salida_secreto_cifrado: secreto ? cifrar(secreto) : null,
         contrato,
     })
     await db.from('notify.configuracion_canales').delete()
@@ -291,33 +301,48 @@ test.group('notify · contactos del cliente', (group) => {
         assert.isFalse(emitida.some((e) => e.origen.includes(':contacto:')))
     })
 
-    test('permiso de WhatsApp por número: clave con el número, espera a Iris ≥ 0.10.0 y sale con telefono', async ({
+    test('permiso de WhatsApp por número: clave con HMAC del número (0.12.1), espera a Iris ≥ 0.10.0 y sale con telefono', async ({
         assert,
     }) => {
         const clienteId = await crearCliente()
-        const r = await new RegistrarConsentimientoWhatsapp().execute(
-            {
-                cliente_id: clienteId,
-                estado: 'acepta',
-                origen: 'argos_panel',
-                empresa_id: 1,
-                telefono: '+50244556677',
-                ocurrido_en: '2026-11-21T15:00:00.000Z',
-            },
-            contextoPrueba(),
-        )
+        const registrar = (telefono: string) =>
+            new RegistrarConsentimientoWhatsapp().execute(
+                {
+                    cliente_id: clienteId,
+                    estado: 'acepta',
+                    origen: 'argos_panel',
+                    empresa_id: 1,
+                    telefono,
+                    ocurrido_en: '2026-11-21T15:00:00.000Z',
+                },
+                contextoPrueba(),
+            )
+        // Sin secreto del receptor no hay clave posible: 409, nada en la cola
+        await fijarConector('0.9.0', null)
+        await assert.rejects(() => registrar('+50244556677'), /conector con Iris/)
+        assert.isNull(await db.from('notify.consentimientos_iris').where('cliente_id', clienteId).first())
+
+        await fijarConector('0.9.0')
+        const r = await registrar('+50244556677')
         assert.equal(
             r.idempotency_key,
-            `argos:consentimiento:1:${clienteId}:whatsapp:${createHash('sha256').update('+50244556677').digest('hex').slice(0, 16)}:2026-11-21T15:00:00.000Z`,
+            `argos:consentimiento:1:${clienteId}:whatsapp:${huellaEsperada('+50244556677', SECRETO_1)}:2026-11-21T15:00:00.000Z`,
         )
         assert.notInclude(r.idempotency_key, '44556677')
-        // El número no queda en claro en la auditoría
+        // Otro número en el mismo instante es otro permiso
+        const otro = await registrar('+50255123344')
+        assert.notEqual(otro.idempotency_key, r.idempotency_key)
+
+        // Ni el número ni la clave (dato personal) quedan en claro en la auditoría
         const auditadas = await db
             .from('audit.acciones')
             .where('accion', 'notificaciones.registrar_consentimiento')
             .where('entidad_id', clienteId)
         assert.isNotEmpty(auditadas)
-        for (const a of auditadas) assert.notInclude(JSON.stringify(a), '44556677')
+        for (const a of auditadas) {
+            assert.notInclude(JSON.stringify(a), '44556677')
+            assert.notInclude(JSON.stringify(a), huellaEsperada('+50244556677', SECRETO_1))
+        }
         const cambios = await db
             .from('audit.cambios')
             .where({ entidad_tipo: 'cliente', entidad_id: clienteId })
@@ -338,18 +363,77 @@ test.group('notify · contactos del cliente', (group) => {
                 status: 201,
             })
         })
-        await fijarConector('0.9.0')
-        assert.containsSubset(await entregarConsentimientosIris(), { en_espera: 1, enviados: 0 })
+        // Iris < 0.10.0: espera sin gastar intentos
+        assert.containsSubset(await entregarConsentimientosIris(), { en_espera: 2, enviados: 0 })
         await fijarConector('0.10.0')
-        assert.containsSubset(await entregarConsentimientosIris(), { enviados: 1 })
-        assert.deepEqual(JSON.parse(cuerpos[0]!), {
-            empresa_id: 1,
-            cliente_id: clienteId,
-            canal: 'whatsapp',
-            estado: 'acepta',
-            origen: 'argos_panel',
-            ocurrido_en: '2026-11-21T15:00:00.000Z',
-            telefono: '+50244556677',
+        assert.containsSubset(await entregarConsentimientosIris(), { enviados: 2 })
+        assert.deepInclude(
+            cuerpos.map((c) => JSON.parse(c)),
+            {
+                empresa_id: 1,
+                cliente_id: clienteId,
+                canal: 'whatsapp',
+                estado: 'acepta',
+                origen: 'argos_panel',
+                ocurrido_en: '2026-11-21T15:00:00.000Z',
+                telefono: '+50244556677',
+            },
+        )
+    })
+
+    test('rotación del secreto: el pendiente se reintenta con la clave y los bytes guardados, sin recalcular', async ({
+        assert,
+    }) => {
+        const clienteId = await crearCliente()
+        await fijarConector('0.10.0', SECRETO_1)
+        const r = await new RegistrarConsentimientoWhatsapp().execute(
+            {
+                cliente_id: clienteId,
+                estado: 'baja',
+                origen: 'argos_panel',
+                empresa_id: 1,
+                telefono: '+50277889900',
+                ocurrido_en: '2026-11-21T16:00:00.000Z',
+            },
+            contextoPrueba(),
+        )
+        const original = r.idempotency_key
+        assert.include(original, huellaEsperada('+50277889900', SECRETO_1))
+
+        const llamadas: Array<{ clave: string; cuerpo: string }> = []
+        let status = 503
+        fijarFetchConsentimientosIris(async (_url, init) => {
+            llamadas.push({
+                clave: new Headers(init?.headers).get('idempotency-key')!,
+                cuerpo: String(init?.body),
+            })
+            return status < 300
+                ? new Response(JSON.stringify({ consentimiento_id: 'c-r', estado_vigente: 'baja' }), {
+                      status,
+                  })
+                : new Response(`{"error":"caido","clave":"${original}","telefono":"+50277889900"}`, {
+                      status,
+                  })
         })
+        assert.containsSubset(await entregarConsentimientosIris(), { reintentar: 1 })
+        // El error guardado no repite el número ni la clave
+        const fila = await db.from('notify.consentimientos_iris').where('idempotency_key', original).first()
+        assert.notInclude(fila.ultimo_error, '+50277889900')
+        assert.notInclude(fila.ultimo_error, original)
+
+        // El secreto de webhooks rota (reconexión): el reintento manda la clave y los bytes guardados
+        await fijarConector('0.10.0', SECRETO_2)
+        status = 201
+        assert.containsSubset(await entregarConsentimientosIris({ ahora: new Date(Date.now() + 61_000) }), {
+            enviados: 1,
+        })
+        assert.lengthOf(llamadas, 2)
+        assert.equal(llamadas[0]!.clave, original)
+        assert.equal(llamadas[1]!.clave, original)
+        assert.equal(llamadas[1]!.cuerpo, llamadas[0]!.cuerpo)
+        assert.notInclude(llamadas[1]!.clave, huellaEsperada('+50277889900', SECRETO_2))
+        const enviada = await db.from('notify.consentimientos_iris').where('id', fila.id).first()
+        assert.equal(enviada.idempotency_key, original)
+        assert.equal(enviada.entrega, 'enviado')
     })
 })
