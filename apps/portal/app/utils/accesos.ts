@@ -119,7 +119,7 @@ export function accesosRapidos(entrada: EntradaAccesos): AccesoRapido[] {
             id: 'promesa',
             titulo: 'Prometer pago',
             descripcion: 'Elige el día en que vas a pagar',
-            icono: 'i-lucide-hand-coins',
+            icono: 'i-lucide-calendar-check',
             alcance: 'empresa',
             accion: 'promesa',
         })

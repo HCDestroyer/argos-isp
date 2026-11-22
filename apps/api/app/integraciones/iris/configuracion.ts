@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import { capacidadesIris, type CapacidadesIris } from '#integraciones/equipos/equipos'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
@@ -29,7 +30,27 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-export const CONTRATO_IRIS = '0.8.1'
+// 0.12.0 (A6, 21 nov): con la 0.9.0 completa del lado de Argos (bienvenida con seguimiento, avisos de
+// soporte, `capacidades`, y A32, A33 y A35 con su error de «sin capacidad» porque Argos no tiene SmartOLT
+// ni ACS: `capacidades.aprovisionamiento` en false) y 0.10.0 a 0.12.0 ya en main (A38–A48, `X-Iris-Contacto`).
+// No 0.12.1: la clave del consentimiento por número todavía usa sha256 (0.12.1 pide HMAC con el secreto
+// del receptor) y el portal no manda `X-Iris-Contacto` en §11.
+export const CONTRATO_IRIS = '0.12.0'
+
+/**
+ * Contrato que habla este Argos ahora: `CONTRATO_IRIS`, salvo en las pruebas, que pueden hablar otro
+ * (`fijarContratoArgosParaPruebas`) para ejercitar lo que se activa con una versión mayor (0.14.0 §4.5)
+ * sin publicarla antes de tiempo. Nunca se fija fuera de las pruebas: no hay estado entre peticiones.
+ */
+let contratoArgosDePrueba: string | null = null
+
+export function fijarContratoArgosParaPruebas(contrato?: string | null): void {
+    contratoArgosDePrueba = contrato ?? null
+}
+
+export function contratoArgos(): string {
+    return contratoArgosDePrueba ?? CONTRATO_IRIS
+}
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
@@ -128,6 +149,8 @@ export interface FilaConectorIris {
     activo: boolean
     url_base: string | null
     token_cifrado: string | null
+    /** `token_portal` de Iris (0.9.0 §1.2), cifrado v1; solo lo lee el servidor del portal (A5) */
+    token_portal_cifrado: string | null
     webhook_salida_url: string | null
     webhook_salida_secreto_cifrado: string | null
     webhook_entrada_secreto_cifrado: string | null
@@ -152,6 +175,10 @@ export interface FilaConectorIris {
     encender_al_confirmar: boolean
     /** 0.8.0: lo último que informó Iris de su sincronización (`PUT /integraciones/iris/sincronizacion`) */
     sincronizacion: SincronizacionIris | null
+    /** 0.14.0 §6.6: vínculos de técnicos que Iris dijo haber enviado al cerrar su carga inicial */
+    vinculos_cargados: number | null
+    /** 0.14.0 §6.6: cierre de la carga inicial de vínculos; null con contrato ≥ 0.14.0 = en carga */
+    vinculos_cargados_en: Date | null
     version: number
     created_at: Date
     updated_at: Date
@@ -315,6 +342,8 @@ export interface JuegoPendienteIris {
     webhook_entrada_secreto: string
     contrato: string | null
     receptor_argos: boolean | null
+    /** `token_portal` del canje nuevo (0.9.0 §1.2); null si Iris no lo mandó */
+    token_portal?: string | null
 }
 
 /**
@@ -345,6 +374,9 @@ export async function bloquearConectorIris(t: Transaccion): Promise<FilaConector
  * Guarda cambios en la fila (la crea si no existe), con control de `version` si se pide y diff en
  * `audit.cambios` (secretos como `***`). La configuración es de la instalación, no de una empresa.
  */
+/** Versión desde la que Argos conoce el vínculo de cada técnico (§6.6). */
+export const CONTRATO_CARGA_VINCULOS = '0.14.0'
+
 export async function guardarConectorIris(
     t: Transaccion,
     antes: FilaConectorIris | null,
@@ -353,6 +385,16 @@ export async function guardarConectorIris(
 ): Promise<FilaConectorIris> {
     if (opciones.version !== undefined && (antes?.version ?? 0) !== opciones.version) {
         throw new ConflictoVersion(TABLA_CONECTOR_IRIS, 1)
+    }
+    // 0.14.0 §6.6 (N-1): al pasar a ≥ 0.14.0 (PUT del contrato o canje) se abre la carga inicial de
+    // vínculos de técnicos; la cierra Iris con `vinculos_cargados`
+    if (
+        typeof cambios.contrato === 'string' &&
+        contratoAdmite(cambios.contrato, CONTRATO_CARGA_VINCULOS) &&
+        !contratoAdmite(antes?.contrato, CONTRATO_CARGA_VINCULOS) &&
+        !('vinculos_cargados_en' in cambios)
+    ) {
+        cambios = { ...cambios, vinculos_cargados: null, vinculos_cargados_en: null }
     }
     let despues: FilaConectorIris
     if (antes) {
@@ -387,6 +429,8 @@ export interface VistaConectorIris {
     activo: boolean
     url_base: string | null
     token: '***' | null
+    /** `***` si Iris entregó el `token_portal` (0.9.0 §1.2); nunca el valor */
+    token_portal: '***' | null
     webhook_salida_url: string | null
     webhook_salida_secreto: '***' | null
     webhook_entrada_url: string | null
@@ -468,6 +512,7 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
         activo: fila?.activo ?? false,
         url_base: fila?.url_base ?? null,
         token: mascara(fila?.token_cifrado),
+        token_portal: mascara(fila?.token_portal_cifrado),
         webhook_salida_url: fila?.webhook_salida_url ?? null,
         webhook_salida_secreto: mascara(fila?.webhook_salida_secreto_cifrado),
         webhook_entrada_url: base ? `${base}${RUTA_RECEPTOR_IRIS}` : null,
@@ -507,7 +552,12 @@ export interface EstadoConectorIris {
     version_argos: string
     /** versión del contrato Iris que habla este Argos (`CONTRATO_IRIS`) */
     contrato: string
+    /** 0.9.0 §4.3: qué puede aprovisionar Argos por empresa y tecnología (hoy todo en false) */
+    capacidades: CapacidadesIris
 }
+
+/** `version_argos` y `contrato` del canje y de `PUT /integraciones/iris/contrato`. */
+export type VersionesIris = Omit<EstadoConectorIris, 'activo' | 'capacidades'>
 
 /**
  * Para quien solo tiene `iris.abrir` (botón "Ver en Iris") y para el token de Iris (contrato 0.5.0,
@@ -516,11 +566,15 @@ export interface EstadoConectorIris {
  */
 export async function estadoConectorIris(): Promise<EstadoConectorIris> {
     const config = await configIris()
-    return { activo: config.activo && Boolean(config.urlBase && config.token), ...(await versionesIris()) }
+    return {
+        activo: config.activo && Boolean(config.urlBase && config.token),
+        ...(await versionesIris()),
+        capacidades: await capacidadesIris(),
+    }
 }
 
 /** `version_argos` y `contrato` (canje, estado y `PUT /integraciones/iris/contrato`). */
-export async function versionesIris(): Promise<Omit<EstadoConectorIris, 'activo'>> {
+export async function versionesIris(): Promise<VersionesIris> {
     const { version } = await versionInstalada()
-    return { version_argos: version, contrato: CONTRATO_IRIS }
+    return { version_argos: version, contrato: contratoArgos() }
 }

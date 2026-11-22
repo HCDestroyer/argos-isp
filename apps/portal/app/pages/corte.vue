@@ -5,8 +5,8 @@
  * muestra nombre parcial, estado y montos.
  *
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Día 4: solicitar promesa
- * de pago (tarea 4, `PromesaSolicitar`) y subir el comprobante de depósito (tarea 5,
- * `ComprobanteSubir`). Semana 2: pagar en línea (`PagoEnLinea`); la pasarela devuelve al cliente a
+ * de pago (tarea 4, `PromesaSolicitar`, modal corto) y subir el comprobante de depósito (tarea 5,
+ * página propia `/comprobante`, que al volver deja el comprobante en `useComprobanteEnviado`). Semana 2: pagar en línea (`PagoEnLinea`); la pasarela devuelve al cliente a
  * `/corte?pago=<id>&estado=<pagado|fallido>`, donde se sigue el cobro (`GET /portal/pagos/en-linea/:id`)
  * junto con el estado; `estado` (lo que dijo el proveedor) se muestra mientras llega el webhook.
  *
@@ -43,21 +43,26 @@ const pendiente = computed(() => esPendienteInstalacion(corte.value?.estado))
 
 const verDeposito = ref(false)
 const verPromesa = ref(false)
-const verComprobante = ref(false)
 /** Modal ya abierto alguna vez: desde entonces queda montado (ver la plantilla). */
-const usado = reactive({ deposito: false, promesa: false, comprobante: false })
+const usado = reactive({ deposito: false, promesa: false })
 watchEffect(() => {
     usado.deposito ||= verDeposito.value
     usado.promesa ||= verPromesa.value
-    usado.comprobante ||= verComprobante.value
 })
 
-/** Último comprobante enviado desde esta página: queda en revisión; al aprobarlo, el servicio vuelve. */
+/**
+ * Último comprobante enviado (en `/comprobante`, de donde se vuelve aquí): queda en revisión; al
+ * aprobarlo, el servicio vuelve. Se lee una vez al montar.
+ */
 const comprobante = ref<ComprobantePortal | null>(null)
-function comprobanteEnviado(enviado: ComprobantePortal) {
-    comprobante.value = enviado
-    vigilarEstado()
-}
+const comprobanteEnviado = useComprobanteEnviado()
+onMounted(() => {
+    if (comprobanteEnviado.value) {
+        comprobante.value = comprobanteEnviado.value
+        comprobanteEnviado.value = null
+        vigilarEstado()
+    }
+})
 
 /** Última promesa enviada desde esta página (aprobada o pendiente; la rechazada se ve en el modal). */
 const promesa = ref<PromesaSolicitada | null>(null)
@@ -293,7 +298,7 @@ function alAcceso(accion: NonNullable<AccesoRapido['accion']>) {
         verDeposito.value = true
     }
     else if (accion === 'comprobante') {
-        verComprobante.value = true
+        void navigateTo('/comprobante?volver=/corte')
     }
     else if (accion === 'promesa') {
         verPromesa.value = true
@@ -370,25 +375,38 @@ async function actualizar() {
         />
 
         <template v-else>
-            <div>
-                <p
-                    v-if="corte.nombre_parcial"
-                    class="text-sm text-muted"
+            <!-- Tarjeta del corte (tablero `Portal`): estado, título, el monto una sola vez y qué hacer. -->
+            <section
+                class="ax-tarjeta flex flex-col gap-4 p-5"
+                aria-labelledby="titulo-corte"
+                data-testid="corte-tarjeta"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <EstadoServicioBadge
+                        v-if="corte.estado"
+                        :estado="corte.estado"
+                    />
+                    <p
+                        v-if="corte.nombre_parcial"
+                        class="text-sm text-muted"
+                    >
+                        Hola, {{ corte.nombre_parcial }}
+                    </p>
+                </div>
+                <h1
+                    id="titulo-corte"
+                    class="text-2xl font-semibold tracking-[-0.02em] text-balance text-highlighted"
                 >
-                    Hola, {{ corte.nombre_parcial }}
-                </p>
-                <h1 class="mt-1 text-2xl font-semibold text-balance text-highlighted">
                     {{ mensaje.titulo }}
                 </h1>
-                <p class="mt-1 text-sm text-muted">
+                <CorteResumenDeuda
+                    v-if="identificado"
+                    :corte="corte"
+                />
+                <p class="text-sm text-muted">
                     {{ mensaje.descripcion }}
                 </p>
-            </div>
-
-            <CorteResumenDeuda
-                v-if="identificado"
-                :corte="corte"
-            />
+            </section>
 
             <CorteEstadoEnVivo
                 v-if="pagoId !== null"
@@ -427,9 +445,9 @@ async function actualizar() {
                 data-testid="promesa-pendiente-corte"
             />
 
-            <div
+            <!-- La acción principal, fija abajo en el teléfono. -->
+            <PortalBarraAccion
                 v-if="!identificado"
-                class="flex flex-col gap-2"
                 data-testid="corte-no-identificado"
             >
                 <UButton
@@ -442,9 +460,9 @@ async function actualizar() {
                 <p class="-mt-1 text-center text-xs text-muted">
                     Para pagar en línea, subir un comprobante o pedir una promesa de pago necesitamos saber cuál es tu servicio.
                 </p>
-            </div>
+            </PortalBarraAccion>
 
-            <template v-else-if="!retirado">
+            <PortalBarraAccion v-else-if="!retirado && (!pagoEnCamino || depositoPrincipal)">
                 <PagoEnLinea v-if="!pagoEnCamino" />
                 <!-- Sin pasarela, el depósito es la acción principal (un botón, no una tarjeta más). -->
                 <UButton
@@ -456,7 +474,7 @@ async function actualizar() {
                     data-testid="ver-deposito"
                     @click="verDeposito = true"
                 />
-            </template>
+            </PortalBarraAccion>
 
             <UAlert
                 v-if="errorCuenta"
@@ -484,6 +502,7 @@ async function actualizar() {
             <PortalAccesosRapidos
                 :accesos="accesos"
                 :testids="TESTIDS_CORTE"
+                forma="lista"
                 @accion="alAcceso"
             />
 
@@ -502,6 +521,7 @@ async function actualizar() {
             <UButton
                 v-if="contacto.to !== '/contacto'"
                 label="Más formas de contacto y horario"
+                icon="i-lucide-headset"
                 color="neutral"
                 variant="link"
                 size="sm"
@@ -530,11 +550,6 @@ async function actualizar() {
             v-if="usado.promesa"
             v-model:open="verPromesa"
             @resultado="promesaResuelta"
-        />
-        <LazyComprobanteSubir
-            v-if="usado.comprobante"
-            v-model:open="verComprobante"
-            @enviado="comprobanteEnviado"
         />
     </div>
 </template>

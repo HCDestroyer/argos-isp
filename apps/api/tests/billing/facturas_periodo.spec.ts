@@ -1,8 +1,9 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import { prepararEmpresas } from '#tests/contabilidad/ayudas_contabilidad'
 import {
     asientoDe,
     escenario,
@@ -181,16 +182,24 @@ test.group('Facturas de periodo · vista previa', () => {
     })
 })
 
-test.group('Facturas de periodo · emitir', () => {
+test.group('Facturas de periodo · emitir', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('cliente paga 3 meses adelantados: el anticipo queda aplicado y el cron no duplica', async ({
         assert,
     }) => {
-        const e = await servicioDesdeSeptiembre({ fecha_instalacion: '2026-11-01' })
+        // empresa propia: `afirmarLibro` compara el libro con los documentos de toda la empresa, y en
+        // la principal otras suites dejan fixtures sin asiento (el orden de los archivos varía)
+        const empresas = await prepararEmpresas()
+        const e = await servicioDesdeSeptiembre({
+            fecha_instalacion: '2026-11-01',
+            servicio: { empresa_id: empresas.B },
+        })
         await generar(e.servicioId, '2026-11-01')
         // paga noviembre y tres meses más: lo que sobra queda como saldo a favor
         await new RegistrarPago().execute(
             { cliente_id: e.clienteId, metodo: 'caja', monto: '600.00' },
-            contextoPrueba(),
+            empresas.ctx,
         )
         const conSaldo = await vista(e.servicioId, '2026-11-01')
         assert.equal(conSaldo.saldo_a_favor, '450.00')
@@ -210,7 +219,7 @@ test.group('Facturas de periodo · emitir', () => {
         assert.deepEqual([r.omitidas, r.bonificadas, r.saldo_a_favor], [[], [], '0.00'])
         assert.equal(await saldoTexto(e.clienteId), '0.00')
         await afirmarLibroCuadrado(assert)
-        await afirmarLibro(assert, 1)
+        await afirmarLibro(assert, [empresas.B, empresas.C])
 
         // misma clave que el cron, mismo evento y snapshot con la emisión manual
         const dic = await db.from('billing.facturas').where('id', r.creadas[0]!.factura_id).firstOrFail()

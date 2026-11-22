@@ -1,0 +1,2 @@
+# Certificado propio: CERTS_DIR/fullchain.pem (con la cadena) y CERTS_DIR/privkey.pem.
+tls /certs/fullchain.pem /certs/privkey.pem

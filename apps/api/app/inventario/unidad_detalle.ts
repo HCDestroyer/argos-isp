@@ -1,12 +1,14 @@
 import db from '@adonisjs/lucid/services/db'
 import { historialUnidad, verUnidad } from '#inventario/unidades'
+import { intentosConVerificacion } from '#inventario/recuperacion'
 
 /**
  * Lecturas de una unidad para A48 (contrato Iris 0.12.0 §3.10):
  *
  * - **Panel** (`GET /inventario/unidades/:id`): la unidad con su kardex (`historial`), más
  *   `historial_estados` (cada cambio del estado del equipo), sus `garantias` (proveedor, RMA, vencimiento,
- *   resultado), los `intentos` de recuperación (actor, foto, ubicación) y los `contactos` registrados.
+ *   resultado), los `intentos` de recuperación (actor, foto, ubicación y verificación con Iris, 0.14.0) y
+ *   los `contactos` registrados.
  * - **Iris** (M5, `inventario.ver_unidad`): serie, MAC, modelo, estado del equipo e historial de estados
  *   (fecha, de, a, motivo), **sin costos, proveedor ni RMA**; en el historial, `servicio_id` solo para el
  *   servicio actual de la unidad y para el de la orden en curso (`?servicio_id=`).
@@ -63,28 +65,7 @@ export async function detalleUnidad(unidadId: number) {
             'g.mac_anterior',
             'g.nota',
         )) as Array<Record<string, unknown>>
-    const intentos = (await db
-        .from('inventario.intentos_recuperacion as i')
-        .leftJoin('core.usuarios as u', 'u.id', 'i.actor_tecnico_id')
-        .where('i.unidad_id', unidadId)
-        .orderBy('i.id')
-        .select(
-            'i.id',
-            'i.servicio_id',
-            'i.intento_n',
-            'i.motivo',
-            'i.foto_ref',
-            db.raw('i.lat::text as lat'),
-            db.raw('i.lng::text as lng'),
-            db.raw('i.precision_m::text as precision_m'),
-            'i.nota',
-            'i.fecha',
-            'i.actor_tecnico',
-            'i.actor_tecnico_id',
-            'u.nombre as actor_tecnico_nombre',
-            'i.origen_externo_id',
-            'i.created_at',
-        )) as Array<Record<string, unknown>>
+    const intentos = await intentosConVerificacion(unidadId)
     const contactos = (await db
         .from('inventario.contactos_recuperacion as c')
         .leftJoin('core.usuarios as u', 'u.id', 'c.registrado_por')
@@ -111,12 +92,7 @@ export async function detalleUnidad(unidadId: number) {
             origen_externo_id: e.origen_externo_id,
         })),
         garantias: garantias.map((g) => ({ ...g, id: Number(g.id), proveedor_id: n(g.proveedor_id) })),
-        intentos: intentos.map((i) => ({
-            ...i,
-            id: Number(i.id),
-            servicio_id: Number(i.servicio_id),
-            actor_tecnico_id: n(i.actor_tecnico_id),
-        })),
+        intentos,
         contactos: contactos.map((c) => ({
             ...c,
             id: Number(c.id),

@@ -48,6 +48,8 @@ describe('portal autenticado /cuenta', () => {
         expect(inicio.text()).toContain('Juan Pérez López')
         expect(inicio.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')
         expect(inicio.find('[data-testid="servicio-cuenta"]').text()).toContain('Suspendido')
+        // El saldo va una sola vez (pedido del PM): solo en el banner, nunca repetido en otra tarjeta.
+        expect(inicio.text().split('Q 550.00')).toHaveLength(2)
         inicio.unmount()
 
         const wrapper = await montarCuenta('/cuenta?seccion=facturas')
