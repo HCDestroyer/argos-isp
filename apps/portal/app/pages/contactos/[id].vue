@@ -318,15 +318,18 @@ async function quitar() {
                         </UFormField>
                     </fieldset>
 
-                    <UButton
-                        type="submit"
-                        :label="esNuevo ? 'Agregar contacto' : 'Guardar'"
-                        icon="i-lucide-check"
-                        size="xl"
-                        block
-                        :loading="guardando"
-                        data-testid="contacto-guardar"
-                    />
+                    <!-- Acción principal, fija abajo en el teléfono. -->
+                    <PortalBarraAccion>
+                        <UButton
+                            type="submit"
+                            :label="esNuevo ? 'Agregar contacto' : 'Guardar'"
+                            icon="i-lucide-check"
+                            size="xl"
+                            block
+                            :loading="guardando"
+                            data-testid="contacto-guardar"
+                        />
+                    </PortalBarraAccion>
                     <UButton
                         v-if="!esNuevo && actual"
                         label="Quitar contacto"

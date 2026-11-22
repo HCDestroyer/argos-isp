@@ -606,6 +606,12 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
         'Intentamos recuperar el equipo {{equipo.serie}}{{#servicio.direccion}} en {{servicio.direccion}}{{/servicio.direccion}}. ' +
             'Si ya lo entregaste, comunícate con nosotros.',
     ),
+    ...ambos(
+        'equipo.wifi_cambiado',
+        'Se cambió el Wi-Fi de tu servicio',
+        'Se cambió el Wi-Fi de tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}}{{#servicio.direccion}} en {{servicio.direccion}}{{/servicio.direccion}}. ' +
+            'Si no fuiste tú, comunícate con nosotros.',
+    ),
     // Soporte de Iris (contrato 0.9.0 §6.6, `soporte.ts`): número, tipo y estado; nunca el texto del
     // mensaje (no llega a Argos). WhatsApp no: Iris avisa en su conversación.
     ...ambos(

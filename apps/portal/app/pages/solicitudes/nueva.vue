@@ -248,15 +248,18 @@ const volver = '/cuenta?seccion=soporte&pestana=solicitudes'
                             class="w-full"
                         />
                     </UFormField>
-                    <UButton
-                        type="submit"
-                        label="Enviar solicitud"
-                        icon="i-lucide-send"
-                        size="xl"
-                        block
-                        :loading="enviando"
-                        data-testid="solicitud-enviar"
-                    />
+                    <!-- Acción principal, fija abajo en el teléfono. -->
+                    <PortalBarraAccion>
+                        <UButton
+                            type="submit"
+                            label="Enviar solicitud"
+                            icon="i-lucide-send"
+                            size="xl"
+                            block
+                            :loading="enviando"
+                            data-testid="solicitud-enviar"
+                        />
+                    </PortalBarraAccion>
                 </UForm>
             </div>
         </UCard>
