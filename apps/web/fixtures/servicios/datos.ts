@@ -54,6 +54,11 @@ export function precioMensualServicio(costoOverride: string | null, planId: numb
     return costoOverride ?? catalogo.find(p => p.id === planId)?.precio ?? '0.00'
 }
 
+/** `S-000412`: el código del servicio que arma la API desde el id. */
+export function codigoServicio(id: number): string {
+    return `S-${String(id).padStart(6, '0')}`
+}
+
 function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean): Servicio {
     const router = cliente.zona_id === 3 ? 2 : 1
     const plan = cliente.tipo === 'empresa' ? (router === 1 ? 3 : 4) : ((cliente.id % 2) + 1)
@@ -62,6 +67,9 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
     const v6 = router === 1 && plan !== 4
     return {
         id,
+        // Como la API (A1, contrato Iris 0.10.0 §3.7): código automático e inmutable; nombre opcional.
+        codigo: codigoServicio(id),
+        nombre: sucursal ? 'Sucursal' : null,
         cliente_id: cliente.id,
         // Multiempresa (A1): las sucursales (segundo servicio de los clientes 3 y 11) son de
         // Fibra del Sur (empresa 2); lo demás, de la 1. Así un cliente tiene servicios de dos NIT.

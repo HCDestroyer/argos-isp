@@ -134,7 +134,7 @@ describe('campos personalizados en el cliente', () => {
         if (cliente) {
             cliente.campos_personalizados = { ...cliente.campos_personalizados, medio_contacto: 'Vecino', acepta_publicidad: true, fecha_visita: '2026-10-05', numero_poste: 12 }
         }
-        const ficha = await mountSuspended(conApp(PaginaCliente), { route: '/clientes/8' })
+        const ficha = await mountSuspended(conApp(PaginaCliente), { route: '/clientes/8?datos=1' })
         await esperar(() => expect(ficha.find('[data-prueba="dato-campo-medio_contacto"]').exists()).toBe(true))
         expect(ficha.find('[data-prueba="dato-campo-medio_contacto"]').text()).toContain('Cómo nos conoció')
         expect(ficha.find('[data-prueba="dato-campo-acepta_publicidad"]').text()).toContain('Sí')
@@ -146,7 +146,7 @@ describe('campos personalizados en el cliente', () => {
 
     it('si el catálogo falla, la ficha lo dice con Reintentar', async () => {
         bd.fallas['GET /api/v1/campos-personalizados'] = 500
-        const ficha = await mountSuspended(conApp(PaginaCliente), { route: '/clientes/1' })
+        const ficha = await mountSuspended(conApp(PaginaCliente), { route: '/clientes/1?datos=1' })
         await esperar(() => expect(ficha.text()).toContain('Reintentar'))
     })
 })
