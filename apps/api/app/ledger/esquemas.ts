@@ -238,9 +238,25 @@ export const Caja = definirEsquema(
             turno_abierto_id: nulable(id),
             turno_abierto_por: { ...nulable(id), description: 'Usuario que abrió el turno abierto' },
             turno_abierto_por_nombre: nulable(texto),
+            formato_recibo: {
+                ...enumerado(['pos_80', 'carta']),
+                description: 'Decisión del PM 20: formato del recibo de esta caja (pos_80 de fábrica)',
+            },
+            formato_factura: {
+                ...enumerado(['pos_80', 'carta']),
+                description: 'Decisión del PM 20: formato de la factura de esta caja (carta de fábrica)',
+            },
             ...auditable,
         },
-        ['cajero_nombre', 'turno_abierto_por', 'turno_abierto_por_nombre', 'empresa_id'],
+        // empresa_id y los formatos siempre vienen; opcionales para no romper clientes tipados
+        [
+            'cajero_nombre',
+            'turno_abierto_por',
+            'turno_abierto_por_nombre',
+            'empresa_id',
+            'formato_recibo',
+            'formato_factura',
+        ],
     ),
 )
 

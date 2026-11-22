@@ -25,6 +25,7 @@ import {
     type OrigenBonificacion,
 } from '#billing/bonificaciones'
 
+import { enPausa, rangosSinCobro } from '#billing/pausas'
 /**
  * `facturas.emitir`: emite la factura de UN periodo de un servicio. La llama `generarFacturas`
  * (cron o `POST /facturas/generar`), una transacción por factura.
@@ -93,6 +94,12 @@ export interface EmisionManual {
     /** vencimiento fijado por quien llama (lo pasado a mano vence desde hoy); por defecto periodo + gracia */
     vence_en?: string | null
     /**
+     * Decisión del PM 21: días de gracia antes del corte que escribió quien emite un periodo pasado y el
+     * día desde el que cuenta para el corte (`corte_desde`). Se guardan en la factura;
+     * `evaluarEstadoServicio` no la cuenta antes de `corte_desde`.
+     */
+    gracia_corte?: { dias: number; desde: string } | null
+    /**
      * Total editado a mano (con IVA incluido; `facturas.editar_monto_periodo` y motivo, que valida quien
      * llama). Si difiere del calculado: mayor, una línea `servicio` «Ajuste del monto del periodo» por
      * la diferencia (4.1.01, IVA desglosado); menor, un descuento por la diferencia sobre la línea del
@@ -160,6 +167,10 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         const permitida = input.manual?.antes_de_facturar_desde || input.manual?.antes_del_inicio
         if (desde && input.periodo.periodo < desde && !permitida) {
             return { factura_id: null, creada: false, motivo: 'antes_de_facturar_desde' }
+        }
+        // pausa sin cobro (decisión del PM 16): el periodo que empieza dentro de la pausa no se cobra
+        if (enPausa(await rangosSinCobro(t.trx, servicio.id), input.periodo.periodo)) {
+            return { factura_id: null, creada: false, motivo: 'en_pausa' }
         }
 
         const { periodo, fin, dias, dias_ciclo: diasCiclo } = input.periodo
@@ -247,6 +258,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                           facturar_desde: desde,
                           monto_calculado: aTexto(calculado),
                           monto_cobrado: editado ? aTexto(cobrado) : null,
+                          ...(input.manual.gracia_corte ? { gracia_corte: input.manual.gracia_corte } : {}),
                           ...(tramoDesde
                               ? {
                                     tramo_inicial: {
@@ -286,6 +298,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             reglas_snapshot: snapshot,
             certificar_al: config.certificar_al,
             descripcion: `servicio ${servicio.id} · periodo ${periodo}`,
+            gracia_corte: input.manual?.gracia_corte ?? null,
         })
         if (!emision.creada) return { factura_id: emision.factura_id, creada: false, motivo: 'ya_existe' }
         const facturaId = emision.factura_id!

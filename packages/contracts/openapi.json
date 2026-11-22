@@ -45,6 +45,9 @@
       "name": "clientes"
     },
     {
+      "name": "cobranza"
+    },
+    {
       "name": "compras"
     },
     {
@@ -1752,6 +1755,172 @@
           }
         },
         "x-permiso": "adicionales.desactivar_motivo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ajustes-cobro": {
+      "get": {
+        "operationId": "ajustesCobroVer",
+        "summary": "Ajustes de cobro y libro de la empresa activa",
+        "description": "Sin guardar nunca: los valores de fábrica (asientos_requieren_aprobacion false, pausa_tope_dias 90) y version 0.",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ajustes_cobro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ajustes_cobro.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "ajustesCobroEditar",
+        "summary": "Editar los ajustes de cobro y libro de la empresa activa",
+        "description": "Decisiones del PM 10 (aprobación de asientos manuales por otro usuario) y 16 (tope de días de la pausa sin cobro, 1 a 365). Solo cambia lo que viene; 409 conflicto_version. Emite ajustes_cobro.cambiados.",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se guardó); si cambió responde 409"
+                  },
+                  "asientos_requieren_aprobacion": {
+                    "description": "Un asiento manual queda como borrador hasta que otro usuario lo aprueba (false de fábrica)",
+                    "type": "boolean"
+                  },
+                  "pausa_tope_dias": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "description": "Días máximos de una pausa sin cobro (90 de fábrica)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ajustes_cobro.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ajustes_cobro.editar",
         "x-implementado": true
       }
     },
@@ -4281,6 +4450,518 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos-origen": {
+      "get": {
+        "operationId": "bancosOrigenListar",
+        "summary": "Catálogo de bancos de origen con su estado en la empresa activa",
+        "description": "Decisión del PM 23: catálogo único del sistema, con los inactivos y `oculto` para la empresa activa (sin empresa activa, oculto es false). Las listas para elegir banco (GET /bancos) ya no traen los ocultos de la empresa activa.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BancoOrigen"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "bancosOrigenCrear",
+        "summary": "Agregar un banco al catálogo de bancos de origen (todas las empresas)",
+        "description": "409 banco_duplicado si el nombre ya existe. Emite banco_origen.cambiado (creado: true).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000,
+                    "description": "Posición en las listas (por defecto, después de los demás y antes de «Otro»)"
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Banco",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BancoOrigen"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos_origen.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos_origen.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos-origen/{id}": {
+      "put": {
+        "operationId": "bancosOrigenEditar",
+        "summary": "Editar nombre, orden o estado de un banco del catálogo",
+        "description": "Afecta a todas las empresas; los pagos y comprobantes que ya lo usan no cambian. 409 conflicto_version o banco_duplicado. Emite banco_origen.cambiado.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "activo": {
+                    "description": "false: sale de las listas de todas las empresas",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Banco",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BancoOrigen"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos_origen.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos_origen.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos-origen/{id}/mostrar": {
+      "post": {
+        "operationId": "bancosOrigenMostrar",
+        "summary": "Volver a mostrar en la empresa activa un banco oculto",
+        "description": "Idempotente. Emite banco_origen.cambiado (campos [oculto]).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Banco",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BancoOrigen"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos_origen.mostrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos_origen.mostrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos-origen/{id}/ocultar": {
+      "post": {
+        "operationId": "bancosOrigenOcultar",
+        "summary": "Ocultar en la empresa activa un banco que no usa",
+        "description": "Ya no sale en GET /bancos de esta empresa. Idempotente. Emite banco_origen.cambiado (campos [oculto]).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Banco",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BancoOrigen"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos_origen.ocultar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos_origen.ocultar",
         "x-implementado": true
       }
     },
@@ -9154,6 +9835,147 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cajas/{id}/impresion": {
+      "put": {
+        "operationId": "cajasConfigurarImpresion",
+        "summary": "Elegir el formato de impresión de la caja (recibo y factura)",
+        "description": "Decisión del PM 20: cada caja recuerda su formato. De fábrica, recibo en ticket de 80 mm (pos_80) y factura en carta. Solo cambia lo que viene; 409 conflicto_version. Emite caja.impresion_cambiada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "formato_recibo": {
+                    "type": "string",
+                    "enum": [
+                      "pos_80",
+                      "carta"
+                    ],
+                    "description": "pos_80 (ticket de 80 mm, de fábrica) o carta"
+                  },
+                  "formato_factura": {
+                    "type": "string",
+                    "enum": [
+                      "pos_80",
+                      "carta"
+                    ],
+                    "description": "carta (de fábrica) o pos_80"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caja",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Caja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.configurar_impresion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.configurar_impresion",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cajas/{id}/turnos": {
       "get": {
         "operationId": "cajasTurnos",
@@ -10069,13 +10891,12 @@
                   "evidencia": {
                     "type": "string",
                     "maxLength": 4000,
-                    "description": "Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT"
+                    "description": "Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT. Vacía: el resumen de las gestiones de cobro registradas del cliente (422 castigo_sin_evidencia si no tiene)"
                   }
                 },
                 "required": [
                   "facturas",
-                  "motivo",
-                  "evidencia"
+                  "motivo"
                 ],
                 "additionalProperties": false
               }
@@ -12069,6 +12890,334 @@
           }
         },
         "x-permiso": "clientes.estado_cuenta",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/gestiones-cobro": {
+      "get": {
+        "operationId": "clientesGestionesCobro",
+        "summary": "Gestiones de cobro de un cliente, de la más reciente a la más vieja",
+        "description": "Las de las empresas de la petición (la activa o, sin ella, las del alcance). Filtros servicio_id y tipo.",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "llamada",
+                "mensaje",
+                "visita",
+                "promesa",
+                "carta"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de gestiones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GestionCobro"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso gestiones_cobro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "gestiones_cobro.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "clientesRegistrarGestionCobro",
+        "summary": "Registrar una gestión de cobro (llamada, mensaje, visita, promesa verbal o carta)",
+        "description": "Decisión del PM 8 y contrato Iris 0.13.0. Solo informativa: nunca cambia el servicio, las facturas ni las promesas; es la evidencia del castigo de cartera. `ocurrido_en` entre ahora − 7 días y ahora + 5 minutos (422 fuera_de_ventana). La empresa es la del servicio (422 servicio_de_otro_cliente si no es del cliente) o la activa (422 cliente_de_otra_empresa si el cliente no tiene servicios en ella; 403 empresa_no_permitida fuera del alcance del token). Con el token de Iris: X-Iris-Actor obligatoria (400 cabecera_iris_requerida), Idempotency-Key obligatoria = `iris:gestion:<gestion_id>` con el UUID v7 de Iris (400 idempotency_key_requerida; 422 si no tiene ese formato); la misma clave con otro cuerpo → 422 idempotency_key_reutilizada; `carta` y `origen_tipo: panel` → 422 solo_argos; `nota` → 422 nota_no_permitida; `origen_id` obligatorio. `X-Iris-Contacto` (opcional): el contacto debe ser del cliente, con el servicio entre los suyos y su permiso `consultar` (403 servicio_fuera_del_contacto o permiso_de_contacto); queda en `contacto_id`. Desde el panel: `origen_tipo` panel por defecto y nota corta (hasta 280). Emite gestion_cobro.registrada (sin la nota). Responde `201 { gestion_id, … }`.",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "llamada",
+                      "mensaje",
+                      "visita",
+                      "promesa",
+                      "carta"
+                    ],
+                    "description": "carta solo desde el panel de Argos"
+                  },
+                  "resultado": {
+                    "type": "string",
+                    "enum": [
+                      "contesto",
+                      "no_contesto",
+                      "numero_equivocado",
+                      "promete_pagar",
+                      "rechaza",
+                      "pago_informado",
+                      "visita_sin_contacto"
+                    ]
+                  },
+                  "ocurrido_en": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Cuándo ocurrió: entre ahora − 7 días y ahora + 5 minutos (si no, 422 fuera_de_ventana)"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "enum": [
+                      "conversacion",
+                      "orden",
+                      "llamada",
+                      "panel"
+                    ],
+                    "description": "panel solo desde Argos (por defecto); Iris: conversacion, orden o llamada"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "Id de la conversación, orden o llamada en Iris (obligatorio desde Iris)"
+                  },
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 280,
+                    "description": "Nota corta, solo desde el panel (Iris no manda texto libre)"
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "resultado",
+                  "ocurrido_en"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Gestión registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GestionCobroRegistrada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso gestiones_cobro.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "gestiones_cobro.registrar",
         "x-implementado": true
       }
     },
@@ -17425,7 +18574,7 @@
       "post": {
         "operationId": "comprobantesAprobar",
         "summary": "Aprobar comprobante: registra el pago con sus datos y reactiva",
-        "description": "Contrato Iris 0.7.0 §7.7: también con el token de Iris, a nombre del usuario de Argos vinculado a X-Iris-Actor: usuario:<id> (auditoría con via_token_id; el pago y el comprobante quedan con ese usuario). Con ese token exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida; la huella incluye X-Iris-Actor: otra clave igual con otro actor es 422 idempotency_key_reutilizada). 403 actor_ia_no_permitido, actor_sin_vinculo, actor_inactivo, actor_sin_permiso o actor_sin_empresa; 409 iris_apagado; 409 comprobante_no_es_de_iris si el comprobante no llegó por Iris (canal ≠ iris). Desde el panel no cambia nada. Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.",
+        "description": "Contrato Iris 0.7.0 §7.7: también con el token de Iris, a nombre del usuario de Argos vinculado a X-Iris-Actor: usuario:<id> (auditoría con via_token_id; el pago y el comprobante quedan con ese usuario). Con ese token exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida; la huella incluye X-Iris-Actor: otra clave igual con otro actor es 422 idempotency_key_reutilizada). 403 actor_ia_no_permitido, actor_sin_vinculo, actor_inactivo, actor_sin_permiso o actor_sin_empresa; 409 iris_apagado; 409 comprobante_no_es_de_iris si el comprobante no llegó por Iris (canal ≠ iris). Desde el panel no cambia nada. Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Con menos dinero (decisión del PM 14) se abona a las facturas más viejas y `cobertura` dice cuánto falta; si la plantilla del servicio tiene rechazar_monto_distinto, un monto distinto de lo que se debe responde 422 monto_distinto (rechazarlo con esa causa). Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.",
         "tags": [
           "pagos"
         ],
@@ -17514,7 +18663,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Comprobante"
+                  "$ref": "#/components/schemas/ComprobanteAprobado"
                 }
               }
             }
@@ -17823,6 +18972,142 @@
           }
         },
         "x-permiso": "comprobantes.rechazar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/comprobantes/{id}/reconectar": {
+      "post": {
+        "operationId": "comprobantesReconectar",
+        "summary": "Dar desde el panel la reconexión temporal mientras caja revisa el comprobante",
+        "description": "Decisión del PM 15: mismas reglas y mismo cupo que la reconexión de Iris (POST /comprobantes/:id/reconexion-temporal); las del panel y las de Iris cuentan juntas para max_por_periodo. Crea la promesa reconexion_temporal (canal operador) y evaluarEstadoServicio reactiva en la misma transacción. 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, promesa_abierta, servicio_no_cortado, cupo_agotado, comprobante_no_cubre. Emite promesa.creada.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Obligatorio solo si el comprobante no tiene servicio"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "enum": [
+                      "fuera_de_horario",
+                      "sin_personal"
+                    ],
+                    "description": "fuera_de_horario: caja cerrada. sin_personal: horario hábil, pero nadie de caja disponible. Mismas reglas; el comprobante queda pendiente en la cola de caja"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reconexión temporal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconexionTemporal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.reconectar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.reconectar",
         "x-implementado": true
       }
     },
@@ -29959,6 +31244,276 @@
           }
         },
         "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/gestiones-cobro/{id}": {
+      "get": {
+        "operationId": "gestionesCobroVer",
+        "summary": "Ver una gestión de cobro",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gestión",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GestionCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso gestiones_cobro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "gestiones_cobro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/gestiones-cobro/{id}/adjunto": {
+      "get": {
+        "operationId": "gestionesCobroArchivo",
+        "summary": "Archivo de respaldo de una gestión de cobro",
+        "description": "Responde el archivo con su Content-Type e `inline`. 404 si la gestión no tiene adjunto.",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Foto (image/jpeg, image/png, image/webp) o PDF. La respuesta real lleva el Content-Type del archivo (el generador de OpenAPI declara application/json)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso gestiones_cobro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "gestiones_cobro.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "gestionesCobroAdjuntar",
+        "summary": "Adjuntar el archivo de respaldo de una gestión de cobro (una sola vez)",
+        "description": "Foto de la carta entregada, captura del mensaje… 409 adjunto_existente si ya tiene uno (la gestión no se edita). 422 archivo (required, tipo o tamano). Emite gestion_cobro.adjunto_agregado.",
+        "tags": [
+          "cobranza"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto (JPG, PNG o WebP) o PDF, hasta 5 MB; el tipo se decide por el contenido"
+                  }
+                },
+                "required": [
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gestión con su adjunto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GestionCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso gestiones_cobro.adjuntar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "gestiones_cobro.adjuntar",
         "x-implementado": true
       }
     },
@@ -49593,6 +51148,177 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/asientos": {
+      "post": {
+        "operationId": "libroRegistrarAsiento",
+        "summary": "Registrar un asiento manual de ajuste (o su borrador, si la empresa exige aprobación)",
+        "description": "Decisión del PM 10. Origen ajuste. Cada línea con debe o haber (422 debe_o_haber), Σ debe = Σ haber (422 descuadre); cuenta imputable y activa, auxiliar de cliente o proveedor, mes cerrado (422 periodo_cerrado) y bloqueos como cualquier asiento. Sin aprobación (de fábrica): estado registrado y el asiento ya está en el libro (libro.asiento_manual_registrado). Con asientos_requieren_aprobacion en los ajustes de la empresa: estado pendiente_aprobacion y un borrador que no toca el libro (libro.asiento_pendiente); lo aprueba otro usuario en POST /libro/borradores/:id/aprobar.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha contable (por defecto hoy, al registrar o aprobar)"
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "movimientos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "cuenta": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 30,
+                          "description": "Código del plan de cuentas (imputable y activa)"
+                        },
+                        "debe": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        },
+                        "haber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        },
+                        "cliente_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Obligatorio en cuentas con auxiliar de cliente (CxC, anticipos)"
+                        },
+                        "proveedor_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Obligatorio en 2.1.03 Proveedores"
+                        }
+                      },
+                      "required": [
+                        "cuenta"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 2,
+                    "maxItems": 200
+                  }
+                },
+                "required": [
+                  "descripcion",
+                  "movimientos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Asiento o borrador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsientoManual"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.registrar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.registrar_asiento",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/asientos/{id}": {
       "get": {
         "operationId": "libroVerAsiento",
@@ -50960,6 +52686,434 @@
           }
         },
         "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/borradores": {
+      "get": {
+        "operationId": "libroBorradores",
+        "summary": "Borradores de asiento manual (pendientes, aprobados y rechazados)",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "aprobado",
+                "rechazado"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de borradores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BorradorAsiento"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/borradores/{id}": {
+      "get": {
+        "operationId": "libroVerBorrador",
+        "summary": "Ver un borrador de asiento manual",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Borrador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BorradorAsiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/borradores/{id}/aprobar": {
+      "post": {
+        "operationId": "libroAprobarBorrador",
+        "summary": "Aprobar el borrador de asiento de otro usuario (lo registra en el libro)",
+        "description": "Quien lo creó no puede aprobarlo: 403 autoaprobacion. 409 borrador_decidido si ya se aprobó o rechazó. Registra el asiento con la fecha del borrador (o hoy); si el mes se cerró o una cuenta cambió, responde ese error y el borrador sigue pendiente. Emite libro.asiento_manual_registrado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Borrador aprobado (con asiento_id)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BorradorAsiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.aprobar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.aprobar_asiento",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/borradores/{id}/rechazar": {
+      "post": {
+        "operationId": "libroRechazarBorrador",
+        "summary": "Rechazar con motivo un borrador de asiento (no toca el libro)",
+        "description": "Quien lo creó también puede rechazarlo (retirarlo). 409 borrador_decidido. Emite libro.asiento_rechazado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Borrador rechazado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BorradorAsiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.rechazar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.rechazar_asiento",
         "x-implementado": true
       }
     },
@@ -63446,6 +65600,10 @@
                   "mora_recurrente": {
                     "type": "boolean"
                   },
+                  "rechazar_monto_distinto": {
+                    "description": "Decisión del PM 14: no aprobar un comprobante cuyo monto no coincide con lo que debe cubrir (false de fábrica: se aplica como abono)",
+                    "type": "boolean"
+                  },
                   "hora_corte": {
                     "type": "string",
                     "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
@@ -63954,6 +66112,9 @@
                     ]
                   },
                   "mora_recurrente": {
+                    "type": "boolean"
+                  },
+                  "rechazar_monto_distinto": {
                     "type": "boolean"
                   },
                   "hora_corte": {
@@ -80251,6 +82412,8 @@
                         "adicionales.desactivar_motivo",
                         "adicionales.editar",
                         "adicionales.ver",
+                        "ajustes_cobro.editar",
+                        "ajustes_cobro.ver",
                         "ajustes_operacion.editar",
                         "ajustes_operacion.ver",
                         "anuncios.administrar",
@@ -80268,12 +82431,17 @@
                         "bancos.reatribuir_llegada",
                         "bancos.trasladar",
                         "bancos.ver",
+                        "bancos_origen.crear",
+                        "bancos_origen.editar",
+                        "bancos_origen.mostrar",
+                        "bancos_origen.ocultar",
                         "bitacora.ver",
                         "bodegas.crear",
                         "bodegas.desactivar",
                         "bodegas.editar",
                         "cajas.abrir",
                         "cajas.cerrar",
+                        "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
                         "cajas.ver",
@@ -80309,6 +82477,7 @@
                         "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
+                        "comprobantes.reconectar",
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
@@ -80367,6 +82536,9 @@
                         "fiscal.editar_parametros",
                         "fiscal.instalar",
                         "fiscal.ver",
+                        "gestiones_cobro.adjuntar",
+                        "gestiones_cobro.registrar",
+                        "gestiones_cobro.ver",
                         "horus.abrir",
                         "horus.configurar",
                         "horus.generar_token",
@@ -80424,6 +82596,7 @@
                         "lealtad.entregar",
                         "lealtad.revertir_canje",
                         "lealtad.ver",
+                        "libro.aprobar_asiento",
                         "libro.bloquear",
                         "libro.bloquear_duro",
                         "libro.cerrar_apertura",
@@ -80433,6 +82606,7 @@
                         "libro.excepcion_bloqueo",
                         "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
+                        "libro.rechazar_asiento",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
@@ -80534,6 +82708,7 @@
                         "servicios.eliminar",
                         "servicios.generar_codigo_identificacion",
                         "servicios.limitar",
+                        "servicios.pausar_sin_cobro",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
                         "servicios.quitar_limite",
@@ -80543,6 +82718,7 @@
                         "servicios.retirar",
                         "servicios.sincronizar_router",
                         "servicios.suspender",
+                        "servicios.terminar_pausa",
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
                         "servicios.ver_credenciales",
@@ -80700,6 +82876,8 @@
                         "adicionales.desactivar_motivo",
                         "adicionales.editar",
                         "adicionales.ver",
+                        "ajustes_cobro.editar",
+                        "ajustes_cobro.ver",
                         "ajustes_operacion.editar",
                         "ajustes_operacion.ver",
                         "anuncios.administrar",
@@ -80717,12 +82895,17 @@
                         "bancos.reatribuir_llegada",
                         "bancos.trasladar",
                         "bancos.ver",
+                        "bancos_origen.crear",
+                        "bancos_origen.editar",
+                        "bancos_origen.mostrar",
+                        "bancos_origen.ocultar",
                         "bitacora.ver",
                         "bodegas.crear",
                         "bodegas.desactivar",
                         "bodegas.editar",
                         "cajas.abrir",
                         "cajas.cerrar",
+                        "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
                         "cajas.ver",
@@ -80758,6 +82941,7 @@
                         "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
+                        "comprobantes.reconectar",
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
@@ -80816,6 +83000,9 @@
                         "fiscal.editar_parametros",
                         "fiscal.instalar",
                         "fiscal.ver",
+                        "gestiones_cobro.adjuntar",
+                        "gestiones_cobro.registrar",
+                        "gestiones_cobro.ver",
                         "horus.abrir",
                         "horus.configurar",
                         "horus.generar_token",
@@ -80873,6 +83060,7 @@
                         "lealtad.entregar",
                         "lealtad.revertir_canje",
                         "lealtad.ver",
+                        "libro.aprobar_asiento",
                         "libro.bloquear",
                         "libro.bloquear_duro",
                         "libro.cerrar_apertura",
@@ -80882,6 +83070,7 @@
                         "libro.excepcion_bloqueo",
                         "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
+                        "libro.rechazar_asiento",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
@@ -80983,6 +83172,7 @@
                         "servicios.eliminar",
                         "servicios.generar_codigo_identificacion",
                         "servicios.limitar",
+                        "servicios.pausar_sin_cobro",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
                         "servicios.quitar_limite",
@@ -80992,6 +83182,7 @@
                         "servicios.retirar",
                         "servicios.sincronizar_router",
                         "servicios.suspender",
+                        "servicios.terminar_pausa",
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
                         "servicios.ver_credenciales",
@@ -92304,6 +94495,15 @@
                     "maxItems": 60,
                     "description": "Total a cobrar (con IVA) de periodos elegidos, si difiere del calculado: exige facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo (422 motivo_requerido); mayor que cero (422 monto_positivo). Igual al calculado = sin edición"
                   },
+                  "dias_gracia_corte": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 90,
+                    "description": "Decisión del PM 21: días de gracia antes del corte de los periodos pasados (los que empiezan antes de hoy). Quedan en cada factura (dias_gracia_corte y corte_desde = hoy + días) y evaluarEstadoServicio no las cuenta para limitar ni cortar antes de esa fecha. El vencimiento del documento y la mora no cambian. Sin el dato, como siempre"
+                  },
                   "tramo_inicial": {
                     "type": [
                       "object",
@@ -92716,6 +94916,213 @@
           }
         },
         "x-permiso": "servicios.limitar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/pausar-sin-cobro": {
+      "post": {
+        "operationId": "serviciosPausarSinCobro",
+        "summary": "Pausar un servicio sin cobro (suspende y no factura los periodos de la pausa)",
+        "description": "Decisión del PM 16. La suspensión manual (POST /servicios/:id/suspender) sigue facturando; esta no: los periodos que empiezan entre hoy y hoy + dias no se emiten nunca. Suspende con la suspensión manual de A1 (servicio.estado_cambiado) y, al llegar hasta, el cron pausas lo reactiva solo y evaluarEstadoServicio decide por la deuda. dias de 1 a pausa_tope_dias de la empresa (422 tope_pausa; 90 de fábrica). 422 pausa_activa, suspension_manual (ya suspendido a mano), servicio_retirado o servicio_pendiente_instalacion. Emite servicio.pausa_iniciada.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "dias": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "description": "Días de pausa desde hoy; hasta pausa_tope_dias de la empresa (90 de fábrica)"
+                  }
+                },
+                "required": [
+                  "motivo",
+                  "dias"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pausa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PausaServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.pausar_sin_cobro; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.pausar_sin_cobro",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/pausas": {
+      "get": {
+        "operationId": "serviciosPausas",
+        "summary": "Pausas sin cobro de un servicio, la más reciente primero",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pausas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PausaServicio"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -94093,6 +96500,131 @@
           }
         },
         "x-permiso": "servicios.suspender",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/terminar-pausa": {
+      "post": {
+        "operationId": "serviciosTerminarPausa",
+        "summary": "Terminar antes de tiempo la pausa sin cobro (reactiva el servicio)",
+        "description": "Reactiva con A1 y luego evaluarEstadoServicio (si debe, vuelve a limitarse o cortarse según su plantilla). 422 sin_pausa. Emite servicio.pausa_terminada (fin_motivo manual).",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pausa terminada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PausaServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.terminar_pausa; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.terminar_pausa",
         "x-implementado": true
       }
     },
@@ -95792,6 +98324,8 @@
                             "adicionales.desactivar_motivo",
                             "adicionales.editar",
                             "adicionales.ver",
+                            "ajustes_cobro.editar",
+                            "ajustes_cobro.ver",
                             "ajustes_operacion.editar",
                             "ajustes_operacion.ver",
                             "anuncios.administrar",
@@ -95809,12 +98343,17 @@
                             "bancos.reatribuir_llegada",
                             "bancos.trasladar",
                             "bancos.ver",
+                            "bancos_origen.crear",
+                            "bancos_origen.editar",
+                            "bancos_origen.mostrar",
+                            "bancos_origen.ocultar",
                             "bitacora.ver",
                             "bodegas.crear",
                             "bodegas.desactivar",
                             "bodegas.editar",
                             "cajas.abrir",
                             "cajas.cerrar",
+                            "cajas.configurar_impresion",
                             "cajas.crear",
                             "cajas.depositar",
                             "cajas.ver",
@@ -95850,6 +98389,7 @@
                             "compras.ver",
                             "comprobantes.aprobar",
                             "comprobantes.rechazar",
+                            "comprobantes.reconectar",
                             "comprobantes.reconexion_temporal",
                             "comprobantes.registrar",
                             "comprobantes.ver",
@@ -95908,6 +98448,9 @@
                             "fiscal.editar_parametros",
                             "fiscal.instalar",
                             "fiscal.ver",
+                            "gestiones_cobro.adjuntar",
+                            "gestiones_cobro.registrar",
+                            "gestiones_cobro.ver",
                             "horus.abrir",
                             "horus.configurar",
                             "horus.generar_token",
@@ -95965,6 +98508,7 @@
                             "lealtad.entregar",
                             "lealtad.revertir_canje",
                             "lealtad.ver",
+                            "libro.aprobar_asiento",
                             "libro.bloquear",
                             "libro.bloquear_duro",
                             "libro.cerrar_apertura",
@@ -95974,6 +98518,7 @@
                             "libro.excepcion_bloqueo",
                             "libro.reabrir_ejercicio",
                             "libro.reabrir_periodo",
+                            "libro.rechazar_asiento",
                             "libro.registrar_asiento",
                             "libro.revertir_asiento",
                             "libro.ver",
@@ -96075,6 +98620,7 @@
                             "servicios.eliminar",
                             "servicios.generar_codigo_identificacion",
                             "servicios.limitar",
+                            "servicios.pausar_sin_cobro",
                             "servicios.programar_plan_temporal",
                             "servicios.quitar_adicional",
                             "servicios.quitar_limite",
@@ -96084,6 +98630,7 @@
                             "servicios.retirar",
                             "servicios.sincronizar_router",
                             "servicios.suspender",
+                            "servicios.terminar_pausa",
                             "servicios.ver",
                             "servicios.ver_credencial_adicional",
                             "servicios.ver_credenciales",
@@ -98854,6 +101401,49 @@
           }
         }
       },
+      "AjustesCobro": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "asientos_requieren_aprobacion",
+          "pausa_tope_dias",
+          "version",
+          "updated_by",
+          "updated_at"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asientos_requieren_aprobacion": {
+            "type": "boolean",
+            "description": "Decisión 10: un asiento manual queda como borrador hasta que otro usuario lo aprueba"
+          },
+          "pausa_tope_dias": {
+            "type": "integer",
+            "description": "Decisión 16: días máximos de una pausa sin cobro"
+          },
+          "version": {
+            "type": "integer",
+            "description": "0 = nunca se guardó (valores de fábrica)"
+          },
+          "updated_by": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "AjustesOperacion": {
         "type": "object",
         "required": [
@@ -100026,6 +102616,41 @@
           }
         }
       },
+      "AsientoManual": {
+        "type": "object",
+        "required": [
+          "estado",
+          "asiento_id",
+          "borrador"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "registrado",
+              "pendiente_aprobacion"
+            ],
+            "description": "registrado: ya está en el libro; pendiente_aprobacion: borrador que aprueba otro usuario"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "borrador": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BorradorAsiento"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "AsignacionRol": {
         "type": "object",
         "required": [
@@ -100922,6 +103547,40 @@
           },
           "cuenta_nombre": {
             "type": "string"
+          }
+        }
+      },
+      "BancoOrigen": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "orden",
+          "activo",
+          "oculto",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "orden": {
+            "type": "integer"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false: fuera de las listas de todas las empresas"
+          },
+          "oculto": {
+            "type": "boolean",
+            "description": "Oculto en la empresa activa (decisión del PM 23)"
+          },
+          "version": {
+            "type": "integer"
           }
         }
       },
@@ -103645,6 +106304,147 @@
           }
         }
       },
+      "BorradorAsiento": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "fecha",
+          "descripcion",
+          "movimientos",
+          "total",
+          "estado",
+          "creado_por",
+          "creado_por_nombre",
+          "created_at",
+          "decidido_por",
+          "decidido_por_nombre",
+          "decidido_en",
+          "motivo_rechazo",
+          "asiento_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "null = la fecha de hoy al aprobar"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "cuenta",
+                "debe",
+                "haber",
+                "cliente_id",
+                "proveedor_id"
+              ],
+              "properties": {
+                "cuenta": {
+                  "type": "string"
+                },
+                "debe": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "haber": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cliente_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "proveedor_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "aprobado",
+              "rechazado"
+            ]
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "creado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidido_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decidido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo_rechazo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "El asiento que se registró al aprobarlo"
+          }
+        }
+      },
       "BorradorCompra": {
         "type": "object",
         "required": [
@@ -104083,6 +106883,22 @@
               "string",
               "null"
             ]
+          },
+          "formato_recibo": {
+            "type": "string",
+            "enum": [
+              "pos_80",
+              "carta"
+            ],
+            "description": "Decisión del PM 20: formato del recibo de esta caja (pos_80 de fábrica)"
+          },
+          "formato_factura": {
+            "type": "string",
+            "enum": [
+              "pos_80",
+              "carta"
+            ],
+            "description": "Decisión del PM 20: formato de la factura de esta caja (carta de fábrica)"
           },
           "version": {
             "type": "integer",
@@ -105158,6 +107974,63 @@
                 }
               }
             }
+          },
+          "gestiones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "tipo",
+                "resultado",
+                "ocurrido_en",
+                "servicio_id",
+                "tiene_adjunto"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "llamada",
+                    "mensaje",
+                    "visita",
+                    "promesa",
+                    "carta"
+                  ]
+                },
+                "resultado": {
+                  "type": "string",
+                  "enum": [
+                    "contesto",
+                    "no_contesto",
+                    "numero_equivocado",
+                    "promete_pagar",
+                    "rechaza",
+                    "pago_informado",
+                    "visita_sin_contacto"
+                  ]
+                },
+                "ocurrido_en": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "tiene_adjunto": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "Gestiones de cobro del cliente en la empresa registradas hasta el castigo, de la más reciente a la más vieja (evidencia; decisión del PM 8). Siempre viene; opcional en el esquema para no romper clientes tipados"
           }
         }
       },
@@ -106319,6 +109192,28 @@
             "type": "integer",
             "minimum": 0,
             "description": "Sesiones del portal que cerró la restauración (0 en la lectura)"
+          }
+        }
+      },
+      "CoberturaComprobante": {
+        "type": "object",
+        "required": [
+          "deuda",
+          "aplicado",
+          "falta"
+        ],
+        "properties": {
+          "deuda": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de las facturas a las que se aplicó, antes del pago"
+          },
+          "aplicado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo que el pago cubrió de esas facturas"
+          },
+          "falta": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo que esas facturas siguen debiendo (0.00 si quedaron cubiertas)"
           }
         }
       },
@@ -107548,6 +110443,30 @@
             "format": "date-time"
           }
         }
+      },
+      "ComprobanteAprobado": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Comprobante"
+          },
+          {
+            "type": "object",
+            "required": [
+              "pago",
+              "cobertura"
+            ],
+            "properties": {
+              "pago": {
+                "$ref": "#/components/schemas/Pago",
+                "description": "El pago registrado (como POST /pagos)"
+              },
+              "cobertura": {
+                "$ref": "#/components/schemas/CoberturaComprobante",
+                "description": "Decisión del PM 14: con menos dinero se abona a las facturas más viejas y se informa cuánto falta"
+              }
+            }
+          }
+        ]
       },
       "ConceptoCargo": {
         "type": "object",
@@ -118087,6 +121006,21 @@
             "minimum": 1,
             "description": "Factura original que esta sustituye; null si no es una sustituta"
           },
+          "dias_gracia_corte": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Decisión del PM 21: días de gracia antes del corte que escribió quien emitió este mes pasado; null si no se escribieron"
+          },
+          "corte_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Desde este día la factura cuenta para limitar o cortar (emisión + dias_gracia_corte); null = desde que vence"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -118997,6 +121931,321 @@
               "$ref": "#/components/schemas/FraseFiscal"
             },
             "description": "Todas las filas de frases manuales"
+          }
+        }
+      },
+      "GestionCobro": {
+        "type": "object",
+        "required": [
+          "id",
+          "gestion_id",
+          "empresa_id",
+          "cliente_id",
+          "servicio_id",
+          "contacto_id",
+          "tipo",
+          "resultado",
+          "ocurrido_en",
+          "origen_tipo",
+          "origen_id",
+          "sistema_origen",
+          "iris_gestion_id",
+          "iris_actor",
+          "nota",
+          "tiene_adjunto",
+          "adjunto_tipo",
+          "registrado_por",
+          "registrado_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "gestion_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Alias de id (contrato Iris 0.13.0)"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "contacto_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Contacto con quien se habló (X-Iris-Contacto); null = el titular"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "llamada",
+              "mensaje",
+              "visita",
+              "promesa",
+              "carta"
+            ]
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "contesto",
+              "no_contesto",
+              "numero_equivocado",
+              "promete_pagar",
+              "rechaza",
+              "pago_informado",
+              "visita_sin_contacto"
+            ]
+          },
+          "ocurrido_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "origen_tipo": {
+            "type": "string",
+            "enum": [
+              "conversacion",
+              "orden",
+              "llamada",
+              "panel"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sistema_origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris"
+            ],
+            "description": "iris si la registró Iris; null desde el panel"
+          },
+          "iris_gestion_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UUID v7 de Iris (de Idempotency-Key)"
+          },
+          "iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tiene_adjunto": {
+            "type": "boolean"
+          },
+          "adjunto_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GestionCobroRegistrada": {
+        "type": "object",
+        "required": [
+          "id",
+          "gestion_id",
+          "empresa_id",
+          "cliente_id",
+          "servicio_id",
+          "contacto_id",
+          "tipo",
+          "resultado",
+          "ocurrido_en",
+          "origen_tipo",
+          "origen_id",
+          "sistema_origen",
+          "iris_gestion_id",
+          "iris_actor",
+          "nota",
+          "tiene_adjunto",
+          "adjunto_tipo",
+          "registrado_por",
+          "registrado_por_nombre",
+          "created_at",
+          "repetida"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "gestion_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Alias de id (contrato Iris 0.13.0)"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "contacto_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Contacto con quien se habló (X-Iris-Contacto); null = el titular"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "llamada",
+              "mensaje",
+              "visita",
+              "promesa",
+              "carta"
+            ]
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "contesto",
+              "no_contesto",
+              "numero_equivocado",
+              "promete_pagar",
+              "rechaza",
+              "pago_informado",
+              "visita_sin_contacto"
+            ]
+          },
+          "ocurrido_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "origen_tipo": {
+            "type": "string",
+            "enum": [
+              "conversacion",
+              "orden",
+              "llamada",
+              "panel"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sistema_origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris"
+            ],
+            "description": "iris si la registró Iris; null desde el panel"
+          },
+          "iris_gestion_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UUID v7 de Iris (de Idempotency-Key)"
+          },
+          "iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tiene_adjunto": {
+            "type": "boolean"
+          },
+          "adjunto_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "repetida": {
+            "type": "boolean",
+            "description": "true si Iris repitió la misma gestión (mismo iris_gestion_id y datos): no se duplicó"
           }
         }
       },
@@ -123643,6 +126892,8 @@
           "adicionales.desactivar_motivo",
           "adicionales.editar",
           "adicionales.ver",
+          "ajustes_cobro.editar",
+          "ajustes_cobro.ver",
           "ajustes_operacion.editar",
           "ajustes_operacion.ver",
           "anuncios.administrar",
@@ -123660,12 +126911,17 @@
           "bancos.reatribuir_llegada",
           "bancos.trasladar",
           "bancos.ver",
+          "bancos_origen.crear",
+          "bancos_origen.editar",
+          "bancos_origen.mostrar",
+          "bancos_origen.ocultar",
           "bitacora.ver",
           "bodegas.crear",
           "bodegas.desactivar",
           "bodegas.editar",
           "cajas.abrir",
           "cajas.cerrar",
+          "cajas.configurar_impresion",
           "cajas.crear",
           "cajas.depositar",
           "cajas.ver",
@@ -123701,6 +126957,7 @@
           "compras.ver",
           "comprobantes.aprobar",
           "comprobantes.rechazar",
+          "comprobantes.reconectar",
           "comprobantes.reconexion_temporal",
           "comprobantes.registrar",
           "comprobantes.ver",
@@ -123759,6 +127016,9 @@
           "fiscal.editar_parametros",
           "fiscal.instalar",
           "fiscal.ver",
+          "gestiones_cobro.adjuntar",
+          "gestiones_cobro.registrar",
+          "gestiones_cobro.ver",
           "horus.abrir",
           "horus.configurar",
           "horus.generar_token",
@@ -123816,6 +127076,7 @@
           "lealtad.entregar",
           "lealtad.revertir_canje",
           "lealtad.ver",
+          "libro.aprobar_asiento",
           "libro.bloquear",
           "libro.bloquear_duro",
           "libro.cerrar_apertura",
@@ -123825,6 +127086,7 @@
           "libro.excepcion_bloqueo",
           "libro.reabrir_ejercicio",
           "libro.reabrir_periodo",
+          "libro.rechazar_asiento",
           "libro.registrar_asiento",
           "libro.revertir_asiento",
           "libro.ver",
@@ -123926,6 +127188,7 @@
           "servicios.eliminar",
           "servicios.generar_codigo_identificacion",
           "servicios.limitar",
+          "servicios.pausar_sin_cobro",
           "servicios.programar_plan_temporal",
           "servicios.quitar_adicional",
           "servicios.quitar_limite",
@@ -123935,6 +127198,7 @@
           "servicios.retirar",
           "servicios.sincronizar_router",
           "servicios.suspender",
+          "servicios.terminar_pausa",
           "servicios.ver",
           "servicios.ver_credencial_adicional",
           "servicios.ver_credenciales",
@@ -123984,6 +127248,8 @@
           "Desactivar un motivo de cortesía (no se borra)",
           "Editar servicios adicionales del catálogo",
           "Ver el catálogo de servicios adicionales y los motivos de cortesía",
+          "Editar los ajustes de cobro y libro de la empresa (aprobación de asientos manuales, tope de la pausa sin cobro)",
+          "Ver los ajustes de cobro y libro de la empresa",
           "Cambiar los ajustes de operación, globales o por empresa",
           "Ver los ajustes de operación (retiro, código de corte, caídas, falla general…)",
           "Crear, editar, publicar y archivar los anuncios del portal y la página de corte; solo admin",
@@ -124001,12 +127267,17 @@
           "Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)",
           "Trasladar fondos entre cuentas bancarias propias de la empresa",
           "Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones",
+          "Agregar un banco al catálogo de bancos de origen del sistema (todas las empresas)",
+          "Editar nombre, orden o estado de un banco del catálogo de bancos de origen",
+          "Volver a mostrar en la empresa un banco de origen oculto",
+          "Ocultar en la empresa un banco de origen que no usa",
           "Ver bitácora de acciones y cambios",
           "Crear bodegas y bodegas de técnico",
           "Desactivar bodegas (sin existencias)",
           "Editar bodegas",
           "Abrir turno de caja",
           "Cerrar turno de caja",
+          "Elegir el formato de impresión de recibos y facturas de una caja",
           "Crear cajas de una empresa (multiempresa: cada NIT tiene sus cajas)",
           "Depositar en el banco el efectivo de un turno de caja (queda en fondos en tránsito)",
           "Ver cajas y turnos",
@@ -124042,6 +127313,7 @@
           "Ver compras (libro de compras)",
           "Aprobar comprobantes de depósito (registra el pago)",
           "Rechazar comprobantes de depósito con motivo",
+          "Dar desde el panel la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (mismas reglas y cupo que Iris)",
           "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
           "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
@@ -124100,6 +127372,9 @@
           "Agregar valores con vigencia a los parámetros fiscales",
           "Instalar o actualizar el paquete de localización fiscal de una empresa; solo admin",
           "Ver la localización fiscal, parámetros, régimen, establecimientos y el tablero fiscal",
+          "Agregar el archivo de respaldo de una gestión de cobro (una sola vez)",
+          "Registrar una gestión de cobro de un cliente (solo informativa; evidencia para el castigo de cartera)",
+          "Ver las gestiones de cobro de un cliente (llamadas, mensajes, visitas, cartas) y su adjunto",
           "Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión",
           "Configurar el conector con Horus Flow (URL, código de conexión, webhooks, enlace de conexión); solo admin",
           "Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)",
@@ -124157,6 +127432,7 @@
           "Registrar la entrega física de un premio en bienes (con constancia)",
           "Revertir un canje reservado o aplicado a una factura anulada (devuelve los puntos)",
           "Ver el programa de lealtad, reglas, premios, puntos de clientes, canjes y referidos",
+          "Aprobar el borrador de asiento manual de otro usuario (lo registra en el libro; decisión del PM 10)",
           "Bloquear el libro hasta una fecha (global, ventas, compras o impuestos); solo avanza",
           "Bloqueo duro del libro (no retrocede); solo admin",
           "Cerrar los saldos de apertura de la importación (2.9.01 a patrimonio)",
@@ -124166,6 +127442,7 @@
           "Crear y revocar excepciones de bloqueo con fecha de fin; solo admin",
           "Reabrir un ejercicio cerrado (con motivo); solo admin",
           "Reabrir un mes cerrado del libro (con motivo)",
+          "Rechazar con motivo el borrador de asiento manual de otro usuario",
           "Registrar asientos manuales de ajuste",
           "Revertir asientos con un asiento de reverso",
           "Ver libro diario, mayor y plan de cuentas",
@@ -124267,6 +127544,7 @@
           "Eliminar un servicio que nunca se usó (sin facturas, pagos, sesiones ni otro historial); solo admin",
           "Generar el código de un solo uso con el que el cliente se identifica en el portal (vale 15 min de fábrica)",
           "Limitar la velocidad de servicios",
+          "Pausar un servicio sin cobro (lo suspende, no se facturan los periodos de la pausa y se reactiva solo al terminar)",
           "Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)",
           "Dar de baja un adicional de un servicio (con fecha; no se borra)",
           "Quitar el límite de velocidad",
@@ -124276,6 +127554,7 @@
           "Retirar servicios",
           "Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió",
           "Suspender servicios manualmente",
+          "Terminar antes de tiempo la pausa sin cobro de un servicio (lo reactiva)",
           "Ver servicios",
           "Ver la credencial de un adicional de un servicio (queda auditado)",
           "Ver la contraseña PPPoE de un servicio (queda auditado)",
@@ -126561,6 +129840,107 @@
           }
         }
       },
+      "PausaServicio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "cliente_id",
+          "desde",
+          "hasta",
+          "dias",
+          "motivo",
+          "estado",
+          "terminada_en",
+          "fin_motivo",
+          "creada_por",
+          "terminada_por",
+          "version",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desde": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día de la pausa (Guatemala)"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date",
+            "description": "Día en que se reactiva (exclusivo); los periodos que empiezan antes no se facturan"
+          },
+          "dias": {
+            "type": "integer"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activa",
+              "terminada"
+            ]
+          },
+          "terminada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fin_motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "vencida",
+              "manual",
+              "reactivado",
+              "retirado"
+            ]
+          },
+          "creada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "terminada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PeersWireguard": {
         "type": "object",
         "required": [
@@ -128093,6 +131473,10 @@
           },
           "mora_recurrente": {
             "type": "boolean"
+          },
+          "rechazar_monto_distinto": {
+            "type": "boolean",
+            "description": "Decisión del PM 14: true = un comprobante cuyo monto no coincide con lo que debe cubrir no se aprueba (422 monto_distinto); false (fábrica) = se aplica como abono y se informa cuánto falta"
           },
           "hora_corte": {
             "type": "string",
@@ -140651,6 +144035,8 @@
               "adicionales.desactivar_motivo",
               "adicionales.editar",
               "adicionales.ver",
+              "ajustes_cobro.editar",
+              "ajustes_cobro.ver",
               "ajustes_operacion.editar",
               "ajustes_operacion.ver",
               "anuncios.administrar",
@@ -140668,12 +144054,17 @@
               "bancos.reatribuir_llegada",
               "bancos.trasladar",
               "bancos.ver",
+              "bancos_origen.crear",
+              "bancos_origen.editar",
+              "bancos_origen.mostrar",
+              "bancos_origen.ocultar",
               "bitacora.ver",
               "bodegas.crear",
               "bodegas.desactivar",
               "bodegas.editar",
               "cajas.abrir",
               "cajas.cerrar",
+              "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
               "cajas.ver",
@@ -140709,6 +144100,7 @@
               "compras.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.reconectar",
               "comprobantes.reconexion_temporal",
               "comprobantes.registrar",
               "comprobantes.ver",
@@ -140767,6 +144159,9 @@
               "fiscal.editar_parametros",
               "fiscal.instalar",
               "fiscal.ver",
+              "gestiones_cobro.adjuntar",
+              "gestiones_cobro.registrar",
+              "gestiones_cobro.ver",
               "horus.abrir",
               "horus.configurar",
               "horus.generar_token",
@@ -140824,6 +144219,7 @@
               "lealtad.entregar",
               "lealtad.revertir_canje",
               "lealtad.ver",
+              "libro.aprobar_asiento",
               "libro.bloquear",
               "libro.bloquear_duro",
               "libro.cerrar_apertura",
@@ -140833,6 +144229,7 @@
               "libro.excepcion_bloqueo",
               "libro.reabrir_ejercicio",
               "libro.reabrir_periodo",
+              "libro.rechazar_asiento",
               "libro.registrar_asiento",
               "libro.revertir_asiento",
               "libro.ver",
@@ -140934,6 +144331,7 @@
               "servicios.eliminar",
               "servicios.generar_codigo_identificacion",
               "servicios.limitar",
+              "servicios.pausar_sin_cobro",
               "servicios.programar_plan_temporal",
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
@@ -140943,6 +144341,7 @@
               "servicios.retirar",
               "servicios.sincronizar_router",
               "servicios.suspender",
+              "servicios.terminar_pausa",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
               "servicios.ver_credenciales",
@@ -140998,6 +144397,7 @@
               "clientes.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.reconectar",
               "comprobantes.registrar",
               "comprobantes.ver",
               "contactos.buscar",
@@ -141008,6 +144408,9 @@
               "facturas.emitir_periodos",
               "facturas.ver",
               "fel.ver",
+              "gestiones_cobro.adjuntar",
+              "gestiones_cobro.registrar",
+              "gestiones_cobro.ver",
               "inventario.ver",
               "lealtad.canjear",
               "lealtad.ver",
@@ -141038,11 +144441,15 @@
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
               "clientes.vincular_telegram",
+              "comprobantes.reconectar",
               "contactos.buscar",
               "contactos.gestionar",
               "documentos.ver",
               "facturas.emitir_cargo_unico",
               "facturas.ver",
+              "gestiones_cobro.adjuntar",
+              "gestiones_cobro.registrar",
+              "gestiones_cobro.ver",
               "incidentes_red.leer",
               "inventario.ver",
               "ip.resolver",
@@ -141078,6 +144485,7 @@
               "servicios.editar_adicional",
               "servicios.generar_codigo_identificacion",
               "servicios.limitar",
+              "servicios.pausar_sin_cobro",
               "servicios.programar_plan_temporal",
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
@@ -141086,6 +144494,7 @@
               "servicios.reservar_ip",
               "servicios.sincronizar_router",
               "servicios.suspender",
+              "servicios.terminar_pausa",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
               "servicios.ver_credenciales",
@@ -141184,6 +144593,8 @@
               "activos.registrar",
               "activos.ver",
               "adicionales.ver",
+              "ajustes_cobro.editar",
+              "ajustes_cobro.ver",
               "bancos.conciliar",
               "bancos.guardar_mapeo_extracto",
               "bancos.importar_extracto",
@@ -141191,10 +144602,13 @@
               "bancos.reatribuir_llegada",
               "bancos.trasladar",
               "bancos.ver",
+              "bancos_origen.mostrar",
+              "bancos_origen.ocultar",
               "bitacora.ver",
               "bodegas.crear",
               "bodegas.desactivar",
               "bodegas.editar",
+              "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
               "cajas.ver",
@@ -141216,6 +144630,7 @@
               "compras.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.reconectar",
               "comprobantes.registrar",
               "comprobantes.ver",
               "cuentas_bancarias.editar",
@@ -141253,6 +144668,9 @@
               "fiscal.configurar",
               "fiscal.editar_parametros",
               "fiscal.ver",
+              "gestiones_cobro.adjuntar",
+              "gestiones_cobro.registrar",
+              "gestiones_cobro.ver",
               "inventario.abrir_conteo",
               "inventario.adjuntar_documento_traslado",
               "inventario.ajustar",
@@ -141275,11 +144693,13 @@
               "lealtad.entregar",
               "lealtad.revertir_canje",
               "lealtad.ver",
+              "libro.aprobar_asiento",
               "libro.bloquear",
               "libro.cerrar_apertura",
               "libro.cerrar_ejercicio",
               "libro.cerrar_periodo",
               "libro.desbloquear",
+              "libro.rechazar_asiento",
               "libro.registrar_asiento",
               "libro.revertir_asiento",
               "libro.ver",
@@ -141330,6 +144750,7 @@
             "permisos": [
               "activos.ver",
               "adicionales.ver",
+              "ajustes_cobro.ver",
               "ajustes_operacion.ver",
               "anuncios.ver",
               "apariencia.ver",
@@ -141350,6 +144771,7 @@
               "facturas.ver",
               "fel.ver",
               "fiscal.ver",
+              "gestiones_cobro.ver",
               "horus.ver",
               "incidentes_red.leer",
               "inventario.ver",

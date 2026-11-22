@@ -1304,6 +1304,109 @@ export interface CatalogoEventos {
         activa: boolean
         creada: boolean
     }
+    /**
+     * Gestión de cobro registrada (decisión del PM 8, contrato Iris 0.13.0). Solo informativa:
+     * nunca cambia servicio, facturas ni promesas. Sin nota, montos ni teléfonos. `origen: iris` si la
+     * registró Iris (notify no avisa); `iris_gestion_id` es el UUID v7 de Iris (null desde el panel).
+     */
+    'gestion_cobro.registrada': {
+        gestion_id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        contacto_id: number | null
+        tipo: string
+        resultado: string
+        ocurrido_en: string
+        origen_tipo: string
+        origen_id: string | null
+        origen: 'iris' | null
+        iris_gestion_id: string | null
+    }
+    /** Se adjuntó el archivo de una gestión (una sola vez; nunca el contenido). */
+    'gestion_cobro.adjunto_agregado': {
+        gestion_id: number
+        empresa_id: number
+        cliente_id: number
+        tipo_archivo: string
+        tamano: number
+    }
+    /** Ajustes de cobro y libro de una empresa cambiados (`ajustes_cobro.editar`); solo nombres. */
+    'ajustes_cobro.cambiados': {
+        empresa_id: number
+        campos: Array<'asientos_requieren_aprobacion' | 'pausa_tope_dias'>
+    }
+    /**
+     * Asiento manual de ajuste (decisión del PM 10). `libro.asiento_pendiente`: quedó como borrador
+     * (la empresa exige aprobación; no toca el libro). `libro.asiento_manual_registrado`: entró al
+     * libro, directo (`borrador_id` y `aprobado_por` null) o al aprobar el borrador otro usuario.
+     * `libro.asiento_rechazado`: el borrador se rechazó con motivo.
+     */
+    'libro.asiento_pendiente': {
+        borrador_id: number
+        empresa_id: number
+        creado_por: number | null
+        fecha: string | null
+        total: Dinero
+    }
+    'libro.asiento_manual_registrado': {
+        asiento_id: number
+        empresa_id: number
+        borrador_id: number | null
+        total: Dinero
+        registrado_por: number | null
+        aprobado_por: number | null
+    }
+    'libro.asiento_rechazado': {
+        borrador_id: number
+        empresa_id: number
+        creado_por: number | null
+        decidido_por: number | null
+        motivo: string
+    }
+    /**
+     * Pausa sin cobro (decisión del PM 16). Iniciada: el servicio queda suspendido a mano (sale además
+     * `servicio.estado_cambiado`) y los periodos que empiezan antes de `hasta` no se facturan.
+     * Terminada: `fin_motivo` vencida (cron), manual, reactivado o retirado; si correspondía, el
+     * servicio ya se reactivó (`servicio.estado_cambiado`).
+     */
+    'servicio.pausa_iniciada': {
+        pausa_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        desde: string
+        hasta: string
+        dias: number
+    }
+    'servicio.pausa_terminada': {
+        pausa_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        fin_motivo: 'vencida' | 'manual' | 'reactivado' | 'retirado'
+    }
+    /** Decisión del PM 20: la caja cambió su formato de impresión (`pos_80` o `carta`). */
+    'caja.impresion_cambiada': {
+        caja_id: number
+        empresa_id: number
+        campos: Array<'formato_recibo' | 'formato_factura'>
+        formato_recibo: 'pos_80' | 'carta'
+        formato_factura: 'pos_80' | 'carta'
+    }
+    /**
+     * Catálogo único de bancos de origen (decisión del PM 23). Del catálogo (`empresa_id` null): alta
+     * (`creado: true`) o edición de nombre, orden o activo. De una empresa: `campos: ['oculto']` y
+     * `oculto` (la empresa lo ocultó o lo volvió a mostrar). Solo nombres de campos.
+     */
+    'banco_origen.cambiado': {
+        banco_id: number
+        empresa_id: number | null
+        campos: Array<'nombre' | 'orden' | 'activo' | 'oculto'>
+        creado: boolean
+        activo: boolean | null
+        oculto: boolean | null
+    }
     'cartera.castigada': {
         castigo_id: number
         empresa_id: number
@@ -1958,6 +2061,16 @@ export const EVENTOS = [
     'banco.extracto_importado',
     'banco.conciliado',
     'cuenta_bancaria.cambiada',
+    'gestion_cobro.registrada',
+    'gestion_cobro.adjunto_agregado',
+    'ajustes_cobro.cambiados',
+    'libro.asiento_pendiente',
+    'libro.asiento_manual_registrado',
+    'libro.asiento_rechazado',
+    'servicio.pausa_iniciada',
+    'servicio.pausa_terminada',
+    'caja.impresion_cambiada',
+    'banco_origen.cambiado',
     'cartera.castigada',
     'compra.registrada',
     'compra.anulada',
