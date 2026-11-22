@@ -232,8 +232,12 @@ function operacion(ruta: Ruta): EsquemaJson {
                 required: false,
                 description: ruta.actuarComoVinculado
                     ? `Obligatoria con el token del usuario técnico Iris: \`usuario:<id en Iris>\` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). \`asistente_ia\` responde 403 \`actor_ia_no_permitido\`. Con \`Idempotency-Key\`, la misma clave con otro actor es 422`
-                    : `${obligatoria}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)`,
-                schema: { type: 'string', pattern: '^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$' },
+                    : `${obligatoria}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)${
+                          ruta.actorSistemaIris
+                              ? '. También `sistema` (contrato Iris 0.14.2 §7.1): lectura sin persona, sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (400 `cabecera_iris_requerida`), auditada con canal `sistema`'
+                              : '. `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)'
+                      }`,
+                schema: { type: 'string', pattern: '^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$' },
             },
             {
                 name: 'X-Iris-Conversacion',
