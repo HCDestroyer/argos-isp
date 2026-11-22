@@ -26,7 +26,10 @@ export async function entrar(page: Page, email: string): Promise<void> {
     await expect(page).not.toHaveURL(/\/login/)
 }
 
-/** Abre el menú lateral si está plegado (teléfono) y devuelve su contenedor. */
+/**
+ * Abre el menú lateral si está plegado (teléfono) y devuelve su contenedor. En escritorio el menú
+ * arranca compacto (rail de iconos): se pasa a expandido (con nombres), que queda recordado.
+ */
 export async function menu(page: Page) {
     const lateral = page.locator('#dashboard-sidebar-principal')
     const abrir = page.getByRole('button', { name: 'Abrir barra lateral' })
@@ -34,6 +37,10 @@ export async function menu(page: Page) {
     await expect(lateral.getByRole('link', { name: 'Inicio' }).or(abrir).first()).toBeVisible()
     if (!(await lateral.isVisible())) {
         await page.getByRole('button', { name: 'Abrir barra lateral' }).click()
+    }
+    else if (await lateral.locator('[data-prueba="menu-rail"]').isVisible()) {
+        await lateral.locator('[data-prueba="alternar-menu"]').click()
+        await expect(lateral.locator('[data-prueba="menu-principal"]')).toBeVisible()
     }
     // En teléfono el menú se abre en un panel aparte con los mismos enlaces.
     const abierto = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Inicio' }) })
@@ -47,7 +54,7 @@ export async function menu(page: Page) {
  * pruebas vean cada enlace permitido. Un grupo sin secciones permitidas no existe.
  */
 export async function expandirGrupos(contenedor: Locator): Promise<void> {
-    const cerrados = contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]')
+    const cerrados = contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]')
     while (await cerrados.count()) {
         await cerrados.first().click()
     }
@@ -62,6 +69,18 @@ async function esperarQuieto(elemento: Locator): Promise<void> {
         anterior = caja
         return quieto
     }, { intervals: [100] }).toBe(true)
+}
+
+/** Elige la empresa activa desde el menú del usuario (barra superior). */
+export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
+    await page.locator('[data-prueba="menu-usuario"]').click()
+    await page.getByRole('menuitemcheckbox', { name: nombre }).click()
+    await expect(empresaActiva(page)).toContainText(nombre)
+}
+
+/** La empresa activa que muestra el botón del usuario. */
+export function empresaActiva(page: Page): Locator {
+    return page.locator('[data-prueba="empresa-activa"]').first()
 }
 
 /** Va a una sección por el menú lateral. */
@@ -86,7 +105,7 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
             url: page.url(),
             dialogos: await page.getByRole('dialog').count(),
             lateralVisible: await page.locator('#dashboard-sidebar-principal').isVisible(),
-            gruposPlegados: await contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]').count().catch(() => -1),
+            gruposPlegados: await contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]').count().catch(() => -1),
             enlaceAntes: antes,
             enlaceDespues: await enlace.boundingBox({ timeout: 1000 }).catch(() => null),
         }
@@ -98,4 +117,14 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
 /** Abre una pestaña de la ficha del router («Control de velocidad», «Pools e IPs», «Conexión»…). */
 export async function pestanaRouter(page: Page, nombre: string): Promise<void> {
     await page.locator('[data-prueba="pestanas-router"]').getByRole('tab', { name: nombre }).click()
+}
+
+/** Ficha del cliente: abre «Datos del cliente» (ícono de persona en la franja o «Datos» en el teléfono). */
+export async function verDatosCliente(page: Page): Promise<void> {
+    const datos = page.locator('[data-prueba="datos-cliente"]')
+    if (await datos.isVisible()) {
+        return
+    }
+    await page.locator('[data-prueba="ver-datos-cliente"]:visible, [data-prueba="ver-datos-cliente-movil"]:visible').first().click()
+    await expect(datos).toBeVisible()
 }

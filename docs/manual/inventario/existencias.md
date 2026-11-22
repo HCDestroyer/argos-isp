@@ -8,7 +8,7 @@ pantallas:
 
 Aquí ves qué hay en cada bodega, cuánto vale y qué está por debajo del mínimo. Desde esta pantalla también registras el saldo inicial, los consumos, los traslados inmediatos, los ajustes y las bajas.
 
-Menú: **Inventario → Existencias**.
+Menú: **Inventario → Movimientos → Existencias**.
 
 ## Quién la usa
 

@@ -8,7 +8,7 @@ pantallas:
 
 Cuántos puntos se emitieron, canjearon y vencieron en un rango de fechas, y si el pasivo de los puntos cuadra con el libro contable.
 
-Menú: **Reportes y bitácora → Reportes → Lealtad**.
+Menú: **Reportes → Reportes → Lealtad**.
 
 ## Quién la usa
 

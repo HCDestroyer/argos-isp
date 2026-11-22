@@ -93,7 +93,7 @@ Si las facturas marcadas son de varias empresas (NIT), verás «Un pago por empr
 
 **Me equivoqué de monto o de cliente.** No se edita. Pide a contabilidad que anule el pago (ver [Pagos](./pagos.md#anular-un-pago)) y regístralo bien.
 
-**El cliente mandó la foto de su depósito.** Si llegó por el portal o por Iris, está en **Cobros → Comprobantes**, donde caja lo aprueba o rechaza. Aprobarlo registra el pago igual que aquí.
+**El cliente mandó la foto de su depósito.** Si llegó por el portal o por Iris, está en **Comprobantes**, donde caja lo aprueba o rechaza. Aprobarlo registra el pago igual que aquí.
 
 | Mensaje                                              | Qué significa y qué hacer                                                                                                            |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |

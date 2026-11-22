@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { elegirEmpresa, entrar, ir } from './ayudas'
 
 /**
  * Configuración → Fiscal (localización GT, fase 2): régimen con su aviso, parámetros con vigencia
@@ -7,10 +7,7 @@ import { entrar, ir } from './ayudas'
  * (ArgosNet) tiene cerrado 2026-09, así que una vigencia en ese mes responde 422.
  */
 async function elegirArgosNet(page: Page) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: /ArgosNet/ }).click()
-    await expect(selector).toContainText('ArgosNet')
+    await elegirEmpresa(page, /ArgosNet/)
 }
 
 test('parámetros: un valor en un mes cerrado se explica y uno futuro se inserta sin tocar el vigente', async ({ page }) => {

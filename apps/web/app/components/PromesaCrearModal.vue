@@ -239,6 +239,7 @@ function otra() {
                 <template v-else>
                     <UButton
                         label="Cancelar"
+                        :icon="ICONOS.cancelar"
                         color="neutral"
                         variant="ghost"
                         :disabled="enviando"

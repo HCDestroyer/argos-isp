@@ -64,7 +64,8 @@ describe('semana 2 · dashboard', () => {
         const vista = await mountSuspended(PaginaInicio, { route: '/' })
         await esperar(() => expect(vista.find('[data-prueba="tablero-error"]').exists()).toBe(true))
         expect(vista.text()).toContain('Reintentar')
-        expect(vista.text()).not.toContain('Q ')
+        // Sin cifras del tablero; los últimos pagos son otra lectura (`GET /pagos`) que sí respondió.
+        expect(vista.text().replace(vista.find('[data-prueba="ultimos-pagos"]').text(), '')).not.toContain('Q ')
         expect(vista.find('[data-prueba="kpi-mes"]').exists()).toBe(false)
         expect(vista.find('[data-prueba="tablero-servicios"]').exists()).toBe(false)
     })

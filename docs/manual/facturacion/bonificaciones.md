@@ -14,7 +14,7 @@ Una bonificación es algo que se entregó sin cobrar: un mes gratis, un descuent
 - **Ver:** `facturas.ver` (`admin`, `cajero`, `soporte`, `contabilidad`, `lectura`).
 - La pantalla es solo de consulta. Las bonificaciones nacen solas: de un mes gratis o un descuento del 100 % al facturar el periodo, de un canje de lealtad, o de un cargo único en Q 0.00 (permiso `facturas.cargo_sin_costo`).
 
-Se llega desde **Cobros → Bonificaciones**. Desde la ficha de un cliente o servicio se abre ya filtrada.
+Se llega desde **Facturación → Bonificaciones**. Desde la ficha de un cliente o servicio se abre ya filtrada.
 
 ## Qué ves
 

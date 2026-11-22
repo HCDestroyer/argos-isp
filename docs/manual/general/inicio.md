@@ -19,7 +19,9 @@ La primera pantalla al entrar al panel. Te saluda, te muestra el tablero con los
 
 ### Saludo y fecha
 
-«Hola, _tu nombre_», la fecha de hoy y, con el tablero, «Datos al _fecha y hora_»: el momento hasta el que están al día los números. El tablero no se calcula en vivo: se actualiza solo cada vez que se emite o anula una factura, se registra o anula un pago, cambia una promesa o cambia el estado de un servicio. Si acabas de hacer algo y no lo ves, espera unos segundos y toca el botón de actualizar (el icono de flechas en la barra de arriba).
+Arriba, en la franja de color, «Buenos días», «Buenas tardes» o «Buenas noches» con tu nombre, la fecha de hoy y, con el tablero, «Datos al _fecha y hora_»: el momento hasta el que están al día los números. El tablero no se calcula en vivo: se actualiza solo cada vez que se emite o anula una factura, se registra o anula un pago, cambia una promesa o cambia el estado de un servicio. Si acabas de hacer algo y no lo ves, espera unos segundos y toca el botón de actualizar (el icono de flechas en la barra de arriba).
+
+Debajo, los atajos a lo más usado que puedes abrir: **Cobrar**, **Nuevo cliente**, **Cartera vencida** y **Comprobantes**.
 
 ### Servicios por estado
 
@@ -27,12 +29,14 @@ Cuántos servicios hay **Activos** (verde), **Limitados** (ámbar), **Cortados**
 
 ### Indicadores
 
-| Tarjeta               | Qué dice                                                                                  | Al tocarla                         |
+Cada tarjeta tiene su icono, la cifra grande y, en su menú de tres puntos, el enlace a la lista que la explica. Las dos primeras traen una mini gráfica de los últimos 8 meses y la variación contra el mes anterior.
+
+| Tarjeta               | Qué dice                                                                                  | Su menú abre                       |
 | --------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------- |
-| **Facturado del mes** | Lo facturado en el mes, lo cobrado, el porcentaje de cobranza con su barra y lo pendiente | Abre **Facturas**                  |
-| **Cartera vencida**   | El monto vencido, cuántas facturas y clientes, y el total por cobrar                      | Abre **Facturas** con las vencidas |
-| **Cobros de hoy**     | Lo cobrado hoy y cuántos pagos                                                            | Abre **Pagos** de hoy              |
-| **Promesas activas**  | Cuántas promesas de pago están vigentes y cuánto suman                                    | Abre **Promesas** activas          |
+| **Facturado del mes** | Lo facturado en el mes, lo cobrado, el porcentaje de cobranza con su barra y lo pendiente | **Facturas**                       |
+| **Cobros de hoy**     | Lo cobrado hoy y cuántos pagos; la tendencia compara lo cobrado en el mes con el anterior | **Pagos** de hoy                   |
+| **Cartera vencida**   | El monto vencido, cuántas facturas y clientes, y el total por cobrar                      | **Facturas** con las vencidas      |
+| **Promesas activas**  | Cuántas promesas de pago están vigentes y cuánto suman                                    | **Promesas** activas               |
 
 Lo pendiente del mes nunca sale negativo: si un cliente pagó por adelantado, eso no es deuda.
 
@@ -43,9 +47,13 @@ Lo pendiente del mes nunca sale negativo: si un cliente pagó por adelantado, es
 
 Si no hubo movimientos en esos 12 meses, en lugar de la gráfica dice «Sin facturación ni cobros en los últimos 12 meses».
 
+### Últimos pagos
+
+Con el permiso `pagos.ver`: los últimos pagos con el cliente, el método, la hora, el monto y su estado. Las pestañas **Todos**, **Registrados** y **Anulados** filtran la lista; **Ver todos los pagos** abre **Pagos**.
+
 ### Accesos
 
-Una tarjeta por cada sección del menú que puedes abrir, con su descripción. Si una sección no aparece, es que tu usuario no tiene su permiso (ver [Conoce el panel](../../guia/conoce-el-panel.md)).
+Bloques por área (Día a día, Facturación, Red, Inventario, Finanzas…) con hasta seis secciones cada uno, las más usadas primero; de la configuración, un solo acceso a **Toda la configuración**. Si una sección no aparece, es que tu usuario no tiene su permiso (ver [Conoce el panel](../../guia/conoce-el-panel.md)).
 
 ### Empresa activa
 

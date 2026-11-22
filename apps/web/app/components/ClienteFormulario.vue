@@ -17,12 +17,19 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
  */
 const props = withDefaults(defineProps<{
     cliente?: Cliente | null
+    /**
+     * Alta en 3 pasos (tablero NuevoAltaCliente): el botón principal crea el cliente y sigue al
+     * servicio («Siguiente: servicio»); «Crear cliente sin servicio» lo crea y va a su ficha.
+     */
+    conServicio?: boolean
 }>(), {
     cliente: null,
+    conServicio: false,
 })
 
 const emit = defineEmits<{
-    guardado: [cliente: Cliente]
+    /** `seguir`: en el alta en pasos, el usuario eligió continuar con el servicio. */
+    guardado: [cliente: Cliente, seguir: boolean]
     cancelar: []
     /** El usuario pidió cargar la versión actual tras un 409. */
     recargar: []
@@ -185,6 +192,9 @@ watch(() => estado.nit_cui, (valor) => {
     }
 })
 
+/** En el alta en pasos: qué botón envió el formulario. */
+const seguir = ref(false)
+
 async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
     enviando.value = true
     problema.value = null
@@ -196,7 +206,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
 
     if (resultado.ok) {
         await registrarWhatsapp(resultado.data.id)
-        emit('guardado', resultado.data)
+        emit('guardado', resultado.data, props.conServicio && seguir.value)
         return
     }
     problema.value = resultado.problema
@@ -227,7 +237,7 @@ onMounted(async () => {
         :schema="esquema"
         :state="estado"
         :validate-on="VALIDAR_EN"
-        class="flex w-full max-w-3xl flex-col gap-6"
+        class="flex w-full max-w-5xl flex-col gap-6"
         @submit="alEnviar"
     >
         <UAlert
@@ -252,375 +262,400 @@ onMounted(async () => {
             description="Corrige los campos marcados en rojo y vuelve a guardar."
         />
 
-        <UPageCard
-            title="Datos generales"
-            variant="subtle"
-        >
-            <div class="grid gap-4 sm:grid-cols-2">
-                <UFormField
-                    name="nombre"
-                    label="Nombre"
-                    help="Aparece en el aviso de cobro, el recibo y la búsqueda."
-                    required
-                    class="sm:col-span-2"
-                >
-                    <UInput
-                        v-model="estado.nombre"
-                        placeholder="Nombre completo o razón comercial"
-                        autocomplete="off"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="tipo"
-                    label="Tipo"
-                >
-                    <USelect
-                        v-model="estado.tipo"
-                        :items="itemsTipo"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="canal_preferido"
-                    label="Canal de avisos"
-                    help="Por dónde le llegan los avisos de cobro, de corte y de reactivación."
-                >
-                    <USelect
-                        v-model="estado.canal_preferido"
-                        :items="itemsCanal"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <div
-                    v-if="puedeConsentir"
-                    class="flex flex-col gap-2 sm:col-span-2"
-                    data-prueba="campo-whatsapp"
-                >
-                    <UCheckbox
-                        v-model="aceptaWhatsappCasilla"
-                        label="Acepta avisos por WhatsApp"
-                        description="Cobros, cortes y reactivaciones por la mensajería de Iris. Si el cliente escribe BAJA en el chat, la baja manda."
-                        :disabled="casillaWhatsappBloqueada || enviando"
-                        data-prueba="acepta-whatsapp"
-                    />
-                    <ProblemaAlerta
-                        v-if="problemaWhatsapp"
-                        :problema="problemaWhatsapp"
-                        :reintentar="problemaWhatsapp.status === 403 ? undefined : cargarWhatsapp"
-                        :reintentando="cargandoWhatsapp"
-                    />
-                </div>
-
-                <UFormField
-                    name="telefono"
-                    label="Teléfono"
-                    help="Para buscarlo al cobrar y para contactarlo."
-                >
-                    <UInput
-                        v-model="estado.telefono"
-                        type="tel"
-                        inputmode="tel"
-                        placeholder="5501 2000"
-                        icon="i-lucide-phone"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="movil"
-                    label="Móvil"
-                >
-                    <UInput
-                        v-model="estado.movil"
-                        type="tel"
-                        inputmode="tel"
-                        placeholder="5512 3344"
-                        icon="i-lucide-smartphone"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="email"
-                    label="Correo"
-                    help="Para enviarle el aviso de cobro y la factura electrónica."
-                    class="sm:col-span-2"
-                >
-                    <UInput
-                        v-model="estado.email"
-                        type="email"
-                        placeholder="cliente@correo.gt"
-                        icon="i-lucide-mail"
-                        class="w-full"
-                    />
-                </UFormField>
-            </div>
-        </UPageCard>
-
-        <UPageCard
-            title="Ubicación"
-            variant="subtle"
-        >
-            <div class="grid gap-4 sm:grid-cols-2">
-                <UFormField
-                    v-if="puede('zonas.ver')"
-                    name="zona"
-                    label="Zona"
-                    help="Agrupa clientes por sector para reportes, corte y la empresa que factura."
-                >
-                    <USelect
-                        v-model="estado.zona"
-                        :items="itemsZona"
-                        icon="i-lucide-map-pin"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="coordenadas"
-                    label="Coordenadas"
-                    hint="Opcional"
-                >
-                    <UInput
-                        v-model="estado.coordenadas"
-                        placeholder="14.6349,-90.5069"
-                        icon="i-lucide-locate"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="direccion"
-                    label="Dirección"
-                    help="Se propone como dirección de instalación de sus servicios."
-                    class="sm:col-span-2"
-                >
-                    <UTextarea
-                        v-model="estado.direccion"
-                        :rows="2"
-                        autoresize
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="referencia"
-                    label="Referencia"
-                    hint="Opcional"
-                    help="Cómo llegar. Se propone en sus servicios y la ve el técnico."
-                    class="sm:col-span-2"
-                >
-                    <UTextarea
-                        v-model="estado.referencia"
-                        :rows="2"
-                        :maxlength="300"
-                        autoresize
-                        placeholder="Casa verde frente a la iglesia"
-                        class="w-full"
-                        data-prueba="cliente-referencia"
-                    />
-                </UFormField>
-            </div>
-        </UPageCard>
-
-        <UPageCard
-            title="Datos fiscales"
-            description="Se usa en el aviso de cobro y en la factura electrónica (FEL)."
-            variant="subtle"
-        >
-            <UAlert
-                v-if="cliente?.nit_cui_invalido"
-                color="warning"
-                variant="subtle"
-                icon="i-lucide-badge-alert"
-                title="NIT o CUI por corregir"
-                description="El número no pasó la validación al activar la localización fiscal (se conservó tal cual). Corrígelo o márcalo como consumidor final: la factura FEL lo exige válido."
-                class="mb-4"
-                data-prueba="nit-invalido"
-            />
-            <div class="grid gap-4 sm:grid-cols-2">
-                <UFormField
-                    name="tipo_documento_fiscal"
-                    label="Documento"
-                >
-                    <USelect
-                        v-model="estado.tipo_documento_fiscal"
-                        :items="itemsDocumento"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    name="nit_cui"
-                    label="Número"
-                    :required="estado.tipo_documento_fiscal !== 'cf'"
-                    help="La factura electrónica (FEL) sale a nombre de este documento."
-                    :description="estado.tipo_documento_fiscal === 'nit' ? 'Con dígito verificador (módulo 11).' : estado.tipo_documento_fiscal === 'cui' ? '13 dígitos del DPI.' : estado.tipo_documento_fiscal === 'pasaporte' ? '3 a 20 letras o dígitos.' : 'Consumidor final no lleva número.'"
-                >
-                    <UFieldGroup class="w-full">
-                        <UInput
-                            v-model="estado.nit_cui"
-                            :placeholder="PLACEHOLDER_DOCUMENTO[estado.tipo_documento_fiscal]"
-                            :disabled="estado.tipo_documento_fiscal === 'cf'"
-                            class="w-full font-mono"
-                        />
-                        <UButton
-                            label="CF"
-                            color="neutral"
-                            variant="outline"
-                            aria-label="Consumidor final"
-                            @click="consumidorFinal"
-                        />
-                    </UFieldGroup>
-                </UFormField>
-
-                <UFormField
-                    name="pais_fiscal"
-                    required
-                    label="País"
-                    description="NIT y CUI son de Guatemala; un extranjero usa pasaporte."
-                >
-                    <UInput
-                        v-model="estado.pais_fiscal"
-                        maxlength="2"
-                        class="w-full font-mono uppercase"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="nombre_fiscal"
-                    label="Nombre fiscal"
-                >
-                    <UInput
-                        v-model="estado.nombre_fiscal"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="direccion_fiscal"
-                    label="Dirección fiscal"
-                    class="sm:col-span-2"
-                >
-                    <UInput
-                        v-model="estado.direccion_fiscal"
-                        class="w-full"
-                    />
-                </UFormField>
-
-                <UFormField
-                    name="agente_retencion_iva"
-                    description="Retiene IVA al pagar sus facturas."
-                >
-                    <USwitch
-                        v-model="estado.agente_retencion_iva"
-                        label="Agente de retención de IVA"
-                    />
-                </UFormField>
-                <UFormField
-                    name="sector_publico"
-                    description="Reglas propias de retención."
-                >
-                    <USwitch
-                        v-model="estado.sector_publico"
-                        label="Sector público"
-                    />
-                </UFormField>
-
-                <div class="sm:col-span-2">
-                    <UButton
-                        label="Copiar nombre y dirección"
-                        icon="i-lucide-copy"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        @click="copiarAFiscal"
-                    />
-                </div>
-            </div>
-        </UPageCard>
-
-        <UPageCard
-            v-if="problemaCatalogo || cargandoCatalogo || (catalogo && catalogo.length)"
-            title="Datos adicionales"
-            description="Campos propios de la empresa (catálogo de campos personalizados)."
-            variant="subtle"
-            data-prueba="cliente-campos-personalizados"
-        >
-            <ProblemaAlerta
-                v-if="problemaCatalogo"
-                :problema="problemaCatalogo"
-                :reintentar="cargarCatalogo"
-                :reintentando="cargandoCatalogo"
-            />
-            <USkeleton
-                v-else-if="cargandoCatalogo"
-                class="h-16 w-full"
-            />
-            <div
-                v-else-if="catalogo"
-                class="grid gap-4 sm:grid-cols-2"
+        <div class="surface-card overflow-hidden">
+            <FormularioSeccion
+                titulo="Datos generales"
+                descripcion="Cómo se llama y cómo se le contacta."
             >
-                <UFormField
-                    v-for="campo in catalogo"
-                    :key="campo.clave"
-                    :label="campo.tipo === 'booleano' ? undefined : campo.etiqueta"
-                    :name="`campos_personalizados.${campo.clave}`"
-                    :required="campo.requerido && campo.tipo !== 'booleano'"
-                    :data-prueba="`campo-cliente-${campo.clave}`"
-                >
-                    <USwitch
-                        v-if="campo.tipo === 'booleano'"
-                        :model-value="estado.campos_personalizados[campo.clave] === true"
-                        :label="campo.etiqueta"
-                        @update:model-value="valor => fijarCampo(campo.clave, valor)"
-                    />
-                    <UInputNumber
-                        v-else-if="campo.tipo === 'numero'"
-                        :model-value="numeroDe(estado.campos_personalizados[campo.clave])"
-                        :format-options="{ useGrouping: false, maximumFractionDigits: 6 }"
-                        class="w-full"
-                        @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'number' ? valor : null)"
-                    />
-                    <USelect
-                        v-else-if="campo.tipo === 'opcion'"
-                        :model-value="textoDe(estado.campos_personalizados[campo.clave]) || undefined"
-                        :items="opcionesDe(campo)"
-                        placeholder="Elige una opción"
-                        class="w-full"
-                        @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'string' ? valor : '')"
-                    />
-                    <UInput
-                        v-else
-                        :model-value="textoDe(estado.campos_personalizados[campo.clave])"
-                        :type="campo.tipo === 'fecha' ? 'date' : 'text'"
-                        :maxlength="campo.tipo === 'texto' ? 500 : undefined"
-                        class="w-full"
-                        @update:model-value="valor => fijarCampo(campo.clave, String(valor ?? ''))"
-                    />
-                </UFormField>
-            </div>
-        </UPageCard>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <UFormField
+                        name="nombre"
+                        label="Nombre"
+                        help="Aparece en el aviso de cobro, el recibo y la búsqueda."
+                        required
+                        class="sm:col-span-2"
+                    >
+                        <UInput
+                            v-model="estado.nombre"
+                            placeholder="Nombre completo o razón comercial"
+                            autocomplete="off"
+                            class="w-full"
+                        />
+                    </UFormField>
 
-        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <UButton
-                label="Cancelar"
-                color="neutral"
-                variant="ghost"
-                class="justify-center"
-                :disabled="enviando"
-                @click="emit('cancelar')"
-            />
-            <UButton
-                type="submit"
-                :label="editando ? 'Guardar cambios' : 'Crear cliente'"
-                icon="i-lucide-check"
-                class="glow-brand justify-center"
-                :loading="enviando"
-            />
+                    <UFormField
+                        name="tipo"
+                        label="Tipo"
+                    >
+                        <USelect
+                            v-model="estado.tipo"
+                            :items="itemsTipo"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="canal_preferido"
+                        label="Canal de avisos"
+                        help="Por dónde le llegan los avisos de cobro, de corte y de reactivación."
+                    >
+                        <USelect
+                            v-model="estado.canal_preferido"
+                            :items="itemsCanal"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <div
+                        v-if="puedeConsentir"
+                        class="flex flex-col gap-2 sm:col-span-2"
+                        data-prueba="campo-whatsapp"
+                    >
+                        <UCheckbox
+                            v-model="aceptaWhatsappCasilla"
+                            label="Acepta avisos por WhatsApp"
+                            description="Cobros, cortes y reactivaciones por la mensajería de Iris. Si el cliente escribe BAJA en el chat, la baja manda."
+                            :disabled="casillaWhatsappBloqueada || enviando"
+                            data-prueba="acepta-whatsapp"
+                        />
+                        <ProblemaAlerta
+                            v-if="problemaWhatsapp"
+                            :problema="problemaWhatsapp"
+                            :reintentar="problemaWhatsapp.status === 403 ? undefined : cargarWhatsapp"
+                            :reintentando="cargandoWhatsapp"
+                        />
+                    </div>
+
+                    <UFormField
+                        name="telefono"
+                        label="Teléfono"
+                        help="Para buscarlo al cobrar y para contactarlo."
+                    >
+                        <UInput
+                            v-model="estado.telefono"
+                            type="tel"
+                            inputmode="tel"
+                            placeholder="5501 2000"
+                            icon="i-lucide-phone"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="movil"
+                        label="Móvil"
+                    >
+                        <UInput
+                            v-model="estado.movil"
+                            type="tel"
+                            inputmode="tel"
+                            placeholder="5512 3344"
+                            icon="i-lucide-smartphone"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="email"
+                        label="Correo"
+                        help="Para enviarle el aviso de cobro y la factura electrónica."
+                        class="sm:col-span-2"
+                    >
+                        <UInput
+                            v-model="estado.email"
+                            type="email"
+                            placeholder="cliente@correo.gt"
+                            icon="i-lucide-mail"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+            </FormularioSeccion>
+
+            <FormularioSeccion
+                titulo="Ubicación"
+                descripcion="Dónde está el servicio y cómo llegar."
+            >
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <UFormField
+                        v-if="puede('zonas.ver')"
+                        name="zona"
+                        label="Zona"
+                        help="Agrupa clientes por sector para reportes, corte y la empresa que factura."
+                    >
+                        <USelect
+                            v-model="estado.zona"
+                            :items="itemsZona"
+                            icon="i-lucide-map-pin"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="coordenadas"
+                        label="Coordenadas"
+                        hint="Opcional"
+                    >
+                        <UInput
+                            v-model="estado.coordenadas"
+                            placeholder="14.6349,-90.5069"
+                            icon="i-lucide-locate"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="direccion"
+                        label="Dirección"
+                        help="Se propone como dirección de instalación de sus servicios."
+                        class="sm:col-span-2"
+                    >
+                        <UTextarea
+                            v-model="estado.direccion"
+                            :rows="2"
+                            autoresize
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="referencia"
+                        label="Referencia"
+                        hint="Opcional"
+                        help="Cómo llegar. Se propone en sus servicios y la ve el técnico."
+                        class="sm:col-span-2"
+                    >
+                        <UTextarea
+                            v-model="estado.referencia"
+                            :rows="2"
+                            :maxlength="300"
+                            autoresize
+                            placeholder="Casa verde frente a la iglesia"
+                            class="w-full"
+                            data-prueba="cliente-referencia"
+                        />
+                    </UFormField>
+                </div>
+            </FormularioSeccion>
+
+            <FormularioSeccion
+                titulo="Datos fiscales"
+                descripcion="Se usa en el aviso de cobro y en la factura electrónica (FEL)."
+            >
+                <UAlert
+                    v-if="cliente?.nit_cui_invalido"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-badge-alert"
+                    title="NIT o CUI por corregir"
+                    description="El número no pasó la validación al activar la localización fiscal (se conservó tal cual). Corrígelo o márcalo como consumidor final: la factura FEL lo exige válido."
+                    class="mb-4"
+                    data-prueba="nit-invalido"
+                />
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <UFormField
+                        name="tipo_documento_fiscal"
+                        label="Documento"
+                    >
+                        <USelect
+                            v-model="estado.tipo_documento_fiscal"
+                            :items="itemsDocumento"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField
+                        name="nit_cui"
+                        label="Número"
+                        :required="estado.tipo_documento_fiscal !== 'cf'"
+                        help="La factura electrónica (FEL) sale a nombre de este documento."
+                        :description="estado.tipo_documento_fiscal === 'nit' ? 'Con dígito verificador (módulo 11).' : estado.tipo_documento_fiscal === 'cui' ? '13 dígitos del DPI.' : estado.tipo_documento_fiscal === 'pasaporte' ? '3 a 20 letras o dígitos.' : 'Consumidor final no lleva número.'"
+                    >
+                        <UFieldGroup class="w-full">
+                            <UInput
+                                v-model="estado.nit_cui"
+                                :placeholder="PLACEHOLDER_DOCUMENTO[estado.tipo_documento_fiscal]"
+                                :disabled="estado.tipo_documento_fiscal === 'cf'"
+                                class="w-full font-mono"
+                            />
+                            <UButton
+                                label="CF"
+                                color="neutral"
+                                variant="outline"
+                                aria-label="Consumidor final"
+                                @click="consumidorFinal"
+                            />
+                        </UFieldGroup>
+                    </UFormField>
+
+                    <UFormField
+                        name="pais_fiscal"
+                        required
+                        label="País"
+                        description="NIT y CUI son de Guatemala; un extranjero usa pasaporte."
+                    >
+                        <UInput
+                            v-model="estado.pais_fiscal"
+                            maxlength="2"
+                            class="w-full font-mono uppercase"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="nombre_fiscal"
+                        label="Nombre fiscal"
+                    >
+                        <UInput
+                            v-model="estado.nombre_fiscal"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="direccion_fiscal"
+                        label="Dirección fiscal"
+                        class="sm:col-span-2"
+                    >
+                        <UInput
+                            v-model="estado.direccion_fiscal"
+                            class="w-full"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="agente_retencion_iva"
+                        description="Retiene IVA al pagar sus facturas."
+                    >
+                        <USwitch
+                            v-model="estado.agente_retencion_iva"
+                            label="Agente de retención de IVA"
+                        />
+                    </UFormField>
+                    <UFormField
+                        name="sector_publico"
+                        description="Reglas propias de retención."
+                    >
+                        <USwitch
+                            v-model="estado.sector_publico"
+                            label="Sector público"
+                        />
+                    </UFormField>
+
+                    <div class="sm:col-span-2">
+                        <UButton
+                            label="Copiar nombre y dirección"
+                            icon="i-lucide-copy"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            @click="copiarAFiscal"
+                        />
+                    </div>
+                </div>
+            </FormularioSeccion>
+
+            <FormularioSeccion
+                v-if="problemaCatalogo || cargandoCatalogo || (catalogo && catalogo.length)"
+                titulo="Datos adicionales"
+                descripcion="Campos propios de la empresa (catálogo de campos personalizados)."
+                data-prueba="cliente-campos-personalizados"
+            >
+                <ProblemaAlerta
+                    v-if="problemaCatalogo"
+                    :problema="problemaCatalogo"
+                    :reintentar="cargarCatalogo"
+                    :reintentando="cargandoCatalogo"
+                />
+                <USkeleton
+                    v-else-if="cargandoCatalogo"
+                    class="h-16 w-full"
+                />
+                <div
+                    v-else-if="catalogo"
+                    class="grid gap-4 sm:grid-cols-2"
+                >
+                    <UFormField
+                        v-for="campo in catalogo"
+                        :key="campo.clave"
+                        :label="campo.tipo === 'booleano' ? undefined : campo.etiqueta"
+                        :name="`campos_personalizados.${campo.clave}`"
+                        :required="campo.requerido && campo.tipo !== 'booleano'"
+                        :data-prueba="`campo-cliente-${campo.clave}`"
+                    >
+                        <USwitch
+                            v-if="campo.tipo === 'booleano'"
+                            :model-value="estado.campos_personalizados[campo.clave] === true"
+                            :label="campo.etiqueta"
+                            @update:model-value="valor => fijarCampo(campo.clave, valor)"
+                        />
+                        <UInputNumber
+                            v-else-if="campo.tipo === 'numero'"
+                            :model-value="numeroDe(estado.campos_personalizados[campo.clave])"
+                            :format-options="{ useGrouping: false, maximumFractionDigits: 6 }"
+                            class="w-full"
+                            @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'number' ? valor : null)"
+                        />
+                        <USelect
+                            v-else-if="campo.tipo === 'opcion'"
+                            :model-value="textoDe(estado.campos_personalizados[campo.clave]) || undefined"
+                            :items="opcionesDe(campo)"
+                            placeholder="Elige una opción"
+                            class="w-full"
+                            @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'string' ? valor : '')"
+                        />
+                        <UInput
+                            v-else
+                            :model-value="textoDe(estado.campos_personalizados[campo.clave])"
+                            :type="campo.tipo === 'fecha' ? 'date' : 'text'"
+                            :maxlength="campo.tipo === 'texto' ? 500 : undefined"
+                            class="w-full"
+                            @update:model-value="valor => fijarCampo(campo.clave, String(valor ?? ''))"
+                        />
+                    </UFormField>
+                </div>
+            </FormularioSeccion>
+
+            <FormularioAcciones>
+                <UButton
+                    label="Cancelar"
+                    :icon="ICONOS.cancelar"
+                    color="neutral"
+                    variant="outline"
+                    class="justify-center"
+                    :disabled="enviando"
+                    @click="emit('cancelar')"
+                />
+                <template v-if="conServicio && !editando">
+                    <UButton
+                        type="submit"
+                        label="Crear cliente sin servicio"
+                        icon="i-lucide-check"
+                        color="neutral"
+                        variant="outline"
+                        class="justify-center"
+                        :loading="enviando && !seguir"
+                        :disabled="enviando"
+                        @click="seguir = false"
+                    />
+                    <UButton
+                        type="submit"
+                        label="Siguiente: servicio"
+                        trailing-icon="i-lucide-chevron-right"
+                        class="glow-brand justify-center"
+                        :loading="enviando && seguir"
+                        :disabled="enviando"
+                        data-prueba="alta-siguiente"
+                        @click="seguir = true"
+                    />
+                </template>
+                <UButton
+                    v-else
+                    type="submit"
+                    :label="editando ? 'Guardar cambios' : 'Crear cliente'"
+                    icon="i-lucide-check"
+                    class="glow-brand justify-center"
+                    :loading="enviando"
+                />
+            </FormularioAcciones>
         </div>
     </UForm>
 </template>

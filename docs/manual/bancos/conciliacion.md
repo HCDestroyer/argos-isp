@@ -18,7 +18,7 @@ Conciliar **nunca reescribe asientos**: solo liga la línea del banco con lo que
 - **Conciliar, registrar, deshacer y aplicar reglas:** `bancos.conciliar` (`admin`, `contabilidad`).
 - **Reatribuir una llegada:** `bancos.reatribuir_llegada` (`admin`, `contabilidad`).
 
-Se llega desde **Bancos → Conciliación bancaria**. Desde ahí, «Reglas» abre las [reglas de conciliación](./reglas.md) y «Reporte» el [reporte de conciliación](./cuadre-por-cuenta.md).
+Se llega desde **Finanzas → Bancos → Conciliación bancaria**. Desde ahí, «Reglas» abre las [reglas de conciliación](./reglas.md) y «Reporte» el [reporte de conciliación](./cuadre-por-cuenta.md).
 
 ## Qué ves
 

@@ -19,6 +19,7 @@ describe('filtros de clientes · URL y parámetros de la API', () => {
             routerId: null,
             planId: null,
             conDeuda: true,
+            alDia: false,
             conPromesa: false,
             nitInvalido: false,
         })
@@ -33,6 +34,7 @@ describe('filtros de clientes · URL y parámetros de la API', () => {
             routerId: 1,
             planId: 4,
             conDeuda: true,
+            alDia: false,
             conPromesa: true,
             nitInvalido: true,
         }
@@ -72,6 +74,19 @@ describe('filtros de clientes · URL y parámetros de la API', () => {
 
         expect(accesoRapidoClientes({ ...base, estado: 'activo' })).toBeNull()
         expect(aplicarAccesoRapidoClientes(deuda, 'todos')).toMatchObject({ estado: null, conDeuda: false, zonaId: 2 })
+    })
+
+    it('contadores: Al día manda con_deuda_vencida=false y Con promesa su bandera', () => {
+        const alDia = aplicarAccesoRapidoClientes(FILTROS_CLIENTES_VACIOS, 'al_dia')
+        expect(accesoRapidoClientes(alDia)).toBe('al_dia')
+        expect(filtrosApiClientes(alDia)).toEqual({ con_deuda_vencida: false })
+        expect(queryFiltrosClientes(alDia)).toEqual({ al_dia: '1' })
+        expect(leerFiltrosClientes({ al_dia: '1', deuda: '1' })).toMatchObject({ alDia: true, conDeuda: false })
+
+        const promesa = aplicarAccesoRapidoClientes(alDia, 'promesa')
+        expect(promesa).toMatchObject({ alDia: false, conPromesa: true })
+        expect(accesoRapidoClientes(promesa)).toBe('promesa')
+        expect(accesoRapidoClientes({ ...promesa, conDeuda: true })).toBeNull()
     })
 })
 

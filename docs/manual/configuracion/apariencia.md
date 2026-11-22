@@ -1,5 +1,7 @@
 ---
 orden: 3
+pantallas:
+    - /configuracion/apariencia
 ---
 
 # Apariencia
@@ -24,7 +26,7 @@ Cambia cómo se ve el sistema para todos: el **color** del panel y del portal, e
 
 Los SVG se limpian al subirlos (sin scripts ni enlaces externos). Si alguien más cambió la apariencia mientras la editabas, el sistema te pide recargar antes de guardar.
 
-El logo de cada empresa (el que sale en el portal del cliente, los PDF y los correos) se cambia en **Configuración → Empresas**, no aquí.
+El logo de cada empresa (el que sale en el portal del cliente, los PDF y los correos) se cambia en **Configuración → Empresa y fiscal → Empresas**, no aquí.
 
 ## Accesos rápidos
 

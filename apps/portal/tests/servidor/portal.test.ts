@@ -17,6 +17,8 @@ import { EMPRESA_FIXTURE } from '../../fixtures/empresa'
 
 const api = await levantarApiFalsa()
 const URL_PUBLICA = 'http://portal.argosisp.example'
+/** Apariencia pública del admin (A6): el servidor la lee al servir cada página. */
+const APARIENCIA = '/api/v1/apariencia/publica'
 
 /** Entornos del servidor de cada bloque (`servidorCon` lo reinicia sin recompilar al cambiar). */
 const CON_URL_PUBLICA = {
@@ -138,7 +140,8 @@ describe('sondas de portal cautivo (con URL pública)', () => {
 
     it('las sondas solo preguntan a la API a dónde redirigir (destino-corte), nada más', () => {
         expect(api.rutas.length).toBeGreaterThan(0)
-        expect(api.rutas.every(ruta => ruta === '/api/v1/portal/destino-corte')).toBe(true)
+        // (y la apariencia pública del admin cuando se sirve la página `/corte`)
+        expect(api.rutas.every(ruta => ruta === '/api/v1/portal/destino-corte' || ruta === APARIENCIA)).toBe(true)
     })
 })
 
@@ -167,7 +170,7 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         const respuesta = await pedir('/favicon.svg', { host: 'captive.apple.com' })
         expect(respuesta.status).toBe(200)
         expect(respuesta.headers['content-type']).toContain('image/svg+xml')
-        expect(respuesta.cuerpo).toContain('#0f766e')
+        expect(respuesta.cuerpo).toContain('#4f46e5')
     })
 
     it('el manifiesto PWA y sus íconos se sirven en el Host ajeno', async () => {
@@ -176,7 +179,7 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         expect(manifiesto.headers['content-type']).toContain('application/manifest+json')
         const datos = JSON.parse(manifiesto.cuerpo) as { display: string, theme_color: string, icons: { src: string }[] }
         expect(datos.display).toBe('standalone')
-        expect(datos.theme_color).toBe('#0f766e')
+        expect(datos.theme_color).toBe('#4f46e5')
         for (const icono of datos.icons) {
             const respuesta = await pedir(icono.src, { host: 'captive.apple.com' })
             expect(respuesta.status, icono.src).toBe(200)
@@ -393,9 +396,10 @@ describe('políticas públicas para Meta (/privacidad, /terminos, /eliminar-dato
         for (const [otra] of POLITICAS) {
             expect(html).toContain(`href="${otra}"`)
         }
-        // El servidor pidió la empresa con la IP de origen (como el proxy del navegador), nunca sin ella.
-        expect(api.rutas).toEqual(['/api/v1/portal/empresa'])
-        expect(String(api.cabeceras[0]?.['x-forwarded-for'])).toMatch(/127\.0\.0\.1$/)
+        // El servidor pidió la empresa con la IP de origen (como el proxy del navegador), nunca sin ella;
+        // aparte, la apariencia pública (tema del admin), que no lleva datos del visitante.
+        expect(api.rutas.filter(r => r !== APARIENCIA)).toEqual(['/api/v1/portal/empresa'])
+        expect(String(api.cabeceras[api.rutas.indexOf('/api/v1/portal/empresa')]?.['x-forwarded-for'])).toMatch(/127\.0\.0\.1$/)
     })
 
     it('texto de cada página: datos tratados, terceros, eliminación y baja de WhatsApp', async () => {
@@ -416,8 +420,8 @@ describe('políticas públicas para Meta (/privacidad, /terminos, /eliminar-dato
     it('?empresa=<id> pide esa empresa y reenvía la cookie de la sesión', async () => {
         const respuesta = await pedir('/privacidad?empresa=2', { host: HOST, headers: { cookie: 'argos_portal=abc' } })
         expect(respuesta.status).toBe(200)
-        expect(api.rutas).toEqual(['/api/v1/portal/empresa?empresa_id=2'])
-        expect(api.cabeceras[0]?.cookie).toBe('argos_portal=abc')
+        expect(api.rutas.filter(r => r !== APARIENCIA)).toEqual(['/api/v1/portal/empresa?empresa_id=2'])
+        expect(api.cabeceras[api.rutas.indexOf('/api/v1/portal/empresa?empresa_id=2')]?.cookie).toBe('argos_portal=abc')
     })
 
     it('sin correo configurado no inventa uno: muestra lo disponible y remite al contacto', async () => {
@@ -439,6 +443,56 @@ describe('políticas públicas para Meta (/privacidad, /terminos, /eliminar-dato
         const html = (await pedir('/corte', { host: HOST })).cuerpo
         expect(html).toContain('data-testid="pie-politicas"')
         expect(html).toContain('href="/eliminar-datos"')
+    })
+})
+
+describe('apariencia del admin (tema) en el HTML del servidor', () => {
+    beforeEach(() => servidorCon({ NUXT_API_BASE_INTERNAL: api.url, NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA, NUXT_PORTAL_HOSTS: '' }))
+
+    afterAll(() => {
+        api.respuestas.delete(APARIENCIA)
+    })
+
+    it('el preset del admin llega en `<html>` (data-tema y el tono AA del primario), también en /corte', async () => {
+        api.respuestas.set(APARIENCIA, JSON.stringify({
+            tema: 'esmeralda',
+            paleta: { color: 'emerald', claro: '#047857', oscuro: '#34D399' },
+            modo_predeterminado: 'sistema',
+            nombre_marca: 'ArgosIsp',
+            eslogan: null,
+            logo_login_url: null,
+            fondo_login_url: null,
+            version: 2,
+        }))
+        const html = (await pedir('/corte', { host: 'portal.argosisp.example' })).cuerpo
+        expect(html).toMatch(/<html[^>]*data-tema="esmeralda"/)
+        expect(html).toContain('--ax-primario-claro:#047857')
+        expect(html).toContain('--ax-primario-oscuro:#34d399')
+        expect(html).toContain('--color-emerald-500')
+    })
+
+    it('si la API no responde o manda algo raro: índigo, y la página sale igual', async () => {
+        api.respuestas.set(APARIENCIA, JSON.stringify({ tema: 'fucsia', fondo_login_url: 'https://evil.example/x.jpg' }))
+        const rara = await pedir('/corte', { host: 'portal.argosisp.example' })
+        expect(rara.status).toBe(200)
+        expect(rara.cuerpo).toMatch(/<html[^>]*data-tema="indigo"/)
+        api.respuestas.set(APARIENCIA, 'no es json')
+        const rota = await pedir('/entrar', { host: 'portal.argosisp.example' })
+        expect(rota.status).toBe(200)
+        expect(rota.cuerpo).toMatch(/<html[^>]*data-tema="indigo"/)
+        expect(rota.cuerpo).not.toContain('evil.example')
+    })
+
+    it('los archivos de apariencia se sirven en el mismo origen (§7); otro nombre, 404 sin llegar a la API', async () => {
+        api.rutas.length = 0
+        const archivo = await pedir('/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp', { host: 'portal.argosisp.example' })
+        expect(archivo.status).toBe(200)
+        expect(api.rutas).toContain('/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.webp')
+        api.rutas.length = 0
+        for (const ruta of ['/api/v1/apariencia/archivos/otro.png', '/api/v1/apariencia/archivos/fondo-login-3f2a9c1d0b7e4a55.exe']) {
+            expect((await pedir(ruta, { host: 'portal.argosisp.example' })).status, ruta).toBe(404)
+        }
+        expect(api.rutas).toEqual([])
     })
 })
 

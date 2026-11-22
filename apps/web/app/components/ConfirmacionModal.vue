@@ -51,12 +51,19 @@ async function confirmarAccion() {
         :title="titulo"
         :dismissible="!enviando"
     >
+        <template #title>
+            <ModalTitulo
+                :texto="titulo"
+                :icono="icono"
+                :tipo="color === 'error' ? 'peligro' : color === 'warning' ? 'advertencia' : 'info'"
+            />
+        </template>
         <template #body>
             <div class="flex flex-col gap-4">
                 <UAlert
                     :color="color === 'error' ? 'error' : 'neutral'"
                     variant="subtle"
-                    :icon="icono"
+                    icon="i-lucide-info"
                     :description="efecto"
                 />
                 <ProblemaAlerta
@@ -69,8 +76,9 @@ async function confirmarAccion() {
             <div class="flex w-full justify-end gap-2">
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
-                    variant="ghost"
+                    variant="outline"
                     :disabled="enviando"
                     @click="abierto = false"
                 />
