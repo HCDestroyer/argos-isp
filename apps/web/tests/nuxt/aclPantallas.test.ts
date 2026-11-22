@@ -282,10 +282,17 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Secciones de fichas: leen con el permiso de la ficha que las monta.
     // Eliminar sin historial (`contratos/eliminar.md`): cada ficha comprueba el suyo.
     'EliminarRegistroModal.vue': { permisos: ['servicios.eliminar', 'routers.eliminar'], desde: ['pages/servicios/[id]/index.vue', 'pages/routers/[id].vue'], exentos: { 'pages/servicios/[id]/index.vue': ['routers.eliminar'], 'pages/routers/[id].vue': ['servicios.eliminar'] } },
-    'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
+    // Rediseño de Red (tablero RedPlanForm): la ficha del plan es `planes/[id]/index.vue` y su edición `planes/[id]/editar.vue`.
+    'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id]/index.vue'] },
+    // Rediseño de Red: el plan elegido al lado de la lista (RedPlanes) y las pestañas de la ficha del router (RedRouterFicha).
+    'RedPlanDetalle.vue': { permisos: ['planes.ver'], desde: ['pages/planes/index.vue'] },
+    'RouterResumen.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'RouterVelocidadPanel.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'RouterBitacoraComandos.vue': { permisos: ['red.ver'], desde: ['pages/routers/[id].vue'] },
     // Control de velocidad por capas (`contratos/control-velocidad.md`, A2).
     // La matriz pide `routers.ver`: «Velocidad» solo se abre desde la lista de routers, que ya lo exige.
-    'EstrategiaVelocidadModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'] } },
+    // También desde «Velocidad» de la ficha rediseñada (RouterVelocidadPanel), que solo monta la ficha (`routers.ver`).
+    'EstrategiaVelocidadModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'], 'components/RouterVelocidadPanel.vue': ['routers.ver'] } },
     'SincronizarPlanModal.vue': { permisos: ['planes.sincronizar'], desde: ['components/PlanRouters.vue', 'pages/planes/[id]/index.vue', 'pages/planes/index.vue'] },
     // «Reconciliar ahora» con vista previa: desde el menú del router, «Velocidad» y el chequeo del corte de «Probar conexión».
     'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterControlVelocidad.vue', 'components/RouterRedAcceso.vue', 'components/RouterPruebaConexionModal.vue', 'pages/routers/[id].vue'] },
