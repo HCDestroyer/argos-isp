@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { solicitarVelocidad } from '#network/sesiones/velocidad'
-import { datosServicioPromocion } from '#core/promociones_velocidad'
+import { cambiarPlanPorPromocion, datosServicioPromocion } from '#core/promociones_velocidad'
 
 export interface EntradaCerrarTramoPromocion {
     tramo_id: number
@@ -21,8 +21,10 @@ export interface SalidaCerrarTramoPromocion {
  * Cierra un tramo abierto de una promoción de velocidad (`promociones_velocidad.cerrar_tramo`, acción
  * del sistema: el cron al llegar `fin`, y quitar o cancelar la promoción). El servicio vuelve a la
  * velocidad de su plan: CoA de velocidad a las sesiones vivas (`sesion.velocidad_solicitada`),
- * `servicio.promocion_velocidad_terminada` (RouterOS) y `aaa:user:*` al confirmar. Idempotente: un
- * tramo ya cerrado no cambia (sin auditoría).
+ * `servicio.promocion_velocidad_terminada` (RouterOS) y `aaa:user:*` al confirmar. Un tramo que
+ * cambió el plan (`cambia_plan`, decisión del PM 34) devuelve el servicio a `plan_original_id` si
+ * todavía está en el plan destino (`servicio.config_cambiada`, `motivo: 'promocion_velocidad'`; en un
+ * retiro sin evento, como el plan temporal). Idempotente: un tramo ya cerrado no cambia (sin auditoría).
  */
 export default class CerrarTramoPromocion extends DomainAction<
     EntradaCerrarTramoPromocion,
@@ -52,6 +54,9 @@ export default class CerrarTramoPromocion extends DomainAction<
                 'tr.inicio',
                 'tr.fin',
                 'tr.estado',
+                'tr.cambia_plan',
+                'tr.plan_original_id',
+                'tr.plan_destino_id',
                 t.trx.raw('p.precio IS NOT NULL AS cambia_precio'),
             )
             .first()) as {
@@ -62,6 +67,9 @@ export default class CerrarTramoPromocion extends DomainAction<
             inicio: Date
             fin: Date
             estado: string
+            cambia_plan: boolean
+            plan_original_id: number | null
+            plan_destino_id: number | null
             cambia_precio: boolean
         } | null
         if (!tramo) throw new NoEncontrado(`El tramo ${input.tramo_id} no existe`)
@@ -80,7 +88,27 @@ export default class CerrarTramoPromocion extends DomainAction<
             { estado: 'cerrado', motivo_cierre: input.motivo },
         )
         let coa = 0
-        if (input.motivo !== 'retiro') {
+        if (tramo.cambia_plan) {
+            const actual = (await t.trx
+                .from('core.servicios')
+                .where('id', servicioId)
+                .forUpdate()
+                .select('plan_id')
+                .firstOrFail()) as { plan_id: number }
+            // si alguien cambió el plan durante la promoción, se respeta ese cambio
+            if (Number(actual.plan_id) === Number(tramo.plan_destino_id)) {
+                await cambiarPlanPorPromocion(t, {
+                    servicioId,
+                    empresaId: Number(tramo.empresa_id),
+                    de: Number(tramo.plan_destino_id),
+                    a: Number(tramo.plan_original_id),
+                    promocionId: Number(tramo.promocion_id),
+                    tramoId: Number(tramo.id),
+                    tramo: `promoción de velocidad ${tramo.promocion_id}: ${input.motivo}`,
+                    silencioso: input.motivo === 'retiro',
+                })
+            }
+        } else if (input.motivo !== 'retiro') {
             const { servicio } = await datosServicioPromocion(t.trx, servicioId)
             const velocidad = await solicitarVelocidad(t, servicio, 'promocion_velocidad_fin')
             coa = velocidad.coa
@@ -93,6 +121,7 @@ export default class CerrarTramoPromocion extends DomainAction<
             inicio: new Date(tramo.inicio).toISOString(),
             fin: new Date(tramo.fin).toISOString(),
             cambia_precio: Boolean(tramo.cambia_precio),
+            cambia_plan: Boolean(tramo.cambia_plan),
             motivo: input.motivo,
         })
         refrescarAaaAlConfirmar(t, { servicioId })

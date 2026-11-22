@@ -4,6 +4,7 @@ import { redis } from '#shared/redis'
 import { claveAaa } from '#core/aaa'
 import { ejecutarCronCore } from '#core/jobs'
 import { tramoEn, proximoTramo } from '#core/promociones_velocidad'
+import { EXTRAS_TODOS, estrategiasDeControl } from '#network/estrategia_velocidad'
 import { limpiarClavesAaa } from '#tests/core/ayudas_aaa'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
@@ -381,5 +382,214 @@ test.group('Promociones de velocidad · API', (group) => {
                 .json({ version: vigente.version, motivo: 'otra vez' }),
             409,
         )
+    })
+})
+
+/** Router con velocidad por plan: `pcq_plan` (cola PCQ del plan) o `arbol_pcq` (árbol). */
+function estrategiaPorPlan(aplicacion: 'pcq_plan' | 'arbol_pcq') {
+    if (aplicacion === 'arbol_pcq') {
+        return {
+            control_velocidad: 'arbol_pcq',
+            estrategia_velocidad: JSON.stringify(estrategiasDeControl('arbol_pcq')),
+        }
+    }
+    const pcq = { aplicacion: 'pcq_plan', padre: 'ninguno', tipo_cola: 'pcq', extras: { ...EXTRAS_TODOS } }
+    return { estrategia_velocidad: JSON.stringify({ pppoe: pcq, ip_estatica: pcq, dhcp_fija: pcq }) }
+}
+
+async function planDelServicio(servicioId: number): Promise<number> {
+    const fila = (await db.from('core.servicios').where('id', servicioId).select('plan_id').first()) as {
+        plan_id: number
+    }
+    return Number(fila.plan_id)
+}
+
+test.group('Promociones de velocidad · routers con velocidad por plan (decisión del PM 34)', (group) => {
+    group.each.setup(() => limpiarClavesAaa())
+
+    test('PCQ, días completos: multiplicador 422; plan destino cambia el plan y lo devuelve al terminar', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const { servicio, plan, routerId } = await escenario(client, token, estrategiaPorPlan('pcq_plan'))
+        await abrirSesion(servicio, routerId)
+        const ahora = Date.now()
+        const inicio = new Date(ahora - HORA)
+        const fin = new Date(ahora + 24 * HORA)
+        const base = {
+            nombre: unico('Gamer PCQ'),
+            modo: 'dias',
+            inicio: inicio.toISOString(),
+            fin: fin.toISOString(),
+            servicio_ids: [servicio.id],
+        }
+
+        const multiplicador = await estado(
+            client
+                .post('/api/v1/promociones-velocidad')
+                .bearerToken(token)
+                .json({ ...base, tipo_velocidad: 'multiplicador', multiplicador: 2 }),
+            422,
+        )
+        assert.equal(multiplicador.body().type, 'urn:argosisp:problema:promocion_requiere_plan_destino')
+        assert.match(multiplicador.body().detail, /plan destino/)
+        assert.equal(multiplicador.body().errors[0].field, 'plan_destino_id')
+
+        const destino = await crearPlanFila({ bajada_kbps: 60000, subida_kbps: 15000, precio: '400.00' })
+        const r = await estado(
+            client
+                .post('/api/v1/promociones-velocidad')
+                .bearerToken(token)
+                .json({ ...base, tipo_velocidad: 'plan_destino', plan_destino_id: destino }),
+            201,
+        )
+        const promo = r.body()
+
+        // el servicio pasa al plan destino (mecánica del plan temporal), sin CoA de velocidad propio
+        assert.equal(await planDelServicio(servicio.id), destino)
+        const configs = await eventos('servicio.config_cambiada', servicio.id)
+        const dePromo = configs.filter((e) => e.motivo === 'promocion_velocidad')
+        assert.lengthOf(dePromo, 1)
+        assert.deepEqual(dePromo[0]!.campos, ['plan'])
+        assert.equal(dePromo[0]!.promocion_id, promo.id)
+        assert.lengthOf(await eventos('sesion.velocidad_solicitada', servicio.id), 0)
+        const iniciadas = await eventos('servicio.promocion_velocidad_iniciada', servicio.id)
+        assert.lengthOf(iniciadas, 1)
+        assert.isTrue(iniciadas[0]!.cambia_plan)
+        assert.isFalse(iniciadas[0]!.cambia_precio)
+        const tramo = (await db
+            .from('core.promociones_velocidad_tramos')
+            .where({ promocion_id: promo.id, servicio_id: servicio.id })
+            .firstOrFail()) as Record<string, any>
+        assert.isTrue(tramo.cambia_plan)
+        assert.equal(Number(tramo.plan_original_id), plan)
+        assert.equal(Number(tramo.plan_destino_id), destino)
+        assert.equal(dePromo[0]!.tramo_id, Number(tramo.id))
+
+        // RADIUS ve el plan destino; facturación sigue en el plan original
+        const durante = await leerAaa(servicio.user_ppp)
+        assert.equal(durante!.plan.bajada_kbps, 60000)
+        const { sqlPlanFacturablePromocion } = await import('#core/promociones_velocidad')
+        const facturable = (await db
+            .from('core.servicios as s')
+            .where('s.id', servicio.id)
+            .select(db.raw(`${sqlPlanFacturablePromocion('s')} AS plan`))
+            .first()) as { plan: number }
+        assert.equal(Number(facturable.plan), plan)
+
+        // el cron pasado el fin lo devuelve a su plan; repetir la corrida no duplica
+        await ejecutarCronCore('promociones_velocidad', new Date(fin.getTime() + 60_000))
+        await ejecutarCronCore('promociones_velocidad', new Date(fin.getTime() + 120_000))
+        assert.equal(await planDelServicio(servicio.id), plan)
+        const configsFin = await eventos('servicio.config_cambiada', servicio.id)
+        const todas = configsFin.filter((e) => e.motivo === 'promocion_velocidad')
+        assert.lengthOf(todas, 2)
+        assert.isUndefined(todas.find((e) => (e.campos as string[]).includes('precio')))
+        const terminadas = await eventos('servicio.promocion_velocidad_terminada', servicio.id)
+        assert.lengthOf(terminadas, 1)
+        assert.isTrue(terminadas[0]!.cambia_plan)
+        assert.equal((await leerAaa(servicio.user_ppp))!.plan.bajada_kbps, 20000)
+        const cambios = (await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'servicio', entidad_id: servicio.id, campo: 'plan_id' })
+            .count('* as n')
+            .first()) as { n: string }
+        assert.isAtLeast(Number(cambios.n), 2)
+    })
+
+    test('árbol, franja horaria: cada franja cambia de plan al empezar y lo devuelve al terminar, sin duplicar', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const { servicio, plan } = await escenario(client, token, estrategiaPorPlan('arbol_pcq'))
+        const destino = await crearPlanFila({ bajada_kbps: 50000, subida_kbps: 10000 })
+        await estado(
+            client
+                .post('/api/v1/promociones-velocidad')
+                .bearerToken(token)
+                .json({
+                    nombre: unico('Noches árbol'),
+                    tipo_velocidad: 'plan_destino',
+                    plan_destino_id: destino,
+                    modo: 'franja',
+                    inicio: '2032-01-01T00:00:00Z',
+                    fin: '2032-02-01T00:00:00Z',
+                    franja_inicio: '18:00',
+                    franja_fin: '23:00',
+                    servicio_ids: [servicio.id],
+                }),
+            201,
+        )
+        assert.equal(await planDelServicio(servicio.id), plan)
+        const dePromo = async () => {
+            const todas = await eventos('servicio.config_cambiada', servicio.id)
+            return todas.filter((e) => e.motivo === 'promocion_velocidad')
+        }
+
+        // 2 ene 2032 19:00 Guatemala = 3 ene 01:00 UTC; dos corridas abren un solo tramo
+        const dentro = new Date('2032-01-03T01:00:00Z')
+        await ejecutarCronCore('promociones_velocidad', dentro)
+        await ejecutarCronCore('promociones_velocidad', new Date(dentro.getTime() + 60_000))
+        assert.equal(await planDelServicio(servicio.id), destino)
+        assert.lengthOf(await dePromo(), 1)
+        assert.equal((await leerAaa(servicio.user_ppp))!.plan.bajada_kbps, 50000)
+
+        // 23:00 Guatemala: vuelve a su plan
+        await ejecutarCronCore('promociones_velocidad', new Date('2032-01-03T05:00:00Z'))
+        await ejecutarCronCore('promociones_velocidad', new Date('2032-01-03T05:01:00Z'))
+        assert.equal(await planDelServicio(servicio.id), plan)
+        assert.lengthOf(await dePromo(), 2)
+
+        // la franja del día siguiente abre otro tramo y lo cierra igual
+        await ejecutarCronCore('promociones_velocidad', new Date('2032-01-04T01:00:00Z'))
+        assert.equal(await planDelServicio(servicio.id), destino)
+        await ejecutarCronCore('promociones_velocidad', new Date('2032-01-04T05:00:00Z'))
+        assert.equal(await planDelServicio(servicio.id), plan)
+        assert.lengthOf(await dePromo(), 4)
+        const tramos = await db
+            .from('core.promociones_velocidad_tramos')
+            .where('servicio_id', servicio.id)
+            .where('cambia_plan', true)
+        assert.lengthOf(tramos, 2)
+        assert.isTrue(tramos.every((t) => t.estado === 'cerrado'))
+    })
+
+    test('plan destino con plan temporal o incompatible: 422', async ({ client, assert }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const { servicio } = await escenario(client, token, estrategiaPorPlan('pcq_plan'))
+        const solo4 = await crearPlanFila({ dual_stack: 'v4' })
+        const cuerpo = (planDestino: number) => ({
+            nombre: unico('Promo'),
+            tipo_velocidad: 'plan_destino',
+            plan_destino_id: planDestino,
+            modo: 'dias',
+            inicio: '2033-01-01T00:00:00Z',
+            fin: '2033-01-10T00:00:00Z',
+            servicio_ids: [servicio.id],
+        })
+        const incompatible = await estado(
+            client.post('/api/v1/promociones-velocidad').bearerToken(token).json(cuerpo(solo4)),
+            422,
+        )
+        assert.equal(incompatible.body().type, 'urn:argosisp:problema:promocion_plan_incompatible')
+
+        const temporal = await crearPlanFila({ bajada_kbps: 30000 })
+        await estado(
+            client
+                .post(`/api/v1/servicios/${servicio.id}/planes-temporales`)
+                .bearerToken(token)
+                .json({ plan_id: temporal, inicio: '2033-01-01T00:00:00Z', fin: '2033-02-01T00:00:00Z' }),
+            201,
+        )
+        const conTemporal = await estado(
+            client
+                .post('/api/v1/promociones-velocidad')
+                .bearerToken(token)
+                .json(cuerpo(await crearPlanFila({ bajada_kbps: 40000 }))),
+            422,
+        )
+        assert.equal(conTemporal.body().type, 'urn:argosisp:problema:promocion_con_plan_temporal')
     })
 })

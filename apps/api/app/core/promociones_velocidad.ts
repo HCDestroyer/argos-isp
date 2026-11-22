@@ -4,6 +4,9 @@ import type { QueryClientContract, TransactionClientContract } from '@adonisjs/l
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { VelocidadPlan } from '#network/velocidad'
+import type { Transaccion } from '#shared/domain_action'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { registrarTramo } from '#network/historial'
 
 /**
  * Promociones de velocidad (decisión del PM 18, 21 nov 2026): «promoción para gamers», duplicar el plan
@@ -20,10 +23,18 @@ import type { VelocidadPlan } from '#network/velocidad'
  *   del plan (con las excepciones del router) en `aaa:user:*` (RADIUS), en el estado deseado de RouterOS
  *   (cola simple) y en el CoA de velocidad (`sesion.velocidad_solicitada`). No cambia `plan_id`: un plan
  *   temporal y una promoción conviven (la promoción se aplica sobre el plan vigente).
- * - Respeta el control de velocidad del router: solo estrategias con velocidad por servicio
- *   (`radius_rate_limit`, `perfil_ppp`, `cola_simple`); con `pcq_plan` o `arbol_pcq` (velocidad del plan,
- *   compartida) o en un router sin RADIUS con PPPoE, 422 `promocion_estrategia_incompatible`. La
- *   velocidad resultante no supera la capacidad del router (422 `promocion_supera_capacidad`).
+ * - Respeta el control de velocidad del router. Con velocidad por servicio (`radius_rate_limit`,
+ *   `perfil_ppp`, `cola_simple`) sube la velocidad como se describe arriba. Con velocidad por plan
+ *   (`pcq_plan`, `arbol_pcq`: la cola es del plan, compartida) **cambia el plan** del servicio al plan
+ *   destino mientras dura el tramo y lo devuelve al cerrarlo (decisión del PM 34, mecánica de los planes
+ *   temporales: `servicio.config_cambiada` con `campos: ['plan']` y `motivo: 'promocion_velocidad'`, sin
+ *   cortar la sesión). Ahí un multiplicador no sirve: 422 `promocion_requiere_plan_destino`. En un
+ *   router sin RADIUS con PPPoE, 422 `promocion_estrategia_incompatible` (cambiar el perfil del secret
+ *   corta la sesión). La velocidad resultante no supera la capacidad del router (422
+ *   `promocion_supera_capacidad`).
+ * - Precio: el cambio de plan de la promoción no cambia el precio, salvo `precio`. Mientras el tramo
+ *   está abierto, `plan_id` es el destino y el plan que se factura es `plan_original_id` del tramo
+ *   (`sqlPlanFacturablePromocion`, para A3).
  */
 
 export const ZONA_GUATEMALA = 'America/Guatemala'
@@ -56,8 +67,21 @@ export function sqlPromocionVigente(alias: string): string {
                FROM core.promociones_velocidad_tramos tr
                JOIN core.promociones_velocidad pv ON pv.id = tr.promocion_id
                LEFT JOIN network.planes pd ON pd.id = pv.plan_destino_id
-              WHERE tr.servicio_id = ${alias}.id AND tr.estado = 'abierto'
+              WHERE tr.servicio_id = ${alias}.id AND tr.estado = 'abierto' AND NOT tr.cambia_plan
               LIMIT 1)`
+}
+
+/**
+ * Plan que se factura del servicio `alias` (interfaz para A3, decisión del PM 34): con un tramo de
+ * promoción abierto que cambió el plan (`cambia_plan`) y el servicio todavía en el plan destino, el
+ * plan original del tramo; si no, `plan_id`. La promoción no cambia el precio salvo `precio`.
+ */
+export function sqlPlanFacturablePromocion(alias: string): string {
+    return `coalesce((SELECT tr.plan_original_id
+                        FROM core.promociones_velocidad_tramos tr
+                       WHERE tr.servicio_id = ${alias}.id AND tr.estado = 'abierto' AND tr.cambia_plan
+                         AND tr.plan_destino_id = ${alias}.plan_id
+                       LIMIT 1), ${alias}.plan_id)`
 }
 
 export function leerPromocion(valor: unknown): PromocionVigente | null {
@@ -454,10 +478,20 @@ export async function promocionComoVigente(
 
 /** Solo estas estrategias tienen velocidad propia por servicio (`contratos/control-velocidad.md` §7). */
 export const APLICACIONES_CON_PROMOCION = ['radius_rate_limit', 'perfil_ppp', 'cola_simple'] as const
+/** Velocidad del plan (PCQ o árbol): la promoción cambia el plan del servicio (decisión del PM 34). */
+export const APLICACIONES_POR_PLAN = ['pcq_plan', 'arbol_pcq'] as const
+
+export interface Aplicabilidad {
+    velocidad: VelocidadPlan
+    /** true: router con velocidad por plan, el tramo cambia el plan del servicio al plan destino */
+    cambia_plan: boolean
+}
 
 /**
  * Exige que la promoción se pueda aplicar al servicio sin romper el control de velocidad del router
- * (422 `promocion_estrategia_incompatible`) ni pasar su capacidad (422 `promocion_supera_capacidad`).
+ * (422 `promocion_estrategia_incompatible`, o `promocion_requiere_plan_destino` en un router con
+ * velocidad por plan y una promoción con multiplicador) ni pasar su capacidad (422
+ * `promocion_supera_capacidad`). Dice además si el tramo debe cambiar el plan.
  */
 export function exigirPromocionAplicable(
     servicio: {
@@ -471,12 +505,14 @@ export function exigirPromocionAplicable(
         capacidad_subida_kbps: number | null
     },
     promocion: PromocionVigente,
-): VelocidadPlan {
+    planDestinoId: number | null,
+): Aplicabilidad {
     if (servicio.estado === 'retirado') {
         throw new ReglaNegocio(`El servicio ${servicio.servicio_id} está retirado`, 'servicio_retirado')
     }
-    const compatible = (APLICACIONES_CON_PROMOCION as readonly string[]).includes(servicio.aplicacion)
-    if (!compatible || (servicio.tipo_conexion === 'pppoe' && servicio.router_sin_radius)) {
+    const porServicio = (APLICACIONES_CON_PROMOCION as readonly string[]).includes(servicio.aplicacion)
+    const porPlan = (APLICACIONES_POR_PLAN as readonly string[]).includes(servicio.aplicacion)
+    if ((!porServicio && !porPlan) || (servicio.tipo_conexion === 'pppoe' && servicio.router_sin_radius)) {
         throw new ReglaNegocio(
             `El servicio ${servicio.servicio_id} usa una velocidad que no es por servicio ` +
                 `(${servicio.router_sin_radius ? 'router sin RADIUS' : servicio.aplicacion}): la promoción ` +
@@ -487,6 +523,21 @@ export function exigirPromocionAplicable(
                     field: 'servicio_ids',
                     message: 'Control de velocidad del router incompatible',
                     rule: 'estrategia',
+                },
+            ],
+        )
+    }
+    if (porPlan && planDestinoId === null) {
+        throw new ReglaNegocio(
+            `El router del servicio ${servicio.servicio_id} controla la velocidad por plan ` +
+                `(${servicio.aplicacion}): un multiplicador no se puede aplicar. Usa una promoción con ` +
+                '«plan destino»: el servicio pasa a ese plan mientras dura la promoción',
+            'promocion_requiere_plan_destino',
+            [
+                {
+                    field: 'plan_destino_id',
+                    message: 'Indica el plan destino: el router controla la velocidad por plan (PCQ)',
+                    rule: 'requerido',
                 },
             ],
         )
@@ -504,7 +555,58 @@ export function exigirPromocionAplicable(
             [{ field: 'servicio_ids', message: 'Supera la capacidad del router', rule: 'capacidad' }],
         )
     }
-    return resultado
+    return { velocidad: resultado, cambia_plan: porPlan }
+}
+
+/**
+ * Con `cambia_plan` (decisión del PM 34): el plan destino debe estar activo, disponible en el router
+ * del servicio y ser compatible con el plan actual (mismo `dual_stack` y tamaño del prefijo
+ * delegado: el cambio no mueve IPs ni prefijos, no corta la sesión), y el servicio no puede tener un
+ * plan temporal programado o activo (los dos cambian `plan_id`). 422 `promocion_plan_incompatible` o
+ * `promocion_con_plan_temporal`.
+ */
+export async function exigirPlanDestinoAplicable(
+    trx: QueryClientContract,
+    servicio: { servicio_id: number; router_id: number; plan_id: number },
+    planDestinoId: number,
+): Promise<void> {
+    const { obtenerImplementacionPlan } = await import('#network/actions/obtener_implementacion_plan')
+    const campo = [
+        { field: 'servicio_ids', message: `Servicio ${servicio.servicio_id}`, rule: 'plan_destino' },
+    ]
+    const temporal = (await trx
+        .from('core.servicios_planes_temporales')
+        .where('servicio_id', servicio.servicio_id)
+        .whereIn('estado', ['programado', 'activo'])
+        .select('id')
+        .first()) as { id: number } | null
+    if (temporal) {
+        throw new ReglaNegocio(
+            `El servicio ${servicio.servicio_id} tiene el plan temporal ${temporal.id}: en un router con ` +
+                'velocidad por plan, la promoción y el plan temporal no pueden cambiar el plan a la vez',
+            'promocion_con_plan_temporal',
+            campo,
+        )
+    }
+    if (planDestinoId === servicio.plan_id) return
+    const destino = await obtenerImplementacionPlan(planDestinoId, servicio.router_id, trx)
+    if (!destino.activo) {
+        throw new ReglaNegocio(`El plan ${destino.nombre} está inactivo`, 'plan_inactivo', campo)
+    }
+    const actual = await obtenerImplementacionPlan(servicio.plan_id, servicio.router_id, trx, {
+        aunqueNoDisponible: true,
+    })
+    if (
+        actual.dual_stack !== destino.dual_stack ||
+        Number(actual.tamano_prefijo_delegado) !== Number(destino.tamano_prefijo_delegado)
+    ) {
+        throw new ReglaNegocio(
+            `El plan destino ${destino.nombre} cambia IPv4/IPv6 o el tamaño del prefijo delegado del ` +
+                `servicio ${servicio.servicio_id}: la promoción solo puede cambiar la velocidad`,
+            'promocion_plan_incompatible',
+            campo,
+        )
+    }
 }
 
 /*
@@ -532,6 +634,8 @@ export async function datosServicioPromocion(trx: QueryClientContract, servicioI
         servicio,
         datos: {
             servicio_id: servicio.servicio_id,
+            router_id: servicio.router_id,
+            plan_id: servicio.plan_id,
             tipo_conexion: servicio.tipo_conexion,
             aplicacion: servicio.estrategia.aplicacion,
             router_sin_radius: router.modo_seguridad === 'api',
@@ -632,4 +736,57 @@ export async function promocionesPendientes(
             (p) => !existentes.has(`${p.promocion_id}:${p.servicio_id}:${p.inicio.getTime()}`),
         ),
     }
+}
+
+/**
+ * Cambia `core.servicios.plan_id` de `de` a `a` por un tramo de promoción en un router con velocidad
+ * por plan (decisión del PM 34), con la mecánica de los planes temporales: diff del servicio, tramo
+ * del historial de asignaciones, `servicio.config_cambiada` (`campos: ['plan']`, `motivo:
+ * 'promocion_velocidad'`, `promocion_id`, `tramo_id`; nunca `precio`: la promoción no lo cambia salvo
+ * su `precio`, que factura A3) y `aaa:user:*` al confirmar. `coa` y RouterOS lo aplican como cualquier
+ * cambio de plan, sin cortar la sesión. Con `silencioso` (retiro) solo devuelve el plan, sin evento.
+ */
+export async function cambiarPlanPorPromocion(
+    t: Transaccion,
+    datos: {
+        servicioId: number
+        empresaId: number
+        de: number
+        a: number
+        promocionId: number
+        tramoId: number
+        tramo: string
+        silencioso?: boolean
+    },
+): Promise<boolean> {
+    if (datos.de === datos.a) return false
+    await t.trx
+        .from('core.servicios')
+        .where('id', datos.servicioId)
+        .update(
+            (datos.silencioso
+                ? { plan_id: datos.a }
+                : {
+                      plan_id: datos.a,
+                      version: t.trx.knexRawQuery('version + 1'),
+                      updated_at: t.trx.knexRawQuery('now()'),
+                  }) as Record<string, unknown>,
+        )
+    await t.registrarCambios(
+        { tipo: 'servicio', id: datos.servicioId },
+        { plan_id: datos.de },
+        { plan_id: datos.a },
+    )
+    if (datos.silencioso) return true
+    await registrarTramo(t.trx, datos.servicioId, datos.tramo)
+    await t.emit('servicio.config_cambiada', {
+        servicio_id: datos.servicioId,
+        empresa_id: datos.empresaId,
+        campos: ['plan'],
+        motivo: 'promocion_velocidad',
+        promocion_id: datos.promocionId,
+        tramo_id: datos.tramoId,
+    })
+    refrescarAaaAlConfirmar(t, { servicioId: datos.servicioId })
+    return true
 }

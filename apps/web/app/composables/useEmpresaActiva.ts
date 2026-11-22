@@ -51,6 +51,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/fiscal/establecimientos',
     '/api/v1/fiscal/obligaciones',
     '/api/v1/fiscal/tablero',
+    '/api/v1/incidentes-red',
     '/api/v1/inventario/cobros-equipo',
     '/api/v1/inventario/cobros-equipo/pendientes-declarar',
     '/api/v1/inventario/conteos',
@@ -61,6 +62,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/inventario/tipos-producto',
     '/api/v1/inventario/traslados',
     '/api/v1/inventario/unidades',
+    '/api/v1/ip-historial',
     '/api/v1/lealtad/canjes',
     '/api/v1/lealtad/premios',
     '/api/v1/lealtad/programas',
@@ -91,7 +93,10 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/pasarela/cobros',
     '/api/v1/productos',
     '/api/v1/promesas',
+    '/api/v1/promociones-velocidad',
+    '/api/v1/promociones-velocidad/{id}/servicios',
     '/api/v1/proveedores',
+    '/api/v1/red/caidas-repetidas',
     '/api/v1/reportes/altas-bajas',
     '/api/v1/reportes/bonificaciones',
     '/api/v1/reportes/cartera-vencida',
@@ -108,9 +113,10 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/reportes/lealtad',
     '/api/v1/reportes/promesas',
     '/api/v1/routers',
-    // Ruta con parámetro: la prueba la compara con el OpenAPI; el plugin no la consolida (es por router).
     '/api/v1/routers/{id}/vlans',
     '/api/v1/servicios',
+    '/api/v1/servicios/{id}/caidas-repetidas',
+    '/api/v1/servicios/{id}/promociones-velocidad',
 ]
 
 function leerGuardada(usuarioId: number): EleccionEmpresa | null {

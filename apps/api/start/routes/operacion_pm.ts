@@ -86,8 +86,11 @@ const promociones: Ruta[] = [
         descripcion:
             '`multiplicador` (x2) o `plan_destino`; `dias` (todo el periodo) o `franja` (cada día de ' +
             '`franja_inicio` a `franja_fin`, hora de Guatemala, con `dias_semana` opcional). Se aplica por CoA de ' +
-            'velocidad sin cortar la sesión; el precio no cambia salvo `precio`. 422 `promocion_estrategia_incompatible` ' +
-            '(el router controla la velocidad por plan: PCQ o árbol, o PPPoE sin RADIUS), `promocion_supera_capacidad`, ' +
+            'velocidad sin cortar la sesión; en un router con velocidad por plan (PCQ o árbol) cada tramo pasa el ' +
+            'servicio al plan destino y lo devuelve al terminar (`servicio.config_cambiada`, `motivo: ' +
+            'promocion_velocidad`). El precio no cambia salvo `precio`. 422 `promocion_requiere_plan_destino` ' +
+            '(multiplicador en un router PCQ o árbol), `promocion_plan_incompatible`, `promocion_con_plan_temporal`, ' +
+            '`promocion_estrategia_incompatible` (PPPoE sin RADIUS), `promocion_supera_capacidad`, ' +
             '`promocion_solapada`, `servicio_de_otra_empresa`.',
         etiqueta: 'promociones',
         permiso: 'promociones_velocidad.crear',

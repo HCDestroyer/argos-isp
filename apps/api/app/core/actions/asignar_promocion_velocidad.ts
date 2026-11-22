@@ -5,6 +5,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import {
     bloquearPromocion,
     datosServicioPromocion,
+    exigirPlanDestinoAplicable,
     exigirPromocionAplicable,
     promocionComoVigente,
     verPromocion,
@@ -23,7 +24,9 @@ export interface EntradaAsignarPromocionVelocidad {
  *
  * - Todo o nada: si un servicio no puede (otra empresa, retirado, control de velocidad del router
  *   incompatible, capacidad del router o se solapa con otra promoción vigente), 422 y no se asigna
- *   ninguno. Un servicio que ya la tiene se deja igual (idempotente).
+ *   ninguno. En un router con velocidad por plan (PCQ o árbol, decisión del PM 34) la promoción
+ *   cambia el plan del servicio: exige plan destino (422 `promocion_requiere_plan_destino`), compatible
+ *   y disponible en el router, y que el servicio no tenga plan temporal. Un servicio que ya la tiene se deja igual (idempotente).
  * - Solapadas: un servicio no tiene dos promociones activas con periodos (`inicio`–`fin`) que se
  *   crucen (422 `promocion_solapada`), aunque sus franjas no coincidan: así la velocidad efectiva es
  *   siempre de una sola promoción.
@@ -95,7 +98,10 @@ export default class AsignarPromocionVelocidad extends DomainAction<
                 )
             }
             const { datos } = await datosServicioPromocion(t.trx, servicioId)
-            exigirPromocionAplicable(datos, comoVigente)
+            const aplicable = exigirPromocionAplicable(datos, comoVigente, promocion.plan_destino_id)
+            if (aplicable.cambia_plan) {
+                await exigirPlanDestinoAplicable(t.trx, datos, promocion.plan_destino_id!)
+            }
 
             const [fila] = (await t.trx
                 .insertQuery()

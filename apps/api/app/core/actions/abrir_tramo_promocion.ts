@@ -4,7 +4,9 @@ import { solicitarVelocidad } from '#network/sesiones/velocidad'
 import { Problema } from '#shared/errores'
 import {
     bloquearPromocion,
+    cambiarPlanPorPromocion,
     datosServicioPromocion,
+    exigirPlanDestinoAplicable,
     definicionTiempo,
     exigirPromocionAplicable,
     promocionComoVigente,
@@ -35,9 +37,13 @@ export interface SalidaAbrirTramoPromocion {
  *   hace nada. Solo un tramo abierto por servicio.
  * - Revisa otra vez que la promoción se pueda aplicar (estrategia del router y capacidad): si ya no,
  *   no la abre y queda auditado (`rechazado`).
- * - Pide CoA de velocidad (`sesion.velocidad_solicitada`, sin cortar la sesión) a las sesiones vivas
- *   que lo admiten, emite `servicio.promocion_velocidad_iniciada` (RouterOS recalcula la cola simple)
- *   y reescribe `aaa:user:*` al confirmar.
+ * - Velocidad por servicio: pide CoA de velocidad (`sesion.velocidad_solicitada`, sin cortar la
+ *   sesión) a las sesiones vivas que lo admiten.
+ * - Velocidad por plan (`pcq_plan`, `arbol_pcq`, decisión del PM 34): pasa el servicio al plan destino
+ *   (`cambia_plan`, guarda `plan_original_id` en el tramo) con `servicio.config_cambiada` (`motivo:
+ *   'promocion_velocidad'`); `coa` y RouterOS lo aplican como un plan temporal, sin cortar la sesión.
+ * - Emite `servicio.promocion_velocidad_iniciada` (RouterOS recalcula) y reescribe `aaa:user:*` al
+ *   confirmar.
  * - Auditoría solo cuando abre o rechaza (el cron la llama cada minuto).
  */
 export default class AbrirTramoPromocion extends DomainAction<
@@ -91,8 +97,15 @@ export default class AbrirTramoPromocion extends DomainAction<
 
         const { datos } = await datosServicioPromocion(t.trx, input.servicio_id)
         if (datos.estado === 'retirado') return nada('no_vigente')
+        let cambiaPlan = false
         try {
-            exigirPromocionAplicable(datos, await promocionComoVigente(t.trx, promocion))
+            const aplicable = exigirPromocionAplicable(
+                datos,
+                await promocionComoVigente(t.trx, promocion),
+                promocion.plan_destino_id,
+            )
+            cambiaPlan = aplicable.cambia_plan
+            if (cambiaPlan) await exigirPlanDestinoAplicable(t.trx, datos, promocion.plan_destino_id!)
         } catch (error) {
             if (error instanceof Problema) return nada('rechazado', error.detalle ?? error.message)
             throw error
@@ -108,6 +121,9 @@ export default class AbrirTramoPromocion extends DomainAction<
                 inicio: tramo.inicio,
                 fin: tramo.fin,
                 abierto_en: ahora,
+                cambia_plan: cambiaPlan,
+                plan_original_id: cambiaPlan ? datos.plan_id : null,
+                plan_destino_id: cambiaPlan ? promocion.plan_destino_id : null,
             })
             .returning('id')) as Array<{ id: number }>
         const tramoId = Number(fila!.id)
@@ -117,11 +133,28 @@ export default class AbrirTramoPromocion extends DomainAction<
             inicio: tramo.inicio.toISOString(),
             fin: tramo.fin.toISOString(),
             estado: 'abierto',
+            ...(cambiaPlan
+                ? { plan_original_id: datos.plan_id, plan_destino_id: promocion.plan_destino_id }
+                : {}),
         })
 
-        // ya con el tramo abierto: la velocidad efectiva del servicio es la de la promoción
-        const { servicio } = await datosServicioPromocion(t.trx, input.servicio_id)
-        const velocidad = await solicitarVelocidad(t, servicio, 'promocion_velocidad')
+        let coa = 0
+        if (cambiaPlan) {
+            await cambiarPlanPorPromocion(t, {
+                servicioId: input.servicio_id,
+                empresaId: promocion.empresa_id,
+                de: datos.plan_id,
+                a: promocion.plan_destino_id!,
+                promocionId: promocion.id,
+                tramoId,
+                tramo: `promoción de velocidad ${promocion.id}: inicio`,
+            })
+        } else {
+            // ya con el tramo abierto: la velocidad efectiva del servicio es la de la promoción
+            const { servicio } = await datosServicioPromocion(t.trx, input.servicio_id)
+            const velocidad = await solicitarVelocidad(t, servicio, 'promocion_velocidad')
+            coa = velocidad.coa
+        }
         await t.emit('servicio.promocion_velocidad_iniciada', {
             servicio_id: input.servicio_id,
             empresa_id: promocion.empresa_id,
@@ -130,8 +163,9 @@ export default class AbrirTramoPromocion extends DomainAction<
             inicio: tramo.inicio.toISOString(),
             fin: tramo.fin.toISOString(),
             cambia_precio: promocion.precio !== null,
+            cambia_plan: cambiaPlan,
         })
         refrescarAaaAlConfirmar(t, { servicioId: input.servicio_id })
-        return { tramo_id: tramoId, resultado: 'abierto', detalle: null, coa: velocidad.coa }
+        return { tramo_id: tramoId, resultado: 'abierto', detalle: null, coa }
     }
 }

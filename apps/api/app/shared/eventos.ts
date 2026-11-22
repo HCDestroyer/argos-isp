@@ -332,6 +332,10 @@ export interface CatalogoEventos {
      * `motivo: 'plan_temporal'` (lealtad, aditivo): inicio, fin o cancelación de un plan temporal
      * (`core.servicios_planes_temporales`, `plan_temporal_id`); llega con `campos: ['plan']` y se
      * aplica como cualquier cambio de plan (CoA de velocidad, sin cortar la sesión).
+     * `motivo: 'promocion_velocidad'` (decisión del PM 34, aditivo): un tramo de promoción de velocidad
+     * en un router con velocidad por plan (`pcq_plan`, `arbol_pcq`) pasa el servicio al plan destino al
+     * abrir y lo devuelve al cerrar (`promocion_id`, `tramo_id`); llega con `campos: ['plan']` y se
+     * aplica como el plan temporal (sin cortar la sesión). No cambia el precio.
      * `motivo: 'union_routers'` (aditivo, `contratos/routers.md`): `routers.unir` pasó el servicio al
      * router que queda, que es **el mismo equipo**; llega con `campos: ['router']`, las direcciones no
      * cambian y la sesión no se corta (el NAS es el mismo). RouterOS lo aplica como siempre.
@@ -360,8 +364,11 @@ export interface CatalogoEventos {
             | 'precio'
         >
         empresa_anterior_id?: number
-        motivo?: 'plan_temporal' | 'union_routers'
+        motivo?: 'plan_temporal' | 'union_routers' | 'promocion_velocidad'
         plan_temporal_id?: number
+        /** con `motivo: 'promocion_velocidad'` (decisión del PM 34): la promoción y su tramo */
+        promocion_id?: number
+        tramo_id?: number
         /** cambio de plan de un pendiente pedido por Iris (contrato 0.10.0 §3.4.5): la orden */
         origen_tipo?: string
         origen_id?: string
@@ -1590,6 +1597,11 @@ export interface PayloadTramoPromocion {
     inicio: string
     fin: string
     cambia_precio: boolean
+    /**
+     * true (decisión del PM 34): router con velocidad por plan; el tramo pasó el servicio al plan
+     * destino (`servicio.config_cambiada`, `motivo: 'promocion_velocidad'`) y al cerrar lo devuelve.
+     */
+    cambia_plan: boolean
 }
 
 export type NombreEvento = keyof CatalogoEventos
