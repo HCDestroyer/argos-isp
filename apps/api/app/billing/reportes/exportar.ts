@@ -1,5 +1,6 @@
 import { crc32 } from 'node:zlib'
 import type { Columna, Reporte, ValorCelda } from '#billing/reportes/definicion'
+import { empresaParaPdf, reporteAPdf } from '#billing/reportes/pdf'
 
 /**
  * Exportación de reportes a CSV y a Excel (XLSX) **sin dependencias**: un XLSX es un ZIP de
@@ -10,10 +11,13 @@ import type { Columna, Reporte, ValorCelda } from '#billing/reportes/definicion'
  */
 
 export type FormatoExportacion = 'csv' | 'xlsx'
+/** Formatos de archivo de un reporte: CSV, Excel y PDF (decisión 7 del PM). */
+export type FormatoArchivo = FormatoExportacion | 'pdf'
 
-export const TIPOS_CONTENIDO: Record<FormatoExportacion, string> = {
+export const TIPOS_CONTENIDO: Record<FormatoArchivo, string> = {
     csv: 'text/csv; charset=utf-8',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pdf: 'application/pdf',
 }
 
 /*
@@ -278,4 +282,35 @@ export function zipSinCompresion(archivos: Array<[string, Buffer]>): Buffer {
 
 export function exportar(reporte: Reporte, formato: FormatoExportacion): Buffer {
     return formato === 'csv' ? aCsv(reporte) : aXlsx(reporte)
+}
+
+/**
+ * Empresas del encabezado de un archivo: las del filtro `empresas` del reporte (`todas` = null, el
+ * consolidado) o, si el reporte no lo trae, las de la petición.
+ */
+export function empresasDelReporte(reporte: Reporte, peticion: number[] | null): number[] | null {
+    const filtro = reporte.filtros.empresas
+    if (filtro === 'todas') return null
+    if (Array.isArray(filtro)) return filtro.map(Number)
+    if (typeof reporte.filtros.empresa_id === 'number') return [reporte.filtros.empresa_id]
+    return peticion
+}
+
+/** CSV, XLSX o PDF (con logo, empresa, filtros y fecha) del reporte. */
+export async function exportarArchivo(
+    reporte: Reporte,
+    formato: FormatoArchivo,
+    opciones: { empresas: number[] | null; generado_en?: Date; generado_para?: string | null },
+): Promise<Buffer> {
+    if (formato !== 'pdf') return exportar(reporte, formato)
+    return reporteAPdf(reporte, {
+        empresa: await empresaParaPdf(opciones.empresas),
+        generado_en: opciones.generado_en ?? new Date(reporte.generado_en),
+        generado_para: opciones.generado_para ?? null,
+    })
+}
+
+/** Nombre del archivo descargado: `<reporte>-<fecha>.<ext>`. */
+export function nombreArchivo(reporte: Reporte, formato: FormatoArchivo, ahora: Date = new Date()): string {
+    return `${reporte.reporte}-${ahora.toISOString().slice(0, 10)}.${formato}`
 }

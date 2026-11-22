@@ -753,3 +753,26 @@ export const PARAMETROS_GT_2026_3: readonly DefinicionParametro[] = [
     ...PARAMETROS_GT,
     PARAMETRO_EGRESO_CAJERO_MAXIMO,
 ]
+
+/**
+ * `gt-2026.5` (decisión 12 del PM, 21 nov 2026): el aviso del límite del pequeño contribuyente llega
+ * al 80 % y al 95 % (y al 100 %, cuando ya lo superó). Nuevo valor de `pc_alertas` vigente desde el
+ * 21 nov 2026; el de antes (80 y 100) queda para las fechas anteriores. Se cambia por empresa como
+ * cualquier parámetro (`PUT /fiscal/parametros/pc_alertas`).
+ */
+export const PC_ALERTAS_DESDE_2026_5 = '2026-11-21'
+
+export const PARAMETROS_GT_2026_5: readonly DefinicionParametro[] = PARAMETROS_GT_2026_3.map((p) =>
+    p.clave === 'pc_alertas'
+        ? {
+              ...p,
+              descripcion:
+                  'Umbrales de aviso (porcentaje del límite anual) del pequeño contribuyente en el tablero, el panel del dueño y las alertas: 80 % y 95 % de fábrica',
+              fuente: 'decisión del PM 12 (21 nov 2026)',
+              valores: [
+                  ...p.valores,
+                  { vigente_desde: PC_ALERTAS_DESDE_2026_5, valor: ['80.00', '95.00', '100.00'] },
+              ],
+          }
+        : p,
+)

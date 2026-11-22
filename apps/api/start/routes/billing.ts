@@ -92,7 +92,6 @@ import RegistrarComprobante, {
 import RegistrarReconexionTemporal from '#billing/actions/registrar_reconexion_temporal'
 import { canalPromesaIris, exigirEmpresaActuacion, exigirIdempotenciaIris } from '#billing/iris'
 import { readFile } from 'node:fs/promises'
-import type { Reporte } from '#billing/reportes/definicion'
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
@@ -103,7 +102,8 @@ import {
     listarConciliaciones,
     verCobroPasarela,
 } from '#billing/pasarelas/cobros'
-import { TIPOS_CONTENIDO, exportar } from '#billing/reportes/exportar'
+import { DESCRIPCION_EXPORTACION, responderReporte } from '#billing/reportes/http'
+import panelFinanciero from '#start/routes/panel_financiero'
 import { resumenDashboard } from '#billing/reportes/resumenes'
 import {
     altasBajas,
@@ -1166,20 +1166,6 @@ async function canalPromesa(ctx: HttpContext, pedido?: CanalPromesa): Promise<Ca
 |--------------------------------------------------------------------------
 */
 
-/** JSON, o descarga CSV/XLSX con nombre `<reporte>-<fecha>.<ext>`. */
-function responderReporte(ctx: HttpContext, reporte: Reporte, formato?: 'json' | 'csv' | 'xlsx') {
-    if (!formato || formato === 'json') return Promise.resolve(reporte)
-    const nombre = `${reporte.reporte}-${new Date().toISOString().slice(0, 10)}.${formato}`
-    ctx.response.header('Content-Type', TIPOS_CONTENIDO[formato])
-    ctx.response.header('Content-Disposition', `attachment; filename="${nombre}"`)
-    ctx.response.header('Cache-Control', 'private, no-store')
-    ctx.response.send(exportar(reporte, formato))
-    return Promise.resolve(undefined)
-}
-
-const DESCRIPCION_EXPORTACION =
-    ' Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.'
-
 const reportes: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -1792,6 +1778,7 @@ const estadoCuenta: Ruta[] = [
 
 export default [
     ...reportes,
+    ...panelFinanciero,
     ...pasarelaRutas,
     ...plantillas,
     ...facturas,

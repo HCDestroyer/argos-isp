@@ -13,8 +13,7 @@ import { lista, pagina } from '#shared/openapi/esquemas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
 import { resolverEmpresaActiva } from '#core/empresas'
-import { exportar, TIPOS_CONTENIDO } from '#billing/reportes/exportar'
-import type { Reporte } from '#billing/reportes/definicion'
+import { DESCRIPCION_EXPORTACION as DESCRIPCION_ARCHIVOS, responderReporte } from '#billing/reportes/http'
 import * as v from '#ledger/validators_compras'
 import {
     Compra,
@@ -51,16 +50,7 @@ import RegistrarCompraDesdeEgreso from '#ledger/actions/registrar_compra_desde_e
 import AnularCompra from '#ledger/actions/anular_compra'
 import { exigirBodega } from '#inventario/acceso_http'
 
-/** JSON, o descarga CSV/XLSX con nombre `<reporte>-<fecha>.<ext>` (como `/reportes/*`). */
-export function responderReporte(ctx: HttpContext, reporte: Reporte, formato?: 'json' | 'csv' | 'xlsx') {
-    if (!formato || formato === 'json') return Promise.resolve(reporte)
-    const nombre = `${reporte.reporte}-${new Date().toISOString().slice(0, 10)}.${formato}`
-    ctx.response.header('Content-Type', TIPOS_CONTENIDO[formato])
-    ctx.response.header('Content-Disposition', `attachment; filename="${nombre}"`)
-    ctx.response.header('Cache-Control', 'private, no-store')
-    ctx.response.send(exportar(reporte, formato))
-    return Promise.resolve(undefined)
-}
+export { responderReporte }
 
 export const DESCRIPCION_EXPORTACION =
     ' Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.'
@@ -354,7 +344,7 @@ const pagosProveedores: Ruta[] = [
         query: v.cuentasPorPagarValidator,
         descripcion:
             'Saldo pendiente de cada compra al crédito por días desde su vencimiento al corte, por proveedor. El total cuadra con 2.1.03 (check cxp_antiguedad).' +
-            DESCRIPCION_EXPORTACION,
+            DESCRIPCION_ARCHIVOS,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCuentasPorPagar },
         handler: async (ctx, { query }) => {
             const empresas = empresasDeLaLista(ctx.empresa, query.empresas)
