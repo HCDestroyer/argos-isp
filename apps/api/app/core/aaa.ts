@@ -1,6 +1,12 @@
 import { sqlHostGatewayEfectivo, sqlLocalAddress } from '#network/red_acceso/local_address'
 import { perfilesPorServidor, type ServidorGateway } from '#network/routeros/red_acceso'
 import db from '@adonisjs/lucid/services/db'
+import {
+    leerPromocion,
+    sqlPromocionVigente,
+    velocidadConPromocion,
+    type PromocionVigente,
+} from '#core/promociones_velocidad'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
@@ -154,6 +160,8 @@ interface FilaAaa {
     ipv4: string | null
     prefijo_enlace: string | null
     prefijo_delegado: string | null
+    /** tramo abierto de una promoción de velocidad (`#core/promociones_velocidad`) */
+    promocion: unknown
 }
 
 /**
@@ -216,7 +224,19 @@ function consultaBase(cliente: QueryClientContract) {
             cliente.raw(
                 `(SELECT a.prefijo::text FROM network.ipv6_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'delegacion' LIMIT 1) AS prefijo_delegado`,
             ),
+            // promoción de velocidad (decisión del PM 18): el tramo abierto sube la velocidad activa
+            cliente.raw(`${sqlPromocionVigente('s')} AS promocion`),
         )
+}
+
+/**
+ * Con una promoción de velocidad abierta, `perfil_ppp` manda también `Mikrotik-Rate-Limit`: el perfil
+ * del plan tiene la velocidad de siempre y una sesión que reconecta durante la promoción debe entrar con
+ * la de la promoción (como el CoA que recibió la sesión viva).
+ */
+function conPromocionAaa(v: VelocidadAaa, promocion: PromocionVigente | null): VelocidadAaa {
+    if (!promocion || v.aplicacion !== 'perfil_ppp') return v
+    return { ...v, rate_limit: true }
 }
 
 const nulo = (v: string | null | undefined) => (v === null || v === undefined || v === '' ? null : v)
@@ -244,15 +264,19 @@ function aRegistro(f: FilaAaa, perfilPorServidor = false): RegistroAaa {
         ipv6 = { modo }
     }
 
-    const velocidad = velocidadEfectiva(leerVelocidad(f as unknown as Record<string, unknown>), {
-        reuso: f.pr_reuso,
-        garantizado_pct: f.pr_garantizado_pct,
-        rafaga_bajada_kbps: f.pr_rafaga_bajada_kbps,
-        rafaga_subida_kbps: f.pr_rafaga_subida_kbps,
-        rafaga_umbral_pct: f.pr_rafaga_umbral_pct,
-        rafaga_segundos: f.pr_rafaga_segundos,
-        prioridad: f.pr_prioridad,
-    })
+    const promocion = leerPromocion(f.promocion)
+    const velocidad = velocidadConPromocion(
+        velocidadEfectiva(leerVelocidad(f as unknown as Record<string, unknown>), {
+            reuso: f.pr_reuso,
+            garantizado_pct: f.pr_garantizado_pct,
+            rafaga_bajada_kbps: f.pr_rafaga_bajada_kbps,
+            rafaga_subida_kbps: f.pr_rafaga_subida_kbps,
+            rafaga_umbral_pct: f.pr_rafaga_umbral_pct,
+            rafaga_segundos: f.pr_rafaga_segundos,
+            prioridad: f.pr_prioridad,
+        }),
+        promocion,
+    )
 
     // Estrategia PPPoE del router y del plan (`contratos/control-velocidad.md`): los extras apagados
     // quitan ráfaga, prioridad o garantizado de la cadena; `velocidad` dice qué atributos manda `aaa`.
@@ -268,14 +292,17 @@ function aRegistro(f: FilaAaa, perfilPorServidor = false): RegistroAaa {
         estado: f.estado,
         router_id: Number(f.router_id),
         control_velocidad: estrategia.aplicacion === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
-        velocidad: velocidadAaa(estrategia, Number(f.plan_id), velocidad.reuso, nulo(f.profile_ppp)),
+        velocidad: conPromocionAaa(
+            velocidadAaa(estrategia, Number(f.plan_id), velocidad.reuso, nulo(f.profile_ppp)),
+            promocion,
+        ),
         plan: {
             id: Number(f.plan_id),
-            subida_kbps: f.subida_kbps,
-            bajada_kbps: f.bajada_kbps,
+            subida_kbps: promocion ? velocidad.subida_kbps : f.subida_kbps,
+            bajada_kbps: promocion ? velocidad.bajada_kbps : f.bajada_kbps,
             subida_limitada_kbps: f.subida_limitada_kbps,
             bajada_limitada_kbps: f.bajada_limitada_kbps,
-            rate_limit_override: nulo(f.rate_limit_override),
+            rate_limit_override: promocion ? null : nulo(f.rate_limit_override),
             profile_ppp: nulo(f.profile_ppp),
             rate_limit: rateLimitServicio(conExtras, 'activo'),
             rate_limit_limitado: rateLimitServicio(conExtras, 'limitado'),

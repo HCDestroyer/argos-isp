@@ -33,6 +33,10 @@ const camposPlantilla = {
     mora_tipo: vine.enum(['ninguna', 'fija', 'porcentaje'] as const).optional(),
     mora_valor: dinero().optional(),
     mora_recurrente: vine.boolean().optional(),
+    rechazar_monto_distinto: vine.boolean().optional().meta({
+        description:
+            'Decisión del PM 14: no aprobar un comprobante cuyo monto no coincide con lo que debe cubrir (false de fábrica: se aplica como abono)',
+    }),
     hora_corte: vine
         .string()
         .trim()
@@ -70,6 +74,7 @@ export const editarPlantillaValidator = vine.compile(
         mora_tipo: vine.enum(['ninguna', 'fija', 'porcentaje'] as const).optional(),
         mora_valor: dinero().optional(),
         mora_recurrente: vine.boolean().optional(),
+        rechazar_monto_distinto: vine.boolean().optional(),
         hora_corte: vine
             .string()
             .trim()
@@ -524,9 +529,12 @@ export const cancelarPromesaValidator = vine.compile(vine.object({ motivo: motiv
 */
 
 const formato = vine
-    .enum(['json', 'csv', 'xlsx'] as const)
+    .enum(['json', 'csv', 'xlsx', 'pdf'] as const)
     .optional()
-    .meta({ description: 'json (por defecto), csv o xlsx (descarga con Content-Disposition)' })
+    .meta({
+        description:
+            'json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)',
+    })
 const rango = {
     desde: fechaIso().optional().meta({ description: 'Por defecto: el día 1 del mes de hace 11 meses' }),
     hasta: fechaIso().optional().meta({ description: 'Por defecto: hoy (Guatemala)' }),
@@ -917,6 +925,10 @@ export const emitirFacturasPeriodoValidator = vine.compile(
                 description:
                     'Total a cobrar (con IVA) de periodos elegidos, si difiere del calculado: exige facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo (422 motivo_requerido); mayor que cero (422 monto_positivo). Igual al calculado = sin edición',
             }),
+        dias_gracia_corte: vine.number().withoutDecimals().range([0, 90]).nullable().optional().meta({
+            description:
+                'Decisión del PM 21: días de gracia antes del corte de los periodos pasados (los que empiezan antes de hoy). Quedan en cada factura (dias_gracia_corte y corte_desde = hoy + días) y evaluarEstadoServicio no las cuenta para limitar ni cortar antes de esa fecha. El vencimiento del documento y la mora no cambian. Sin el dato, como siempre',
+        }),
         tramo_inicial: vine
             .object({
                 modo: vine.enum(['primera_factura', 'cargo_unico'] as const),

@@ -7,6 +7,8 @@ import { expect, test, type Page } from '@playwright/test'
  * pantallas de las promociones en claro y oscuro, a 390 px y 1280 px. Sin la variable, se salta.
  */
 const DESTINO = process.env.PW_CAPTURAS
+/** Capturas del rediseño posteriores (drawer, comprobante, confirmación): no existían antes. */
+const DESPUES = process.env.PW_CAPTURAS_DESPUES === '1'
 
 async function capturar(page: Page, nombre: string, proyecto: string, tema: string) {
     await page.waitForLoadState('networkidle')
@@ -161,6 +163,181 @@ for (const tema of ['light', 'dark'] as const) {
                 }
                 await seccion.screenshot({ path: join(DESTINO!, `whatsapp-${escenario}-${nombreTema}-${info.project.name}.png`) })
             }
+        })
+    })
+}
+
+/**
+ * Rediseño (índigo eléctrico): inicio público, `/entrar`, `/cuenta` (inicio y facturas) y `/corte`,
+ * en claro y oscuro, a 390 px y 1280 px, con densidad 2 para revisar el detalle.
+ */
+for (const tema of ['light', 'dark'] as const) {
+    test.describe(`capturas rediseño ${tema}`, () => {
+        test.skip(!DESTINO, 'Solo con PW_CAPTURAS')
+        test.use({ colorScheme: tema, deviceScaleFactor: 2 })
+
+        test('pantallas principales', async ({ page }, info) => {
+            mkdirSync(DESTINO!, { recursive: true })
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.addInitScript((t) => {
+                try {
+                    localStorage.setItem('nuxt-color-mode', t)
+                }
+                catch {
+                    // sin almacenamiento: el tema sale de prefers-color-scheme
+                }
+            }, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/corte')
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+            await capturar(page, 'rediseno-corte', info.project.name, nombreTema)
+            await page.goto('/')
+            await page.getByRole('heading', { level: 1 }).first().waitFor()
+            await capturar(page, 'rediseno-portal', info.project.name, nombreTema)
+            await page.goto('/entrar')
+            await page.getByRole('heading', { level: 1 }).first().waitFor()
+            await capturar(page, 'rediseno-entrar', info.project.name, nombreTema)
+
+            await page.goto('/entrar?con=codigo')
+            await expect(async () => {
+                await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+                await page.getByRole('button', { name: 'Enviarme un código' }).click()
+                await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+            }).toPass({ timeout: 60_000 })
+            await page.locator('input').first().click()
+            await page.keyboard.type('123456')
+            await page.getByTestId('seccion-inicio').waitFor({ timeout: 30_000 })
+            await capturar(page, 'rediseno-cuenta-inicio', info.project.name, nombreTema)
+            if (DESPUES) {
+                // Solo la ventana, al final del scroll: la barra inferior fija no tapa el pie.
+                await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+                await page.waitForTimeout(300)
+                await page.screenshot({ path: join(DESTINO!, `rediseno-cuenta-inicio-final-${nombreTema}-${info.project.name}.png`) })
+                await page.evaluate(() => window.scrollTo(0, 0))
+            }
+            await page.getByTestId('nav-facturas').filter({ visible: true }).first().click()
+            await page.getByTestId('seccion-facturas').waitFor({ timeout: 30_000 })
+            await capturar(page, 'rediseno-cuenta-facturas', info.project.name, nombreTema)
+            if (!DESPUES) {
+                return
+            }
+            // Drawer de detalle de una factura (sin salir de la lista).
+            await page.getByTestId('factura').first().click()
+            await page.getByTestId('detalle').waitFor()
+            await page.waitForTimeout(400)
+            await page.screenshot({ path: join(DESTINO!, `rediseno-drawer-factura-${nombreTema}-${info.project.name}.png`) })
+            await page.keyboard.press('Escape')
+            // Subir comprobante: página propia (se navega con la SPA: la sesión vive en memoria).
+            await page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
+            await page.getByTestId('cuenta-subir-comprobante').click()
+            await page.getByTestId('comprobante-formulario').waitFor({ timeout: 30_000 })
+            await capturar(page, 'rediseno-comprobante', info.project.name, nombreTema)
+        })
+
+        test('confirmación (canje de puntos)', async ({ page }, info) => {
+            test.skip(!DESPUES, 'Solo en las capturas de después')
+            mkdirSync(DESTINO!, { recursive: true })
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.addInitScript((t) => {
+                try {
+                    localStorage.setItem('nuxt-color-mode', t)
+                }
+                catch {
+                    // sin almacenamiento: el tema sale de prefers-color-scheme
+                }
+            }, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/entrar?con=codigo&puntos=canje')
+            await expect(async () => {
+                await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+                await page.getByRole('button', { name: 'Enviarme un código' }).click()
+                await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+            }).toPass({ timeout: 60_000 })
+            await page.locator('input').first().click()
+            await page.keyboard.type('123456')
+            await page.getByTestId('resumen-puntos').waitFor({ timeout: 30_000 })
+            await page.getByTestId('nav-puntos').filter({ visible: true }).first().click()
+            await page.getByTestId('premio-501').getByTestId('canjear').click()
+            await page.getByTestId('confirmar-canje').waitFor()
+            await page.waitForTimeout(400)
+            await page.screenshot({ path: join(DESTINO!, `rediseno-modal-canje-${nombreTema}-${info.project.name}.png`) })
+        })
+    })
+}
+
+/** Entra con el código de los fixtures; `extra` se suma a la URL (p. ej. `&tema=esmeralda`). */
+async function entrarConCodigo(page: Page, extra = ''): Promise<void> {
+    await page.goto(`/entrar?con=codigo${extra}`)
+    await expect(async () => {
+        await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+        await page.getByRole('button', { name: 'Enviarme un código' }).click()
+        await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+    }).toPass({ timeout: 90_000 })
+    await page.locator('input').first().click()
+    await page.keyboard.type('123456')
+    await page.getByTestId('seccion-inicio').waitFor({ timeout: 30_000 })
+}
+
+async function prepararTema(page: Page, tema: 'light' | 'dark') {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.addInitScript((t) => {
+        try {
+            localStorage.setItem('nuxt-color-mode', t)
+        }
+        catch {
+            // sin almacenamiento: el tema sale de prefers-color-scheme
+        }
+    }, tema)
+}
+
+/** `/cuenta` en escritorio (1280 y 1440 px): inicio, pagar, facturas y cuenta, claro y oscuro. */
+for (const ancho of [1280, 1440]) {
+    for (const tema of ['light', 'dark'] as const) {
+        test.describe(`capturas escritorio ${ancho} ${tema}`, () => {
+            test.skip(!DESTINO || !DESPUES, 'Solo con PW_CAPTURAS y PW_CAPTURAS_DESPUES')
+            test.use({ colorScheme: tema, deviceScaleFactor: 2, viewport: { width: ancho, height: 900 } })
+
+            test('cuenta en escritorio', async ({ page }, info) => {
+                test.skip(info.project.name !== 'escritorio', 'Solo en el proyecto de escritorio')
+                mkdirSync(DESTINO!, { recursive: true })
+                await prepararTema(page, tema)
+                const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+                await entrarConCodigo(page)
+                await page.getByTestId('recientes').waitFor()
+                await capturar(page, `rediseno-escritorio-inicio-${ancho}`, 'escritorio', nombreTema)
+                for (const [nav, seccion, nombre] of [['nav-facturas', 'seccion-facturas', 'facturas'], ['pagar', 'seccion-pagar', 'pagar'], ['nav-cuenta', 'seccion-cuenta', 'cuenta']] as const) {
+                    if (nav === 'pagar') {
+                        await page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
+                    }
+                    else {
+                        await page.getByTestId('navegacion-lateral').getByTestId(nav).click()
+                    }
+                    await page.getByTestId(seccion).waitFor()
+                    await capturar(page, `rediseno-escritorio-${nombre}-${ancho}`, 'escritorio', nombreTema)
+                }
+            })
+        })
+    }
+}
+
+/** Otro preset del admin (esmeralda): `/corte`, `/entrar` y el inicio de `/cuenta`. */
+for (const tema of ['light', 'dark'] as const) {
+    test.describe(`capturas preset esmeralda ${tema}`, () => {
+        test.skip(!DESTINO || !DESPUES, 'Solo con PW_CAPTURAS y PW_CAPTURAS_DESPUES')
+        test.use({ colorScheme: tema, deviceScaleFactor: 2 })
+
+        test('portal en esmeralda', async ({ page }, info) => {
+            mkdirSync(DESTINO!, { recursive: true })
+            await prepararTema(page, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/corte?tema=esmeralda')
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+            await capturar(page, 'rediseno-esmeralda-corte', info.project.name, nombreTema)
+            await page.goto('/entrar?tema=esmeralda')
+            await page.getByRole('heading', { level: 1 }).first().waitFor()
+            await capturar(page, 'rediseno-esmeralda-entrar', info.project.name, nombreTema)
+            await entrarConCodigo(page, '&tema=esmeralda')
+            await capturar(page, 'rediseno-esmeralda-cuenta', info.project.name, nombreTema)
         })
     })
 }

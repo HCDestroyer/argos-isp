@@ -105,6 +105,7 @@ test.group('inventario: configuración con los privilegios de la API (argosisp_a
                 empresa_id: 1,
                 traslado_firma_obligatoria: true,
                 recuperacion_tecnicos_minimos: 2,
+                iris_movimientos_diarios_alerta: 40,
                 version: 0,
             })
             const guardada = await new ConfigurarInventario().execute(
@@ -116,6 +117,7 @@ test.group('inventario: configuración con los privilegios de la API (argosisp_a
                 empresa_id: 1,
                 traslado_firma_obligatoria: false,
                 recuperacion_tecnicos_minimos: 2,
+                iris_movimientos_diarios_alerta: 40,
                 version: 1,
             })
             const otra = await new ConfigurarInventario().execute(

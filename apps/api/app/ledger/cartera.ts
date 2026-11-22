@@ -6,6 +6,7 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import type { LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { resumenGestiones, type ResumenGestiones } from '#billing/gestiones_cobro'
 
 /**
  * Estimación y castigo de cartera (contrato de localización fiscal §10.9): lectura.
@@ -75,6 +76,8 @@ export interface CastigoVista {
     registrado_por: number | null
     created_at: Date
     facturas: Array<{ factura_id: number; monto: string; iva: string }>
+    /** gestiones de cobro del cliente en la empresa registradas hasta el castigo (decisión del PM 8) */
+    gestiones: ResumenGestiones['gestiones']
 }
 
 function consultaCastigos(cliente: QueryClientContract) {
@@ -116,8 +119,14 @@ async function conFacturas(cliente: QueryClientContract, filas: Array<Omit<Casti
         monto: string
         iva: string
     }>
+    const gestiones = new Map<number, ResumenGestiones['gestiones']>()
+    for (const f of filas) {
+        const r = await resumenGestiones(cliente, Number(f.cliente_id), Number(f.empresa_id), f.created_at)
+        gestiones.set(Number(f.id), r.gestiones)
+    }
     return filas.map((f) => ({
         ...f,
+        gestiones: gestiones.get(Number(f.id)) ?? [],
         facturas: facturas
             .filter((x) => Number(x.castigo_id) === Number(f.id))
             .map((x) => ({ factura_id: Number(x.factura_id), monto: x.monto, iva: x.iva })),

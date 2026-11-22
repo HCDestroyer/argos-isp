@@ -76,7 +76,29 @@ export const PERMISOS_IRIS_CONTRATO = [
     'clientes.registrar_identidad',
     'servicios.completar_datos',
     'servicios.cambiar_titular',
+    // gestiones de cobro (contrato 0.13.0, decisión del PM 8; A3): llamadas y visitas de Iris
+    'gestiones_cobro.registrar',
+    // falla general de red (contrato 0.13.0): servicios afectados por páginas
+    'incidentes_red.leer',
+    // equipos del cliente y bienvenida (contrato 0.9.0 §12, A32, A33, A35 y A37)
+    'servicios.aprovisionar',
+    'servicios.ver_equipo',
+    'servicios.cambiar_wifi',
+    'servicios.reenviar_bienvenida',
 ] as const
+
+/** Permiso que el contrato 0.13.0 suma al usuario técnico Iris (migración de los tokens vigentes). */
+export const PERMISOS_IRIS_0130 = ['gestiones_cobro.registrar'] as const satisfies ReadonlyArray<
+    (typeof PERMISOS_IRIS_CONTRATO)[number]
+>
+
+/** Permisos que el contrato 0.9.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
+export const PERMISOS_IRIS_090 = [
+    'servicios.aprovisionar',
+    'servicios.ver_equipo',
+    'servicios.cambiar_wifi',
+    'servicios.reenviar_bienvenida',
+] as const satisfies ReadonlyArray<(typeof PERMISOS_IRIS_CONTRATO)[number]>
 
 /** Permisos que el contrato 0.12.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
 export const PERMISOS_IRIS_0120 = [

@@ -312,11 +312,16 @@ export const RedIpv4 = definirEsquema(
             },
             dns_primario: nulable(texto),
             dns_secundario: nulable(texto),
+            publica: {
+                ...booleano,
+                description:
+                    'Red de IPs públicas (decisión del PM 30): solo la usan el adicional «IP pública» y los planes que la incluyen',
+            },
             ocupacion: OcupacionPool,
             ...auditable,
         },
         // red de acceso (5 nov): la API siempre los envía; opcionales hasta que las fixtures del panel los traigan
-        ['gateway_efectivo', 'gateway_derivado', 'gateway_ocupado_por'],
+        ['gateway_efectivo', 'gateway_derivado', 'gateway_ocupado_por', 'publica'],
     ),
 )
 
@@ -589,6 +594,10 @@ export const Plan = definirEsquema(
                 ...lista(id),
                 description: 'Routers con implementación propia del plan; con `global` vale en todos (A40)',
             },
+            incluye_ip_publica: {
+                ...booleano,
+                description: 'Trae una IP pública de una red `publica` del router (decisión del PM 30)',
+            },
             global: booleano,
             activo: booleano,
             ...auditable,
@@ -599,7 +608,7 @@ export const Plan = definirEsquema(
         },
         // `warnings` es opcional de verdad: solo en las respuestas de crear y editar. `modo` y `routers`
         // (Iris 0.10.0): la API siempre los envía; opcionales hasta que las fixtures los traigan
-        ['warnings', 'modo', 'routers'],
+        ['warnings', 'modo', 'routers', 'incluye_ip_publica'],
     ),
 )
 
@@ -689,8 +698,12 @@ export const PlanEfectivo = definirEsquema(
                     'Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado',
             },
             routers: { ...lista(id), description: 'Routers con implementación propia del plan (A40)' },
+            incluye_ip_publica: {
+                ...booleano,
+                description: 'Trae una IP pública de una red `publica` del router (decisión del PM 30)',
+            },
         },
-        ['modo', 'routers'],
+        ['modo', 'routers', 'incluye_ip_publica'],
     ),
 )
 

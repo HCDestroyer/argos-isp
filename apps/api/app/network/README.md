@@ -206,3 +206,17 @@ Lecturas: `GET /qos/perfiles` y `GET /qos/perfiles/:id` (con el costo en cada ro
 ## Vista previa del rate-limit (semana 3)
 
 - `POST /api/v1/planes/vista-previa` (`planes.ver`): recibe los campos de velocidad del formulario de planes (`bajada_kbps`, `subida_kbps`, `*_limitada_kbps`, `reuso`, `garantizado_pct`, `rafaga_*`, `prioridad`, opcionales `rate_limit_override` y `activos`, por defecto 1) y devuelve `vistaPreviaVelocidad` de `velocidad.ts`: `rate_limit`, `rate_limit_limitado`, `garantizado_pct_efectivo`, `limit_at_servicio_kbps` y `padre` (`limitesPadrePlan` con `activos`). 422 por campo con `validarVelocidad`, igual que crear el plan. No guarda ni audita (es una lectura).
+
+## Quién tenía una IP en una fecha (decisión del PM 28; `actions/buscar_historial_ip.ts`)
+
+`GET /ip-historial?ip=&en=` (`ip.buscar_historial`, solo `admin` de fábrica): IPv4 o IPv6 en `network.sesiones` y el historial de asignaciones vigente en ese instante; devuelve servicio, cliente y sesión. Cada consulta queda en `audit.acciones` con los servicios devueltos. Retención `ip_historial.retencion_dias` (730): más atrás, 422 `fuera_de_retencion`. Es una lectura: no emite eventos. Hoy nada borra sesiones viejas (ver `.claude/integration/a1.md`).
+
+## Falla general de red y caídas repetidas (decisión del PM 31; `incidentes_red.ts`, contrato Iris 0.13.0)
+
+- `network.incidentes_red` (uno abierto por alcance `router`, `olt`, `pon` o `zona`) y `network.incidentes_red_servicios`. Cron `fallas_generales` (cada minuto, `incidentes_red.evaluar`): abre cuando los servicios activos o limitados sin sesión cuya última sesión terminó en la ventana (cualquier causa salvo `Admin-Reset`) cumplen el umbral (`falla_general.*`: 30 % y al menos 5 en 5 min de fábrica), amplía y cierra (`recuperado`) cuando ya no lo cumplen.
+- A mano: `POST /incidentes-red` (`incidentes_red.abrir`, motivo obligatorio, afectados = servicios activos del alcance) y `POST /incidentes-red/:id/cerrar` (`incidentes_red.cerrar`).
+- Lectura: `GET /incidentes-red`, `GET /incidentes-red/:id` y `GET /incidentes-red/:id/servicios?empresa_id=&cursor=&limit=` (≤ 1000, solo ids; 404 fuera del alcance), con `incidentes_red.leer` (también el usuario técnico de Iris).
+- Eventos `red.falla_general_abierta` / `red.falla_general_cerrada`, uno por empresa afectada con el mismo `incidente_id`: `{ incidente_id, empresa_id, alcance, alcance_id, servicios_afectados: { cantidad, ids (≤ 5000) }, origen, desde, hasta }`. Nunca nombres ni direcciones.
+- **Reapertura**: si el mismo alcance vuelve a caer después del cierre se abre un incidente **nuevo** (otro `incidente_id`); Iris reusa su ticket si la nueva falla llega dentro de los 30 minutos siguientes al cierre.
+- Mientras un servicio está en un incidente abierto (o en su alcance), `servicio.caidas_repetidas` no se emite. El umbral de caídas por servicio es por empresa (`caidas.*`, 3 en 60 min); la alerta en Argos es `GET /red/caidas-repetidas` y `GET /servicios/:id/caidas-repetidas`.
+

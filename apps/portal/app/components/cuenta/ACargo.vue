@@ -32,31 +32,42 @@ const servicios = computed(() => (aCargo.lista.value ?? []).flatMap(grupo => gru
     />
     <section
         v-else-if="servicios.length > 0"
-        class="flex flex-col gap-3"
+        class="ax-tarjeta flex flex-col p-4 sm:p-5"
         aria-labelledby="titulo-a-cargo"
         data-testid="a-cargo"
     >
-        <h2
-            id="titulo-a-cargo"
-            class="text-sm font-semibold text-highlighted"
-        >
-            Está a tu cargo
-        </h2>
-        <UCard
+        <div class="flex items-center gap-3">
+            <PortalPastilla
+                icono="i-lucide-users-round"
+                tono="info"
+            />
+            <div class="min-w-0">
+                <h2
+                    id="titulo-a-cargo"
+                    class="font-semibold text-highlighted"
+                >
+                    Está a tu cargo
+                </h2>
+                <p class="text-xs text-muted">
+                    Servicios de otros titulares que te dejaron a cargo.
+                </p>
+            </div>
+        </div>
+        <div
             v-for="{ servicio, contactoId, permisos } in servicios"
             :key="`${contactoId}-${servicio.id}`"
-            :ui="{ body: 'p-4 sm:p-4' }"
+            class="mt-4 border-t border-default pt-4"
             data-testid="a-cargo-servicio"
         >
-            <div class="flex items-start gap-3">
+            <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
                 <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
                     <UIcon
                         name="i-lucide-house"
                         class="size-5"
                     />
                 </span>
-                <div class="min-w-0 flex-1">
-                    <p class="truncate font-medium text-highlighted">
+                <div class="min-w-0 flex-1 basis-40">
+                    <p class="font-medium break-words text-highlighted">
                         {{ nombreServicioACargo(servicio) }}
                     </p>
                     <p class="truncate text-xs text-muted">
@@ -105,6 +116,6 @@ const servicios = computed(() => (aCargo.lista.value ?? []).flatMap(grupo => gru
             >
                 Para pagar, indica el código {{ servicio.codigo ?? servicio.id }} en caja o en tu depósito.
             </p>
-        </UCard>
+        </div>
     </section>
 </template>

@@ -34,7 +34,11 @@ import {
 import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
-import { avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
+import { EVENTO_BIENVENIDA, avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
+import { avisoDeSoporte, esEventoSoporte, origenMasivo } from '#notify/soporte'
+import { origenIrisDe, registrarBienvenida, seguirBienvenida } from '#notify/bienvenida'
+import { conectorAdmite } from '#integraciones/iris/configuracion'
+import type { CanalNotificacion } from '#shared/eventos'
 import { servicioEliminado } from '#notify/eliminados'
 import { renderizar } from '#notify/plantillas'
 import {
@@ -55,6 +59,8 @@ export interface EntradaProgramar {
     payload: Record<string, unknown>
     /** instante ISO con el que se calculan días al vencimiento (por defecto, ahora) */
     ahora?: string
+    /** solo estos canales (reenvío de la bienvenida, §12.5); sin él, todos los que sirvan */
+    canales?: CanalNotificacion[]
 }
 
 export interface ResultadoProgramar {
@@ -73,7 +79,15 @@ interface Aviso {
     clienteId: number
     evento: string
     payload: Record<string, unknown>
+    /** avisos de soporte con `aviso_por_correo`: Iris ya mandó el correo (`soporte.ts`) */
+    sinCorreo?: boolean
 }
+
+/** Desde esta versión del contrato Iris la bienvenida por WhatsApp es `bienvenida_servicio` (§12.5). */
+const CONTRATO_BIENVENIDA_SERVICIO = '0.9.0'
+
+/** Evento interno del reenvío de la bienvenida (lo emite `ReenviarBienvenida`). */
+export const EVENTO_BIENVENIDA_SOLICITADA = 'servicio.bienvenida_solicitada'
 
 /**
  * Decide a quién, por qué canal y con qué texto se notifica un evento, y lo registra en
@@ -118,6 +132,23 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         // `lealtad.referido_calificado` va al referidor, no al referido (`lealtad.ts`)
         let payload = payloadDelAviso(input.evento, input.payload)
         let eventoAviso = input.evento
+        let origen = input.origen
+        let canalesPedidos = input.canales
+        // Reenvío de la bienvenida (`ReenviarBienvenida`, §12.5): la bienvenida por los canales pedidos,
+        // con el origen de envíos que ya registró la acción
+        if (input.evento === EVENTO_BIENVENIDA_SOLICITADA) {
+            if (typeof payload.origen_envios !== 'string') return { clienteId: null, envios: [], encolar: [] }
+            origen = payload.origen_envios
+            eventoAviso = EVENTO_BIENVENIDA
+            if (Array.isArray(payload.canales)) canalesPedidos = payload.canales as CanalNotificacion[]
+        }
+        // Avisos de soporte de Iris (`soporte.ts`, contrato 0.9.0 §6.6)
+        const soporte = esEventoSoporte(input.evento) ? avisoDeSoporte(input.evento, payload) : null
+        if (esEventoSoporte(input.evento)) {
+            if (!soporte) return { clienteId: null, envios: [], encolar: [] }
+            eventoAviso = soporte.evento
+            payload = soporte.payload
+        }
         // Avisos al titular (`contactos.ts`): contacto agregado, servicio a su nombre, intento de recuperación
         if ((EVENTOS_AVISO_TITULAR as readonly string[]).includes(input.evento)) {
             const titular = await avisoAlTitular(t.trx, input.evento, payload)
@@ -143,8 +174,41 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         const empresaEvento = await empresaDelEvento(t.trx, payload)
         if (empresaEvento !== null) t.fijarEmpresa(empresaEvento)
 
+        const ahora = input.ahora ? DateTime.fromISO(input.ahora, { zone: 'utc' }) : DateTime.utc()
+        // Respuesta masiva de soporte: un solo aviso por cliente en la ventana (`soporte.ts`)
+        if (soporte?.masivo) {
+            const masivo = await origenMasivo(t.trx, origen, clienteId, ahora)
+            if (!masivo) return { clienteId: null, envios: [], encolar: [] }
+            origen = masivo
+        }
+
         // La activación de la instalación se avisa con la bienvenida (`instalacion.ts`)
-        const avisos: Aviso[] = [{ clienteId, evento: eventoDelAviso(eventoAviso, payload), payload }]
+        const avisos: Aviso[] = [
+            {
+                clienteId,
+                evento: eventoDelAviso(eventoAviso, payload),
+                payload,
+                sinCorreo: soporte?.sinCorreo ?? false,
+            },
+        ]
+        // Bienvenida con seguimiento (`bienvenida.ts`, contrato Iris 0.9.0 §12.5)
+        const servicioBienvenida = Number(payload.servicio_id)
+        const esBienvenida =
+            avisos[0]!.evento === EVENTO_BIENVENIDA && Number.isSafeInteger(servicioBienvenida)
+        if (esBienvenida) {
+            const origenIris = origenIrisDe(payload)
+            await registrarBienvenida(t.trx, {
+                origen,
+                servicioId: servicioBienvenida,
+                empresaId: empresaEvento,
+                clienteId,
+                origenTipo: origenIris ? 'iris_orden' : null,
+                origenId: origenIris?.id ?? null,
+                reenvio: false,
+                canales: (canalesPedidos as never) ?? null,
+                requestId: t.ctx.requestId,
+            })
+        }
         if (input.evento === 'pago.registrado') {
             for (const tercero of tercerosDelPago(input.payload, clienteId)) {
                 avisos.push({
@@ -155,13 +219,12 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
             }
         }
 
-        const ahora = input.ahora ? DateTime.fromISO(input.ahora, { zone: 'utc' }) : DateTime.utc()
-        await bloquearOrigen(t.trx, input.origen)
+        await bloquearOrigen(t.trx, origen)
 
         let principal: number | null = null
         const envios: EnvioCreado[] = []
         for (const aviso of avisos) {
-            const programados = await this.programar(t, input.origen, aviso, ahora)
+            const programados = await this.programar(t, origen, aviso, ahora, canalesPedidos)
             if (programados === null) continue
             if (principal === null && aviso.clienteId === clienteId) {
                 principal = clienteId
@@ -174,11 +237,10 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         if (principal !== null && esAvisoDeCobro(principalAviso.evento, payload)) {
             const servicioId = await this.servicioDelAviso(t, payload)
             for (const contacto of await contactosConAvisos(t.trx, clienteId, servicioId)) {
-                envios.push(
-                    ...(await this.programarContacto(t, input.origen, principalAviso, contacto, ahora)),
-                )
+                envios.push(...(await this.programarContacto(t, origen, principalAviso, contacto, ahora)))
             }
         }
+        if (esBienvenida) await seguirBienvenida(t, origen)
         return {
             clienteId: principal,
             envios,
@@ -192,8 +254,14 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         origen: string,
         aviso: Aviso,
         ahora: DateTime,
+        canales?: CanalNotificacion[],
     ): Promise<EnvioCreado[] | null> {
         const plantillas = await plantillasActivas(t.trx, aviso.evento)
+        // Iris ya mandó el correo (soporte) o el reenvío pidió solo algunos canales
+        if (aviso.sinCorreo) plantillas.delete('correo')
+        if (canales) {
+            for (const canal of [...plantillas.keys()]) if (!canales.includes(canal)) plantillas.delete(canal)
+        }
         if (plantillas.size === 0) return null
 
         const existentes = await enviosExistentes(t.trx, origen, aviso.clienteId)
@@ -232,17 +300,21 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
             }
         }
         const variables = await construirVariables(t.trx, aviso.evento, aviso.payload, destinatario, ahora)
+        // sin respaldo por correo (`EnviarNotificacion`): Iris ya lo mandó
+        if (aviso.sinCorreo) variables.sin_correo = true
         const elegidos: EleccionWhatsapp[] = []
         for (const eleccion of elegirCanales(destinatario, plantillas, config, aviso.evento)) {
             if (eleccion.canal !== 'whatsapp') {
                 elegidos.push({ ...eleccion, variables })
                 continue
             }
-            const preparada = await this.prepararWhatsapp(t, eleccion, variables, conector)
+            const preparada = await this.prepararWhatsapp(t, eleccion, variables, conector, aviso.payload)
             if (preparada) elegidos.push(preparada)
         }
 
         if (elegidos.length === 0) {
+            // soporte sin correo: que el cliente no tenga otro canal no es una falla (Iris ya avisó)
+            if (aviso.sinCorreo) return null
             const canal = destinatario.canalPreferido
             const plantilla =
                 (canal !== 'whatsapp' ? plantillas.get(canal) : undefined) ??
@@ -376,9 +448,16 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         eleccion: EleccionCanal,
         variables: Variables,
         conector: EstadoWhatsapp | null,
+        payload: Record<string, unknown>,
     ): Promise<EleccionWhatsapp | null> {
-        const codigo = renderizar(eleccion.plantilla.cuerpo, variables).trim()
+        let codigo = renderizar(eleccion.plantilla.cuerpo, variables).trim()
         if (codigo === '') return null
+        // 0.9.0 §12.5: con un Iris ≥ 0.9.0 la bienvenida es `bienvenida_servicio`, con `origen`
+        let origenIris: ReturnType<typeof origenIrisDe> = null
+        if (codigo === 'bienvenida' && (await conectorAdmite(CONTRATO_BIENVENIDA_SERVICIO, t.trx))) {
+            codigo = 'bienvenida_servicio'
+            origenIris = origenIrisDe(payload)
+        }
         const plantilla = { ...eleccion.plantilla, asunto: null, cuerpo: codigo }
         if (!esCodigoIris(codigo)) {
             return {
@@ -396,7 +475,14 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         return {
             ...eleccion,
             plantilla,
-            variables: { ...variables, iris: { plantilla: codigo, variables: iris ?? {} } },
+            variables: {
+                ...variables,
+                iris: {
+                    plantilla: codigo,
+                    variables: iris ?? {},
+                    ...(origenIris ? { origen: origenIris } : {}),
+                },
+            },
             omitido,
         }
     }

@@ -71,7 +71,7 @@ describe('programa no activado en el portal', () => {
         const layout = await mountSuspended(Layout, { route: '/cuenta' })
         await esperar()
         const barra = layout.find('[data-testid="navegacion-inferior"]')
-        expect(barra.findAll('a').map(a => a.text())).toEqual(['Inicio', 'Pagar', 'Facturas', 'Cuenta'])
+        expect(barra.findAll('a').map(a => a.text())).toEqual(['Inicio', 'Facturas', 'Cuenta'])
 
         const inicio = await montarPuntos('/cuenta')
         expect(inicio.find('[data-testid="resumen-puntos"]').exists()).toBe(false)
@@ -90,8 +90,8 @@ describe('programa visible', () => {
         const layout = await mountSuspended(Layout, { route: '/cuenta?seccion=puntos' })
         await esperar()
         const barra = layout.find('[data-testid="navegacion-inferior"]')
-        expect(barra.findAll('a').map(a => a.text())).toEqual(['Inicio', 'Pagar', 'Facturas', 'Puntos', 'Cuenta'])
-        expect(barra.find('ul').classes()).toContain('grid-cols-5')
+        expect(barra.findAll('a').map(a => a.text())).toEqual(['Inicio', 'Facturas', 'Puntos', 'Cuenta'])
+        expect(barra.find('ul').classes()).toContain('grid-cols-4')
         expect(barra.find('[data-testid="nav-puntos"]').attributes('aria-current')).toBe('page')
 
         const inicio = await montarPuntos('/cuenta')

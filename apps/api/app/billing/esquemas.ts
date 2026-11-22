@@ -113,6 +113,11 @@ export const PlantillaFacturacion = definirEsquema(
             mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
             mora_valor: Dinero,
             mora_recurrente: booleano,
+            rechazar_monto_distinto: {
+                ...booleano,
+                description:
+                    'Decisión del PM 14: true = un comprobante cuyo monto no coincide con lo que debe cubrir no se aprueba (422 monto_distinto); false (fábrica) = se aplica como abono y se informa cuánto falta',
+            },
             hora_corte: {
                 type: 'string',
                 pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
@@ -134,7 +139,8 @@ export const PlantillaFacturacion = definirEsquema(
             motivo_retiro: nulable(texto),
             ...auditable,
         },
-        ['por_defecto'],
+        // siempre viene; opcional en el esquema para no romper clientes tipados (decisión del PM 14)
+        ['por_defecto', 'rechazar_monto_distinto'],
     ),
 )
 
@@ -327,9 +333,21 @@ export const Factura = definirEsquema(
                 ...nulable(id),
                 description: 'Factura original que esta sustituye; null si no es una sustituta',
             },
+            dias_gracia_corte: {
+                ...nulable(entero),
+                description:
+                    'Decisión del PM 21: días de gracia antes del corte que escribió quien emitió este mes pasado; null si no se escribieron',
+            },
+            corte_desde: {
+                ...nulable(fecha),
+                description:
+                    'Desde este día la factura cuenta para limitar o cortar (emisión + dias_gracia_corte); null = desde que vence',
+            },
             ...auditable,
         },
         [
+            'dias_gracia_corte',
+            'corte_desde',
             'sustituida_por',
             'sustituye_a',
             'origen_externo_tipo',
