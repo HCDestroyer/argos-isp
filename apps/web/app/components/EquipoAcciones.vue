@@ -6,11 +6,13 @@
  * que toca; al terminar avisa con un toast y emite `hecho` para recargar la pantalla.
  *
  * Cada acción la ofrece la pantalla solo con su permiso (`accionesEquipo`): el técnico nunca decide
- * pérdidas ni cobros.
+ * pérdidas ni cobros. Aquí se vuelve a comprobar: `ejecutar` no abre una acción sin su permiso y
+ * cada ventana se monta solo con el permiso exacto de su endpoint.
  */
 const emit = defineEmits<{ hecho: [] }>()
 
 const toast = useToast()
+const { puede } = usePermisos()
 
 const unidad = shallowRef<UnidadInventario | null>(null)
 const pendiente = shallowRef<PendienteNoRecuperado | null>(null)
@@ -19,6 +21,9 @@ const resultadoGarantia = ref<'reparada' | 'reemplazada' | 'rechazada'>('reparad
 const abiertos = reactive<Record<AccionEquipo, boolean>>({ cambiar: false, recibir: false, contacto: false, no_recuperado: false, funciona: false, garantia: false, resolver: false, baja: false })
 
 function ejecutar(accion: AccionEquipo, elegida: UnidadInventario, extra: { pendiente?: PendienteNoRecuperado | null, contexto?: string | null, resultado?: 'reparada' | 'reemplazada' | 'rechazada' } = {}) {
+    if (!puede(ACCIONES_EQUIPO[accion].permiso)) {
+        return
+    }
     unidad.value = elegida
     pendiente.value = extra.pendiente ?? null
     contexto.value = extra.contexto ?? null
@@ -47,34 +52,40 @@ const nombre = computed(() => (unidad.value ? `${unidad.value.producto_nombre} $
 
 <template>
     <EquipoCambiarModal
+        v-if="puede('servicios.cambiar_equipo')"
         v-model:open="abiertos.cambiar"
         :unidad="unidad"
         :contexto="contexto"
         @hecho="c => listo(c.cobro_propuesto_id ? 'Equipo cambiado; el cobro quedó propuesto' : 'Equipo cambiado')"
     />
     <EquipoDevolverModal
+        v-if="puede('inventario.devolver_comodato')"
         v-model:open="abiertos.recibir"
         :unidad="unidad"
         @hecho="u => listo(`${identificacionUnidad(u)} recibido en ${u.bodega_nombre ?? 'la bodega'}`)"
     />
     <EquipoContactoModal
+        v-if="puede('inventario.registrar_contacto_recuperacion')"
         v-model:open="abiertos.contacto"
         :unidad="unidad"
         @hecho="listo('Contacto registrado')"
     />
     <EquipoNoRecuperadoModal
+        v-if="puede('inventario.cobrar_equipo')"
         v-model:open="abiertos.no_recuperado"
         :unidad="unidad"
         :pendiente="pendiente"
         @hecho="u => listo(u.cobro_id ? 'Declarado no recuperado y cobrado al cliente' : 'Declarado no recuperado')"
     />
     <EquipoGarantiaModal
+        v-if="puede('inventario.enviar_garantia')"
         v-model:open="abiertos.garantia"
         modo="enviar"
         :unidad="unidad"
         @hecho="listo('Enviado a garantía')"
     />
     <EquipoGarantiaModal
+        v-if="puede('inventario.resolver_garantia')"
         v-model:open="abiertos.resolver"
         modo="resolver"
         :unidad="unidad"
@@ -82,6 +93,7 @@ const nombre = computed(() => (unidad.value ? `${unidad.value.producto_nombre} $
         @hecho="listo('Garantía resuelta')"
     />
     <AccionMotivoModal
+        v-if="puede('inventario.marcar_reparada')"
         v-model:open="abiertos.funciona"
         titulo="Funciona: a bodega"
         :efecto="`${nombre} queda disponible en su bodega como usado.`"
@@ -94,6 +106,7 @@ const nombre = computed(() => (unidad.value ? `${unidad.value.producto_nombre} $
         @hecho="listo('El equipo volvió a la bodega')"
     />
     <AccionMotivoModal
+        v-if="puede('inventario.dar_de_baja')"
         v-model:open="abiertos.baja"
         titulo="Dar de baja"
         :efecto="`${nombre} sale del inventario como gasto (5.6.02). No se deshace.`"

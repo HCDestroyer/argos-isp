@@ -387,6 +387,7 @@ function cobroDecidido(titulo: string) {
             @hecho="recargarTodo"
         />
         <CobroEquipoAprobarModal
+            v-if="puede('inventario.cobrar_equipo')"
             v-model:open="aprobarAbierto"
             :cobro="cobroElegido"
             @hecho="cobroDecidido('Cobro aprobado: el cargo quedó en la cuenta del cliente')"

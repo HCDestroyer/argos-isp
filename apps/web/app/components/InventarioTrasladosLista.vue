@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
 type Pastilla = 'todos' | 'en_transito' | 'recibida_con_diferencias'
 
 const route = useRoute()
+const { enlace } = usePermisos()
 const inicial = route.query.estado === 'en_transito' || route.query.estado === 'recibida_con_diferencias' ? route.query.estado : 'todos'
 const pastilla = ref<Pastilla>(inicial)
 const enCamino = ref<number | null>(null)
@@ -70,8 +71,12 @@ const columnas: TableColumn<OrdenTraslado>[] = [
     { id: 'ir', header: () => h('span', { class: 'sr-only' }, 'Abrir'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } },
 ]
 
+/** Sin permiso para abrir la orden, la fila no navega y el número queda como texto. */
 function alElegir(_evento: Event, fila: { original: OrdenTraslado }) {
-    void navigateTo(`/inventario/traslados/${fila.original.id}`)
+    const destino = enlace(`/inventario/traslados/${fila.original.id}`)
+    if (destino) {
+        void navigateTo(destino)
+    }
 }
 </script>
 
@@ -139,7 +144,7 @@ function alElegir(_evento: Event, fila: { original: OrdenTraslado }) {
             >
                 <template #numero-cell="{ row }">
                     <ULink
-                        :to="`/inventario/traslados/${row.original.id}`"
+                        :to="enlace(`/inventario/traslados/${row.original.id}`)"
                         class="font-mono text-sm text-highlighted hover:text-primary"
                         :data-orden="row.original.numero"
                     >T-{{ String(row.original.numero).padStart(4, '0') }}</ULink>

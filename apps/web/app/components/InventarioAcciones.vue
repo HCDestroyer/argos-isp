@@ -9,7 +9,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
  */
 const emit = defineEmits<{ hecho: [operacion: OperacionInventario] }>()
 
-const { puede } = usePermisos()
+const { puede, puedeAbrir, enlace } = usePermisos()
 const toast = useToast()
 
 const operaciones = computed(() => (Object.keys(OPERACIONES_INVENTARIO) as OperacionInventario[]).filter(o => puede(OPERACIONES_INVENTARIO[o].permiso)))
@@ -29,6 +29,9 @@ async function cargarCatalogos() {
 }
 
 async function abrir(o: OperacionInventario, productoId: number | null = null, bodegaId: number | null = null) {
+    if (!puede(OPERACIONES_INVENTARIO[o].permiso)) {
+        return
+    }
     await cargarCatalogos()
     operacion.value = o
     elegida.value = { productoId, bodegaId }
@@ -37,14 +40,18 @@ async function abrir(o: OperacionInventario, productoId: number | null = null, b
 
 defineExpose({ abrir, operaciones })
 
-const mas = computed<DropdownMenuItem[][]>(() => [
-    [{ type: 'label', label: 'Registrar a mano' }, ...operaciones.value.map(o => ({ label: OPERACIONES_INVENTARIO[o].etiqueta, icon: OPERACIONES_INVENTARIO[o].icono, onSelect: () => void abrir(o) }))],
-    [
-        { label: 'Bodegas y traslados', icon: 'i-lucide-warehouse', to: '/inventario/bodegas' },
-        { label: 'Conteos físicos', icon: 'i-lucide-clipboard-list', to: '/inventario/conteos' },
-        { label: 'Inventario valorizado', icon: 'i-lucide-scale', to: '/inventario/valorizado' },
-    ],
-])
+const mas = computed<DropdownMenuItem[][]>(() => {
+    const grupos: DropdownMenuItem[][] = [
+        [{ type: 'label', label: 'Registrar a mano' }, ...operaciones.value.map(o => ({ label: OPERACIONES_INVENTARIO[o].etiqueta, icon: OPERACIONES_INVENTARIO[o].icono, onSelect: () => void abrir(o) }))],
+        [
+            ...(puedeAbrir('/inventario/bodegas') ? [{ label: 'Bodegas y traslados', icon: 'i-lucide-warehouse', to: '/inventario/bodegas' }] : []),
+            ...(puedeAbrir('/inventario/conteos') ? [{ label: 'Conteos físicos', icon: 'i-lucide-clipboard-list', to: '/inventario/conteos' }] : []),
+            ...(puedeAbrir('/inventario/valorizado') ? [{ label: 'Inventario valorizado', icon: 'i-lucide-scale', to: '/inventario/valorizado' }] : []),
+        ],
+    ]
+    // Sin permiso para ninguna sección, el grupo de enlaces no se muestra vacío.
+    return grupos.filter(grupo => grupo.some(item => item.type !== 'label'))
+})
 
 function alHacer(o: OperacionInventario) {
     toast.add({ title: `${OPERACIONES_INVENTARIO[o].etiqueta} registrado`, icon: 'i-lucide-circle-check', color: 'success' })
@@ -91,8 +98,8 @@ function alHacer(o: OperacionInventario) {
             />
         </UDropdownMenu>
         <UButton
-            v-if="puede('productos.crear')"
-            to="/inventario/productos?nuevo=1"
+            v-if="puede('productos.crear') && puedeAbrir('/inventario/productos')"
+            :to="enlace('/inventario/productos?nuevo=1')"
             icon="i-lucide-plus"
             label="Nuevo producto"
             size="lg"
