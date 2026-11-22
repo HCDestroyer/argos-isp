@@ -29,6 +29,10 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
+// Se queda en 0.8.1 (revisión del 21 nov): de la 0.9.0 faltan en Argos `aprovisionar` y `capacidades`
+// (§12.2, A32), `GET /servicios/:id/equipo` (§12.3, A33), `POST /servicios/:id/wifi` y
+// `equipo.wifi_resuelto` (§12.4, A35) y la bienvenida con seguimiento (§12.5, A37). Anunciar 0.9.0
+// haría que Iris llamara rutas que no existen; 0.10.0 a 0.12.0 dependen de ella (son aditivas).
 export const CONTRATO_IRIS = '0.8.1'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
@@ -128,6 +132,8 @@ export interface FilaConectorIris {
     activo: boolean
     url_base: string | null
     token_cifrado: string | null
+    /** `token_portal` de Iris (0.9.0 §1.2), cifrado v1; solo lo lee el servidor del portal (A5) */
+    token_portal_cifrado: string | null
     webhook_salida_url: string | null
     webhook_salida_secreto_cifrado: string | null
     webhook_entrada_secreto_cifrado: string | null
@@ -315,6 +321,8 @@ export interface JuegoPendienteIris {
     webhook_entrada_secreto: string
     contrato: string | null
     receptor_argos: boolean | null
+    /** `token_portal` del canje nuevo (0.9.0 §1.2); null si Iris no lo mandó */
+    token_portal?: string | null
 }
 
 /**
@@ -387,6 +395,8 @@ export interface VistaConectorIris {
     activo: boolean
     url_base: string | null
     token: '***' | null
+    /** `***` si Iris entregó el `token_portal` (0.9.0 §1.2); nunca el valor */
+    token_portal: '***' | null
     webhook_salida_url: string | null
     webhook_salida_secreto: '***' | null
     webhook_entrada_url: string | null
@@ -468,6 +478,7 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
         activo: fila?.activo ?? false,
         url_base: fila?.url_base ?? null,
         token: mascara(fila?.token_cifrado),
+        token_portal: mascara(fila?.token_portal_cifrado),
         webhook_salida_url: fila?.webhook_salida_url ?? null,
         webhook_salida_secreto: mascara(fila?.webhook_salida_secreto_cifrado),
         webhook_entrada_url: base ? `${base}${RUTA_RECEPTOR_IRIS}` : null,

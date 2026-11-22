@@ -408,3 +408,8 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 - **Eventos atrasados:** un `servicio.*` o `asignacion.cambiada` que llega después del
   `servicio.eliminado` sale igual con el `empresa_id` de su payload (sin la fila, `cliente_id`
   queda null si el evento no lo trae); Iris lo trata como «no existe».
+
+## Portal del cliente con Iris (contrato 0.9.0 §1.2, §6.6 y §11)
+
+- **`token_portal`**: el segundo `iris_pat_` de Iris, recortado a `portal_argos.*`, para el servidor del portal (A5, `app/portal/soporte/iris_portal.ts`). Llega en el canje (`token_portal`, opcional; formato `iris_pat_` y distinto del token del panel, si no `422` en el campo) y en `PUT /integraciones/iris/contrato` con contrato ≥ 0.9.0 (con uno anterior se ignora; omitido se conserva; `null` lo borra). Se guarda cifrado en `integraciones.iris_conector.token_portal_cifrado` (migración `1795277619707`), se rota con cada canje (también la reconexión pendiente de 0.6.3, al confirmarse) y se borra al desconectar. Nunca sale en una respuesta: `GET /integraciones/iris` muestra `token_portal: '***' | null`; en `audit.acciones` y `audit.cambios` queda como `***`.
+- **Webhooks de soporte** (`RecibirWebhookIris`): `ticket.estado_cambiado`, `ticket.respondido` y `solicitud_servicio.estado_cambiado`, deduplicados por `X-Webhook-Id` como los demás. Si el cliente existe, se reemiten al bus como `soporte.ticket_estado_cambiado`, `soporte.ticket_respondido` y `soporte.solicitud_estado_cambiado` (resultado `aviso_emitido`) para que notify avise al cliente; un cliente inexistente o un payload incompleto quedan `ignorado` (`cliente_no_encontrado`, `payload_invalido`). El portal no guarda nada: relee de Iris al abrir cada pantalla.

@@ -133,6 +133,7 @@ const iris: Ruta[] = [
                 {
                     contrato: cuerpo.contrato,
                     receptor_argos: cuerpo.receptor_argos ?? null,
+                    ...(cuerpo.token_portal !== undefined ? { token_portal: cuerpo.token_portal } : {}),
                     atk_id: tokenDeLaPeticion(ctx),
                 },
                 ctx.contextoAccion(),
@@ -264,6 +265,7 @@ const iris: Ruta[] = [
                     code_verifier: cuerpo.code_verifier ?? null,
                     contrato: cuerpo.contrato ?? null,
                     receptor_argos: cuerpo.receptor_argos ?? null,
+                    token_portal: cuerpo.token_portal ?? null,
                 },
                 ctx.contextoAccion('webhook'),
             ),
