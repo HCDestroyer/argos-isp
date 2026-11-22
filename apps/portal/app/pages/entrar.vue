@@ -46,14 +46,24 @@ const esquemaContrasena = z.object({
 type Credenciales = z.output<typeof esquemaContrasena>
 const credenciales = reactive({ documento: '', contrasena: '' })
 
+const formContrasena = useTemplateRef<{ submit: () => Promise<void> }>('formContrasena')
+
 async function entrarConContrasena(evento: FormSubmitEvent<Credenciales>) {
     enviando.value = true
     error.value = null
+    reintentar.value = null
     const respuesta = await acceso.entrarConContrasena(evento.data.documento, evento.data.contrasena, empresaId.value)
     enviando.value = false
     if (!respuesta.ok) {
         error.value = mensajeProblema(respuesta.problema)
-        credenciales.contrasena = ''
+        // Sin conexión o falla del servidor: «Reintentar» con lo mismo. Si la contraseña no era,
+        // se borra para escribirla de nuevo.
+        if (esFallaTransitoria(respuesta.problema)) {
+            reintentar.value = () => void formContrasena.value?.submit()
+        }
+        else {
+            credenciales.contrasena = ''
+        }
         return
     }
     clearNuxtData('portal:cuenta')
@@ -62,11 +72,14 @@ async function entrarConContrasena(evento: FormSubmitEvent<Credenciales>) {
 
 watch(forma, () => {
     error.value = null
+    reintentar.value = null
 })
 const paso = ref<'pedir' | 'verificar'>('pedir')
 const solicitud = ref<SolicitudCodigo | null>(null)
 const enviando = ref(false)
 const error = ref<string | null>(null)
+/** «Reintentar» del error: solo si falló la conexión o el servidor (no con datos incorrectos). */
+const reintentar = ref<(() => void) | null>(null)
 
 // Espejo de `solicitarCodigoValidator` (apps/api/app/portal/validators.ts).
 const esquemaPedir = z.object({
@@ -78,13 +91,17 @@ const pedir = reactive({ identificador: '' })
 const codigo = ref<(number | undefined)[]>([])
 const codigoCompleto = computed(() => codigo.value.map(digito => digito ?? '').join(''))
 
-async function enviarCodigo(resultado: Promise<Resultado<SolicitudCodigo>>) {
+async function enviarCodigo(resultado: Promise<Resultado<SolicitudCodigo>>, repetir?: () => void) {
     enviando.value = true
     error.value = null
+    reintentar.value = null
     const respuesta = await resultado
     enviando.value = false
     if (!respuesta.ok) {
         error.value = mensajeProblema(respuesta.problema)
+        if (repetir && esFallaTransitoria(respuesta.problema)) {
+            reintentar.value = repetir
+        }
         return
     }
     solicitud.value = respuesta.data
@@ -93,11 +110,11 @@ async function enviarCodigo(resultado: Promise<Resultado<SolicitudCodigo>>) {
 }
 
 function pedirPorIdentificador(evento: FormSubmitEvent<Pedir>) {
-    return enviarCodigo(acceso.solicitarPorIdentificador(evento.data.identificador))
+    return enviarCodigo(acceso.solicitarPorIdentificador(evento.data.identificador), () => void pedirPorIdentificador(evento))
 }
 
 function pedirPorIp() {
-    return enviarCodigo(acceso.solicitarPorIp())
+    return enviarCodigo(acceso.solicitarPorIp(), () => void pedirPorIp())
 }
 
 function pedirOtro() {
@@ -133,16 +150,10 @@ const destinoTexto = computed(() => solicitud.value?.destino
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-highlighted">
-                Entrar a mi cuenta
-            </h1>
-            <p class="mt-1 text-sm text-muted">
-                Para ver tus facturas, pagos y datos.
-            </p>
-        </div>
-
+    <PortalAcceso
+        titulo="Entrar a mi cuenta"
+        descripcion="Para ver tus facturas, pagos y datos."
+    >
         <UAlert
             v-if="error"
             data-testid="error-acceso"
@@ -150,6 +161,7 @@ const destinoTexto = computed(() => solicitud.value?.destino
             variant="subtle"
             icon="i-lucide-circle-alert"
             :title="error"
+            :actions="reintentar ? [{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: reintentar }] : undefined"
         />
 
         <UTabs
@@ -164,6 +176,7 @@ const destinoTexto = computed(() => solicitud.value?.destino
 
         <UCard v-if="forma === 'contrasena'">
             <UForm
+                ref="formContrasena"
                 :schema="esquemaContrasena"
                 :state="credenciales"
                 class="flex flex-col gap-4"
@@ -178,6 +191,7 @@ const destinoTexto = computed(() => solicitud.value?.destino
                 >
                     <UInput
                         v-model="credenciales.documento"
+                        icon="i-lucide-id-card"
                         autocomplete="username"
                         autocapitalize="characters"
                         size="xl"
@@ -193,6 +207,7 @@ const destinoTexto = computed(() => solicitud.value?.destino
                 >
                     <PortalCampoContrasena
                         v-model="credenciales.contrasena"
+                        icon="i-lucide-lock"
                         testid="campo-contrasena"
                     />
                 </UFormField>
@@ -257,6 +272,7 @@ const destinoTexto = computed(() => solicitud.value?.destino
                     >
                         <UInput
                             v-model="pedir.identificador"
+                            icon="i-lucide-id-card"
                             autocomplete="username"
                             inputmode="text"
                             size="xl"
@@ -334,5 +350,5 @@ const destinoTexto = computed(() => solicitud.value?.destino
             to="/corte"
             class="self-center"
         />
-    </div>
+    </PortalAcceso>
 </template>

@@ -91,7 +91,9 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.7.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  `"0.12.0"`: la versión del contrato que habla este Argos). Desde 0.9.0 (§4.3) también
+  `capacidades: { aprovisionamiento: [{ empresa_id, ftth, wireless, tr069 }] }` (una fila por empresa
+  activa; hoy todo `false`: Argos no tiene SmartOLT ni ACS, ver `#integraciones/equipos`). Una repetición del canje sale con los
   valores actuales.
 - **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
   lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
@@ -408,3 +410,18 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 - **Eventos atrasados:** un `servicio.*` o `asignacion.cambiada` que llega después del
   `servicio.eliminado` sale igual con el `empresa_id` de su payload (sin la fila, `cliente_id`
   queda null si el evento no lo trae); Iris lo trata como «no existe».
+
+## Portal del cliente con Iris (contrato 0.9.0 §1.2, §6.6 y §11)
+
+- **`token_portal`**: el segundo `iris_pat_` de Iris, recortado a `portal_argos.*`, para el servidor del portal (A5, `app/portal/soporte/iris_portal.ts`). Llega en el canje (`token_portal`, opcional; formato `iris_pat_` y distinto del token del panel, si no `422` en el campo) y en `PUT /integraciones/iris/contrato` con contrato ≥ 0.9.0 (con uno anterior se ignora; omitido se conserva; `null` lo borra). Se guarda cifrado en `integraciones.iris_conector.token_portal_cifrado` (migración `1795277619707`), se rota con cada canje (también la reconexión pendiente de 0.6.3, al confirmarse) y se borra al desconectar. Nunca sale en una respuesta: `GET /integraciones/iris` muestra `token_portal: '***' | null`; en `audit.acciones` y `audit.cambios` queda como `***`.
+- **Webhooks de soporte** (`RecibirWebhookIris`): `ticket.estado_cambiado`, `ticket.respondido` y `solicitud_servicio.estado_cambiado`, deduplicados por `X-Webhook-Id` como los demás. Si el cliente existe, se reemiten al bus como `soporte.ticket_estado_cambiado`, `soporte.ticket_respondido` y `soporte.solicitud_estado_cambiado` (resultado `aviso_emitido`) para que notify avise al cliente; un cliente inexistente o un payload incompleto quedan `ignorado` (`cliente_no_encontrado`, `payload_invalido`). El portal no guarda nada: relee de Iris al abrir cada pantalla.
+
+## Contrato 0.9.0 completo y versión anunciada (A6)
+
+`CONTRATO_IRIS = '0.12.0'`. De la 0.9.0, además de lo de arriba: bienvenida con seguimiento (§12.5,
+`#notify/bienvenida`; webhook `servicio.bienvenida_cambiada` solo a conectores ≥ 0.9.0), avisos de
+tickets y solicitudes (`#notify/soporte`), `capacidades` en el canje y el estado, y A32, A33 y A35 en
+`#integraciones/equipos` (rutas con la forma del contrato que responden su error de «sin capacidad»:
+Argos no tiene SmartOLT ni ACS). 0.10.0 a 0.12.0 ya estaban en main. No se anuncia 0.12.1: la clave
+del consentimiento por número usa sha256 y 0.12.1 pide HMAC con el secreto del receptor, y el portal no
+manda `X-Iris-Contacto` en §11 (B28).

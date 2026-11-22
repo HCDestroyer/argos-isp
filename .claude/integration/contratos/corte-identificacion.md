@@ -747,3 +747,11 @@ Lo que el diagnóstico debe detectar (`portal_ip_cliente`, §5 ter.9):
 - Por verificar en el laboratorio:
     - todo lo marcado «probar» en §2.7 y §3 B;
     - `src-address` de `/tool/fetch` con masquerade (§4.2).
+
+## Código para identificarse que da el personal (decisión del PM 19, 21 nov 2026)
+
+Distinto del código de corte de 13 caracteres que pone el router (arriba): es el que el personal genera en la ficha del servicio («Generar código») y le dicta al cliente cuando el portal no lo reconoce (cambió de equipo o entra desde otra red).
+
+- **A1 (hecho, rama `agente/a1-operacion-pm`)**: `POST /servicios/:id/codigo-identificacion` (`servicios.generar_codigo_identificacion`; soporte y cajero de fábrica) → `{ servicio_id, codigo (6 dígitos), expira_en, vigencia_min }`. Un solo uso; un código nuevo anula el anterior del servicio. Vigencia = ajuste `codigo_corte.vigencia_min`: **15 minutos de fábrica, configurable de 5 a 60, por empresa o global** (`PUT /ajustes-operacion`). En la base solo su HMAC (`core.codigos_identificacion`); nunca en eventos (`servicio.codigo_identificacion_emitido` lleva `servicio_id`, `empresa_id`, `expira_en`) ni en la auditoría.
+- **Canje**: acción `servicios.canjear_codigo_identificacion` (`#core/actions/canjear_codigo_identificacion`, entrada `{ codigo }`, salida `{ servicio_id | null }`; marca `usado_en`, audita con el código como `***`).
+- **A5 (pendiente)**: aceptar el código en el portal como una identificación más (después del código de corte y antes de la IP) y contar los fallidos en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP: 6 dígitos solo resisten la fuerza bruta con ese límite.

@@ -9,6 +9,8 @@ import { configPara } from '#notify/configuracion'
 import { nombreRemitente } from '#notify/marca'
 import { VARIABLES_IRIS, esCodigoIris, estadoConectorWhatsapp } from '#notify/whatsapp'
 import type { AvisoIris } from '#notify/canales/canal'
+import { EVENTO_BIENVENIDA } from '#notify/instalacion'
+import { seguirBienvenida } from '#notify/bienvenida'
 
 export interface EntradaEnviar {
     envioId: number
@@ -64,6 +66,18 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
     readonly nombre = 'notificaciones.enviar'
 
     protected async handle(input: EntradaEnviar, t: Transaccion): Promise<ResultadoEnviar> {
+        const resultado = await this.entregar(input, t)
+        // Bienvenida con seguimiento (contrato Iris 0.9.0 §12.5): emite el cambio de estado del canal
+        const fila = (await t.trx
+            .from('notify.envios')
+            .where('id', input.envioId)
+            .select('origen', 'evento')
+            .first()) as { origen: string; evento: string } | null
+        if (fila?.evento === EVENTO_BIENVENIDA) await seguirBienvenida(t, fila.origen)
+        return resultado
+    }
+
+    private async entregar(input: EntradaEnviar, t: Transaccion): Promise<ResultadoEnviar> {
         const envio = (await t.trx
             .from('notify.envios')
             .where('id', input.envioId)
@@ -204,6 +218,8 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
     /** Si falló un canal distinto de correo, notifica por correo con la plantilla de correo. */
     private async fallbackCorreo(t: Transaccion, envio: FilaEnvio): Promise<number | undefined> {
         if (envio.canal === 'correo' || envio.cliente_id === null) return undefined
+        // Aviso de soporte con `aviso_por_correo`: Iris ya mandó el correo (`soporte.ts`)
+        if (envio.variables?.sin_correo === true) return undefined
         // El aviso a un contacto del titular (`<origen>:contacto:<id>`) no cae al correo del titular
         if (envio.origen.includes(':contacto:')) return undefined
         const destinatario = await cargarDestinatario(t.trx, envio.cliente_id)
@@ -237,6 +253,7 @@ function avisoIris(envio: FilaEnvio): AvisoIris {
     const iris = (envio.variables?.iris ?? null) as {
         plantilla?: string
         variables?: Record<string, string>
+        origen?: { tipo: 'iris_orden'; id: string }
     } | null
     const empresa = (envio.variables?.empresa ?? {}) as { id?: unknown }
     const servicio = (envio.variables?.servicio ?? {}) as { id?: unknown }
@@ -254,6 +271,7 @@ function avisoIris(envio: FilaEnvio): AvisoIris {
         clienteId: Number(envio.cliente_id),
         servicioId: Number(servicio.id) || null,
         variables: ordenadas(iris.plantilla ?? '', iris.variables),
+        ...(iris.origen ? { origen: iris.origen } : {}),
     }
 }
 

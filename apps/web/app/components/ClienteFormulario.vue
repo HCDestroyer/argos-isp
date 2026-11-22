@@ -17,12 +17,19 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
  */
 const props = withDefaults(defineProps<{
     cliente?: Cliente | null
+    /**
+     * Alta en 3 pasos (tablero NuevoAltaCliente): el botón principal crea el cliente y sigue al
+     * servicio («Siguiente: servicio»); «Crear cliente sin servicio» lo crea y va a su ficha.
+     */
+    conServicio?: boolean
 }>(), {
     cliente: null,
+    conServicio: false,
 })
 
 const emit = defineEmits<{
-    guardado: [cliente: Cliente]
+    /** `seguir`: en el alta en pasos, el usuario eligió continuar con el servicio. */
+    guardado: [cliente: Cliente, seguir: boolean]
     cancelar: []
     /** El usuario pidió cargar la versión actual tras un 409. */
     recargar: []
@@ -185,6 +192,9 @@ watch(() => estado.nit_cui, (valor) => {
     }
 })
 
+/** En el alta en pasos: qué botón envió el formulario. */
+const seguir = ref(false)
+
 async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
     enviando.value = true
     problema.value = null
@@ -196,7 +206,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
 
     if (resultado.ok) {
         await registrarWhatsapp(resultado.data.id)
-        emit('guardado', resultado.data)
+        emit('guardado', resultado.data, props.conServicio && seguir.value)
         return
     }
     problema.value = resultado.problema
@@ -614,7 +624,31 @@ onMounted(async () => {
                     :disabled="enviando"
                     @click="emit('cancelar')"
                 />
+                <template v-if="conServicio && !editando">
+                    <UButton
+                        type="submit"
+                        label="Crear cliente sin servicio"
+                        icon="i-lucide-check"
+                        color="neutral"
+                        variant="outline"
+                        class="justify-center"
+                        :loading="enviando && !seguir"
+                        :disabled="enviando"
+                        @click="seguir = false"
+                    />
+                    <UButton
+                        type="submit"
+                        label="Siguiente: servicio"
+                        trailing-icon="i-lucide-chevron-right"
+                        class="glow-brand justify-center"
+                        :loading="enviando && seguir"
+                        :disabled="enviando"
+                        data-prueba="alta-siguiente"
+                        @click="seguir = true"
+                    />
+                </template>
                 <UButton
+                    v-else
                     type="submit"
                     :label="editando ? 'Guardar cambios' : 'Crear cliente'"
                     icon="i-lucide-check"

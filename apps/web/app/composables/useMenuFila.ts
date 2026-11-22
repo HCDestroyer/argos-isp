@@ -63,5 +63,10 @@ export function useMenuFila<T>(accionesDe: (fila: T) => AccionFila[]) {
         items.value = agruparAcciones(accionesDe(fila.original), aItem)
     }
 
-    return { items, alContextmenu, accionesDe }
+    /** Los mismos items para el botón ⋯ de la fila (menú desplegable). */
+    function itemsDe(fila: T): ContextMenuItem[][] {
+        return agruparAcciones(accionesDe(fila), aItem)
+    }
+
+    return { items, alContextmenu, accionesDe, itemsDe }
 }

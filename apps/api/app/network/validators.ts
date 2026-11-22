@@ -301,6 +301,14 @@ const camposRedIpv4 = {
         .meta({ description: 'Última IP que el sistema entrega a servicios' }),
     dns_primario: ipv4().nullable().optional().meta({ description: 'DNS para los clientes de la red' }),
     dns_secundario: ipv4().nullable().optional(),
+    publica: vine
+        .boolean()
+        .optional()
+        .meta({
+            description:
+                'Red de IPs públicas (decisión del PM 30): la asignación automática no la usa; solo el adicional ' +
+                '«IP pública» y los planes que la incluyen. Por defecto false',
+        }),
 }
 
 export const crearRedIpv4Validator = conMensajes(
@@ -582,6 +590,14 @@ const camposPlan = {
     tipo: vine.enum(TIPOS_PLAN).optional().meta({
         description: 'residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea',
     }),
+    incluye_ip_publica: vine
+        .boolean()
+        .optional()
+        .meta({
+            description:
+                'El plan trae una IP pública (decisión del PM 30): al crear el servicio o pasarlo a este plan se le ' +
+                'asigna una de una red `publica` del router; al salir del plan vuelve a una privada',
+        }),
     global: vine.boolean().optional(),
     activo: vine.boolean().optional(),
 }
@@ -639,6 +655,7 @@ export const editarPlanValidator = conMensajes(
                 .optional()
                 .meta({ type: 'integer' }),
             tipo: vine.enum(TIPOS_PLAN).optional(),
+            incluye_ip_publica: vine.boolean().optional(),
             global: vine.boolean().optional(),
             activo: vine.boolean().optional(),
         }),

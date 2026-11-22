@@ -13,7 +13,7 @@ test.group('billing · precio efectivo del servicio', () => {
             .from('core.servicios as s')
             .join('network.planes as p', 'p.id', 's.plan_id')
             .where('s.id', servicioId)
-            .select(db.raw(`${precioEfectivoSql('s', 'p')} as precio_mensual`))
+            .select(db.raw(`${precioEfectivoSql('s')} as precio_mensual`))
             .firstOrFail()
         const sinJoin = await db
             .from('core.servicios as srv')

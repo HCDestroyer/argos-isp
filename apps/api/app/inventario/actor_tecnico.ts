@@ -10,6 +10,8 @@ export interface ActorTecnico {
     actor: string | null
     usuarioId: number | null
     ocurridoEn: Date | null
+    /** `Idempotency-Key` de la petición de Iris (T-12: queda en el kardex) */
+    idempotencyKey?: string | null
 }
 
 /**
@@ -39,5 +41,6 @@ export function columnasActorTecnico(t: Transaccion) {
         actor_tecnico: a?.actor ?? null,
         actor_tecnico_id: a?.usuarioId ?? null,
         ocurrido_en: a?.ocurridoEn ?? null,
+        idempotency_key: a?.idempotencyKey ?? null,
     }
 }

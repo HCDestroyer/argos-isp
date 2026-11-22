@@ -18,6 +18,8 @@ export interface EntradaConfigurarInventario {
     traslado_firma_obligatoria: boolean
     /** A48: técnicos distintos para declarar un equipo no recuperado (1–10); sin él, se conserva */
     recuperacion_tecnicos_minimos?: number | null
+    /** Iris 0.14.0 (T-12): movimientos al día de un técnico vinculado que disparan la alerta (1–10000) */
+    iris_movimientos_diarios_alerta?: number | null
     version: number
 }
 
@@ -39,11 +41,13 @@ export default class ConfigurarInventario extends DomainAction<
         const antes = await configuracionInventario(empresaId, t.trx)
         if (antes.version !== input.version) throw new ConflictoVersion('configuracion_inventario', empresaId)
         const minimos = input.recuperacion_tecnicos_minimos ?? antes.recuperacion_tecnicos_minimos
+        const alerta = input.iris_movimientos_diarios_alerta ?? antes.iris_movimientos_diarios_alerta
         if (antes.version === 0) {
             await t.trx.insertQuery().table('inventario.configuracion').insert({
                 empresa_id: empresaId,
                 traslado_firma_obligatoria: input.traslado_firma_obligatoria,
                 recuperacion_tecnicos_minimos: minimos,
+                iris_movimientos_diarios_alerta: alerta,
             })
         } else {
             await t.trx
@@ -52,6 +56,7 @@ export default class ConfigurarInventario extends DomainAction<
                 .update({
                     traslado_firma_obligatoria: input.traslado_firma_obligatoria,
                     recuperacion_tecnicos_minimos: minimos,
+                    iris_movimientos_diarios_alerta: alerta,
                     version: t.trx.knexRawQuery('version + 1'),
                     updated_at: t.trx.knexRawQuery('now()'),
                 })
@@ -67,10 +72,12 @@ export default class ConfigurarInventario extends DomainAction<
             {
                 traslado_firma_obligatoria: antes.traslado_firma_obligatoria,
                 recuperacion_tecnicos_minimos: antes.recuperacion_tecnicos_minimos,
+                iris_movimientos_diarios_alerta: antes.iris_movimientos_diarios_alerta,
             },
             {
                 traslado_firma_obligatoria: input.traslado_firma_obligatoria,
                 recuperacion_tecnicos_minimos: minimos,
+                iris_movimientos_diarios_alerta: alerta,
             },
         )
         return configuracionInventario(empresaId, t.trx)

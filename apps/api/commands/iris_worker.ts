@@ -11,6 +11,11 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * Contrato 0.6.0 (§6): en la misma vuelta entrega los permisos de contacto por WhatsApp pendientes
  * (`#notify/consentimientos`) y, cada hora, concilia los avisos de WhatsApp que esperan acuse de
  * Iris hace más de 24 h (`ConciliarAvisosIris`).
+ *
+ * Contrato 0.14.0 (A3, §3.10 y §6.6): en cada vuelta verifica con Iris los intentos de recuperación y los
+ * cambios con cobro propuesto cuyo reintento ya toca, y concilia los vínculos de técnicos rechazados por
+ * unicidad cuyo `id_externo` se liberó (`#inventario/verificacion_iris`). Cada fila se toma con una
+ * actualización condicional: varias copias del worker no la consultan dos veces.
  */
 export default class IrisWorker extends BaseCommand {
     static commandName = 'iris:worker'
@@ -30,6 +35,7 @@ export default class IrisWorker extends BaseCommand {
         const { entregarPendientesIris } = await import('#integraciones/iris/envios')
         const { entregarConsentimientosIris } = await import('#notify/consentimientos')
         const { entregarProspectosIris } = await import('#integraciones/iris/prospectos')
+        const { verificarPendientes, reevaluarVinculos } = await import('#inventario/verificacion_iris')
         const { default: ConciliarAvisosIris } = await import('#notify/actions/conciliar_avisos_iris')
         const { contextoSistema } = await import('#shared/contexto')
         const CADA_CONCILIACION_MS = 3600 * 1000
@@ -63,6 +69,14 @@ export default class IrisWorker extends BaseCommand {
                     await entregarProspectosIris({ limite: 50 })
                 } catch (error) {
                     this.logger.error(`iris:worker: error entregando prospectos: ${(error as Error).message}`)
+                }
+                try {
+                    await verificarPendientes({ limite: 50 })
+                    await reevaluarVinculos({ limite: 50 })
+                } catch (error) {
+                    this.logger.error(
+                        `iris:worker: error verificando el inventario con Iris: ${(error as Error).message}`,
+                    )
                 }
                 if (Date.now() - ultimaConciliacion >= CADA_CONCILIACION_MS) {
                     ultimaConciliacion = Date.now()

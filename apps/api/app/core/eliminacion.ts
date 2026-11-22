@@ -140,6 +140,14 @@ function comprobacionesServicio(id: number): Comprobacion[] {
         },
         porServicio('sesiones', 'network.sesiones', ['sesión PPPoE', 'sesiones PPPoE']),
         porServicio('caidas', 'network.caidas_repetidas', ['registro de caídas', 'registros de caídas']),
+        porServicio('incidentes_red', 'network.incidentes_red_servicios', [
+            'falla general de red',
+            'fallas generales de red',
+        ]),
+        porServicio('promociones_velocidad', 'core.promociones_velocidad_tramos', [
+            'tramo de promoción de velocidad aplicado',
+            'tramos de promoción de velocidad aplicados',
+        ]),
         porServicio('equipos', 'inventario.unidades', [
             'equipo de inventario (comodato o entregado)',
             'equipos de inventario (comodato o entregados)',

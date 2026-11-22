@@ -44,6 +44,9 @@ x-api-env: &api-env
   # se configura desde el panel; HORUS_PERMITIR_HTTP=true solo en laboratorio (Horus sin TLS).
   API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3333}
   HORUS_PERMITIR_HTTP: ${HORUS_PERMITIR_HTTP:-false}
+  # Equipos (A6): SmartOLT y GenieACS por empresa desde el panel; http:// solo en laboratorio
+  # (GenieACS del perfil lab en http://genieacs:7557).
+  EQUIPOS_PERMITIR_HTTP: ${EQUIPOS_PERMITIR_HTTP:-false}
   # URL con la que el navegador llega al panel: autologin de Horus (/sso/entrar) y redirección del
   # enlace de conexión (GET /conectar de la API → <panel>/conectar). Sin ella, 503 en producción.
   PANEL_URL_PUBLICA: ${PANEL_URL_PUBLICA:-http://localhost:${WEB_PORT_HOST:-3000}}
@@ -506,6 +509,43 @@ services:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js iris:worker'"]
 
+  # Equipos del cliente (A6, contrato Iris 0.9.0 §12): cola `equipos` (aprovisionar ONT por SmartOLT,
+  # configurar routers y Wi-Fi por GenieACS) y barrido de reintentos. Sin SmartOLT ni ACS configurados
+  # en ninguna empresa no hace nada.
+  equipos-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, equipos:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js equipos:worker'"]
+
+  # GenieACS de laboratorio (perfil lab): ACS TR-069 propio. Los equipos apuntan a
+  # http://<servidor>:7547 (cwmp); Argos usa el NBI en http://genieacs:7557 (red interna, sin
+  # autenticación: en la empresa se guarda esa URL sin usuario ni clave y EQUIPOS_PERMITIR_HTTP=true).
+  # Interfaz web solo local en 127.0.0.1:3007; al entrar por primera vez, crea o cambia el administrador.
+  genieacs-mongo:
+    profiles: [lab]
+    image: mongo:7.0.14
+    restart: unless-stopped
+    volumes:
+      - genieacs-mongo:/data/db
+
+  genieacs:
+    profiles: [lab]
+    build:
+      context: ./genieacs
+    image: argosisp/genieacs:1.2.16
+    restart: unless-stopped
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: mongodb://genieacs-mongo/genieacs
+      GENIEACS_NBI_INTERFACE: 0.0.0.0
+      GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET:-cambia-este-secreto-de-laboratorio}
+    depends_on:
+      - genieacs-mongo
+    ports:
+      - "${GENIEACS_CWMP_PUERTO:-7547}:7547"
+      - "127.0.0.1:${GENIEACS_UI_PUERTO:-3007}:3000"
+
   web:
     image: argosisp/web:${IMAGE_TAG:-dev}
     build:
@@ -931,3 +971,5 @@ volumes:
   # WireGuard: clave privada del servidor (solo la monta `wireguard`) y estado compartido con el agente
   wireguard-clave:
   wireguard-estado:
+  # GenieACS de laboratorio (perfil lab)
+  genieacs-mongo:

@@ -592,6 +592,21 @@ export const listarServiciosValidator = vine.compile(
 /** suspender, reactivar, limitar, quitar-limite, retirar, desconectar */
 export const motivoValidator = vine.compile(vine.object({ motivo: motivo() }))
 
+/** `POST /servicios/:id/retirar` (decisión del PM 17): la casilla «el equipo ya se entregó». */
+export const retirarServicioValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        equipo_entregado: vine
+            .boolean()
+            .optional()
+            .meta({
+                description:
+                    'El equipo en comodato ya se entregó: no se pide la orden de retiro a Iris ni queda «por recuperar». ' +
+                    'Por defecto false',
+            }),
+    }),
+)
+
 const textoPlanta = () => vine.string().trim().minLength(1).maxLength(100).optional()
 
 /** `potencia_dbm` entre -60 y 10 (comparación decimal, sin pasar por number). */
@@ -1183,6 +1198,14 @@ export const crearAdicionalValidator = vine.compile(
             .nullable()
             .optional()
             .meta({ description: 'Precio sugerido para asignarlo `cobrado` (solo una sugerencia)' }),
+        tipo: vine
+            .enum(['general', 'ip_publica'] as const)
+            .optional()
+            .meta({
+                description:
+                    '`ip_publica` (decisión del PM 30): asignarlo da al servicio una IP de una red pública del router. ' +
+                    'Por defecto `general`. No se cambia después',
+            }),
     }),
 )
 

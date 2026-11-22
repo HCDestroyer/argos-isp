@@ -23,7 +23,7 @@ import {
     versionCambiada,
 } from '../comun'
 import { nuevaSesion } from '../sesiones/datos'
-import { precioMensualServicio } from './datos'
+import { codigoServicio, precioMensualServicio } from './datos'
 import { asignarIncluidos, aplicarBloqueoPorEstado, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
 import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
 import { pendienteInstalacion } from './instalacion'
@@ -262,6 +262,8 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     const pendiente = cuerpo.estado_inicial === 'pendiente_instalacion'
     return {
         id,
+        codigo: codigoServicio(id),
+        nombre: texto(cuerpo.nombre) ?? null,
         cliente_id: Number(cuerpo.cliente_id),
         // Multiempresa (A1): explícita > la sugerida de la zona del cliente > la del router > la activa > la 1.
         empresa_id: empresaDelAlta(solicitud, cuerpo, routerId),
