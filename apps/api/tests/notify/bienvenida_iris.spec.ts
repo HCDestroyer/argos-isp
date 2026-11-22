@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
+import { DateTime, Settings } from 'luxon'
 import { cifrar } from '#shared/cifrado'
 import { contextoPrueba } from '#tests/ayudas'
 import { contextoSistema } from '#shared/contexto'
@@ -242,28 +243,44 @@ test.group('notify · bienvenida con seguimiento (Iris 0.9.0 §12.5)', (group) =
         assert.lengthOf(evs, 1)
         assert.containsSubset(evs[0].payload, { reenvio: true, origen_id: 'ord-5' })
 
-        // antes de 10 min: 429 bienvenida_reciente con los segundos que faltan
-        const reciente = await reenviar().catch((e) => e)
-        assert.equal(reciente.status, 429)
-        assert.equal(reciente.tipo, 'urn:argosisp:problema:bienvenida_reciente')
-        assert.isAbove(reciente.reintentarEnS, 500)
-
-        // tres reenvíos en el día: el cuarto es 429 demasiados_reenvios
-        // solo la última se corre 11 min atrás (ninguna sale del día de Guatemala salvo justo a medianoche)
-        const atras = () =>
+        // Los límites cuentan el día de Guatemala con el reloj de la app y las filas guardan la hora de la
+        // base. Cerca de medianoche, correr las filas 11 min atrás las sacaba del día (falló en CI a las
+        // 00:09 de Guatemala). El reloj de la app queda fijo a mediodía de hoy y cada fila recibe su hora.
+        const mediodia = DateTime.now().setZone('America/Guatemala').startOf('day').plus({ hours: 12 })
+        const fijarUltima = (minutosAntes: number) =>
             db.rawQuery(
-                `UPDATE notify.bienvenidas SET created_at = created_at - interval '11 minutes'
-                  WHERE servicio_id = ? AND created_at > now() - interval '10 minutes'`,
-                [servicioId],
+                `UPDATE notify.bienvenidas SET created_at = ?
+                  WHERE id = (SELECT max(id) FROM notify.bienvenidas WHERE servicio_id = ?)`,
+                [mediodia.minus({ minutes: minutosAntes }).toUTC().toJSDate(), servicioId],
             )
-        await atras()
-        await reenviar()
-        await atras()
-        await reenviar()
-        await atras()
-        const muchos = await reenviar().catch((e) => e)
-        assert.equal(muchos.status, 429)
-        assert.equal(muchos.tipo, 'urn:argosisp:problema:demasiados_reenvios')
-        assert.isAbove(muchos.reintentarEnS, 0)
+        const nowOriginal = Settings.now
+        Settings.now = () => mediodia.toMillis()
+        try {
+            // las filas anteriores (la bienvenida y el primer reenvío) quedan antes de hoy a mediodía
+            await db.rawQuery(`UPDATE notify.bienvenidas SET created_at = ? WHERE servicio_id = ?`, [
+                mediodia.minus({ minutes: 50 }).toUTC().toJSDate(),
+                servicioId,
+            ])
+            await fijarUltima(1)
+
+            // antes de 10 min: 429 bienvenida_reciente con los segundos que faltan
+            const reciente = await reenviar().catch((e) => e)
+            assert.equal(reciente.status, 429)
+            assert.equal(reciente.tipo, 'urn:argosisp:problema:bienvenida_reciente')
+            assert.isAbove(reciente.reintentarEnS, 500)
+
+            // tres reenvíos en el día: el cuarto es 429 demasiados_reenvios
+            await fijarUltima(40)
+            await reenviar()
+            await fijarUltima(30)
+            await reenviar()
+            await fijarUltima(20)
+            const muchos = await reenviar().catch((e) => e)
+            assert.equal(muchos.status, 429)
+            assert.equal(muchos.tipo, 'urn:argosisp:problema:demasiados_reenvios')
+            assert.isAbove(muchos.reintentarEnS, 0)
+        } finally {
+            Settings.now = nowOriginal
+        }
     })
 })
