@@ -8,6 +8,7 @@ import {
     PAQUETE_GT_2026_2,
     PAQUETE_GT_2026_3,
     PAQUETE_GT_2026_4,
+    PAQUETE_GT_2026_5,
 } from '#fiscal/l10n/gt/index'
 import type {
     DatosEmpresaInstalacion,
@@ -40,11 +41,12 @@ export const PAQUETES: Readonly<Record<string, PaqueteLocalizacion>> = {
     [PAQUETE_GT_2026_2.codigo]: PAQUETE_GT_2026_2,
     [PAQUETE_GT_2026_3.codigo]: PAQUETE_GT_2026_3,
     [PAQUETE_GT_2026_4.codigo]: PAQUETE_GT_2026_4,
+    [PAQUETE_GT_2026_5.codigo]: PAQUETE_GT_2026_5,
 }
 
 /** Versión más reciente del paquete de cada país (la que instala el núcleo al crear la empresa). */
 export const ULTIMO_PAQUETE: Readonly<Record<string, PaqueteLocalizacion>> = {
-    GT: PAQUETE_GT_2026_4,
+    GT: PAQUETE_GT_2026_5,
 }
 
 /** Países con paquete, en el orden del selector. */

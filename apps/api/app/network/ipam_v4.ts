@@ -89,7 +89,19 @@ async function exigirRedDelRouter(trx: TransactionClientContract, redId: number,
  */
 export async function asignarIpv4(
     trx: TransactionClientContract,
-    entrada: { servicioId: number; routerId: number; ip?: string | null; redId?: number | null },
+    entrada: {
+        servicioId: number
+        routerId: number
+        ip?: string | null
+        redId?: number | null
+        /**
+         * IP pública (decisión del PM 30). Solo cuenta en la asignación automática (sin `ip` ni `redId`):
+         * `true` toma de las redes `publica` del router (422 `sin_ip_publica` si no hay libres) y deja de
+         * servir una privada vigente; `false` deja una pública vigente y toma de las privadas; ausente
+         * conserva la vigente y, si hay que tomar otra, nunca toma de una red `publica`.
+         */
+        publica?: boolean
+    },
 ): Promise<Ipv4Asignada> {
     await bloquearRouter(trx, entrada.routerId)
     if (entrada.redId) await exigirRedDelRouter(trx, entrada.redId, entrada.routerId)
@@ -191,15 +203,22 @@ export async function asignarIpv4(
         return { ip: entrada.ip, red_id: red.id }
     }
 
+    const automatica = !entrada.redId
     if (actual) {
-        const enRouter = await trx
+        const enRouter = (await trx
             .from('network.redes_ipv4')
             .where('id', actual.red_id)
             .where('router_id', entrada.routerId)
-            .first()
-        if (enRouter && (!entrada.redId || Number(actual.red_id) === entrada.redId)) return actual
+            .select('publica')
+            .first()) as { publica: boolean } | null
+        const mismaClase =
+            !automatica || entrada.publica === undefined || Boolean(enRouter?.publica) === entrada.publica
+        if (enRouter && mismaClase && (!entrada.redId || Number(actual.red_id) === entrada.redId)) {
+            return actual
+        }
         await liberarIpv4(trx, entrada.servicioId)
     }
+    const soloPublicas = automatica && entrada.publica === true
 
     const { rows } = (await trx.rawQuery(
         `SELECT r.id AS red_id, host(k.base + g.n) AS ip
@@ -208,6 +227,7 @@ export async function asignarIpv4(
            CROSS JOIN LATERAL generate_series(k.ini, k.fin) AS g(n)
           WHERE r.router_id = ?
             AND (?::bigint = 0 OR r.id = ?::bigint)
+            AND (?::bigint <> 0 OR r.publica = ?::boolean)
             AND k.base + g.n <> ${sqlGatewayEfectivo('r')}
             AND NOT EXISTS (
                 SELECT 1 FROM network.ipv4_asignaciones a
@@ -220,9 +240,22 @@ export async function asignarIpv4(
             )
           ORDER BY (r.tipo = 'estatico') DESC, r.id, g.n
           LIMIT 1`,
-        [entrada.routerId, entrada.redId ?? 0, entrada.redId ?? 0, entrada.servicioId],
+        [
+            entrada.routerId,
+            entrada.redId ?? 0,
+            entrada.redId ?? 0,
+            entrada.redId ?? 0,
+            soloPublicas,
+            entrada.servicioId,
+        ],
     )) as { rows: Array<{ red_id: number; ip: string }> }
     const libre = rows[0]
+    if (!libre && soloPublicas) {
+        throw new ReglaNegocio(
+            'El router no tiene IPs públicas libres: agrega una red IPv4 marcada como pública',
+            'sin_ip_publica',
+        )
+    }
     if (!libre && entrada.redId) {
         throw new ValidacionFallida(
             [{ field: 'red_ipv4_id', message: 'La red IPv4 no tiene IPs libres', rule: 'llena' }],

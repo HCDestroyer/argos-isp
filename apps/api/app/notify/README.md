@@ -33,13 +33,13 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 
 ## Eventos
 
-**Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado` (también a los dueños de las facturas, ver abajo), `promesa.*`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `bonificacion.registrada` y, de lealtad, `lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer`, `lealtad.referido_calificado`, `lealtad.canje_reservado`, `lealtad.canje_aplicado`, `lealtad.canje_revertido`, `sorteo.ganador_notificado` y `sorteo.premio_entregado` (ver "Avisos de lealtad"). Para alertas internas: `aaa.caido`, `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` y los fiscales `libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`, `nota_credito.anulada` del calendario fiscal, `fiscal.vencimiento_proximo` y `fiscal.limite_pc`, de declaraciones, `declaracion.calculada`, `declaracion.revisada` (solo con `motivo: 'cascada'`), `declaracion.presentada`, `declaracion.pagada` y `declaracion.pago_anulado` (ver "Avisos fiscales"), del libro y los cierres, `libro.proceso_bloqueado`, `libro.checks_verificados` (solo con anomalías), `libro.bloqueo_cambiado`, `libro.emitido`, `ejercicio.cerrado` y `ejercicio.reabierto`, y de sorteos, `sorteo.bases_publicadas`, `sorteo.corte_cerrado`, `sorteo.ejecutado`, `sorteo.cancelado`, `sorteo.entrega_anulada`, `sorteo.premio_no_reclamado` y `sorteo.acta_cerrada` (ver "Avisos del libro, cierres y sorteos"), y de la pasarela, `pago.disputa_abierta` (contracargo).
+**Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado` (también a los dueños de las facturas, ver abajo), `promesa.*`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `bonificacion.registrada` y, de lealtad, `lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer`, `lealtad.referido_calificado`, `lealtad.canje_reservado`, `lealtad.canje_aplicado`, `lealtad.canje_revertido`, `sorteo.ganador_notificado` y `sorteo.premio_entregado` (ver "Avisos de lealtad"). Para alertas internas: `aaa.caido`, `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` y los fiscales `libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`, `nota_credito.anulada` del calendario fiscal, `fiscal.vencimiento_proximo` y `fiscal.limite_pc`, de declaraciones, `declaracion.calculada`, `declaracion.revisada` (solo con `motivo: 'cascada'`), `declaracion.presentada`, `declaracion.pagada` y `declaracion.pago_anulado` (ver "Avisos fiscales"), del libro y los cierres, `libro.proceso_bloqueado`, `libro.checks_verificados` (solo con anomalías), `libro.bloqueo_cambiado`, `libro.emitido`, `ejercicio.cerrado` y `ejercicio.reabierto`, y de sorteos, `sorteo.bases_publicadas`, `sorteo.corte_cerrado`, `sorteo.ejecutado`, `sorteo.cancelado`, `sorteo.entrega_anulada`, `sorteo.premio_no_reclamado` y `sorteo.acta_cerrada` (ver "Avisos del libro, cierres y sorteos"), y de la pasarela, `pago.disputa_abierta` (contracargo). De Iris (0.9.0): `soporte.ticket_estado_cambiado`, `soporte.ticket_respondido` y `soporte.solicitud_estado_cambiado` (ver "Avisos de soporte de Iris") y el interno `servicio.bienvenida_solicitada` (reenvío de la bienvenida). De equipos (A6, contrato Iris 0.9.0 §12.4): `equipo.wifi_resuelto` con `aplicado` → aviso al titular `equipo.wifi_cambiado` (correo y Telegram, «si no fuiste tú, comunícate»; nunca el SSID ni la clave).
 
 **Servicios y routers eliminados** (`contratos/eliminar.md` §7.3). `servicio.eliminado` y `router.eliminado` no avisan a nadie. Un `servicio.*` atrasado de un servicio que ya no existe (`servicio.estado_cambiado`, incluida la bienvenida de instalación) no se avisa al cliente: `ProgramarNotificacion` lo descarta sin error ni envío (`eliminados.ts`). Las alertas de la limpieza en el router (`routeros.fallido`, `coa.fallido`) salen igual, con el servicio y el router por su id. Prueba: `tests/notify/servicio_eliminado.spec.ts`.
 
 **Pendiente (inventario).** Cuando el módulo de inventario esté en `main` (`contratos/inventario.md` §7), se agregan como alerta interna `inventario.existencia_minima` (al cruzar el mínimo hacia abajo) e `inventario.equipo_por_recuperar` (servicio retirado con equipo en comodato). No se implementan antes: el contrato todavía no está en `main`.
 
-**Emite**: `notificacion.enviada { cliente_id, canal, evento_origen, estado }` cuando un envío termina `enviado` o `fallido` (en WhatsApp, al llegar el acuse de Iris) (también cuando el cliente no tiene destino). Las alertas internas sin cliente y los envíos `omitido` no lo emiten. `notificaciones.config_cambiada { configuracion_id, empresa_id, campos }` al guardar o sembrar la configuración de canales; lo consume el propio `notify:worker` (`ConsumidorConfigNotify`).
+**Emite**: `servicio.bienvenida_cambiada` y `servicio.bienvenida_solicitada` (ver "Bienvenida con seguimiento"); `notificacion.enviada { cliente_id, canal, evento_origen, estado }` cuando un envío termina `enviado` o `fallido` (en WhatsApp, al llegar el acuse de Iris) (también cuando el cliente no tiene destino). Las alertas internas sin cliente y los envíos `omitido` no lo emiten. `notificaciones.config_cambiada { configuracion_id, empresa_id, campos }` al guardar o sembrar la configuración de canales; lo consume el propio `notify:worker` (`ConsumidorConfigNotify`).
 
 ## Reglas
 
@@ -96,9 +96,11 @@ de cobro a contactos salen solo por WhatsApp, desde Iris.
   su caché, con el permiso de cada número (§3.5); Argos nunca manda números en el aviso.
 - **Permiso de WhatsApp por número** (§6.4): `RegistrarConsentimientoWhatsapp` y
   `POST /notificaciones/consentimientos` aceptan `telefono` (E.164). Clave
-  `argos:consentimiento:<empresa>:<cliente>:whatsapp:<h>:<ocurrido_en>` (`<h>` = primeros 16 hex del
-  sha256 del número E.164; acordado con Iris para el contrato 0.12.1), el número en claro solo en el cuerpo
-  (`telefono`), nunca en la clave, la auditoría (`***`) ni los logs; sale solo a un Iris ≥ 0.10.0 (antes espera sin gastar intentos) y no cambia el estado
+  `argos:consentimiento:<empresa>:<cliente>:whatsapp:<h>:<ocurrido_en>` (`<h>` = 16 primeros hex del
+  HMAC-SHA256 de `"consentimiento:" + número E.164` con el secreto del receptor de webhooks de Iris del
+  conector, contrato 0.12.1; sin ese secreto, 409 `iris_sin_receptor`; se calcula una sola vez al
+  registrar: si el secreto rota, el pendiente sale con la clave y los bytes guardados), el número en claro solo en el cuerpo
+  (`telefono`), nunca en la clave; ni el número ni la clave (dato personal) van a la auditoría (`***`) ni a los logs (un error de Iris que los repita se enmascara); sale solo a un Iris ≥ 0.10.0 (antes espera sin gastar intentos) y no cambia el estado
   de contacto del cliente (`notify.contacto_iris`). Queda en la línea de tiempo con el número
   enmascarado (`avisos_whatsapp_numero`).
 - **Avisos al titular** por sus canales registrados (correo y Telegram; plantillas nuevas en
@@ -111,6 +113,53 @@ de cobro a contactos salen solo por WhatsApp, desde Iris.
       `servicio.asignado_a_tu_nombre` al `a_cliente_id`.
     - `inventario.recuperacion_intentada` (A48; evento que esperamos de A1/A3, ver `a6.md`) →
       `equipo.intento_recuperacion` con `equipo.serie` enmascarada (`…1A2B`) y `equipo.intento`.
+
+## Avisos de soporte de Iris (contrato Iris 0.9.0 §6.6, A30 y A31)
+
+A1 reemite al bus los webhooks de Iris como `soporte.ticket_estado_cambiado`, `soporte.ticket_respondido`
+y `soporte.solicitud_estado_cambiado` (deduplicados por `X-Webhook-Id`). `soporte.ts` decide la plantilla:
+
+- `soporte.ticket_estado_cambiado`: `a = resuelto` → `soporte.ticket_resuelto` («revísalo y confírmalo»
+  si `puede_confirmar`); `a = cerrado` → `soporte.ticket_cerrado`. Otros estados no avisan.
+- `soporte.ticket_respondido` → `soporte.ticket_respondido`. Con `aviso_por_correo` (Iris ya mandó el
+  correo) no sale por correo ni como respaldo de un Telegram fallido (`variables.sin_correo`), y si al
+  cliente no le queda otro canal no queda ningún envío (no es una falla). Con `masivo` (falla general)
+  un solo aviso por cliente en 60 min: origen `soporte:masivo:<cliente>:<origen del evento>`, bloqueado
+  por cliente; los demás `masivo` de la ventana no avisan.
+- `soporte.solicitud_estado_cambiado` → la plantilla del mismo nombre, con el estado en palabras
+  (`recibida` → «la recibimos», `en_revision`, `cotizada`, `en_proceso`, `completada`, `no_procede`).
+- Variables: `ticket.{id, numero, puede_confirmar, masivo, de_sistema}` y `solicitud.{id, numero,
+  tipo, tipo_texto, estado, estado_texto, completada, no_procede}`. Nunca el texto de un mensaje ni un
+  motivo escrito por una persona (no llegan). El `origen` del ticket se renombra a `ticket_origen`
+  para no confundirlo con la marca `origen: iris` de §7. Solo correo y Telegram (WhatsApp lo maneja Iris).
+- Idempotente por `outbox:<id>` + cliente. Pruebas: `tests/notify/soporte_iris.spec.ts`.
+
+## Bienvenida con seguimiento (contrato Iris 0.9.0 §12.5, A37)
+
+- **Plantilla de WhatsApp.** Con un Iris ≥ 0.9.0, la bienvenida (`servicio.instalacion_activada`, cuyo
+  código en la plantilla es `bienvenida`) se pide como `bienvenida_servicio` con `nombre` (cliente,
+  una línea, hasta 60), `plan` (hasta 80), `precio_mensual` (`leerPrecioEfectivo` de A3), `moneda`
+  (`GTQ`) y `codigo_cliente` (`^[A-Za-z0-9-]{1,30}$`; otro código deja el envío `omitido`). Las cuentas
+  las pone Iris; Argos nunca manda números de cuenta. Con un Iris anterior sigue `bienvenida`.
+- **`origen` (§6.2).** Si la activación trae `origen_tipo = iris_orden` y `origen_id`, el aviso lleva
+  `origen: { tipo: 'iris_orden', id }` (guardado en `variables.iris.origen`: un reintento manda los
+  mismos bytes). Desde el panel de Argos, sin `origen`.
+- **Seguimiento (`bienvenida.ts`).** Cada bienvenida (la de la activación y cada reenvío) es una fila
+  de `notify.bienvenidas` con el `origen` de sus envíos. Al programarla, al enviarse o fallar
+  (`EnviarNotificacion`) y con el acuse de WhatsApp de Iris (`aplicarAcuseIris`), `seguirBienvenida`
+  recalcula los tres canales y, si cambiaron, emite `servicio.bienvenida_cambiada { bienvenida_id,
+  servicio_id, empresa_id, cliente_id, origen_tipo, origen_id, canales[{ canal, estado, motivo,
+  aviso_id }], reenvio }` (uno por cambio). Estados: `pendiente`, `enviada`, `fallida`, `omitida`;
+  `motivo` es un código (`sin_permiso`, `baja`… de Iris, `sin_destino`, `sin_canal`, `apagado`,
+  `conector_no_disponible`, `faltan_datos`, `error_canal`). El worker de webhooks lo manda a Iris solo
+  con contrato ≥ 0.9.0.
+- **Reenviar** (`ReenviarBienvenida`, `servicios.reenviar_bienvenida`, `POST
+  /servicios/:id/bienvenida/reenviar`): solo servicios `activo` (`409 servicio_no_activo`); `429
+  bienvenida_reciente` antes de 10 min de la última y `429 demasiados_reenvios` después de 3 reenvíos
+  en el día de Guatemala (los dos con `Retry-After`). Registra la bienvenida (`reenvio: true`) y emite
+  `servicio.bienvenida_solicitada` (interno): este worker la programa por los `canales` pedidos y la
+  encola, durable por el outbox.
+- Pruebas: `tests/notify/bienvenida_iris.spec.ts`.
 
 ## Bot de Telegram (semana 2)
 

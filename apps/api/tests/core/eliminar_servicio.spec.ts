@@ -3,27 +3,38 @@ import db from '@adonisjs/lucid/services/db'
 import type { ApiClient } from '@japa/api-client'
 import { redis } from '#shared/redis'
 import { claveAaa } from '#core/aaa'
-import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { crearClienteFila, crearEmpresaFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
 
 /**
  * `servicios.eliminar` (decisión del PM, 29 oct; `contratos/eliminar.md`): solo lo que nunca se
  * usó. Una prueba por cada cosa que lo impide y los casos felices.
+ *
+ * Lo que impide eliminar (facturas, pagos, notas, asientos, DTE…) se inserta directo, sin pasar por
+ * el libro: por eso esos servicios viven en una **empresa propia de cada prueba** (se desactiva al
+ * terminar). En la empresa principal dejaban cartera sin CxC y pagos sin asiento que rompían
+ * `afirmarLibro(assert, 1)` de las suites que corrían después (`fast-glob` no ordena los archivos).
  */
 
 interface ServicioCreado {
     id: number
     version: number
+    empresa_id: number
     cliente_id: number
     router_id: number
     user_ppp: string
     ipv4: string | null
 }
 
-async function crearServicio(client: ApiClient, token: string): Promise<ServicioCreado> {
+async function crearServicio(client: ApiClient, token: string, empresaId?: number): Promise<ServicioCreado> {
     const { routerId } = await crearEscenarioRouter()
     const planId = await crearPlanFila({ bajada_limitada_kbps: 1024, subida_limitada_kbps: 512 })
-    return crearServicioApi(client, token, await crearClienteFila(), routerId, planId)
+    return crearServicioApi(client, token, await crearClienteFila(), routerId, planId, empresaId)
+}
+
+/** Servicio en una empresa nueva: para las pruebas que le insertan historial directo. */
+async function crearServicioConHistorial(client: ApiClient, token: string): Promise<ServicioCreado> {
+    return crearServicio(client, token, await crearEmpresaFila())
 }
 
 async function crearServicioApi(
@@ -32,17 +43,26 @@ async function crearServicioApi(
     clienteId: number,
     routerId: number,
     planId: number,
+    empresaId?: number,
 ): Promise<ServicioCreado> {
     const respuesta = await estado(
-        client.post('/api/v1/servicios').bearerToken(token).json({
-            plantilla_facturacion_id: null,
-            cliente_id: clienteId,
-            router_id: routerId,
-            plan_id: planId,
-        }),
+        client
+            .post('/api/v1/servicios')
+            .bearerToken(token)
+            .json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: routerId,
+                plan_id: planId,
+                ...(empresaId === undefined ? {} : { empresa_id: empresaId }),
+            }),
         201,
     )
-    return respuesta.body() as ServicioCreado
+    const servicio = respuesta.body() as ServicioCreado
+    if (empresaId !== undefined && Number(servicio.empresa_id) !== empresaId) {
+        throw new Error(`El servicio quedó en la empresa ${servicio.empresa_id}, no en ${empresaId}`)
+    }
+    return { ...servicio, empresa_id: Number(servicio.empresa_id) }
 }
 
 async function insertar(tabla: string, fila: Record<string, unknown>): Promise<number> {
@@ -52,7 +72,7 @@ async function insertar(tabla: string, fila: Record<string, unknown>): Promise<n
 
 async function factura(s: ServicioCreado): Promise<number> {
     return insertar('billing.facturas', {
-        empresa_id: 1,
+        empresa_id: s.empresa_id,
         cliente_id: s.cliente_id,
         servicio_id: s.id,
         periodo: '2026-10-01',
@@ -75,9 +95,19 @@ async function sesion(s: ServicioCreado): Promise<number> {
     })
 }
 
-async function programaLealtad(): Promise<number> {
+/** Primer motivo sin costo del catálogo de la empresa (cada empresa nace con el suyo). */
+async function motivoSinCosto(empresaId: number): Promise<number> {
+    const motivo = await db
+        .from('billing.motivos_sin_costo')
+        .where('empresa_id', empresaId)
+        .orderBy('id', 'asc')
+        .firstOrFail()
+    return Number(motivo.id)
+}
+
+async function programaLealtad(empresaId: number): Promise<number> {
     return insertar('lealtad.programas', {
-        empresa_id: 1,
+        empresa_id: empresaId,
         nombre: unico('Programa'),
         valor_punto: '0.10',
         terminos_hash: 'a'.repeat(64),
@@ -85,9 +115,9 @@ async function programaLealtad(): Promise<number> {
     })
 }
 
-async function producto(): Promise<number> {
+async function producto(empresaId: number): Promise<number> {
     return insertar('inventario.productos', {
-        empresa_id: 1,
+        empresa_id: empresaId,
         sku: unico('SKU'),
         nombre: unico('ONU'),
         tipo: 'equipo',
@@ -96,7 +126,11 @@ async function producto(): Promise<number> {
 }
 
 /** Asiento cuadrado (Debe = Haber) con dos movimientos sobre una cuenta de prueba. */
-async function asientoCuadrado(origenTipo: string, origenId: number | null): Promise<number> {
+async function asientoCuadrado(
+    empresaId: number,
+    origenTipo: string,
+    origenId: number | null,
+): Promise<number> {
     return db.transaction(async (trx) => {
         const [cuenta] = (await trx
             .insertQuery()
@@ -107,7 +141,7 @@ async function asientoCuadrado(origenTipo: string, origenId: number | null): Pro
             .insertQuery()
             .table('ledger.asientos')
             .insert({
-                empresa_id: 1,
+                empresa_id: empresaId,
                 fecha: '2026-10-01',
                 descripcion: unico('Asiento de prueba'),
                 origen_tipo: origenTipo,
@@ -132,7 +166,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'notas_credito',
         preparar: async (s) =>
             insertar('billing.notas_credito', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 factura_id: await factura(s),
                 servicio_id: s.id,
                 cliente_id: s.cliente_id,
@@ -149,7 +183,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         preparar: async (s) => {
             const facturaId = await factura(s)
             const pagoId = await insertar('billing.pagos', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 cliente_id: s.cliente_id,
                 metodo: 'deposito',
                 monto: '112.00',
@@ -165,7 +199,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'promesas',
         preparar: (s) =>
             insertar('billing.promesas', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 servicio_id: s.id,
                 cliente_id: s.cliente_id,
                 vence_en: new Date(Date.now() + 86_400_000).toISOString(),
@@ -177,7 +211,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'bonificaciones',
         preparar: async (s) =>
             insertar('billing.bonificaciones', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 cliente_id: s.cliente_id,
                 servicio_id: s.id,
                 periodo: '2026-10-01',
@@ -187,9 +221,9 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
                 bruto: '150.00',
                 base: '133.93',
                 lineas: JSON.stringify([]),
-                motivo_id: 1,
+                motivo_id: await motivoSinCosto(s.empresa_id),
                 motivo_texto: 'Promoción',
-                asiento_id: await asientoCuadrado('ajuste', null),
+                asiento_id: await asientoCuadrado(s.empresa_id, 'ajuste', null),
             }),
     },
     {
@@ -201,14 +235,14 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
                 tipo: 'activo',
             })
             const cuentaBancariaId = await insertar('billing.cuentas_bancarias', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 banco_id: 1,
                 numero: unico('000'),
                 alias: unico('Monetaria'),
                 cuenta_id: cuentaId,
             })
             await insertar('billing.comprobantes', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 cliente_id: s.cliente_id,
                 servicio_id: s.id,
                 archivo: 'comprobantes/prueba.png',
@@ -236,7 +270,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'cobros_en_linea',
         preparar: (s) =>
             insertar('billing.pasarela_cobros', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 proveedor: 'falso',
                 cliente_id: s.cliente_id,
                 servicio_id: s.id,
@@ -246,13 +280,13 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
     },
     {
         codigo: 'asientos',
-        preparar: async (s) => asientoCuadrado('factura', await factura(s)),
+        preparar: async (s) => asientoCuadrado(s.empresa_id, 'factura', await factura(s)),
     },
     {
         codigo: 'dte',
         preparar: async (s) =>
             insertar('fiscal.dte', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 documento_tipo: 'factura',
                 documento_id: await factura(s),
                 tipo_dte: 'FACT',
@@ -269,7 +303,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'caidas',
         preparar: async (s) =>
             insertar('network.caidas_repetidas', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 servicio_id: s.id,
                 sesion_id: await sesion(s),
                 desde: new Date(Date.now() - 600_000).toISOString(),
@@ -283,8 +317,8 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'equipos',
         preparar: async (s) =>
             insertar('inventario.unidades', {
-                empresa_id: 1,
-                producto_id: await producto(),
+                empresa_id: s.empresa_id,
+                producto_id: await producto(s.empresa_id),
                 serie: unico('SN'),
                 estado: 'entregada',
                 costo: '300.00',
@@ -295,15 +329,15 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'inventario',
         preparar: async (s) => {
             const bodegaId = await insertar('inventario.bodegas', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 nombre: unico('Bodega'),
                 tipo: 'bodega',
             })
             await insertar('inventario.movimientos', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 tipo: 'ajuste',
                 fecha: '2026-10-01',
-                producto_id: await producto(),
+                producto_id: await producto(s.empresa_id),
                 bodega_id: bodegaId,
                 cantidad: '1',
                 costo_unitario: '5.00',
@@ -318,8 +352,8 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'lealtad',
         preparar: async (s) =>
             insertar('lealtad.movimientos', {
-                empresa_id: 1,
-                programa_id: await programaLealtad(),
+                empresa_id: s.empresa_id,
+                programa_id: await programaLealtad(s.empresa_id),
                 cliente_id: s.cliente_id,
                 servicio_id: s.id,
                 tipo: 'acumulacion',
@@ -331,16 +365,16 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
     {
         codigo: 'canjes',
         preparar: async (s) => {
-            const programaId = await programaLealtad()
+            const programaId = await programaLealtad(s.empresa_id)
             const premioId = await insertar('lealtad.premios', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 programa_id: programaId,
                 tipo: 'bien',
                 nombre: unico('Premio'),
                 costo_puntos: 100,
             })
             await insertar('lealtad.canjes', {
-                empresa_id: 1,
+                empresa_id: s.empresa_id,
                 programa_id: programaId,
                 cliente_id: s.cliente_id,
                 servicio_id: s.id,
@@ -354,7 +388,10 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
     {
         codigo: 'sorteos',
         preparar: async (s) => {
-            const sorteoId = await insertar('lealtad.sorteos', { empresa_id: 1, nombre: unico('Sorteo') })
+            const sorteoId = await insertar('lealtad.sorteos', {
+                empresa_id: s.empresa_id,
+                nombre: unico('Sorteo'),
+            })
             await insertar('lealtad.sorteos_participantes', {
                 sorteo_id: sorteoId,
                 orden: 1,
@@ -405,7 +442,9 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
     },
 ]
 
-test.group('Servicios · eliminar sin historial', () => {
+test.group('Servicios · eliminar sin historial', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('recién creado: eliminable, se elimina, libera su IP y deja auditoría, outbox y lápida', async ({
         client,
         assert,
@@ -513,7 +552,7 @@ test.group('Servicios · eliminar sin historial', () => {
     for (const caso of BLOQUEOS) {
         test(`con ${caso.codigo}: 422 servicio_con_historial y se conserva`, async ({ client, assert }) => {
             const { token } = await usuarioConRoles(['admin'])
-            const s = await crearServicio(client, token)
+            const s = await crearServicioConHistorial(client, token)
             await caso.preparar(s)
 
             const previa = await estado(
@@ -554,7 +593,7 @@ test.group('Servicios · eliminar sin historial', () => {
 
     test('el mensaje cuenta: «tiene 3 facturas»', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['admin'])
-        const s = await crearServicio(client, token)
+        const s = await crearServicioConHistorial(client, token)
         for (let i = 0; i < 3; i++) await factura(s)
         const r = await estado(
             client.delete(`/api/v1/servicios/${s.id}`).qs({ version: s.version }).bearerToken(token),

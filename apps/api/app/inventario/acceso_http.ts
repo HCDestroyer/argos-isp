@@ -44,6 +44,11 @@ export function irisActorDe(ctx: HttpContext): string | null {
     return ctx.request.header('X-Iris-Actor')?.trim() || null
 }
 
+/** `Idempotency-Key` de la petición (Iris 0.14.0: se guarda en el kardex y en la verificación), o null. */
+export function idempotenciaDe(ctx: HttpContext): string | null {
+    return ctx.request.header('idempotency-key')?.trim() || null
+}
+
 /**
  * Rutas de equipos de Iris 0.12.0 §3.10 (A48): con el token de Iris, `X-Iris-Actor: usuario:<id>` es
  * obligatoria (400 `cabecera_iris_requerida`) y el asistente de IA no puede (403 `actor_ia_no_permitido`).

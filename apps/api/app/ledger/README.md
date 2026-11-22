@@ -41,6 +41,18 @@ Libro de doble partida inmutable, plan de cuentas, cajas, bancos y egresos. Todo
 | `libro.registrar_asiento` | `actions/registrar_asiento.ts` | Única puerta de entrada al libro. Las demás acciones la llaman anidada: `new RegistrarAsiento().execute(entrada, t.ctx, { trx: t.trx })` |
 | `libro.revertir_asiento`  | `actions/revertir_asiento.ts`  | Asiento espejo (debe ↔ haber) con `reversa_de`; única forma de corregir                                                                  |
 
+### Asiento manual de ajuste (decisión del PM 10)
+
+`POST /libro/asientos` (`libro.registrar_asiento`, `actions/registrar_asiento_manual.ts`): origen `ajuste`, cada línea con debe o haber, Σ debe = Σ haber (422 `descuadre`). De fábrica entra al libro ya (`libro.asiento_manual_registrado`). Con `asientos_requieren_aprobacion` en `GET/PUT /ajustes-cobro` queda un **borrador** que no toca el libro (`billing.asientos_borradores`, solo inserción; probado antes con `simularEnTransaccion`, evento `libro.asiento_pendiente`). `POST /libro/borradores/:id/aprobar` (`libro.aprobar_asiento`) lo registra; quien lo creó no puede aprobarlo (403 `autoaprobacion`). `POST /libro/borradores/:id/rechazar` (`libro.rechazar_asiento`, con motivo; `libro.asiento_rechazado`). La decisión es una fila de `billing.asientos_borradores_decisiones` (una por borrador, 409 `borrador_decidido`). `GET /libro/borradores?estado=` es consolidable.
+
+### Impresión por caja (decisión del PM 20)
+
+`ledger.cajas.formato_recibo` (`pos_80` de fábrica) y `formato_factura` (`carta`). `PUT /cajas/:id/impresion` (`cajas.configurar_impresion`, con `version`) y evento `caja.impresion_cambiada`.
+
+### Castigo con gestiones de cobro (decisión del PM 8)
+
+`CastigarCartera` acepta `evidencia` vacía si el cliente tiene gestiones de cobro registradas en la empresa: la evidencia es su resumen. La vista del castigo trae `gestiones[]` (las registradas hasta el castigo).
+
 `registrarAsiento` recibe `{ fecha?, descripcion, origen_tipo, origen_id, movimientos: [{ cuenta (código o id), debe | haber, cliente_id? }] }` con montos como string o `Decimal` (nunca `number`) y valida antes de escribir (422 legibles):
 
 - al menos 2 movimientos, exactamente uno de debe/haber > 0, como máximo 2 decimales (el que llama redondea al final de su cálculo);

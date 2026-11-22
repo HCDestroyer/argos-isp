@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
+import { Conflicto, NoEncontrado, Problema, ValidacionFallida } from '#shared/errores'
 import { normalizarMac, normalizarSerie } from '#inventario/unidades'
 import { servicioDe, empresaDeLaUnidad } from '#inventario/comodato'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
@@ -13,6 +13,7 @@ import {
 import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 import { estadoEquipo, motivoDelEstado, type EstadoEquipo } from '#inventario/equipos'
 import { fijarActorTecnico } from '#inventario/actor_tecnico'
+import { esActorIris, estadoVinculos, idIrisDe, vinculoVigente } from '#inventario/vinculos_iris'
 import DevolverComodato from '#inventario/actions/devolver_comodato'
 import AsignarComodato from '#inventario/actions/asignar_comodato'
 
@@ -33,6 +34,10 @@ import AsignarComodato from '#inventario/actions/asignar_comodato'
  *   vinculado a `X-Iris-Actor`; desde el panel puede faltar (la unidad sale de donde esté).
  * - `cobro_propuesto` (sin monto) entra en la cola de cobros de equipo, que decide una persona con
  *   `inventario.cobrar_equipo`. `nota` (≤ 500) no va en eventos ni en logs.
+ * - **0.14.0 (T-7).** Con un Iris ≥ 0.14.0 y `cobro_propuesto`, `foto_ref` es obligatoria (422) y la
+ *   `Idempotency-Key` (`iris:cambio:<orden>:<sale_unidad>:<operacion_id>`) se guarda para verificar el
+ *   cambio con Iris: el cobro queda `por_verificar` y entra a la cola solo cuando Iris lo confirma
+ *   (`inventario.verificar_operacion_iris`); sin verificar, nunca. Con un Iris anterior, como siempre.
  * - Emite `inventario.comodato_devuelto`, `inventario.comodato_asignado`, `inventario.equipo_cambiado` y
  *   `inventario.unidad_estado_cambiado` de cada unidad.
  */
@@ -47,6 +52,8 @@ export interface EntradaCambiarEquipo {
     motivo: (typeof MOTIVOS_CAMBIO)[number]
     destino_sale: (typeof DESTINOS_SALE)[number]
     cobro_propuesto?: { motivo: string; nota?: string | null } | null
+    /** id opaco del adjunto de la orden en Iris (obligatorio con `cobro_propuesto` desde 0.14.0) */
+    foto_ref?: string | null
     nota?: string | null
     fecha?: string | null
     recibido_en_iris?: string | null
@@ -55,6 +62,8 @@ export interface EntradaCambiarEquipo {
     iris_actor?: string | null
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
+    /** `Idempotency-Key` con la que llegó (la pone la ruta) */
+    idempotency_key?: string | null
 }
 
 export interface ResultadoCambiarEquipo {
@@ -62,6 +71,8 @@ export interface ResultadoCambiarEquipo {
     sale: { unidad_id: number; estado: EstadoEquipo }
     entra: { unidad_id: number; estado: EstadoEquipo }
     cobro_propuesto_id: number | null
+    /** 0.14.0: `pendiente` si el cobro propuesto espera la verificación de Iris; null sin cobro */
+    cobro_verificacion: 'pendiente' | 'no_aplica' | null
 }
 
 export default class CambiarEquipo extends DomainAction<EntradaCambiarEquipo, ResultadoCambiarEquipo> {
@@ -77,6 +88,26 @@ export default class CambiarEquipo extends DomainAction<EntradaCambiarEquipo, Re
                     rule: 'destino_sale',
                 },
             ])
+        }
+        const vinculos = input.cobro_propuesto && (await esActorIris(t)) ? await estadoVinculos(t.trx) : null
+        const verificar = vinculos?.exige === true
+        const clave = input.idempotency_key?.trim() || null
+        if (verificar && !input.foto_ref?.trim()) {
+            throw new ValidacionFallida([
+                {
+                    field: 'foto_ref',
+                    message: 'Con cobro_propuesto la foto es obligatoria (contrato 0.14.0)',
+                    rule: 'required',
+                },
+            ])
+        }
+        if (verificar && !clave) {
+            throw new Problema(
+                400,
+                'idempotency_key_requerida',
+                'Falta Idempotency-Key',
+                'Con el contrato 0.14.0 el cambio con cobro propuesto lleva Idempotency-Key iris:cambio:<orden>:<sale_unidad>:<operacion_id>: con ella se verifica en Iris',
+            )
         }
         const momento =
             input.recibido_en_iris || input.fecha ? momentoDeLaOperacion(input) : { ocurridoEn: null }
@@ -213,6 +244,7 @@ export default class CambiarEquipo extends DomainAction<EntradaCambiarEquipo, Re
                 destino_sale: input.destino_sale,
                 estado_sale: estadoSale,
                 nota,
+                foto_ref: input.foto_ref?.trim() || null,
                 fecha: momento.ocurridoEn,
                 recibido_en_iris: input.recibido_en_iris ?? null,
                 actor_tecnico: idIrisDelActor(input.iris_actor)
@@ -238,10 +270,23 @@ export default class CambiarEquipo extends DomainAction<EntradaCambiarEquipo, Re
                     cambio_id: cambioId,
                     motivo: input.cobro_propuesto.motivo.trim(),
                     nota: input.cobro_propuesto.nota?.trim() || null,
-                    estado: 'propuesto',
+                    estado: verificar ? 'por_verificar' : 'propuesto',
                 })
                 .returning('id')) as Array<{ id: number }>
             cobroId = Number(cobro!.id)
+            if (verificar) {
+                await t.trx
+                    .insertQuery()
+                    .table('inventario.verificaciones_iris')
+                    .insert({
+                        empresa_id: empresaId,
+                        operacion: 'cambio',
+                        cambio_id: cambioId,
+                        idempotency_key: clave,
+                        estado: 'pendiente',
+                        proxima_en: t.trx.knexRawQuery(`now() + interval '30 seconds'`),
+                    })
+            }
         }
         await t.emit('inventario.equipo_cambiado', {
             cambio_id: cambioId,
@@ -261,6 +306,7 @@ export default class CambiarEquipo extends DomainAction<EntradaCambiarEquipo, Re
             sale: { unidad_id: Number(sale.id), estado: estadoSale },
             entra: { unidad_id: entraId, estado: estadoEntra },
             cobro_propuesto_id: cobroId,
+            cobro_verificacion: cobroId === null ? null : verificar ? 'pendiente' : 'no_aplica',
         }
     }
 
@@ -303,6 +349,9 @@ export default class CambiarEquipo extends DomainAction<EntradaCambiarEquipo, Re
     ): Promise<TecnicoExterno | null> {
         const idIris = idIrisDelActor(actor)
         if (!idIris) return null
+        // 0.14.0: el vínculo del técnico que llega por `tecnico.argos_*` (§6.6), tenga cuadrilla o no
+        const vinculo = idIrisDe(actor) ? await vinculoVigente(t.trx, empresaId, idIris) : null
+        if (vinculo) return { id_externo: String(vinculo.usuario_id) }
         const fila = (await t.trx
             .from('inventario.cuadrilla_miembros as m')
             .join('inventario.bodegas as b', 'b.id', 'm.bodega_id')
