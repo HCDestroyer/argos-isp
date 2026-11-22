@@ -189,6 +189,9 @@ export interface FacturaFila {
     clave_unica: string
     emitida_en: Date
     vence_en: string
+    /** decisión del PM 21: gracia antes del corte de un mes pasado emitido a mano */
+    dias_gracia_corte: number | null
+    corte_desde: string | null
     vencida_en: Date | null
     estado: EstadoFactura
     subtotal: string
@@ -245,6 +248,8 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('clave_unica'),
         c('emitida_en'),
         cliente.raw(`to_char(${alias}.vence_en, 'YYYY-MM-DD') as vence_en`),
+        c('dias_gracia_corte'),
+        cliente.raw(`to_char(${alias}.corte_desde, 'YYYY-MM-DD') as corte_desde`),
         c('vencida_en'),
         c('estado'),
         c('subtotal'),

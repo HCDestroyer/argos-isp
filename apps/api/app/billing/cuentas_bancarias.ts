@@ -55,15 +55,73 @@ export interface CuentaBancariaVista {
 export async function listarBancos(
     cliente: QueryClientContract = db.connection(),
     soloActivos = true,
+    /** decisión del PM 23: sin los bancos que esa empresa ocultó */
+    empresaId: number | null = null,
 ): Promise<BancoVista[]> {
     return (await cliente
         .from('billing.bancos')
         .if(soloActivos, (q) => q.where('activo', true))
+        .if(empresaId !== null, (q) =>
+            q.whereNotExists((x) =>
+                x
+                    .from('billing.bancos_ocultos as o')
+                    .whereRaw('o.banco_id = billing.bancos.id')
+                    .where('o.empresa_id', empresaId!),
+            ),
+        )
         .orderBy([
             { column: 'orden', order: 'asc' },
             { column: 'nombre', order: 'asc' },
         ])
         .select('id', 'nombre', 'activo')) as BancoVista[]
+}
+
+/** Banco del catálogo con su estado en una empresa (configuración, decisión del PM 23). */
+export interface BancoOrigenVista {
+    id: number
+    nombre: string
+    orden: number
+    activo: boolean
+    /** oculto en la empresa consultada */
+    oculto: boolean
+    version: number
+}
+
+export async function listarBancosOrigen(
+    empresaId: number | null,
+    cliente: QueryClientContract = db.connection(),
+): Promise<BancoOrigenVista[]> {
+    const filas = (await cliente
+        .from('billing.bancos as b')
+        .orderBy([
+            { column: 'b.orden', order: 'asc' },
+            { column: 'b.nombre', order: 'asc' },
+        ])
+        .select(
+            'b.id',
+            'b.nombre',
+            'b.orden',
+            'b.activo',
+            'b.version',
+            empresaId === null
+                ? cliente.raw('false as oculto')
+                : cliente.raw(
+                      'EXISTS (SELECT 1 FROM billing.bancos_ocultos o WHERE o.banco_id = b.id AND o.empresa_id = ?) as oculto',
+                      [empresaId],
+                  ),
+        )) as BancoOrigenVista[]
+    return filas.map((f) => ({ ...f, id: Number(f.id), orden: Number(f.orden), version: Number(f.version) }))
+}
+
+export async function verBancoOrigen(
+    id: number,
+    empresaId: number | null,
+    cliente: QueryClientContract = db.connection(),
+): Promise<BancoOrigenVista> {
+    const bancos = await listarBancosOrigen(empresaId, cliente)
+    const banco = bancos.find((b) => b.id === id)
+    if (!banco) throw new NoEncontrado(`El banco ${id} no existe`)
+    return banco
 }
 
 function consultaCuentas(cliente: QueryClientContract) {

@@ -7,6 +7,7 @@ import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import IncumplirPromesas from '#billing/actions/incumplir_promesas'
+import TerminarPausas from '#billing/actions/terminar_pausas'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
 import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
@@ -29,6 +30,7 @@ import { enviosPendientes } from '#billing/reportes/envios'
  * | `vencer` | 1 h | `VencerFacturas` (vencimiento y mora) |
  * | `corte` | 1 min | `EjecutarCorte` (las horas de corte que ya llegaron y no se procesaron) |
  * | `promesas` | 1 min | `IncumplirPromesas` (`incumplirPromesas`: las vencidas sin pagar → incumplida) |
+ * | `pausas` | 5 min | `TerminarPausas` (pausas sin cobro que llegaron a su fin → reactiva; decisión del PM 16) |
  * | `conciliar` | 06:30 Guatemala | `ConciliarPasarela` (cobros en línea de ayer contra el proveedor) |
  * | `reportes` | 5 min | `EjecutarEnvioReporte` por cada envío programado cuya hora ya llegó (`contratos/reportes.md` §5) |
  * | `sellar` | 1 min | `SellarAsientos` (`ledger:sellar`: cadena de hash del libro, §10.10); sin asientos pendientes no llama la acción |
@@ -51,6 +53,7 @@ export const CRONS = {
     vencer: 60 * 60_000,
     corte: 60_000,
     promesas: 60_000,
+    pausas: 5 * 60_000,
     sellar: 60_000,
     reportes: 5 * 60_000,
 } as const
@@ -145,6 +148,8 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             return conLock(nombre, () => new EjecutarCorte().execute({ ahora }, ctx))
         case 'promesas':
             return conLock(nombre, () => new IncumplirPromesas().execute({ ahora }, ctx))
+        case 'pausas':
+            return conLock(nombre, () => new TerminarPausas().execute({}, ctx))
         case 'conciliar':
             // sin pasarela configurada (producción sin credenciales) no hay nada que conciliar
             if (!proveedorConfigurado()) return { omitido: true }
