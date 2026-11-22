@@ -1,55 +1,94 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { crearEmpresaFila } from '#tests/core/fabricas'
 import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import { CRONS, CRONS_DIARIOS, conLock, ejecutarCron, programarCronsBilling } from '#billing/jobs'
+import { horasDeCorte } from '#billing/cortes'
 import { crearPlantillaFila, escenario, estadoServicio, generar } from '#tests/billing/ayudas_billing'
 
 /**
- * El corte global evalúa todos los servicios de la base de pruebas: se usa un día lejano propio
- * (2030-03-04) para que sus `cortes_ejecutados` no choquen con otras pruebas.
+ * El corte manual por servicio usa un día lejano propio (2030-03-04) a mediodía.
  */
 const A_LAS = (hora: string) => new Date(`2030-03-04T${hora}:00-06:00`)
 
+/**
+ * El cron de corte (sistema, sin servicio) recorre **toda la base**: vence lo pendiente de todas las
+ * empresas hasta el día y evalúa cada servicio cuya hora ya pasó. En la suite completa eso son los
+ * datos de todas las pruebas que corrieron antes (el orden de los archivos varía), y con un día
+ * futuro la corrida vencía y cortaba miles de servicios ajenos y se pasaba de los 30 s. Por eso la
+ * prueba del cron vive en un día del pasado propio (2025-03-04), anterior a los vencimientos de las
+ * demás pruebas, con horas de corte que nadie más usa y sus servicios en una empresa propia; las
+ * otras horas que ya existen en la base se dan por corridas ese día (`cortes_ejecutados`), como si
+ * el cron ya hubiera pasado por ellas. Así la corrida solo procesa lo de esta prueba.
+ */
+const DIA_CRON = '2025-03-04'
+const EN_EL_DIA = (hora: string) => new Date(`${DIA_CRON}T${hora}:00-06:00`)
+const HORAS = { excepcion: '07:43', ocho: '08:13', diez: '10:13' }
+
 const corte = (ahora: Date) => new EjecutarCorte().execute({ ahora }, contextoPrueba())
 
-test.group('billing · cron de corte', () => {
+/** Las horas de corte de la base que no son de esta prueba quedan como ya corridas en `DIA_CRON`. */
+async function otrasHorasYaCorridas() {
+    const propias = new Set(Object.values(HORAS))
+    const existentes = await horasDeCorte('23:59')
+    const otras = existentes.filter((hora) => !propias.has(hora))
+    if (otras.length === 0) return
+    await db
+        .knexQuery()
+        .table('billing.cortes_ejecutados')
+        .insert(otras.map((hora) => ({ clave: `${DIA_CRON} ${hora}` })))
+        .onConflict('clave')
+        .ignore()
+}
+
+test.group('billing · cron de corte', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('a la hora de cada plantilla (o de la excepción): vence lo pendiente y corta una sola vez por día', async ({
         assert,
     }) => {
-        const ocho = await escenario({ plantilla: { hora_corte: '08:00' } })
-        const plantillaDiez = await crearPlantillaFila({ hora_corte: '10:00' })
-        const diez = await escenario({ servicio: { plantilla_facturacion_id: plantillaDiez } })
-        const conExcepcion = await escenario({ servicio: { plantilla_facturacion_id: plantillaDiez } })
+        const empresa = await crearEmpresaFila()
+        const enEmpresa = { empresa_id: empresa, fecha_instalacion: '2025-01-01' }
+        const ocho = await escenario({ plantilla: { hora_corte: HORAS.ocho }, servicio: enEmpresa })
+        const plantillaDiez = await crearPlantillaFila({ hora_corte: HORAS.diez })
+        const diez = await escenario({
+            servicio: { ...enEmpresa, plantilla_facturacion_id: plantillaDiez },
+        })
+        const conExcepcion = await escenario({
+            servicio: { ...enEmpresa, plantilla_facturacion_id: plantillaDiez },
+        })
         await db.table('core.servicios_excepciones').insert({
             servicio_id: conExcepcion.servicioId,
             campo: 'hora_corte',
-            valor: JSON.stringify('07:30'),
+            valor: JSON.stringify(HORAS.excepcion),
         })
-        for (const { servicioId } of [ocho, diez, conExcepcion]) await generar(servicioId, '2026-10-01')
+        // enero y febrero: las dos vencen antes del día del cron (6 de enero y 6 de febrero)
+        for (const { servicioId } of [ocho, diez, conExcepcion]) await generar(servicioId, '2025-02-01')
+        await otrasHorasYaCorridas()
 
-        const primera = await corte(A_LAS('09:00'))
-        assert.includeMembers(primera.horas, ['07:30', '08:00'])
-        assert.notInclude(primera.horas, '10:00')
+        const primera = await corte(EN_EL_DIA('09:00'))
+        assert.sameMembers(primera.horas, [HORAS.excepcion, HORAS.ocho])
+        assert.equal(primera.evaluados, 2)
         assert.isAbove(primera.vencimiento!.vencidas, 0)
         assert.equal(await estadoServicio(ocho.servicioId), 'suspendido')
         assert.equal(await estadoServicio(conExcepcion.servicioId), 'suspendido')
         assert.equal(await estadoServicio(diez.servicioId), 'activo')
 
-        const repetida = await corte(A_LAS('09:30'))
+        const repetida = await corte(EN_EL_DIA('09:30'))
         assert.deepEqual(repetida.horas, [])
         assert.isNull(repetida.vencimiento)
 
-        const segunda = await corte(A_LAS('10:00'))
-        assert.include(segunda.horas, '10:00')
+        const segunda = await corte(EN_EL_DIA('10:30'))
+        assert.deepEqual(segunda.horas, [HORAS.diez])
         assert.equal(await estadoServicio(diez.servicioId), 'suspendido')
 
         const registrado = await db
             .from('billing.cortes_ejecutados')
-            .where('clave', '2030-03-04 08:00')
+            .where('clave', `${DIA_CRON} ${HORAS.ocho}`)
             .firstOrFail()
-        assert.isAtLeast(registrado.cambiados, 1)
+        assert.deepEqual([registrado.evaluados, registrado.cambiados], [1, 1])
         await afirmarLibroCuadrado(assert)
     })
 
