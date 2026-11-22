@@ -177,7 +177,8 @@ const activasMas = ref(false)
 const pendientes = shallowRef<Promesa[] | null>(null)
 const pendientesMas = ref(false)
 const problemaConteo = ref<Problem | null>(null)
-const cumplimiento = shallowRef<{ tasa: number, cumplidas: number, cerradas: number } | null>(null)
+/** Totales del reporte de promesas; cada uno puede venir null (sin dato): se muestra «—», nunca un 0. */
+const cumplimiento = shallowRef<{ tasa: number | null, cumplidas: number | null, cerradas: number | null } | null>(null)
 const problemaCumplimiento = ref<Problem | null>(null)
 
 async function cargarConteos() {
@@ -216,7 +217,8 @@ async function cargarCumplimiento() {
         return
     }
     const totales = resultado.data.totales
-    cumplimiento.value = { tasa: totales.tasa_cumplimiento, cumplidas: totales.cumplidas, cerradas: totales.cumplidas + totales.incumplidas }
+    const cerradas = totales.cumplidas !== null && totales.incumplidas !== null ? totales.cumplidas + totales.incumplidas : null
+    cumplimiento.value = { tasa: totales.tasa_cumplimiento, cumplidas: totales.cumplidas, cerradas }
 }
 
 /** Activas que vencen hoy o mañana (hora de Guatemala). */
@@ -500,8 +502,8 @@ onMounted(async () => {
                     etiqueta="Cumplidas este mes"
                     icono="i-lucide-circle-check"
                     tono="tono-exito"
-                    :valor="cumplimiento ? `${Math.round(cumplimiento.tasa)} %` : null"
-                    :detalle="cumplimiento ? `${cumplimiento.cumplidas} de ${cumplimiento.cerradas}` : undefined"
+                    :valor="cumplimiento ? (cumplimiento.tasa === null ? '—' : `${Math.round(cumplimiento.tasa)} %`) : null"
+                    :detalle="cumplimiento ? `${cumplimiento.cumplidas ?? '—'} de ${cumplimiento.cerradas ?? '—'}` : undefined"
                     :problema="problemaCumplimiento"
                     @reintentar="cargarCumplimiento"
                 />
