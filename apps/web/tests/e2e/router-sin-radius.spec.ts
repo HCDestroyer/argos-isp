@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { conectarRouter, entrar, ir, irAFichaDesdeAlta, pestanaRouter, pestanaServicio } from './ayudas'
+import { accionCliente, conectarRouter, elegirRouter, entrar, ir, irAFichaDesdeAlta, pestanaRouter, pestanaServicio } from './ayudas'
 
 /**
  * Router sin RADIUS (A1, `modo_seguridad = 'api'`), en escritorio y teléfono: el alta no pide la IP
@@ -73,10 +73,10 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     // El primer cliente de la lista (activo, sin servicio en este router).
     await page.locator('table a[href^="/clientes/"]').first().click()
     await expect(page).toHaveURL(/\/clientes\/\d+/)
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const servicio = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(servicio).toBeVisible()
-    await servicio.getByRole('radio', { name: /RB-Norte API/ }).click()
+    await elegirRouter(page, 'RB-Norte API')
     await expect(servicio.locator('[data-prueba="router-sin-radius"]')).toContainText('RB-Norte API no usa RADIUS')
     // El tipo es el del router (`contratos/tipo-conexion-router.md`), en solo lectura.
     await expect(servicio.locator('[data-prueba="tipo-conexion"]')).toContainText('PPPoE')

@@ -119,13 +119,41 @@ export async function pestanaRouter(page: Page, nombre: string): Promise<void> {
     await page.locator('[data-prueba="pestanas-router"]').getByRole('tab', { name: nombre }).click()
 }
 
-/** Ficha del cliente: abre «Datos del cliente» (ícono de persona en la franja o «Datos» en el teléfono). */
+/**
+ * Alta de servicio: elige el router en el buscador (lista desplegable en escritorio, hoja a
+ * pantalla completa en el teléfono). `nombre` es el nombre exacto del router.
+ */
+export async function elegirRouter(page: Page, nombre: string): Promise<void> {
+    const hoja = page.locator('[data-prueba="selector-router-hoja"]')
+    // Espera a que el selector cargue los routers: en el teléfono es la hoja; en escritorio, la lista.
+    await expect(page.locator('[data-prueba="selector-router-hoja"]:visible, [data-prueba="selector-router-menu"]:visible').first()).toBeVisible()
+    if (await hoja.isVisible()) {
+        await hoja.click()
+        const dialogo = page.getByRole('dialog', { name: 'Elegir router' })
+        await dialogo.getByPlaceholder('Buscar por nombre, zona o tipo').fill(nombre)
+        await dialogo.getByRole('option').filter({ has: page.getByText(nombre, { exact: true }) }).click()
+        await expect(dialogo).toBeHidden()
+    }
+    else {
+        await page.locator('[data-prueba="selector-router-menu"]').click()
+        await page.getByRole('option').filter({ has: page.getByText(nombre, { exact: true }) }).click()
+    }
+    await expect(page.locator('[data-prueba="selector-router"]').getByText(nombre, { exact: true }).first()).toBeVisible()
+}
+
+/** Ficha del cliente: elige una acción del menú «Más» de la franja («Nuevo servicio», «Ver datos del cliente»…). */
+export async function accionCliente(page: Page, nombre: string | RegExp): Promise<void> {
+    await page.locator('[data-prueba="mas-cliente"]:visible').first().click()
+    await page.getByRole('menuitem', { name: nombre }).click()
+}
+
+/** Ficha del cliente: abre «Datos del cliente» (Más › Ver datos del cliente). */
 export async function verDatosCliente(page: Page): Promise<void> {
     const datos = page.locator('[data-prueba="datos-cliente"]')
     if (await datos.isVisible()) {
         return
     }
-    await page.locator('[data-prueba="ver-datos-cliente"]:visible, [data-prueba="ver-datos-cliente-movil"]:visible').first().click()
+    await accionCliente(page, 'Ver datos del cliente')
     await expect(datos).toBeVisible()
 }
 

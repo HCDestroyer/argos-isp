@@ -86,8 +86,9 @@ export const esquemaServicio = z.object({
     if (datos.amarre_ip_mac && !datos.mac) {
         ctx.addIssue({ code: 'custom', path: ['mac'], message: 'El amarre IP-MAC necesita la MAC del equipo' })
     }
+    // La red de la IP fija la deduce el alta de la IP (y si no cae en ninguna, lo dice en `ipv4`).
     if (datos.asignacion === 'fija') {
-        for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: true })) {
+        for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: false })) {
             ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
         }
     }
@@ -100,6 +101,14 @@ export const esquemaServicio = z.object({
 })
 
 export type EntradaServicio = z.input<typeof esquemaServicio>
+
+/** Lo que el alta de servicio va eligiendo, para la línea de resumen del alta de cliente. */
+export interface ResumenAltaServicio {
+    router: string | null
+    plan: string | null
+    precio: string | null
+    ip: string
+}
 export type SalidaServicio = z.output<typeof esquemaServicio>
 
 type CuerpoCrearServicio = paths['/api/v1/servicios']['post']['requestBody']['content']['application/json']

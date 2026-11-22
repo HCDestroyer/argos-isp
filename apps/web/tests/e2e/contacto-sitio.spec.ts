@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir, pestanaServicio, verDatosCliente } from './ayudas'
+import { accionCliente, elegirRouter, entrar, ir, pestanaServicio, verDatosCliente } from './ayudas'
 
 /**
  * Pedidos de Iris A12–A14 (contrato 0.5.0): alta de un cliente con referencia («cómo llegar») y de
@@ -33,10 +33,10 @@ test('alta de cliente con referencia y de su servicio con contacto en sitio', as
     await expect(page.locator('[data-prueba="referencia-cliente"]')).toContainText('Casa verde frente a la iglesia')
     await expect(page.getByText('+502 5512-3344').first()).toBeVisible()
 
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
-    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
+    await elegirRouter(page, 'RB-Centro')
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     // Conexión → Red y PPPoE → Instalación y cobro.
     for (let i = 0; i < 2; i++) {

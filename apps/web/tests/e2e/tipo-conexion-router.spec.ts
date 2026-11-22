@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir, pestanaRouter } from './ayudas'
+import { accionCliente, elegirRouter, entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Tipo de conexión por router (`contratos/tipo-conexion-router.md`): en la ficha del router, junto al
@@ -39,10 +39,10 @@ test('cambiar el tipo de conexión de un router con vista previa', async ({ page
     await ir(page, 'Clientes', /\/clientes$/)
     await page.locator('table a[href^="/clientes/"]').first().click()
     await expect(page).toHaveURL(/\/clientes\/\d+/)
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
-    await alta.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
+    await elegirRouter(page, 'RB-Centro')
     await expect(alta.locator('[data-prueba="tipo-conexion"]')).toContainText('IP estática')
     await expect(alta.getByRole('radio', { name: /^PPPoE/ })).toHaveCount(0)
     await alta.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()

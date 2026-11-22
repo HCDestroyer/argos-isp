@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { accionServicio, entrar, ir, pestanaRouter } from './ayudas'
+import { accionCliente, accionServicio, elegirRouter, entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Eliminar sin historial y las vistas «Retirados» / «Inactivos» (`contratos/eliminar.md`), en
@@ -66,10 +66,10 @@ test('servicio: «Retirados» aparte, el motivo de no eliminar y eliminar uno re
     await altaCliente.getByLabel('Teléfono').fill('5555-9876')
     await altaCliente.getByRole('button', { name: 'Crear cliente' }).click()
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
-    await alta.getByRole('radio', { name: /^RB-Centro(?! PCQ)/ }).click()
+    await elegirRouter(page, 'RB-Centro')
     await alta.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     // Conexión → Red y PPPoE → Instalación y cobro → Resumen.
     for (let i = 0; i < 3; i++) {
