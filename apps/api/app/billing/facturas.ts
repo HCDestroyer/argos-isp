@@ -54,6 +54,11 @@ export interface LineaCalculada {
     servicio_adicional_id?: number | null
     /** periodo que cobra la línea del adicional (el de la factura o su primer periodo prorrateado) */
     adicional_periodo?: string | null
+    /**
+     * Concepto de cargo (`billing.conceptos_cargo`) de la línea de un cargo único (contrato Iris 0.14.3
+     * §3, `GET /facturas/origen-iris`); null o ausente en las demás.
+     */
+    concepto_cargo_id?: number | null
     /** inventario (fase C): la línea de un cargo único que vende del inventario */
     producto_id?: number | null
     bodega_id?: number | null

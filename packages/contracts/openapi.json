@@ -25839,6 +25839,128 @@
         "x-implementado": true
       }
     },
+    "/api/v1/facturas/origen-iris": {
+      "get": {
+        "operationId": "facturasOrigenIris",
+        "summary": "Leer una factura de origen Iris para conciliar un «cobro por confirmar» (contrato Iris 0.14.3 §3)",
+        "description": "`empresa_id` y `origen_id` (id de la orden en Iris) obligatorios, más `numero` (número interno de Argos) o `serie` + `numero_dte` (DTE certificado), excluyentes: si faltan o se mezclan, `422 validacion`. Sin pagos, NIT, nombre ni dirección. Si no existe, no es `iris_orden`, su `origen_id` no es el pedido o su empresa está fuera del token (también un `empresa_id` fuera del token): el mismo `404 factura_no_encontrada`. Con el token de Iris, `X-Iris-Actor: usuario:<id>` obligatoria (`400 cabecera_iris_requerida`); con `asistente_ia` o `sistema`, `403 actor_no_permitido`; sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (se ignoran). Máximo 60 lecturas por minuto por token (`429 demasiadas_peticiones` con `Retry-After`). Cada lectura queda auditada con el actor de Iris y canal `api`, con solo los parámetros como entrada.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "numero",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "serie",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "numero_dte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Factura de la orden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaOrigenIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.leer_origen_iris",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.leer_origen_iris",
+        "x-implementado": true
+      }
+    },
     "/api/v1/facturas/vencer": {
       "post": {
         "operationId": "facturasVencer",
@@ -75567,6 +75689,7 @@
                         "facturas.emitir_periodo_anterior",
                         "facturas.emitir_periodos",
                         "facturas.generar",
+                        "facturas.leer_origen_iris",
                         "facturas.nota_credito",
                         "facturas.sustituir",
                         "facturas.ver",
@@ -75996,6 +76119,7 @@
                         "facturas.emitir_periodo_anterior",
                         "facturas.emitir_periodos",
                         "facturas.generar",
+                        "facturas.leer_origen_iris",
                         "facturas.nota_credito",
                         "facturas.sustituir",
                         "facturas.ver",
@@ -90720,6 +90844,7 @@
                             "facturas.emitir_periodo_anterior",
                             "facturas.emitir_periodos",
                             "facturas.generar",
+                            "facturas.leer_origen_iris",
                             "facturas.nota_credito",
                             "facturas.sustituir",
                             "facturas.ver",
@@ -112248,6 +112373,123 @@
           }
         }
       },
+      "FacturaOrigenIris": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "numero",
+          "empresa_id",
+          "servicio_id",
+          "cliente_id",
+          "origen_tipo",
+          "origen_id",
+          "estado",
+          "lineas",
+          "total",
+          "moneda",
+          "emitida_en",
+          "dte"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "string",
+            "description": "Número interno de Argos (el panel lo muestra como «Factura #n»)"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origen_tipo": {
+            "type": "string",
+            "enum": [
+              "iris_orden"
+            ]
+          },
+          "origen_id": {
+            "type": "string",
+            "description": "Id de la orden en Iris"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "lineas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "concepto_id",
+                "precio_unitario",
+                "cantidad"
+              ],
+              "properties": {
+                "concepto_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Concepto de cargo de la línea (`GET /conceptos-cargo`); null en cargos anteriores a Argos con contrato 0.14.3"
+                },
+                "precio_unitario": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "description": "Bruto con IVA, dos decimales"
+                },
+                "cantidad": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "description": "Sin ceros de más («1», «2.5»)"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ"
+            ]
+          },
+          "emitida_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dte": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "serie",
+              "numero"
+            ],
+            "properties": {
+              "serie": {
+                "type": "string"
+              },
+              "numero": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "FacturaPagoAplicado": {
         "type": "object",
         "required": [
@@ -117297,6 +117539,7 @@
           "facturas.emitir_periodo_anterior",
           "facturas.emitir_periodos",
           "facturas.generar",
+          "facturas.leer_origen_iris",
           "facturas.nota_credito",
           "facturas.sustituir",
           "facturas.ver",
@@ -117618,6 +117861,7 @@
           "Emitir a mano un periodo anterior al inicio del servicio (hasta 24) o a su facturar_desde, con motivo (junto con facturas.emitir_periodos)",
           "Emitir a mano facturas de periodos de un servicio: pago por adelantado (hasta 12 periodos futuros) o periodos que el cron no emitió",
           "Generar facturas",
+          "Leer una factura de origen Iris por su número o su DTE, sin pagos ni datos del cliente (solo el token de Iris, contrato Iris 0.14.3 §3)",
           "Emitir notas de crédito (parcial o total) sobre el saldo de una factura",
           "Sustituir una factura mal emitida (anula o acredita la original y emite otra del mismo periodo)",
           "Ver facturas",
@@ -133424,6 +133668,7 @@
               "facturas.emitir_periodo_anterior",
               "facturas.emitir_periodos",
               "facturas.generar",
+              "facturas.leer_origen_iris",
               "facturas.nota_credito",
               "facturas.sustituir",
               "facturas.ver",
