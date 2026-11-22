@@ -32,6 +32,7 @@ import {
     type ContactoAviso,
 } from '#notify/contactos'
 import { configPara, empresaDelEvento } from '#notify/configuracion'
+import { CONTRATO_CAPACIDADES_EQUIPOS, tieneCapacidad } from '#integraciones/equipos/capacidades'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
 import { EVENTO_BIENVENIDA, avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
@@ -308,7 +309,14 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
                 elegidos.push({ ...eleccion, variables })
                 continue
             }
-            const preparada = await this.prepararWhatsapp(t, eleccion, variables, conector, aviso.payload)
+            const preparada = await this.prepararWhatsapp(
+                t,
+                eleccion,
+                variables,
+                conector,
+                aviso.payload,
+                empresaId,
+            )
             if (preparada) elegidos.push(preparada)
         }
 
@@ -449,12 +457,19 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         variables: Variables,
         conector: EstadoWhatsapp | null,
         payload: Record<string, unknown>,
+        empresaId: number | null,
     ): Promise<EleccionWhatsapp | null> {
         let codigo = renderizar(eleccion.plantilla.cuerpo, variables).trim()
         if (codigo === '') return null
         // 0.9.0 §12.5: con un Iris ≥ 0.9.0 la bienvenida es `bienvenida_servicio`, con `origen`
         let origenIris: ReturnType<typeof origenIrisDe> = null
-        if (codigo === 'bienvenida' && (await conectorAdmite(CONTRATO_BIENVENIDA_SERVICIO, t.trx))) {
+        // 0.14.3 §4.3: con un Iris ≥ 0.14.3, solo si la empresa tiene la marca `bienvenida`
+        if (
+            codigo === 'bienvenida' &&
+            (await conectorAdmite(CONTRATO_BIENVENIDA_SERVICIO, t.trx)) &&
+            (!(await conectorAdmite(CONTRATO_CAPACIDADES_EQUIPOS, t.trx)) ||
+                (empresaId !== null && (await tieneCapacidad(empresaId, 'bienvenida', t.trx))))
+        ) {
             codigo = 'bienvenida_servicio'
             origenIris = origenIrisDe(payload)
         }

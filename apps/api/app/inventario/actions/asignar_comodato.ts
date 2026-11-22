@@ -22,6 +22,11 @@ import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 import { bodegaDeUnidadDelTecnico, fechaKardexDe } from '#inventario/cuadrillas'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
+import { esActorIris } from '#inventario/vinculos_iris'
+import { conectorAdmite } from '#integraciones/iris/configuracion'
+
+/** Desde el contrato Iris 0.14.3 un comodato repetido del mismo servicio se responde como hecho. */
+const CONTRATO_COMODATO_HECHO = '0.14.3'
 
 /**
  * `inventario.asignar_comodato` (`POST /servicios/:id/equipos`): presta una unidad `disponible` a un
@@ -33,7 +38,9 @@ import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '
  *   movimiento y depreciación según `depreciacion_inicio` (por defecto desde el mes siguiente).
  * - La unidad queda `en_comodato` con su servicio y su activo.
  * - 409 `servicio_retirado`, `unidad_en_comodato`, `unidad_no_disponible`; servicio de otra empresa:
- *   404. `fecha` (opcional, no futura ni anterior al último movimiento de la unidad) respeta los
+ *   404. Con el token de Iris ≥ 0.14.3, una unidad ya en comodato **en este servicio** responde como
+ *   hecho (la vista de la unidad, sin movimiento ni evento): Iris cierra una orden activada fuera de
+ *   ella sin comodato doble. `fecha` (opcional, no futura ni anterior al último movimiento de la unidad) respeta los
  *   bloqueos del libro.
  * - Emite `inventario.comodato_asignado` e `inventario.movimiento_registrado`.
  * - `origen_tipo` = `iris_orden` + `origen_id` (orden de Iris, `#inventario/origen_externo`): se guardan
@@ -79,6 +86,19 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
         }
         // locks en el orden de todo el inventario: producto primero, después la fila de la unidad
         const previa = await productoDeUnidad(t, input.unidad_id)
+        // contrato Iris 0.14.3 §12.2 (A6): el comodato de una unidad que Argos ya asignó a este servicio
+        // (aprovisionada desde el panel o desde otra orden) se responde como hecho, sin duplicarlo
+        if (await esActorIris(t)) {
+            const ya = await t.trx
+                .from('inventario.unidades')
+                .where({ id: input.unidad_id, servicio_id: servicio.id, estado: 'en_comodato' })
+                .select('id')
+                .first()
+            if (ya && (await conectorAdmite(CONTRATO_COMODATO_HECHO, t.trx))) {
+                t.anotarAuditoria({ ya_asignada: true })
+                return unidadVista(input.unidad_id, t)
+            }
+        }
         const producto = await productoMovible(t, previa)
         await bloquearProducto(t, producto.id)
         // con el lock del producto la unidad ya no cambia: se vuelve a leer

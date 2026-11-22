@@ -23,7 +23,6 @@ import {
 } from '#shared/openapi/esquemas'
 import { NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa, exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
-import { exigirServicio } from '#core/acceso_empresa'
 import { CabeceraIrisRequerida, exigirActorIris } from '#integraciones/iris/atencion'
 import * as v from '#integraciones/equipos/validators'
 import { estadoEquipo } from '#integraciones/equipos/equipos'
@@ -32,7 +31,14 @@ import CambiarWifiServicio from '#integraciones/equipos/actions/cambiar_wifi_ser
 import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import { vistaConfig } from '#integraciones/equipos/configuracion'
-import { leerAprovisionamiento, vistaAprovisionamiento } from '#integraciones/equipos/aprovisionamientos'
+import {
+    iniciadoPor,
+    leerAprovisionamiento,
+    vistaAprovisionamiento,
+    vistaAprovisionamientoAjeno,
+} from '#integraciones/equipos/aprovisionamientos'
+import { exigeCapacidades, exigirCapacidad, exigirServicioIris } from '#integraciones/equipos/capacidades'
+import { esTokenIris } from '#integraciones/iris/atencion'
 import ReenviarBienvenida from '#notify/actions/reenviar_bienvenida'
 
 const EstadoEquipo = definirEsquema(
@@ -64,36 +70,43 @@ const AprovisionamientoAceptado = definirEsquema(
 
 const Aprovisionamiento = definirEsquema(
     'Aprovisionamiento',
-    objeto({
-        aprovisionamiento_id: idEsquema,
-        servicio_id: idEsquema,
-        empresa_id: idEsquema,
-        origen_tipo: nulable(texto),
-        origen_id: nulable(texto),
-        estado: enumerado(['en_proceso', 'listo', 'fallido']),
-        pasos: lista(
-            objeto({
-                paso: enumerado(['ip', 'equipo', 'wifi', 'activacion']),
-                estado: enumerado(['pendiente', 'hecho', 'fallido', 'no_aplica']),
-                en: nulable(instante),
+    objeto(
+        {
+            aprovisionamiento_id: idEsquema,
+            servicio_id: idEsquema,
+            empresa_id: idEsquema,
+            origen_tipo: nulable(texto),
+            origen_id: nulable(texto),
+            iniciado_por: enumerado(['argos', 'iris']),
+            estado: enumerado(['en_proceso', 'listo', 'fallido']),
+            pasos: lista(
+                objeto({
+                    paso: enumerado(['ip', 'equipo', 'wifi', 'activacion']),
+                    estado: enumerado(['pendiente', 'hecho', 'fallido', 'no_aplica']),
+                    en: nulable(instante),
+                }),
+            ),
+            causa: nulable(texto),
+            reintentable: booleano,
+            detalle: nulable(texto),
+            servicio_estado: texto,
+            equipo: objeto({
+                tipo: enumerado(['ont', 'cpe_wireless', 'router_tr069']),
+                serie: nulable(texto),
+                mac: nulable(texto),
+                unidad_id: nulable(idEsquema),
+                modelo: nulable(texto),
+                gestionado: booleano,
             }),
-        ),
-        causa: nulable(texto),
-        reintentable: booleano,
-        detalle: nulable(texto),
-        servicio_estado: texto,
-        equipo: objeto({
-            tipo: enumerado(['ont', 'cpe_wireless', 'router_tr069']),
-            serie: nulable(texto),
-            mac: nulable(texto),
-            unidad_id: nulable(idEsquema),
-            modelo: nulable(texto),
-            gestionado: booleano,
-        }),
-        senal: nulable(objeto({ rx_dbm: nulable({ type: 'number' }), tx_dbm: nulable({ type: 'number' }) })),
-        creado_en: instante,
-        actualizado_en: instante,
-    }),
+            senal: nulable(
+                objeto({ rx_dbm: nulable({ type: 'number' }), tx_dbm: nulable({ type: 'number' }) }),
+            ),
+            creado_en: instante,
+            actualizado_en: instante,
+        },
+        // 0.14.3: para un aprovisionamiento que no inició ese conector la respuesta se recorta
+        ['pasos', 'reintentable', 'detalle', 'servicio_estado', 'equipo', 'senal', 'creado_en'],
+    ),
 )
 
 const WifiAceptado = definirEsquema(
@@ -225,14 +238,18 @@ const rutas: Ruta[] = [
             '`503 equipo_sin_respuesta`. `ssid` es una extensión de Argos (no está en el contrato). Con el token de Iris, ' +
             '`X-Iris-Actor` obligatoria; con ' +
             '`asistente_ia` la respuesta 200 solo trae `servicio_id`, `tecnologia`, `en_linea`, `senal`, `ultimo_contacto` ' +
-            'y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo.',
+            'y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo. Con el token de Iris ≥ 0.14.3, alcance ' +
+            'primero (servicio de otra empresa: 404) y sin la marca `estado_equipo`, `422 capacidad_no_disponible`.',
         etiqueta: 'servicios',
         permiso: 'servicios.ver_equipo',
         respuesta: { status: 200, descripcion: 'Estado del equipo', esquema: EstadoEquipo },
         handler: async (ctx, { params }) => {
             const asistente = esAsistente(ctx)
             const id = Number(params.id)
-            await exigirServicio(ctx, id)
+            // 0.14.3 §4.3: alcance, después la marca `estado_equipo`, después `equipo_sin_gestion`
+            const reglas = await exigeCapacidades(ctx)
+            const empresaId = await exigirServicioIris(ctx, id, reglas)
+            if (reglas) await exigirCapacidad(empresaId, 'estado_equipo')
             return estadoEquipo(id, { asistente })
         },
     }),
@@ -247,10 +264,16 @@ const rutas: Ruta[] = [
             'hace el comodato y activa el servicio; el resultado llega por `instalacion.aprovisionada` o ' +
             '`instalacion.fallida` y por `GET /aprovisionamientos/:id`. Repetir la misma `Idempotency-Key` ' +
             '(`iris:aprovisionar:<orden_id>:<intento>`) devuelve `200` con el estado final si ya terminó. Errores: ' +
-            '`409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id`), ' +
+            '`409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id` e ' +
+            '`iniciado_por`: `argos` | `iris`), ' +
             '`409 unidad_en_otra_bodega`, `422 equipo_invalido`, `422 wifi_invalido`, `422 wifi_no_disponible`, ' +
             '`422 aprovisionamiento_no_disponible` y `422 plan_no_permitido`. Con el token de Iris, `X-Iris-Actor` de una ' +
-            'persona (el asistente nunca aprovisiona). La clave Wi-Fi se guarda cifrada solo hasta terminar y nunca se audita.',
+            'persona (el asistente nunca aprovisiona). La clave Wi-Fi se guarda cifrada solo hasta terminar y nunca se audita. ' +
+            'Contrato Iris 0.14.3 (token de Iris ≥ 0.14.3): servicio fuera del token 404; `wifi` sin la marca `wifi` ' +
+            '`422 capacidad_no_disponible`; la unidad se busca por `unidad_id`, `serie` o `mac` en todo el inventario: ' +
+            'con `tecnico` (vínculo I1 en la empresa, si no `403 actor_desconocido`) en su bodega personal o de cuadrilla, ' +
+            'o ya asignada al servicio; sin `tecnico`, ya asignada; en otro lugar `409 unidad_en_otra_bodega` sin decir ' +
+            'dónde. Desde el panel de Argos: `origen_tipo: argos_panel`, `origen_id: null` y sin `instalacion.*` a Iris.',
         etiqueta: 'servicios',
         permiso: 'servicios.aprovisionar',
         cuerpo: v.aprovisionarValidator,
@@ -271,7 +294,10 @@ const rutas: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             exigirActorIris(ctx, { sinAsistente: true })
             const id = Number(params.id)
-            await exigirServicio(ctx, id)
+            const reglas = await exigeCapacidades(ctx)
+            const empresaId = await exigirServicioIris(ctx, id, reglas)
+            // 0.14.3: `wifi` sin la marca → 422 capacidad_no_disponible (no wifi_no_disponible)
+            if (reglas && cuerpo.wifi) await exigirCapacidad(empresaId, 'wifi')
             return new AprovisionarServicio().execute(
                 {
                     ...cuerpo,
@@ -290,13 +316,17 @@ const rutas: Ruta[] = [
         descripcion:
             '`estado` `en_proceso`, `listo` o `fallido`; `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`) con su estado; ' +
             '`causa`, `reintentable` y `detalle` con `fallido`; `equipo { tipo, serie, mac, unidad_id, modelo, gestionado }`. ' +
-            'Nunca el SSID ni la clave del Wi-Fi inicial. De otra empresa o inexistente: `404`.',
+            'Nunca el SSID ni la clave del Wi-Fi inicial. De otra empresa o inexistente: `404`. `iniciado_por` ' +
+            '(0.14.3): `argos` (panel, `origen_tipo: argos_panel`) o `iris`. Al token de Iris, uno que no inició Iris ' +
+            'se le responde recortado: `aprovisionamiento_id`, `servicio_id`, `empresa_id`, `origen_tipo`, `origen_id: null`, ' +
+            '`iniciado_por`, `estado`, `causa` y `actualizado_en`.',
         etiqueta: 'servicios',
         permiso: 'servicios.aprovisionar',
         respuesta: { status: 200, descripcion: 'Aprovisionamiento', esquema: Aprovisionamiento },
         handler: async (ctx, { params }) => {
             const fila = await leerAprovisionamiento(Number(params.id))
             const contexto = ctx.contextoAccion()
+            // 0.14.3: fuera de las empresas del token, el mismo 404 que uno que no existe
             if (
                 !fila ||
                 (contexto.empresasPermitidas && !contexto.empresasPermitidas.includes(fila.empresa_id))
@@ -304,6 +334,10 @@ const rutas: Ruta[] = [
                 throw new NoEncontrado(`El aprovisionamiento ${String(params.id)} no existe`)
             }
             exigirAccesoEmpresa(contexto, fila.empresa_id)
+            // 0.14.3: al token de Iris, uno que no inició Iris (el panel de Argos) se le responde recortado
+            if (esTokenIris(ctx) && iniciadoPor(fila.origen_tipo) !== 'iris') {
+                return vistaAprovisionamientoAjeno(fila)
+            }
             return vistaAprovisionamiento(fila)
         },
     }),
@@ -321,7 +355,8 @@ const rutas: Ruta[] = [
             'del titular del servicio; el asistente de IA solo `codigo_telefono`, `codigo_correo` o `datos_titular` y de ' +
             'menos de 10 min; una persona además `presencial` o `llamada_verificada`). Con el token de Iris, `X-Iris-Actor` ' +
             'obligatoria y, con el asistente, `X-Iris-Conversacion`. `Idempotency-Key` obligatoria. La clave nunca se ' +
-            'guarda, se audita ni vuelve.',
+            'guarda, se audita ni vuelve. Con el token de Iris ≥ 0.14.3: servicio de otra empresa 404 y sin la marca ' +
+            '`wifi`, `422 capacidad_no_disponible` (antes que `equipo_sin_gestion`).',
         etiqueta: 'servicios',
         permiso: 'servicios.cambiar_wifi',
         cuerpo: v.cambiarWifiValidator,
@@ -336,7 +371,9 @@ const rutas: Ruta[] = [
                 )
             }
             const id = Number(params.id)
-            await exigirServicio(ctx, id)
+            const reglas = await exigeCapacidades(ctx)
+            const empresaId = await exigirServicioIris(ctx, id, reglas)
+            if (reglas) await exigirCapacidad(empresaId, 'wifi')
             return new CambiarWifiServicio().execute(
                 {
                     ...cuerpo,
@@ -357,7 +394,8 @@ const rutas: Ruta[] = [
             'mismas reglas que la primera. `202 { estado: en_cola }`; el resultado de cada canal llega con el webhook ' +
             '`servicio.bienvenida_cambiada` (`reenvio: true`). Errores: `409 servicio_no_activo`, `429 bienvenida_reciente` ' +
             '(antes de 10 min de la última) y `429 demasiados_reenvios` (más de 3 reenvíos por servicio en el día), los dos ' +
-            'con `Retry-After`. `Idempotency-Key` obligatoria (`iris:bienvenida:<orden_id>:<n>`).',
+            'con `Retry-After`. `Idempotency-Key` obligatoria (`iris:bienvenida:<orden_id>:<n>`). Con el token de Iris ' +
+            '≥ 0.14.3: servicio de otra empresa 404 y sin la marca `bienvenida`, `422 capacidad_no_disponible`.',
         etiqueta: 'servicios',
         permiso: 'servicios.reenviar_bienvenida',
         cuerpo: v.reenviarBienvenidaValidator,
@@ -366,7 +404,9 @@ const rutas: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             exigirActorIris(ctx)
             const id = Number(params.id)
-            await exigirServicio(ctx, id)
+            const reglas = await exigeCapacidades(ctx)
+            const empresaId = await exigirServicioIris(ctx, id, reglas)
+            if (reglas) await exigirCapacidad(empresaId, 'bienvenida')
             return new ReenviarBienvenida().execute({ ...cuerpo, servicio_id: id }, ctx.contextoAccion())
         },
     }),

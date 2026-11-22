@@ -37,12 +37,40 @@ servidor propio) para configurar routers, CPE y Wi-Fi. Iris nunca ve credenciale
 | `GET /servicios/:id/equipo`        | `servicios.ver_equipo`   | Estado en vivo (SmartOLT + GenieACS), lectura de menos de 60 s guardada; asistente: solo lo que permite §12.3                                                    |
 | `POST /servicios/:id/wifi`         | `servicios.cambiar_wifi` | Valida, verifica al titular, tope 3 por día, acepta (`202 { solicitud_id }`)                                                                                     |
 
-Errores: `409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id`),
+Errores: `409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id` e
+`iniciado_por`), `422 capacidad_no_disponible` (0.14.3),
 `409 unidad_en_otra_bodega` (simulando el comodato), `422 equipo_invalido`, `422 wifi_invalido`,
 `422 wifi_no_disponible`, `422 aprovisionamiento_no_disponible`, `422 plan_no_permitido`,
 `409 equipo_sin_gestion` (con `extensions.equipos[]` del inventario en A33, salvo al asistente),
 `503 equipo_sin_respuesta`, `422 verificacion_requerida`, `429 demasiados_cambios_wifi` (`Retry-After`
 hasta la medianoche de Guatemala).
+
+## Contrato Iris 0.14.3 (`capacidades.ts`)
+
+Solo con el token de Iris y un conector con contrato ≥ 0.14.3 (con uno anterior, todo como en la 0.14.2):
+
+- **`capacidades.equipos[]`** en el canje y en `GET /integraciones/iris/estado`: una fila por empresa del
+  token `{ empresa_id, estado_equipo, wifi, bienvenida, cobro_equipo }` (con Iris < 0.9.0, todas en false).
+  `estado_equipo` = SmartOLT o GenieACS probados; `wifi` = GenieACS probado; `bienvenida` = aviso de
+  bienvenida encendido y un canal con plantilla activa y configurado (también decide si notify pide
+  `bienvenida_servicio` con `origen` o `bienvenida`); `cobro_equipo` = el concepto con
+  `codigo_sistema = 'instalacion'` activo (columna de A3).
+- **Orden**: alcance (`exigirServicioIris`: servicio de otra empresa = el 404 de uno que no existe),
+  capacidad (`422 capacidad_no_disponible`, sin `extensions` ni datos de SmartOLT o del ACS) y después
+  los errores de la ruta. Antes de todo eso corre el middleware de idempotencia: una clave guardada con
+  la misma huella devuelve su `2xx` original aunque la marca ya esté en false, y una en curso
+  `409 idempotencia_en_curso`; un `4xx` (también el `422`) no guarda la clave. Lo aplican `GET …/equipo`, `POST …/wifi`, el `wifi` de `aprovisionar`,
+  `…/bienvenida/reenviar` y, en `cargo-unico`, solo las líneas del concepto de instalación.
+- **Unidad del aprovisionamiento** (§12.2): se busca por `unidad_id`, `serie` o `mac` en todo el
+  inventario. Con `tecnico`, vínculo I1 en la empresa (`403 actor_desconocido`) y la unidad en su bodega
+  personal o de cuadrilla (se guarda en `bodega_id` y el comodato sale de ahí al activar, sin volver a
+  mirar el actor: con la orden cerrada lo pide un agente) o ya asignada al servicio; sin `tecnico`, ya
+  asignada. Otro lugar, también otra empresa: `409 unidad_en_otra_bodega` sin decir dónde.
+- **Ajeno**: lo que pide el panel de Argos queda con `origen_tipo: argos_panel` y `origen_id: null`; el
+  `409 aprovisionamiento_en_curso` lleva `iniciado_por` (`argos` | `iris`); `GET /aprovisionamientos/:id`
+  suma `iniciado_por` y al token de Iris le recorta uno que no inició Iris; nunca `instalacion.*` a Iris
+  de un `argos_panel`. Un comodato de Iris de una unidad ya en comodato en ese servicio responde como
+  hecho (`inventario.asignar_comodato`), sin movimiento.
 
 ## Flujo asíncrono (`node ace equipos:worker`, cola BullMQ `equipos`)
 
@@ -75,7 +103,7 @@ servicios.cambiar_wifi ──▶ integraciones.wifi_solicitudes ──▶ equipo
 ## Eventos
 
 **Emite** (por outbox): `instalacion.aprovisionada`, `instalacion.fallida`, `equipo.wifi_resuelto`
-(payloads en `contratos/eventos.md`; a Iris con contrato ≥ 0.9.0). La activación emite además los de
+(payloads en `contratos/eventos.md`; a Iris con contrato ≥ 0.9.0, salvo los de `origen_tipo: argos_panel`). La activación emite además los de
 siempre (`servicio.estado_cambiado`, `asignacion.cambiada`, `inventario.comodato_asignado`…).
 **Consume**: nada. notify consume `equipo.wifi_resuelto` (`aplicado` → aviso al titular
 `equipo.wifi_cambiado`).

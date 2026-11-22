@@ -178,6 +178,8 @@ export const PERMISOS = {
         'Cambiar el total calculado de una factura de periodo emitida a mano, con motivo (junto con facturas.emitir_periodos)',
     'facturas.cargo_sin_costo':
         'Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)',
+    'facturas.leer_origen_iris':
+        'Leer una factura de origen Iris por su número o su DTE, sin pagos ni datos del cliente (solo el token de Iris, contrato Iris 0.14.3 §3)',
     'facturas.configurar_motivos': 'Administrar el catálogo de motivos de facturas en Q0 por empresa',
     'facturas.configurar_conceptos':
         'Administrar el catálogo de conceptos de cargo único por empresa (cuenta de ingreso e IVA)',

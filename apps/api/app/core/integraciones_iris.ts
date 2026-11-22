@@ -47,6 +47,8 @@ export const PERMISOS_IRIS_CONTRATO = [
     // recepción de órdenes de traslado en la app de campo (contrato 0.5.0 §3.3)
     'inventario.recibir_traslado',
     'facturas.emitir_cargo_unico',
+    // 0.14.3 §3: leer la factura de una orden para conciliar un «cobro por confirmar»
+    'facturas.leer_origen_iris',
     // comercial
     'clientes.crear',
     'servicios.crear',
@@ -99,6 +101,14 @@ export const PERMISOS_IRIS_090 = [
     'servicios.cambiar_wifi',
     'servicios.reenviar_bienvenida',
 ] as const satisfies ReadonlyArray<(typeof PERMISOS_IRIS_CONTRATO)[number]>
+
+/**
+ * Permiso que el contrato 0.14.3 sumó al usuario técnico Iris (§3; migración de los tokens vigentes
+ * `1795329374595_create_permisos_iris_0143_s_table`).
+ */
+export const PERMISOS_IRIS_0143 = ['facturas.leer_origen_iris'] as const satisfies ReadonlyArray<
+    (typeof PERMISOS_IRIS_CONTRATO)[number]
+>
 
 /** Permisos que el contrato 0.12.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
 export const PERMISOS_IRIS_0120 = [

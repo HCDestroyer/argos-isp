@@ -10,6 +10,12 @@ import {
 } from '#integraciones/equipos/configuracion'
 import * as smartolt from '#integraciones/equipos/smartolt'
 import * as genieacs from '#integraciones/equipos/genieacs'
+import {
+    capacidadesEquipos,
+    empresasDelTokenIris,
+    type CapacidadEquiposEmpresa,
+} from '#integraciones/equipos/capacidades'
+import { leerFilaIris } from '#integraciones/iris/configuracion'
 
 /**
  * Equipos del cliente (contrato Iris 0.9.0 §12, bloque E: A32, A33 y A35) con SmartOLT (ONU de
@@ -36,11 +42,19 @@ export async function gestionDeEmpresa(
 
 export interface CapacidadesIris {
     aprovisionamiento: Array<{ empresa_id: number; ftth: boolean; wireless: boolean; tr069: boolean }>
+    /** 0.14.3 §4.3: marcas por función, una fila por empresa del token (`#integraciones/equipos/capacidades`) */
+    equipos: CapacidadEquiposEmpresa[]
 }
 
-/** `capacidades` del canje y de `GET /integraciones/iris/estado` (§4.3): una fila por empresa activa. */
+/**
+ * `capacidades` del canje y de `GET /integraciones/iris/estado` (§4.3): `aprovisionamiento` con una fila
+ * por empresa activa y, desde 0.14.3, `equipos` con una fila por empresa del token de Iris. Sin
+ * `opciones`, las empresas y el contrato salen del usuario técnico Iris y del conector guardado; el
+ * canje pasa los suyos (el contrato que acaba de informar Iris y el alcance del token nuevo).
+ */
 export async function capacidadesIris(
     cliente: QueryClientContract = db.connection(),
+    opciones: { empresas?: number[]; contratoIris?: string | null } = {},
 ): Promise<CapacidadesIris> {
     const empresas = (await cliente
         .from('core.empresas')
@@ -54,7 +68,13 @@ export async function capacidadesIris(
             ...(await gestionDeEmpresa(Number(e.id), cliente)),
         })
     }
-    return { aprovisionamiento }
+    const delToken = opciones.empresas ?? (await empresasDelTokenIris(cliente))
+    let contrato = opciones.contratoIris
+    if (contrato === undefined) {
+        const fila = await leerFilaIris(cliente)
+        contrato = fila?.contrato ?? null
+    }
+    return { aprovisionamiento, equipos: await capacidadesEquipos(delToken, contrato, cliente) }
 }
 
 /** Problema con miembros de extensión (RFC 9457) bajo `extensions`. */
@@ -93,15 +113,18 @@ export class EquipoSinRespuesta extends Problema {
     }
 }
 
-/** 409 `aprovisionamiento_en_curso` (§12.2) con `extensions.aprovisionamiento_id`. */
+/**
+ * 409 `aprovisionamiento_en_curso` (§12.2) con `extensions.aprovisionamiento_id` y, desde 0.14.3,
+ * `extensions.iniciado_por` (`argos` | `iris`). Nunca datos del equipo.
+ */
 export class AprovisionamientoEnCurso extends ProblemaConExtensiones {
-    constructor(aprovisionamientoId: number) {
+    constructor(aprovisionamientoId: number, iniciadoPor: 'argos' | 'iris') {
         super(
             409,
             'aprovisionamiento_en_curso',
             'Aprovisionamiento en curso',
             `El servicio ya tiene el aprovisionamiento ${aprovisionamientoId} en curso`,
-            { aprovisionamiento_id: aprovisionamientoId },
+            { aprovisionamiento_id: aprovisionamientoId, iniciado_por: iniciadoPor },
         )
     }
 }

@@ -237,7 +237,10 @@ export default class CanjearEnlaceIris extends DomainAction<
                 ...guardada,
                 panel_url: guardada.panel_url ?? urlPanel(),
                 ...(await versionesIris()),
-                capacidades: await capacidadesIris(t.trx),
+                capacidades: await capacidadesIris(t.trx, {
+                    ...(guardada.empresas ? { empresas: guardada.empresas.map((e) => e.id) } : {}),
+                    contratoIris: input.contrato ?? null,
+                }),
             }
             if (completa.empresas) return completa
             // canje guardado antes de 0.3.1: se completa con el alcance actual del usuario Iris
@@ -313,14 +316,19 @@ export default class CanjearEnlaceIris extends DomainAction<
                 motivo_desconexion: null,
             })
         }
+        const alcance = await empresasDelAlcance(emitido.usuario_id, t.trx)
         const salida: SalidaCanjearEnlaceIris = {
             token: emitido.token,
             webhook: { url: `${enlace.base_url}${RUTA_RECEPTOR_IRIS}`, secreto: secretoEntrada },
             conector_id: despues.conector_id,
-            ...(await empresasDelAlcance(emitido.usuario_id, t.trx)),
+            ...alcance,
             panel_url: urlPanel(),
             ...(await versionesIris()),
-            capacidades: await capacidadesIris(t.trx),
+            // 0.14.3 §4.3: `equipos` por empresa del token nuevo, con el contrato que informa este canje
+            capacidades: await capacidadesIris(t.trx, {
+                empresas: alcance.empresas.map((e) => e.id),
+                contratoIris: input.contrato ?? null,
+            }),
         }
         await t.trx
             .from('integraciones.iris_enlaces')
