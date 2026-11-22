@@ -11,7 +11,7 @@
  * de la sesión es de `/api/v1/portal`, así que el manifiesto no la ve: por eso va el id en la URL
  * (es un dato público, el mismo de los avisos de cobro).
  */
-export const TEMA_MARCA = '#0f766e'
+export const TEMA_MARCA = '#4f46e5'
 
 export interface ManifiestoPwa {
     name: string

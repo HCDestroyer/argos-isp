@@ -24,10 +24,19 @@ const props = withDefaults(defineProps<{
     icono?: string
     descripcion?: string
     tituloOculto?: boolean
+    /** Sin la frase de la sección bajo el título (pantallas cuyo tablero no la lleva, como Clientes). */
+    sinDescripcion?: boolean
+    /** La pantalla pinta su propio encabezado con el `h1` (franja de la ficha del cliente): aquí solo las migas. */
+    encabezadoPropio?: boolean
+    /** Con `encabezadoPropio`: tampoco las migas (la pantalla las pinta dentro de su tarjeta, como el alta de cliente). */
+    sinMigas?: boolean
 }>(), {
     icono: undefined,
     descripcion: undefined,
     tituloOculto: false,
+    sinDescripcion: false,
+    encabezadoPropio: false,
+    sinMigas: false,
 })
 
 /**
@@ -39,7 +48,7 @@ const MIGAS_PROPIAS = [/^\/servicios\/\d+\/facturas-periodo$/]
 const ubicacion = computed(() => (MIGAS_PROPIAS.some(patron => patron.test(route.path)) ? null : ubicacionDeRuta(route.path)))
 const esSeccion = computed(() => ubicacion.value?.seccion.ruta === route.path)
 const encabezado = computed(() => esSeccion.value || props.descripcion !== undefined)
-const descripcionVisible = computed(() => props.descripcion ?? (esSeccion.value ? ubicacion.value?.seccion.descripcion : undefined))
+const descripcionVisible = computed(() => (props.sinDescripcion ? undefined : props.descripcion ?? (esSeccion.value ? ubicacion.value?.seccion.descripcion : undefined)))
 
 const migas = computed<BreadcrumbItem[]>(() => {
     const lista: BreadcrumbItem[] = [{ label: 'Inicio', icon: 'i-lucide-house', to: '/' }]
@@ -103,6 +112,14 @@ const migas = computed<BreadcrumbItem[]>(() => {
             >
                 {{ titulo }}
             </h1>
+            <UBreadcrumb
+                v-else-if="encabezadoPropio && !sinMigas"
+                :items="migas"
+                class="hidden sm:flex"
+                :ui="{ link: 'text-[0.8125rem]', linkLeadingIcon: 'size-3.5' }"
+                data-prueba="migas"
+            />
+            <template v-else-if="encabezadoPropio" />
             <div
                 v-else-if="encabezado"
                 class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"

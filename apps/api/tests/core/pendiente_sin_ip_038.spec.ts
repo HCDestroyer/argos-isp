@@ -3,7 +3,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { estado, usuarioConRoles } from '#tests/ayudas'
 import { limpiarClavesAaa } from '#tests/core/ayudas_aaa'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, ipUnica } from '#tests/core/fabricas'
 import { conActor, tokenIris } from '#tests/core/ayudas_iris_0100'
 import { ejecutarCronCore } from '#core/jobs'
 
@@ -143,7 +143,9 @@ test.group('Pendiente sin IP (A38)', (group) => {
             .insert({
                 nombre: `R-${randomUUID().slice(0, 8)}`,
                 host: '192.0.2.1',
-                nas_ip: `198.51.100.${Math.floor(Math.random() * 250) + 1}`,
+                // nas_ip propia (10.200.x.y): 198.51.100.x es el rango de IP de clientes de las pruebas del
+                // portal, y un router con esa IP las hacía fallar al azar (ip_de_router)
+                nas_ip: ipUnica(),
             })
             .returning('id')
         const { servicio: otroPendiente } = await pendiente(client, token)

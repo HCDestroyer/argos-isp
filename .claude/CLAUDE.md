@@ -149,6 +149,13 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 - Las consultas se filtran por la empresa activa (`ctx.empresaId`, cabecera `X-Empresa-Id`) y el alcance del usuario; el consolidado solo con alcance global.
 - Con una sola empresa el sistema se comporta igual que antes: ninguna prueba ni pantalla cambia.
 
+### 14. Crecimiento horizontal (regla principal del PM)
+
+- El sistema crece agregando servidores, no agrandando uno. Ningún componente puede asumir una sola instancia: API, workers, crons y consumidores corren en varias copias a la vez (locks de BullMQ, claves únicas e idempotencia, nada de estado en memoria compartido entre peticiones).
+- Los servicios pesados o expuestos a la red de los clientes van en su propio servidor y Argos los alcanza por URL con credenciales: FreeRADIUS/`aaa`, `coa`, GenieACS (decisión del PM, 21 nov 2026) y lo que venga.
+- La configuración de un servicio externo es por empresa cuando puede haber más de uno (un ACS, una OLT, una pasarela por empresa); nunca un único global implícito.
+- Archivos y adjuntos en almacenamiento compartido, no en el disco de una instancia.
+
 ## Catálogo de eventos (nombre, payload mínimo)
 
 | Evento | Emite | Payload |

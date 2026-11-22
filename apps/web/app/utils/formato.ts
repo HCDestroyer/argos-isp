@@ -94,3 +94,40 @@ export function formatearQuetzales(monto: string | Decimal | null | undefined): 
     const signo = redondeado.isNegative() && !redondeado.isZero() ? '-' : ''
     return `${signo}Q ${agruparMiles(entero)}.${centavos}`
 }
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/** `2026-12-05` → `5 dic` (contadores de la ficha). Con otro año que el actual, `5 dic 2027`. `—` si no hay fecha. */
+export function formatearFechaCorta(valor: FechaEntrada, hoy: Date = new Date()): string {
+    let anio: number
+    let mes: number
+    let dia: number
+    const soloFecha = typeof valor === 'string' ? SOLO_FECHA.exec(valor) : null
+    if (soloFecha) {
+        anio = Number(soloFecha[1])
+        mes = Number(soloFecha[2])
+        dia = Number(soloFecha[3])
+    }
+    else {
+        const fecha = aDate(valor)
+        if (!fecha) {
+            return '—'
+        }
+        const [d, m, a] = formatoFecha.format(fecha).split('/').map(Number)
+        dia = d!
+        mes = m!
+        anio = a!
+    }
+    const anioHoy = Number(formatoFecha.format(hoy).split('/')[2])
+    return `${dia} ${MESES_CORTOS[mes - 1]}${anio === anioHoy ? '' : ` ${anio}`}`
+}
+
+/** `2023-03-14T…` → `mar 2023` (cliente desde). */
+export function formatearMesAnio(valor: FechaEntrada): string {
+    const fecha = aDate(valor)
+    if (!fecha) {
+        return '—'
+    }
+    const [, mes, anio] = formatoFecha.format(fecha).split('/').map(Number)
+    return `${MESES_CORTOS[mes! - 1]} ${anio}`
+}

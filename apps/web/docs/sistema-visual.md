@@ -170,3 +170,18 @@ AA en claro y oscuro (texto ≥ 4,5:1, componentes ≥ 3:1): primario 600 en cla
 tonos de texto de las métricas mezclados (`--tono-texto`). `prefers-reduced-motion` apaga
 transiciones y el alza de tarjetas; `prefers-reduced-transparency` vuelve sólido el vidrio. Las
 pruebas de axe (`tests/e2e/accesibilidad.spec.ts`) recorren las pantallas principales en ambos temas.
+
+## Clientes (fase 2 del rediseño)
+
+- **Lista** (NuevoClientes): contadores que filtran (`data-contador`), tarjeta con buscador, pestañas
+  «Todos / Al día / Con deuda / Suspendidos» y «Más filtros»; cada fila con «Cobrar» y «⋯» (mismo
+  menú del clic derecho, `useMenuFila().itemsDe`). Vista rápida **flotante** (`VistaRapida`:
+  `USlideover` en recuadro, sin velo ni bloqueo, título y descripción en sus slots para no perder el
+  nombre accesible).
+- **Ficha** (NuevoClienteFicha): `ClienteFranja` fija arriba que se compacta al bajar (centinela con
+  `IntersectionObserver`), contadores con `TarjetaDato`, acciones en círculos flotantes,
+  `PromesaServicioBoton` (la promesa es por servicio), pestañas segmentadas (`UTabs` pill) dentro de
+  la tarjeta y `SeccionSinApi` para lo que la API aún no da. Teléfono: barra fija abajo.
+- **Alta** (NuevoAltaCliente): tarjeta centrada con el progreso de 3 pasos; `ClienteFormulario`
+  con `con-servicio` y `ServicioAltaFormulario` con `pasos-externos`.
+- Tonos de estado para pastillas: `tono-exito`, `tono-aviso`, `tono-error` (además de `tono-marca`).
