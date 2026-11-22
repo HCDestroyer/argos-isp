@@ -238,12 +238,12 @@ contactos=f"""<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
 
 resumen=f'''<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#FEF2F2;border:1px solid #FECACA">
   <span class="i" style="width:38px;height:38px;border-radius:11px;background:#FEE2E2;color:#B91C1C;display:flex;align-items:center;justify-content:center">{s('alerta',19)}</span>
-  <div><b style="color:#991B1B">Servicio suspendido por mora</b><div style="font-size:13px;color:#7F1D1D">2 facturas vencidas desde el 5 oct. Al cobrar o dar promesa se reactiva al instante.</div></div>
-  <button class="btn v" style="margin-left:auto">{s('cob',15)}Cobrar Q 400.00</button><button class="btn o">{s('mano',15)}Promesa</button></div>
+  <div><b style="color:#991B1B">Servicio suspendido por mora</b><div style="font-size:13px;color:#7F1D1D">Corte automático el 8 nov. Al cobrar o dar promesa se reactiva al instante.</div></div>
+  <button class="btn o" style="margin-left:auto">{s('mano',15)}Promesa</button></div>
 <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
-  {widget('cob','#FEE2E2','#B91C1C','Saldo pendiente','Q 400.00','2 facturas','#B91C1C')}
-  {widget('reloj','#FEF3C7','#92400E','Próximo vencimiento','5 dic','factura de diciembre')}
   {widget('ok','#DCFCE7','#166534','Pagado este año','Q 1,800.00','9 pagos a tiempo')}
+  {widget('hist','#F1F5F9','#475569','Cliente desde','mar 2023','3 años y 8 meses')}
+  {widget('mano','#FEF3C7','#92400E','Promesas','1 de 2 cumplida','última incumplida el 15 oct')}
   {widget('wifi','#EEF2FF','#4338CA','Consumo del mes','182 GB','↑ 12 % vs. octubre')}
 </div>
 <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px">
@@ -267,7 +267,7 @@ ff=''
 for num,per,em,ve,tot,sal,cl,ico,est in [('A-1940','Noviembre 2026','1 nov','5 nov','Q 200.00','Q 200.00','er','alerta','Vencida'),('A-1882','Octubre 2026','1 oct','5 oct','Q 200.00','Q 200.00','er','alerta','Vencida'),('A-1820','Septiembre 2026','1 sep','5 sep','Q 200.00','Q 0.00','ok','ok','Pagada'),('A-1761','Agosto 2026','1 ago','5 ago','Q 200.00','Q 0.00','ok','ok','Pagada')]:
     ff+=f'<tr class="fila"><td class="td mono">{num}</td><td class="td">{per}</td><td class="td">{em}</td><td class="td">{ve}</td><td class="td num r">{tot}</td><td class="td num r" style="font-weight:600">{sal}</td><td class="td"><span class="b {cl}">{s(ico,13)}{est}</span></td><td class="td r"><button class="ib" title="Imprimir (carta o POS 80 mm)">{s("imp",16)}</button><button class="ib" title="Anular, nota de crédito, enviar">{s("mas",16)}</button></td></tr>'
 facturas=f'''<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="fc on">Todas</span><span class="fc">Pendientes<span class="c">2</span></span><span class="fc">Pagadas</span><span class="fc">Anuladas</span>
-<div style="margin-left:auto;display:flex;gap:8px"><button class="btn o">{s('hist',15)}Facturas pasadas</button><button class="btn o">{s('mas1',15)}Cargo único</button><button class="btn v">{s('cob',15)}Cobrar Q 400.00</button></div></div>
+<div style="margin-left:auto;display:flex;gap:8px"><button class="btn o">{s('hist',15)}Facturas pasadas</button><button class="btn o">{s('mas1',15)}Cargo único</button></div></div>
 {tabla(['Número','Periodo','Emitida','Vence','>Total','>Saldo','Estado','>'],ff)}'''
 pp=''
 for f,rec,met,mon,fa in [('4 sep 2026','R-0911','Efectivo · Caja 1','Q 200.00','A-1820'),('3 ago 2026','R-0850','Depósito Banrural','Q 200.00','A-1761'),('2 jul 2026','R-0797','Pago en línea','Q 200.00','A-1702')]:
@@ -308,23 +308,25 @@ datos=f'''<div class="card" style="position:absolute;right:0;top:calc(100% + 8px
   <div class="kv"><span>NIT</span><span class="copy">4521873-K</span></div>
   <div class="kv"><span>{s('mapa',14)} Dirección</span><span>Zona 3, casa 14</span></div>
   <div style="height:70px;margin-top:8px;border-radius:10px;background:repeating-linear-gradient(45deg,#EEF2FF 0 10px,#F8FAFC 10px 20px);display:flex;align-items:center;justify-content:center;color:#4338CA;font-size:12px;font-weight:600">{s('mapa',15)} Ver en el mapa</div></div>'''
-cab=f'''<section class="isla" style="border-radius:22px;padding:{{{{cabPad}}}};display:flex;align-items:center;gap:14px;position:relative;transition:padding .2s">
+cab=f'''<section class="isla" style="border-radius:22px;padding:{{{{cabPad}}}};display:flex;flex-wrap:nowrap;align-items:center;gap:14px;position:relative;transition:padding .2s">
   <div class="av" style="width:{{{{avT}}}};height:{{{{avT}}}};border-radius:16px;font-size:18px;background:#CFFAFE;color:#0E7490">JL</div>
-  <div style="min-width:0">
+  <div style="min-width:0;flex:0 1 auto">
     <div style="display:flex;align-items:center;gap:8px"><b style="font-size:{{{{nomT}}}};white-space:nowrap">José López</b><span class="b er">{s('alerta',13)}Suspendido</span></div>
     <div style="display:{{{{meta}}}};font-size:13px;color:#64748B;gap:12px;margin-top:3px;white-space:nowrap"><span>CLI-00412</span><span>{s('tel',13)} 5555-8890</span><span>{s('mapa',13)} Norte</span></div>
   </div>
-  <div style="display:flex;gap:8px;margin-left:12px">
+  <div style="display:flex;gap:8px;margin-left:12px;min-width:0;flex:0 1 auto;overflow:hidden">
     <div class="stat" style="background:#FEF2F2;border-color:#FECACA"><span class="ic" style="background:#FEE2E2;color:#B91C1C">{s('cob',17)}</span><div><div class="l">Saldo</div><b class="num" style="color:#B91C1C">Q 400.00</b><small style="display:{{{{meta}}}}">2 facturas vencidas</small></div></div>
-    <div class="stat" style="display:{{{{metaF}}}}"><span class="ic" style="background:#FEF3C7;color:#92400E">{s('reloj',17)}</span><div><div class="l">Próximo vencimiento</div><b>5 dic</b><small>Q 400.00</small></div></div>
+    <div class="stat" style="display:{{{{metaF}}}}"><span class="ic" style="background:#FEF3C7;color:#92400E">{s('reloj',17)}</span><div><div class="l">Próximo vencimiento</div><b>5 dic</b><small>factura de diciembre</small></div></div>
     <div class="stat" style="display:{{{{metaF}}}}"><span class="ic" style="background:#EEF2FF;color:#4338CA">{s('wifi',17)}</span><div><div class="l">Servicios</div><b>2 suspendidos</b><small>Q 400.00 / mes</small></div></div>
   </div>
-  <div style="margin-left:auto;display:flex;gap:8px;align-items:center;position:relative">
-    <button class="btn v">{s('cob',15)}Cobrar</button>
-    <button class="ib" title="Promesa de pago" style="border:1px solid #E2E8F0;border-radius:999px;width:38px;height:38px">{s('mano',16)}</button>
-    <button class="ib" title="Abrir ticket" style="border:1px solid #E2E8F0;border-radius:999px;width:38px;height:38px">{s('ticket',16)}</button>
-    <button class="ib" title="Ver datos del cliente" onClick="{{{{alternarDatos}}}}" style="border:1px solid #E2E8F0;border-radius:999px;width:38px;height:38px;background:{{{{datosBg}}}}">{s('cli',16)}</button>
-    <button class="ib" title="Mensaje, estado de cuenta, editar, retirar" style="border:1px solid #E2E8F0;border-radius:999px;width:38px;height:38px">{s('mas',16)}</button>
+  <div style="margin-left:auto;display:flex;flex:0 0 auto;gap:8px;align-items:center;position:relative">
+    <button class="btn v">{s('cob',15)}Cobrar <span class="num">Q 400.00</span></button>
+    <button class="btn o" aria-haspopup="menu" onClick="{{{{alternarMenu}}}}" style="background:{{{{menuBg}}}}">{s('mas',15)}Más{s('ab',14)}</button>
+    <div class="card" role="menu" style="position:absolute;right:0;top:calc(100% + 8px);width:250px;padding:6px;box-shadow:0 20px 50px rgba(15,23,42,.18);z-index:6;display:{{{{verMenu}}}}">
+      <div class="mcap">Cobro</div><button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('mano',15)}Promesa de pago</button><button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('fac',15)}Nueva factura</button>
+      <div class="mcap">Cliente</div><button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('mas1',15)}Nuevo servicio</button><button class="mi" role="menuitem" onClick="{{{{alternarDatos}}}}" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('cli',15)}Ver datos del cliente</button><button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('editar',15)}Editar cliente</button><button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('ticket',15)}Abrir ticket</button><button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;">{s('doc',15)}Estado de cuenta</button>
+      <button class="mi" role="menuitem" style="width:100%;border:0;background:transparent;font-family:inherit;text-align:left;color:#B91C1C;border-top:1px solid #F1F5F9;margin-top:4px">{s('cerrar',15)}Retirar cliente…</button>
+    </div>
     {datos}
   </div>
 </section>'''
@@ -341,7 +343,7 @@ ficha=f'''{rail('dia')}
     </div>
   </section>
 </main>
-<div style="position:absolute;right:28px;bottom:28px;max-width:360px;background:#0F172A;color:#E2E8F0;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;z-index:7"><b style="color:#fff">Ficha compacta.</b> El cliente ocupa una franja; sus datos se abren con el ícono de persona. Pestañas segmentadas en la misma tarjeta que su contenido, fijas arriba al bajar. Contadores con ícono y contexto. Al bajar, la franja se encoge a nombre, estado, saldo y Cobrar (prueba «Simular desplazamiento»).</div>'''
+<div style="position:absolute;right:28px;bottom:28px;max-width:360px;background:#0F172A;color:#E2E8F0;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;z-index:7"><b style="color:#fff">Ficha compacta.</b> Una sola fila: identidad, contadores y acciones. El saldo aparece una sola vez, en su contador y en «Cobrar Q 400.00»; el resto va en «Más». Pestañas segmentadas en la misma tarjeta que su contenido, fijas arriba al bajar. Contadores con ícono y contexto. Al bajar, la franja se encoge a nombre, estado, saldo y Cobrar (prueba «Simular desplazamiento»).</div>'''
 logic='''class Component extends DCLogic {
 renderVals() {
 const tabs = %s;
@@ -360,8 +362,10 @@ return {
   tgClase: c ? 'on' : '',
   alternar: () => this.setState({ compacto: !c }),
   verDatos: st.datos ? 'block' : 'none',
-  datosBg: st.datos ? '#EEF2FF' : 'transparent',
-  alternarDatos: () => this.setState({ datos: !st.datos }),
+  alternarDatos: () => this.setState({ datos: !st.datos, menu: false }),
+  verMenu: st.menu ? 'block' : 'none',
+  menuBg: st.menu ? '#EEF2FF' : '#fff',
+  alternarMenu: () => this.setState({ menu: !st.menu, datos: false }),
   tabs: tabs.map((t) => ({ ...t, clase: t.id === act ? 'on' : '', vc: t.n ? 'inline' : 'none', ir: () => this.setState({ tab: t.id }) }))
 };
 }
@@ -376,7 +380,7 @@ mv={
 'resumen':f'''<div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:#FEF2F2;border:1px solid #FECACA;font-size:13px;color:#7F1D1D">{s('alerta',18,'#B91C1C')}<span><b>Suspendido por mora.</b> Al cobrar o dar promesa se reactiva al instante.</span></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
 <div class="kpi"><div class="l">{s('hist',13)}Cliente desde</div><b>mar 2023</b></div>
-<div class="kpi"><div class="l">{s('reloj',13)}Próximo</div><b>5 dic</b></div>
+<div class="kpi"><div class="l">{s('mano',13)}Promesas</div><b>1 de 2</b></div>
 <div class="kpi"><div class="l">{s('ok',13)}Pagado 2026</div><b class="num">Q 1,800</b></div>
 <div class="kpi"><div class="l">{s('wifi',13)}Consumo</div><b>182 GB</b></div></div>
 {tarjeta('Servicios',fila('wifi','#EEF2FF','#4338CA','Internet hogar','50 Mbps · 10.20.4.18','', '<div><span class="b er">Suspendido</span></div>')+fila('wifi','#EEF2FF','#4338CA','Cámaras','20 Mbps · 10.20.4.77','','<div><span class="b er">Suspendido</span></div>'))}
@@ -400,8 +404,8 @@ movil=f'''<div style="position:absolute;inset:0;display:flex;flex-direction:colu
     <section class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
       <div style="display:flex;align-items:center;gap:10px"><div class="av" style="width:44px;height:44px;border-radius:14px;background:#CFFAFE;color:#0E7490">JL</div><div style="min-width:0;flex:1"><b style="font-size:16px;display:block">José López</b><span style="font-size:12px;color:#64748B">CLI-00412 · Norte · 5555-8890</span></div><span class="b er">{s('alerta',13)}Suspendido</span></div>
       <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px">
-        <div style="background:#FEF2F2;border-radius:12px;padding:8px 10px"><div style="font-size:11px;color:#991B1B">Debe</div><b class="num" style="color:#B91C1C;font-size:16px">Q 400</b></div>
-        <div style="background:#F8FAFC;border-radius:12px;padding:8px 10px"><div style="font-size:11px;color:#64748B">Vencidas</div><b style="font-size:16px">2</b></div>
+        <div style="background:#FEF2F2;border-radius:12px;padding:8px 10px"><div style="font-size:11px;color:#991B1B">Vencidas</div><b style="color:#B91C1C;font-size:16px">2 facturas</b></div>
+        <div style="background:#F8FAFC;border-radius:12px;padding:8px 10px"><div style="font-size:11px;color:#64748B">Próximo</div><b style="font-size:16px">5 dic</b></div>
         <div style="background:#F8FAFC;border-radius:12px;padding:8px 10px"><div style="font-size:11px;color:#64748B">Servicios</div><b style="font-size:16px">2</b></div>
       </div>
     </section>

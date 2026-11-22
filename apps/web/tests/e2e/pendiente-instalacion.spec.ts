@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { accionCliente, elegirRouter, entrar, ir } from './ayudas'
 
 /**
  * Servicio pendiente de instalación (`contratos/instalacion.md`, pedido A1 de Iris): el
@@ -21,10 +21,10 @@ test('alta pendiente de instalación y activación con planta', async ({ page })
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
 
     // El alta del servicio se abre en un panel lateral de la ficha: no se sale del cliente.
-    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    await accionCliente(page, 'Nuevo servicio')
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
-    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
+    await elegirRouter(page, 'RB-Centro')
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     for (let i = 0; i < 2; i++) {
         await alta.getByRole('button', { name: 'Siguiente' }).click()
