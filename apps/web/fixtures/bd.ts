@@ -52,6 +52,7 @@ import { nodosPortal } from './nodosPortal/datos'
 import { portalCorteInicial } from './portalCorte/datos'
 import { portalContrasenasIniciales, type PortalContrasenasFixture } from './portalContrasena/datos'
 import { contactosIniciales } from './contactos/datos'
+import { fotosIniciales, revisionesIniciales, servicioPendienteTitular, type FotosRevision } from './titularesEmpresa/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
 import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDatos'
@@ -217,6 +218,9 @@ interface BaseFixtures {
     portalContrasenas: PortalContrasenasFixture
     /** Contactos de los clientes (A1, #281). */
     contactos: Schema<'ContactoCliente'>[]
+    /** Revisiones de cambio de titular a una empresa (Iris 0.14.1, A1) y las fotos del representante. */
+    revisionesTitularEmpresa: Schema<'RevisionTitularEmpresaDetalle'>[]
+    fotosTitularEmpresa: Record<number, FotosRevision>
     /** Catálogo de campos personalizados del cliente (A1). */
     camposPersonalizados: Schema<'CampoPersonalizado'>[]
     /** Inventario interno (A3, `contratos/inventario.md`): productos, bodegas, kardex, unidades y conteos. */
@@ -421,6 +425,8 @@ function inicial(): BaseFixtures {
         portalCorte: portalCorteInicial(),
         portalContrasenas: portalContrasenasIniciales(),
         contactos: contactosIniciales(),
+        revisionesTitularEmpresa: [],
+        fotosTitularEmpresa: {},
         camposPersonalizados,
         productos: productosIniciales,
         bodegas: bodegasIniciales,
@@ -502,6 +508,11 @@ function inicial(): BaseFixtures {
         diferimientos: diferimientosIniciales(),
     })
     sembrarServidoresServicios(datos.servicios, datos.redAcceso, datos.redesIpv4)
+    // Iris 0.14.1: el servicio por instalar cuyo cambio de titular a empresa quedó en revisión.
+    const pendienteTitular = servicioPendienteTitular(datos.servicios)
+    datos.servicios.push(pendienteTitular)
+    datos.revisionesTitularEmpresa = revisionesIniciales(pendienteTitular.id)
+    datos.fotosTitularEmpresa = fotosIniciales()
     sembrarNotasCredito(datos)
     sembrarFel(datos)
     // Fase 4: pagos con proveedor de cobro (anticipos), sus asientos y las cuentas nuevas.

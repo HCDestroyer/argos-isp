@@ -32,7 +32,7 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
     await tabla.getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
     await pestanaRouter(page, 'Avanzado')
-    await expect(page.locator('[data-prueba="no-eliminable"]')).toContainText('No se puede eliminar: tiene 22 servicios y 41 sesiones PPPoE. Puedes desactivarlo.')
+    await expect(page.locator('[data-prueba="no-eliminable"]')).toContainText('No se puede eliminar: tiene 23 servicios y 41 sesiones PPPoE. Puedes desactivarlo.')
     await expect(page.locator('[data-prueba="eliminar-router"]')).toHaveCount(0)
     await page.locator('[data-prueba="cambiar-activo-router"]').click()
     await page.getByRole('dialog', { name: /Desactivar RB-Centro/ }).locator('[data-prueba="confirmar-activo-router"]').click()

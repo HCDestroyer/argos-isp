@@ -14216,6 +14216,15 @@ export interface components {
             responsable_pago_id: number | null;
             /** @description Nombre del responsable de pago (solo lectura) */
             responsable_pago_nombre: string | null;
+            /**
+             * Format: date-time
+             * @description Cuándo una persona del panel confirmó el NIT (`POST /clientes/:id/verificar-nit`, Iris 0.14.1); null sin verificar. Se borra sola al cambiar `nit_cui`
+             */
+            nit_verificado_en: string | null;
+            /** @description Usuario de Argos que verificó el NIT; null sin verificar */
+            nit_verificado_por: number | null;
+            /** @description Nombre de quien verificó el NIT (solo lectura) */
+            nit_verificado_por_nombre: string | null;
             /** @description Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta */
             referido_por_id: number | null;
             /** @description Empresa (NIT) en la que cuenta el referido: la del código usado */

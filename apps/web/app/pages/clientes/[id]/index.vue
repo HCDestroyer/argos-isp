@@ -257,6 +257,28 @@ const consumidorFinal = computed(() => cliente.value?.tipo_documento_fiscal === 
 /** Tipo de documento (A1 lo envía siempre; clientes de fixtures viejos: se deduce del número). */
 const tipoDocumento = computed(() => cliente.value?.tipo_documento_fiscal ?? deducirTipoDocumento(cliente.value?.nit_cui))
 
+/** Estado del NIT (Iris 0.14.1): en las empresas con NIT, o si ya está verificado. */
+const muestraNitVerificado = computed(() => !!cliente.value && !consumidorFinal.value && !!cliente.value.nit_cui
+    && (cliente.value.tipo === 'empresa' || cliente.value.nit_verificado_en !== null))
+
+/** Vuelve a leer solo el cliente (tras verificar el NIT o un 409); un error se ve en un aviso. */
+async function recargarCliente() {
+    const resultado = await useClientes().ver(clienteId.value)
+    if (resultado.ok) {
+        cliente.value = resultado.data
+        return
+    }
+    toast.add({ title: 'No se pudo volver a leer el cliente', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+}
+
+async function alVerificarNit(resultado: NitVerificado) {
+    if (cliente.value) {
+        // Mientras se vuelve a leer, la marca ya se ve (la versión nueva evita un 409 al editar).
+        cliente.value = { ...cliente.value, nit_verificado_en: resultado.nit_verificado_en, nit_verificado_por: resultado.nit_verificado_por, version: resultado.version }
+    }
+    await recargarCliente()
+}
+
 async function cargarServicios() {
     if (!puede('servicios.ver')) {
         return
@@ -604,6 +626,13 @@ onMounted(cargar)
                     icon="i-lucide-info"
                     :title="consumidorFinal ? 'Consumidor final' : 'Sin NIT registrado'"
                     description="Los avisos de cobro salen a nombre de Consumidor Final (CF)."
+                />
+                <!-- Iris 0.14.1: el NIT de una empresa lo confirma una persona del panel. -->
+                <ClienteNitVerificado
+                    v-if="muestraNitVerificado"
+                    :cliente="cliente"
+                    @verificado="alVerificarNit"
+                    @recargar="recargarCliente"
                 />
                 <dl class="surface-card grid gap-x-8 gap-y-5 p-4 sm:grid-cols-2 sm:p-6">
                     <DatoFicha

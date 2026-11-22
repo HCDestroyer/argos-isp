@@ -498,6 +498,10 @@ const ICONOS_ACCION: Record<string, string> = {
     reconexion_temporal: 'i-lucide-plug-zap',
     cancelar_reconexion: 'i-lucide-plug-zap',
     verificar_identidad: 'i-lucide-shield-check',
+    ver_identidad: 'i-lucide-eye',
+    verificar_nit: 'i-lucide-badge-check',
+    aprobar_titular_empresa: 'i-lucide-circle-check',
+    rechazar_titular_empresa: 'i-lucide-circle-x',
     registrar_consentimiento: 'i-lucide-message-circle',
 }
 
@@ -588,8 +592,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     ticket_iris: { etiqueta: 'Ticket en Iris' },
     solicitud_iris: { etiqueta: 'Solicitud de servicio en Iris' },
     contacto_cliente: { etiqueta: 'Contacto del cliente' },
-    // Iris 0.14.1: revisión de un cambio de titular a empresa (la pantalla la hace A4)
-    titular_empresa_revision: { etiqueta: 'Revisión de titular empresa' },
+    // Iris 0.14.1: revisión de un cambio de titular a empresa (pantalla «Revisión de titulares»)
+    titular_empresa_revision: { etiqueta: 'Revisión de titular empresa', ruta: id => `/clientes/titulares/${id}` },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */
@@ -651,6 +655,13 @@ function estadoDestino(entrada: unknown): EstadoServicio | null {
  * dice a qué estado pasó: "Servicio suspendido", "Servicio activo".
  */
 export function tituloAccion(accion: Accion): string {
+    // Iris 0.14.1: la misma acción lee la identidad de un cliente o el representante de una revisión.
+    if (accion.accion === 'clientes.ver_identidad' && accion.entidad_tipo === 'titular_empresa_revision') {
+        const parte = typeof accion.entrada === 'object' && accion.entrada !== null && 'parte' in accion.entrada ? accion.entrada.parte : null
+        return parte === 'frente' || parte === 'reverso'
+            ? `Foto del documento del representante consultada (${parte})`
+            : 'Revisión de titular empresa consultada'
+    }
     if (accion.accion === 'servicios.cambiar_estado') {
         const estado = estadoDestino(accion.entrada)
         if (estado) {

@@ -52,15 +52,11 @@ export default class EditarCliente extends DomainAction<EntradaEditarCliente, Cl
                 [`{${cambiaNumero.join(',')}}`],
             )
         }
-        const verificadoAntes = await nitVerificado(t, id)
         await actualizarConVersion(t.trx, 'core.clientes', id, version, columnas)
         const despues = await verCliente(id, t.trx)
+        // Iris 0.14.1: un NIT que cambia deja de estar verificado (trigger `core.borrar_nit_verificado`);
+        // `nit_verificado_en` y `nit_verificado_por` vienen en la vista, así que el diff los registra
         await t.registrarCambios({ tipo: 'cliente', id }, antes, despues)
-        // Iris 0.14.1: un NIT que cambia deja de estar verificado (trigger `core.borrar_nit_verificado`)
-        const verificadoDespues = await nitVerificado(t, id)
-        if (String(verificadoAntes.nit_verificado_en) !== String(verificadoDespues.nit_verificado_en)) {
-            await t.registrarCambios({ tipo: 'cliente', id }, verificadoAntes, verificadoDespues)
-        }
         const campos = CAMPOS_CLIENTE_ACTUALIZADO.filter((campo) => antes[campo] !== despues[campo])
         if (campos.length > 0) await t.emit('cliente.actualizado', { cliente_id: id, campos })
         // §3.8 (ajuste am): los vínculos de contactos de otros clientes que eran esta persona por su número
@@ -69,15 +65,4 @@ export default class EditarCliente extends DomainAction<EntradaEditarCliente, Cl
         }
         return despues
     }
-}
-
-async function nitVerificado(
-    t: Transaccion,
-    id: number,
-): Promise<{ nit_verificado_en: Date | null; nit_verificado_por: number | null }> {
-    return (await t.trx
-        .from('core.clientes')
-        .where('id', id)
-        .select('nit_verificado_en', 'nit_verificado_por')
-        .first()) as { nit_verificado_en: Date | null; nit_verificado_por: number | null }
 }
