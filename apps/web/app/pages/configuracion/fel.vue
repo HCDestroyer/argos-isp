@@ -368,13 +368,7 @@ onMounted(() => {
                                     :icon="configuracion.contingencia_activa ? 'i-lucide-cloud-off' : 'i-lucide-circle-check'"
                                     :title="configuracion.contingencia_activa ? `En contingencia desde ${configuracion.contingencia_desde ? formatearFechaHora(configuracion.contingencia_desde) : '—'}` : 'Sin contingencia: los documentos se certifican al emitirse.'"
                                     :description="configuracion.contingencia_motivo ? `${configuracion.contingencia_activa ? 'Motivo' : 'Último motivo'}: ${configuracion.contingencia_motivo}` : undefined"
-                                />
-                                <UBadge
-                                    :label="configuracion.contingencia_activa ? 'Activa' : 'Inactiva'"
-                                    :icon="configuracion.contingencia_activa ? 'i-lucide-cloud-off' : 'i-lucide-cloud'"
-                                    :color="configuracion.contingencia_activa ? 'warning' : 'success'"
-                                    variant="subtle"
-                                    class="sr-only"
+                                    :data-activa="configuracion.contingencia_activa"
                                     data-prueba="contingencia-estado"
                                 />
                                 <p class="text-xs text-muted">
