@@ -415,3 +415,18 @@ levanta el portal en modo fixtures y pasa axe (WCAG 2.1 A/AA, contraste incluido
 en claro y oscuro, a 390 px y 1280 px. Dependencias de desarrollo: `@playwright/test` 1.56.1 y
 `@axe-core/playwright` 4.11.0 (las mismas versiones que `apps/web`). `?cuenta=dos_empresas` se
 recuerda en la pestaña (`sessionStorage`) para que siga después de entrar con el código.
+
+## Fotos y documentos que sube el cliente
+
+`utils/fotos.ts` (`prepararArchivo`) prepara cada archivo antes de subirlo, en los adjuntos de tickets
+(`components/soporte/Adjuntos.vue`, van a Iris, contrato 0.14.2 §11.6) y en el comprobante de pago
+(`components/comprobante/Subir.vue`, va a A3):
+
+- JPEG, PNG y PDF pasan sin tocar; un JPEG o PNG que pasa del tope del endpoint (10 MB tickets, 5 MB
+  comprobantes) se reescala a JPEG.
+- Cualquier otra foto (HEIC del iPhone, WebP, AVIF…) se convierte a JPEG en el navegador con canvas:
+  calidad 0,85, lado mayor ≤ 2560 px, sin EXIF, con `createImageBitmap` y, si falla, `<img>`.
+- Si el navegador no puede leerla (HEIC en Chrome o Android), no se adjunta y se muestra «No pudimos leer
+  esta foto. Tómala de nuevo o elige otra en JPG o PNG.».
+- `accept="image/jpeg,image/png,application/pdf"`: con tipos concretos, Safari en iOS entrega la foto HEIC
+  de la galería ya en JPEG. Mientras convierte, «Preparando la foto…» y el envío queda deshabilitado.
