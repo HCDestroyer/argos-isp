@@ -5,7 +5,7 @@ import Decimal from 'decimal.js'
  * Portal con sesión: el "dashboard" del cliente, pensado para el teléfono.
  *
  * - Encabezado compacto con el total y el estado más urgente; "Actualizar" y jalar para actualizar.
- * - Secciones en la URL (`?seccion=inicio|pagar|facturas|puntos|sorteos|cuenta`, `utils/navegacion.ts`;
+ * - Secciones en la URL (`?seccion=inicio|pagar|facturas|soporte|puntos|sorteos|cuenta`; «Soporte» solo con Iris, `utils/navegacion.ts`;
  *   «Puntos» solo con el programa visible en el portal; «Sorteos», desde el aviso del carrusel)
  *   con la barra inferior del layout en el teléfono y la barra superior en escritorio.
  * - Inicio: accesos rápidos (`utils/accesos.ts`: solo lo que la API aceptaría ahora) y los
@@ -24,6 +24,17 @@ const { condiciones: leerCondiciones } = useSolicitudPromesa()
 const telegram = useTelegram()
 
 const seccion = computed(() => seccionDeLaRuta(route.query.seccion))
+const { disponible: soporteDisponible } = useSoporte()
+const { visible: puntosVisibles } = usePuntos()
+
+/** Pestañas segmentadas de «Facturas y pagos»: cada una es su `?seccion=` (Atrás vuelve a la anterior). */
+const PESTANAS_FACTURAS = [
+    { label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt' },
+    { label: 'Pagar', value: 'pagar', icon: 'i-lucide-credit-card' },
+]
+function irAPestana(valor: string | number) {
+    void navigateTo(`/cuenta?seccion=${valor}`)
+}
 
 // Solo la primera carga muestra el esqueleto; una recarga (p. ej. tras vincular Telegram) no lo hace.
 const cargando = computed(() => !resultado.value && (status.value === 'idle' || status.value === 'pending'))
@@ -179,9 +190,10 @@ function usarGrupo(grupo: GrupoEmpresa | null) {
     }
 }
 const estadoGeneral = computed(() => estadoMasUrgente(cuenta.value?.servicios ?? []))
+/** La factura pendiente más urgente (banner del inicio). */
+const proxima = computed(() => cuenta.value ? proximoVencimiento(cuenta.value) : null)
 
 const verPromesa = ref(false)
-const verComprobante = ref(false)
 const verDeposito = ref(false)
 const servicioPromesa = ref<number | undefined>(undefined)
 const promesa = ref<PromesaSolicitada | null>(null)
@@ -202,7 +214,7 @@ function alAcceso(grupo: GrupoEmpresa, accion: NonNullable<AccesoRapido['accion'
         void navigateTo('/cuenta?seccion=pagar')
     }
     else if (accion === 'comprobante') {
-        verComprobante.value = true
+        void navigateTo(rutaComprobante(servicioComprobante.value, empresaModal.value))
     }
     else if (accion === 'deposito') {
         verDeposito.value = true
@@ -294,6 +306,9 @@ watch(() => route.hash, async (hash) => {
                 :monto-adeudado="cuenta.monto_adeudado"
                 :estado="estadoGeneral"
                 :actualizando="actualizando"
+                :destacado="seccion === 'inicio'"
+                :proxima="proxima ? proxima.factura : null"
+                :vencidas="proxima?.vencidas ?? 0"
                 @actualizar="actualizar"
             />
 
@@ -338,141 +353,201 @@ watch(() => route.hash, async (hash) => {
                         :actions="[{ label: 'Cómo reactivar mi servicio', icon: 'i-lucide-wifi', color: 'neutral', variant: 'outline', to: '/corte' }]"
                         data-testid="aviso-reactivar"
                     />
-                    <CuentaInicioEmpresa
-                        v-for="(grupo, indice) in grupos"
-                        :key="grupo.clave"
-                        :grupo="grupo"
-                        :mostrar-marca="variasEmpresas"
-                        :telegram="telegramDelGrupo(grupo, indice)"
-                        :ruta-telegram="rutaTelegramDelGrupo(grupo)"
-                        :promesa-por-servicio="promesaPorServicio"
-                        @accion="alAcceso(grupo, $event)"
-                        @pedir-promesa="pedirPromesa"
-                    />
-                    <PuntosResumen />
-                    <PromoPromociones lugar="portal_inicio" />
+                    <!--
+                        El saldo y el vencimiento van una sola vez, en el banner (pedido del PM); el
+                        servicio, en su tarjeta. Aquí solo los puntos, si el programa está visible.
+                    -->
+                    <div
+                        v-if="puntosVisibles"
+                        class="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3"
+                        data-testid="indicadores"
+                    >
+                        <PuntosResumen />
+                    </div>
+                    <!-- Escritorio: servicios y accesos a la izquierda, lo último a la derecha. -->
+                    <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+                        <div class="flex min-w-0 flex-col gap-6 lg:col-span-2">
+                            <CuentaInicioEmpresa
+                                v-for="(grupo, indice) in grupos"
+                                :key="grupo.clave"
+                                :grupo="grupo"
+                                :mostrar-marca="variasEmpresas"
+                                :telegram="telegramDelGrupo(grupo, indice)"
+                                :ruta-telegram="rutaTelegramDelGrupo(grupo)"
+                                :promesa-por-servicio="promesaPorServicio"
+                                @accion="alAcceso(grupo, $event)"
+                                @pedir-promesa="pedirPromesa"
+                            />
+                            <SoporteSolicitarServicio v-if="soporteDisponible" />
+                        </div>
+                        <aside
+                            class="flex min-w-0 flex-col gap-6"
+                            aria-label="Lo último de tu cuenta"
+                        >
+                            <CuentaACargo />
+                            <CuentaRecientes :key="`recientes-${recargas}`" />
+                            <PromoPromociones lugar="portal_inicio" />
+                        </aside>
+                    </div>
                 </div>
 
-                <div
-                    v-else-if="seccion === 'pagar'"
-                    key="pagar"
-                    class="flex flex-col gap-6"
-                    data-testid="seccion-pagar"
+                <section
+                    v-else-if="seccion === 'pagar' || seccion === 'facturas'"
+                    key="facturas-y-pagos"
+                    class="ax-tarjeta flex flex-col gap-4 p-3 sm:p-5"
+                    aria-labelledby="titulo-facturas-y-pagos"
+                    data-testid="seccion-facturas-y-pagos"
                 >
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-pagar"
-                    >
+                    <!-- «Facturas y pagos» (diseño aprobado): pestañas segmentadas dentro de la misma tarjeta. -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <PortalPastilla icono="i-lucide-receipt" />
                         <h2
-                            id="titulo-pagar"
-                            class="text-lg font-semibold text-highlighted"
+                            id="titulo-facturas-y-pagos"
+                            class="min-w-0 flex-1 text-lg font-semibold text-highlighted"
                         >
-                            Pagar
+                            Facturas y pagos
                         </h2>
-                        <UCard v-if="servicioPago !== undefined">
-                            <div class="flex flex-col gap-3">
-                                <UFormField
-                                    v-if="opcionesPago.length > 1"
-                                    label="¿Qué servicio quieres pagar en línea?"
+                    </div>
+                    <UTabs
+                        :model-value="seccion"
+                        :items="PESTANAS_FACTURAS"
+                        :content="false"
+                        variant="pill"
+                        color="neutral"
+                        class="w-full"
+                        data-testid="pestanas-facturas"
+                        @update:model-value="irAPestana"
+                    />
+                    <div
+                        v-if="seccion === 'pagar'"
+                        class="ax-en-tarjeta grid gap-6 lg:grid-cols-2 lg:items-start"
+                        data-testid="seccion-pagar"
+                    >
+                        <!-- Escritorio: pagar y promesas a la izquierda; comprobantes y pagos a la derecha. -->
+                        <div class="flex min-w-0 flex-col gap-6">
+                            <section
+                                class="flex flex-col gap-3"
+                                aria-labelledby="titulo-pagar"
+                            >
+                                <h3
+                                    id="titulo-pagar"
+                                    class="sr-only"
                                 >
-                                    <USelect
-                                        :model-value="servicioPago"
-                                        :items="opcionesPago"
-                                        class="w-full"
-                                        data-testid="servicio-a-pagar"
-                                        @update:model-value="servicioElegido = Number($event)"
+                                    Pagar
+                                </h3>
+                                <div
+                                    v-if="servicioPago !== undefined"
+                                    class="flex flex-col gap-3"
+                                >
+                                    <UFormField
+                                        v-if="opcionesPago.length > 1"
+                                        label="¿Qué servicio quieres pagar en línea?"
+                                    >
+                                        <USelect
+                                            :model-value="servicioPago"
+                                            :items="opcionesPago"
+                                            class="w-full"
+                                            data-testid="servicio-a-pagar"
+                                            @update:model-value="servicioElegido = Number($event)"
+                                        />
+                                    </UFormField>
+                                    <PagoEnLinea
+                                        :servicio-id="servicioPago"
+                                        :empresa-id="grupoPago?.empresa.id"
+                                        id-ayuda="pagar-en-linea-ayuda-cuenta"
                                     />
-                                </UFormField>
-                                <PagoEnLinea
-                                    :servicio-id="servicioPago"
-                                    :empresa-id="grupoPago?.empresa.id"
-                                    id-ayuda="pagar-en-linea-ayuda-cuenta"
+                                </div>
+                                <p
+                                    v-else
+                                    class="text-sm text-muted"
+                                    data-testid="sin-saldo"
+                                >
+                                    No tienes saldo pendiente.
+                                </p>
+                                <UButton
+                                    v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
+                                    :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
+                                    icon="i-lucide-landmark"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="lg"
+                                    block
+                                    data-testid="deposito-pagar"
+                                    @click="usarGrupo(grupoPago); verDeposito = true"
                                 />
-                            </div>
-                        </UCard>
-                        <p
-                            v-else
-                            class="text-sm text-muted"
-                            data-testid="sin-saldo"
+                            </section>
+                            <section
+                                class="flex flex-col gap-3"
+                                aria-labelledby="titulo-promesas"
+                            >
+                                <h3
+                                    id="titulo-promesas"
+                                    class="flex items-center gap-1 text-sm font-semibold text-highlighted"
+                                >
+                                    Promesas de pago
+                                    <PortalAyuda clave="promesa" />
+                                </h3>
+                                <CuentaPromesas :key="`promesas-${recargas}`" />
+                            </section>
+                        </div>
+                        <div class="flex min-w-0 flex-col gap-6">
+                            <CuentaComprobantes
+                                :key="`comprobantes-${recargas}`"
+                                :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
+                                :empresa-id="grupoPago?.empresa.id"
+                            />
+                            <section
+                                class="flex flex-col gap-3"
+                                aria-labelledby="titulo-pagos"
+                            >
+                                <h3
+                                    id="titulo-pagos"
+                                    class="text-sm font-semibold text-highlighted"
+                                >
+                                    Pagos registrados
+                                </h3>
+                                <CuentaPagos :key="`pagos-${recargas}`" />
+                            </section>
+                        </div>
+                    </div>
+                    <div
+                        v-else
+                        class="ax-en-tarjeta grid gap-6 lg:grid-cols-3 lg:items-start"
+                        data-testid="seccion-facturas"
+                    >
+                        <section
+                            class="flex min-w-0 flex-col gap-3 lg:col-span-2"
+                            aria-labelledby="titulo-facturas"
                         >
-                            No tienes saldo pendiente.
-                        </p>
-                        <UButton
-                            v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
-                            :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
-                            icon="i-lucide-landmark"
-                            color="neutral"
-                            variant="outline"
-                            size="lg"
-                            block
-                            data-testid="deposito-pagar"
-                            @click="usarGrupo(grupoPago); verDeposito = true"
-                        />
-                    </section>
+                            <h3
+                                id="titulo-facturas"
+                                class="sr-only"
+                            >
+                                Facturas
+                            </h3>
+                            <CuentaFacturas :key="`facturas-${recargas}`" />
+                        </section>
+                        <section
+                            class="flex min-w-0 flex-col gap-3"
+                            aria-labelledby="titulo-notas-credito"
+                            data-testid="seccion-notas-credito"
+                        >
+                            <h3
+                                id="titulo-notas-credito"
+                                class="text-sm font-semibold text-highlighted"
+                            >
+                                Notas de crédito
+                            </h3>
+                            <CuentaNotasCredito :key="`notas-${recargas}`" />
+                        </section>
+                    </div>
+                </section>
 
-                    <CuentaComprobantes
-                        :key="`comprobantes-${recargas}`"
-                        :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
-                        :empresa-id="grupoPago?.empresa.id"
-                    />
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-pagos"
-                    >
-                        <h2
-                            id="titulo-pagos"
-                            class="text-sm font-semibold text-highlighted"
-                        >
-                            Pagos registrados
-                        </h2>
-                        <CuentaPagos :key="`pagos-${recargas}`" />
-                    </section>
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-promesas"
-                    >
-                        <h2
-                            id="titulo-promesas"
-                            class="text-sm font-semibold text-highlighted"
-                        >
-                            Promesas de pago
-                        </h2>
-                        <CuentaPromesas :key="`promesas-${recargas}`" />
-                    </section>
-                </div>
-
-                <div
-                    v-else-if="seccion === 'facturas'"
-                    key="facturas"
-                    class="flex flex-col gap-6"
-                    data-testid="seccion-facturas"
-                >
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-facturas"
-                    >
-                        <h2
-                            id="titulo-facturas"
-                            class="text-lg font-semibold text-highlighted"
-                        >
-                            Facturas
-                        </h2>
-                        <CuentaFacturas :key="`facturas-${recargas}`" />
-                    </section>
-                    <section
-                        class="flex flex-col gap-3"
-                        aria-labelledby="titulo-notas-credito"
-                        data-testid="seccion-notas-credito"
-                    >
-                        <h2
-                            id="titulo-notas-credito"
-                            class="text-sm font-semibold text-highlighted"
-                        >
-                            Notas de crédito
-                        </h2>
-                        <CuentaNotasCredito :key="`notas-${recargas}`" />
-                    </section>
-                </div>
+                <SoporteSeccion
+                    v-else-if="seccion === 'soporte'"
+                    :key="`soporte-${recargas}`"
+                    :servicios="cuenta.servicios"
+                />
 
                 <SorteoSeccion
                     v-else-if="seccion === 'sorteos'"
@@ -488,63 +563,83 @@ watch(() => route.hash, async (hash) => {
                 <div
                     v-else
                     key="cuenta"
-                    class="flex flex-col gap-4"
+                    class="grid gap-4 lg:grid-cols-2 lg:items-start lg:gap-6"
                     data-testid="seccion-cuenta"
                 >
-                    <h2 class="text-lg font-semibold text-highlighted">
+                    <h2 class="text-lg font-semibold text-highlighted lg:col-span-2">
                         Mi cuenta
                     </h2>
-                    <template v-if="telegramPorEmpresa">
+                    <!-- Escritorio: datos de contacto a la izquierda; avisos y sesión a la derecha. -->
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <section
+                            class="ax-tarjeta flex flex-col gap-4 p-4 sm:p-5"
+                            aria-labelledby="titulo-mis-datos"
+                        >
+                            <div class="flex items-center gap-3">
+                                <PortalPastilla icono="i-lucide-id-card" />
+                                <h3
+                                    id="titulo-mis-datos"
+                                    class="font-semibold text-highlighted"
+                                >
+                                    Mis datos
+                                </h3>
+                            </div>
+                            <CuentaContacto
+                                :contacto="cuenta.cliente"
+                                @actualizado="contactoActualizado"
+                            />
+                        </section>
+                        <CuentaContactos :key="`contactos-${recargas}`" />
+                    </div>
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <template v-if="telegramPorEmpresa">
+                            <CuentaTelegram
+                                v-for="propio in telegramPorEmpresa"
+                                :id="`telegram-${propio.empresa.id}`"
+                                :key="propio.empresa.id"
+                                :vinculado="propio.vinculado"
+                                :empresa="propio.empresa"
+                                @cambio="refresh(); telegram.cargar()"
+                            />
+                        </template>
                         <CuentaTelegram
-                            v-for="propio in telegramPorEmpresa"
-                            :id="`telegram-${propio.empresa.id}`"
-                            :key="propio.empresa.id"
-                            :vinculado="propio.vinculado"
-                            :empresa="propio.empresa"
+                            v-else
+                            id="telegram"
+                            :vinculado="cuenta.cliente.telegram_vinculado"
                             @cambio="refresh(); telegram.cargar()"
                         />
-                    </template>
-                    <CuentaTelegram
-                        v-else
-                        id="telegram"
-                        :vinculado="cuenta.cliente.telegram_vinculado"
-                        @cambio="refresh(); telegram.cargar()"
-                    />
-                    <CuentaWhatsapp :key="`whatsapp-${recargas}`" />
-                    <CuentaContacto
-                        :contacto="cuenta.cliente"
-                        @actualizado="contactoActualizado"
-                    />
-                    <UButton
-                        label="Cambiar contraseña"
-                        icon="i-lucide-key-round"
-                        color="neutral"
-                        variant="outline"
-                        size="lg"
-                        to="/cambiar-contrasena"
-                        block
-                        data-testid="ir-cambiar-contrasena"
-                    />
-                    <UButton
-                        label="Ayuda y contacto"
-                        icon="i-lucide-headset"
-                        color="neutral"
-                        variant="outline"
-                        size="lg"
-                        to="/contacto"
-                        block
-                    />
-                    <UButton
-                        label="Salir"
-                        icon="i-lucide-log-out"
-                        color="neutral"
-                        variant="ghost"
-                        size="lg"
-                        block
-                        :loading="saliendo"
-                        data-testid="salir"
-                        @click="salir"
-                    />
+                        <CuentaWhatsapp :key="`whatsapp-${recargas}`" />
+                        <UButton
+                            label="Cambiar contraseña"
+                            icon="i-lucide-key-round"
+                            color="neutral"
+                            variant="outline"
+                            size="lg"
+                            to="/cambiar-contrasena"
+                            block
+                            data-testid="ir-cambiar-contrasena"
+                        />
+                        <UButton
+                            label="Ayuda y contacto"
+                            icon="i-lucide-headset"
+                            color="neutral"
+                            variant="outline"
+                            size="lg"
+                            to="/contacto"
+                            block
+                        />
+                        <UButton
+                            label="Salir"
+                            icon="i-lucide-log-out"
+                            color="neutral"
+                            variant="ghost"
+                            size="lg"
+                            block
+                            :loading="saliendo"
+                            data-testid="salir"
+                            @click="salir"
+                        />
+                    </div>
                 </div>
             </Transition>
         </template>
@@ -553,12 +648,6 @@ watch(() => route.hash, async (hash) => {
             v-model:open="verPromesa"
             :servicio-id="servicioPromesa"
             @resultado="promesaResuelta"
-        />
-        <ComprobanteSubir
-            v-model:open="verComprobante"
-            :servicio-id="servicioComprobante"
-            :empresa-id="empresaModal"
-            @enviado="recargas += 1"
         />
         <CorteDatosDeposito
             v-model:open="verDeposito"

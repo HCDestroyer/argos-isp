@@ -2,16 +2,26 @@
 @import "@nuxt/ui";
 
 /*
- * Identidad "vidrio y luz" (skill horus-identity, `assets/nuxt-ui/main.css`), la misma que el
- * panel (`apps/web`). Solo utilidades semánticas de Nuxt UI en los componentes (text-muted,
- * bg-elevated, text-error…): nunca colores crudos de Tailwind.
+ * Sistema visual del portal (rediseño, decisión del PM): índigo eléctrico sobre Nuxt UI.
  *
- * Lo propio del portal, marcado con «Portal:» abajo: la página de corte se abre en teléfonos
- * de gama baja con la conexión cortada, así que el aura de `/corte` es una versión liviana
- * (`.app-aura-lite`) y el vidrio pasa a sólido si el navegador no tiene `backdrop-filter`.
+ * - Tokens propios `--ax-*` (los mismos nombres que el panel): fondo gris muy claro (#F8F9FA) o azul
+ *   noche (#0B0F1A), tarjetas blancas de radio 12 px con borde de 1 px (#E7EAEE) y casi sin sombra,
+ *   marca índigo (#4F46E5 en claro, #818CF8 en oscuro) y degradado índigo → cian. El admin puede elegir otro preset
+ *   (`plugins/apariencia.ts`): todo color de marca sale de `--ui-color-primary-*` y
+ *   `--ax-primario-*`, nunca de un hex fijo.
+ * - El degradado de marca (`--ax-gradiente`) es solo acento: logo, filo del encabezado, borde de las
+ *   tarjetas de saldo. Donde lleva texto encima (banner de bienvenida, panel del login) se usa
+ *   `--ax-gradiente-texto`, que termina en cyan-700: el blanco pasa 4,5:1 en todo el recorrido.
+ * - Componentes de Nuxt UI tematizados en `app.config.ts` con estos tokens; clases `ax-*` para los
+ *   patrones propios (lista/tabla, pastilla de icono, banner, KPI, cursores).
+ * - Sin fuentes descargadas: la pila del sistema (SF en iOS, Roboto en Android, Segoe en Windows) a
+ *   14 px con cifras tabulares. `/corte` se abre con la conexión limitada del suspendido: nada de
+ *   Inter ni imágenes (ver «Peso de la página de corte» en el README).
+ *
+ * Solo utilidades semánticas en los componentes (text-muted, bg-elevated, text-error…): nunca
+ * colores crudos de Tailwind; los valores de color viven aquí.
  */
 @theme static {
-    /* Fuente del sistema (nada se descarga: walled garden); monoespaciada para IPs y referencias. */
     --font-sans:
         system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans",
         Arial, sans-serif;
@@ -20,28 +30,71 @@
 }
 
 /*
- * Contraste AA (WCAG 1.4.3 / 1.4.11) en ambos temas: los tonos 500 no llegan a 4,5:1 sobre
- * blanco, así que en claro se usan 600–800 y en oscuro 300–400. Primary 400 en oscuro es la
- * "luz" de la marca: solo en señales y en la acción primaria.
+ * Contraste AA (WCAG 1.4.3 / 1.4.11) en ambos temas. Indigo-600 sobre blanco da 6,3:1 (y el blanco
+ * sobre él, igual); indigo-400 sobre el azul noche, 6,4:1. Los estados van un tono más oscuro en
+ * claro para pasar 4,5:1 también sobre su propio tinte (badges y alertas "subtle"). El cian
+ * (secondary) en claro va en 800: el 600 no llega a 4,5:1 sobre blanco.
  */
 :root,
 .light {
-    --ui-primary: var(--ui-color-primary-700);
-    --ui-secondary: var(--ui-color-secondary-600);
-    /* Estados un tono más oscuros: pasan 4,5:1 también sobre su fondo tintado (badges y alertas "subtle"). */
+    /* Primario del tema (`plugins/apariencia.ts`): el hex validado del admin o el tono AA del preset. */
+    --ui-primary: var(--ax-primario-claro, var(--ui-color-primary-600));
+    --ui-secondary: var(--ui-color-secondary-800);
     --ui-success: var(--ui-color-success-800);
     --ui-info: var(--ui-color-info-700);
     --ui-warning: var(--ui-color-warning-800);
     --ui-error: var(--ui-color-error-700);
     --ui-text-muted: var(--ui-color-neutral-600);
     --ui-text-dimmed: var(--ui-color-neutral-500);
-    /* Fondo claro suavizado para la estructura; el contenido va sobre blanco. */
-    --ui-bg-muted: var(--ui-color-neutral-50);
+    --ui-bg-muted: #f7f8fc;
+    --ui-bg-elevated: #f1f3f9;
+    --ui-bg-accented: #e6e8f0;
+    --ui-border: #e6e8f0;
+    --ui-border-accented: #d3d7e3;
     --ui-radius: 0.375rem;
+
+    /* Sistema `--ax-*` (claro). */
+    --ax-fondo: #f7f8fc;
+    --ax-tarjeta: #ffffff;
+    --ax-borde: #e6e8f0;
+    /* Tarjetas «isla» (diseño aprobado, `.claude/diseno/README.md`): radio 14 px y banner 18 px. */
+    --ax-radio: 0.875rem;
+    --ax-radio-banner: 1.125rem;
+    --ax-radio-modal: 1.125rem;
+    --ax-sombra: 0 1px 2px rgb(16 24 40 / 0.04), 0 10px 28px -18px rgb(30 27 75 / 0.22);
+    --ax-sombra-flotante: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 2px 6px rgb(16 24 40 / 0.06);
+    --ax-marca-1: var(--ui-color-primary-600);
+    --ax-marca-2: var(--ui-color-secondary-500);
+    --ax-gradiente: linear-gradient(135deg, var(--ax-marca-1) 0%, var(--ax-marca-2) 100%);
+    /* Con texto blanco encima: índigo-600 → cyan-700 (5,4:1 en el extremo más claro). */
+    --ax-gradiente-texto: linear-gradient(
+        120deg,
+        var(--ax-primario-claro, var(--ui-color-primary-600)) 0%,
+        var(--ui-color-primary-700) 45%,
+        var(--ui-color-secondary-700) 100%
+    );
+    --ax-tinte: linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--ui-color-primary-600) 10%, transparent),
+        color-mix(in oklab, var(--ui-color-secondary-500) 10%, transparent)
+    );
+    --ax-cabecera-tabla: #f8f9fa;
+    --ax-fila-hover: #f8f9fb;
+
+    /* Materiales heredados de "vidrio y luz" (barra superior, modales, aura). */
+    --hf-glass: rgb(255 255 255 / 0.78);
+    --hf-glass-strong: rgb(255 255 255 / 0.94);
+    --hf-glass-edge: rgb(255 255 255 / 0.7);
+    --hf-card: var(--ax-tarjeta);
+    --hf-aura-1: color-mix(in oklab, var(--ui-color-primary-600) 7%, transparent);
+    --hf-aura-2: color-mix(in oklab, var(--ui-color-secondary-500) 6%, transparent);
+    --hf-glow-brand: transparent;
+    --hf-glow-crit: rgb(220 38 38 / 0.12);
+    --hf-radius-card: var(--ax-radio);
 }
 
 .dark {
-    --ui-primary: var(--ui-color-primary-400);
+    --ui-primary: var(--ax-primario-oscuro, var(--ui-color-primary-400));
     --ui-secondary: var(--ui-color-secondary-300);
     --ui-success: var(--ui-color-success-400);
     --ui-info: var(--ui-color-info-400);
@@ -49,40 +102,37 @@
     --ui-error: var(--ui-color-error-400);
     --ui-text-muted: var(--ui-color-neutral-400);
     --ui-text-dimmed: var(--ui-color-neutral-400);
-    /* Sin negro puro: base azul noche, elevaciones algo más claras. */
-    --ui-bg: #0b1014;
-    --ui-bg-muted: #10151b;
-    --ui-bg-elevated: #1a2029;
-    --ui-border: #232a33;
-}
+    /* Sin negro puro: base azul noche (#0B0F1A), elevaciones algo más claras y del mismo tono. */
+    --ui-bg: #0b0f1a;
+    --ui-bg-muted: #0f1424;
+    --ui-bg-elevated: #171d30;
+    --ui-bg-accented: #1f2740;
+    --ui-border: #222a40;
+    --ui-border-accented: #2e3854;
 
-/*
- * Materiales: vidrio en la capa funcional (barra superior, modales), tarjeta casi sólida en el
- * contenido (nunca vidrio sobre vidrio) y sólido cuando se pide menos transparencia. La luz
- * (halos) solo marca la acción primaria y lo crítico, y solo en oscuro.
- */
-:root,
-.light {
-    --hf-glass: rgb(255 255 255 / 0.66);
-    --hf-glass-strong: rgb(255 255 255 / 0.86);
-    --hf-glass-edge: rgb(255 255 255 / 0.7);
-    /* Opaca en claro: el aura teñiría el fondo y bajaría el contraste de los badges (AA). */
-    --hf-card: #ffffff;
-    --hf-aura-1: rgb(20 184 166 / 0.12);
-    --hf-aura-2: rgb(99 102 241 / 0.09);
-    --hf-glow-brand: transparent;
-    --hf-glow-crit: rgb(220 38 38 / 0.12);
-    --hf-radius-card: 0.875rem;
-}
+    --ax-fondo: #0b0f1a;
+    --ax-tarjeta: #121828;
+    --ax-borde: #222a40;
+    --ax-sombra: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 28px -18px rgb(0 0 0 / 0.6);
+    --ax-sombra-flotante: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+    /* En oscuro el degradado de acento arranca en indigo-400: el 600 se pierde sobre el azul noche. */
+    --ax-marca-1: var(--ui-color-primary-400);
+    --ax-marca-2: var(--ui-color-secondary-400);
+    --ax-tinte: linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--ui-color-primary-400) 16%, transparent),
+        color-mix(in oklab, var(--ui-color-secondary-400) 10%, transparent)
+    );
+    --ax-cabecera-tabla: #0f1424;
+    --ax-fila-hover: #161c2e;
 
-.dark {
-    --hf-glass: rgb(16 21 27 / 0.62);
-    --hf-glass-strong: rgb(16 21 27 / 0.86);
-    --hf-glass-edge: rgb(255 255 255 / 0.06);
-    --hf-card: rgb(20 25 32 / 0.86);
-    --hf-aura-1: rgb(20 184 166 / 0.2);
-    --hf-aura-2: rgb(99 102 241 / 0.16);
-    --hf-glow-brand: rgb(45 212 191 / 0.45);
+    --hf-glass: rgb(11 15 26 / 0.72);
+    --hf-glass-strong: rgb(18 24 40 / 0.94);
+    --hf-glass-edge: rgb(255 255 255 / 0.05);
+    --hf-card: var(--ax-tarjeta);
+    --hf-aura-1: color-mix(in oklab, var(--ui-color-primary-600) 20%, transparent);
+    --hf-aura-2: color-mix(in oklab, var(--ui-color-secondary-500) 10%, transparent);
+    --hf-glow-brand: color-mix(in oklab, var(--ui-color-primary-400) 40%, transparent);
     --hf-glow-crit: rgb(255 107 120 / 0.26);
 }
 
@@ -90,10 +140,15 @@
     html {
         -webkit-text-size-adjust: 100%;
         text-rendering: optimizeLegibility;
+        /* Portal: sin el destello gris de WebKit al tocar; el estado activo lo pinta Nuxt UI. */
+        -webkit-tap-highlight-color: transparent;
     }
 
     body {
-        @apply bg-default text-default antialiased;
+        @apply text-default antialiased;
+        background-color: var(--ax-fondo);
+        font-size: 0.875rem;
+        line-height: 1.5;
     }
 
     /* Cifras tabulares en datos. */
@@ -103,8 +158,9 @@
         font-variant-numeric: tabular-nums;
     }
 
-    h1 {
-        letter-spacing: -0.015em;
+    h1,
+    h2 {
+        letter-spacing: -0.02em;
     }
 
     /* Foco siempre visible (WCAG 2.4.7), también en enlaces sin estilo de Nuxt UI (logo, pie). */
@@ -116,36 +172,101 @@
     a:focus-visible {
         border-radius: calc(var(--ui-radius) * 1.5);
     }
-}
 
-/* Vidrio: solo la capa funcional; sólido si se pide menos transparencia. */
-.chrome-material,
-.glass-material {
-    background-color: var(--hf-glass);
-    -webkit-backdrop-filter: blur(28px) saturate(150%);
-    backdrop-filter: blur(28px) saturate(150%);
-    box-shadow: inset 0 1px 0 var(--hf-glass-edge);
-}
+    /*
+     * Cursores según el lugar o la acción. `pointer` en todo lo que se toca, `not-allowed` en lo
+     * deshabilitado, `text` en los campos y `progress` mientras algo procesa. Los propios del
+     * portal se piden con `data-cursor`: `help` (ayudas), `copy` (datos que se copian: cuenta
+     * bancaria, código), `zoom-in` (comprobantes e imágenes ampliables), `grab` (zona de soltar).
+     */
+    a[href],
+    button,
+    summary,
+    label[for],
+    select,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="menuitemradio"],
+    [role="menuitemcheckbox"],
+    [role="option"],
+    [role="radio"],
+    [role="checkbox"],
+    [role="switch"],
+    input[type="checkbox"],
+    input[type="radio"],
+    input[type="file"] {
+        cursor: pointer;
+    }
 
-/* Tarjeta del contenido: casi sólida, deja intuir el aura sin perder legibilidad. */
-.surface-card {
-    background-color: var(--hf-card);
-    border-radius: var(--hf-radius-card);
-    box-shadow:
-        0 0 0 1px var(--ui-border),
-        inset 0 1px 0 var(--hf-glass-edge);
-}
-
-.dark .surface-card {
-    box-shadow:
-        0 0 0 1px var(--ui-border),
-        inset 0 1px 0 var(--hf-glass-edge),
-        0 12px 32px rgb(0 0 0 / 0.22);
+    input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="button"], [type="submit"]),
+    textarea,
+    [contenteditable="true"] {
+        cursor: text;
+    }
 }
 
 /*
- * Aura: fondo de color muy difuminado bajo toda la app para que el vidrio tenga qué reflejar.
- * Deriva de 60 s; quieta con movimiento reducido.
+ * Cursores propios (fuera de `@layer base`: ganan a `cursor-pointer` de los botones de Nuxt UI).
+ */
+[data-cursor="help"] {
+    cursor: help;
+}
+
+[data-cursor="copy"] {
+    cursor: copy;
+}
+
+[data-cursor="zoom"] {
+    cursor: zoom-in;
+}
+
+[data-cursor="grab"] {
+    cursor: grab;
+}
+
+[data-cursor="grab"][data-dragging="true"] {
+    cursor: copy;
+}
+
+[aria-busy="true"],
+[data-loading="true"] {
+    cursor: progress;
+}
+
+:disabled,
+[aria-disabled="true"],
+[data-disabled]:not([data-disabled="false"]) {
+    cursor: not-allowed;
+}
+
+/* Un botón deshabilitado porque está procesando (con su indicador girando): `progress`. */
+:disabled:has(.animate-spin),
+[aria-disabled="true"]:has(.animate-spin) {
+    cursor: progress;
+}
+
+/* Vidrio: solo la capa funcional (barra superior y navegación); sólido si se pide menos transparencia. */
+.chrome-material,
+.glass-material {
+    background-color: var(--hf-glass);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(20px) saturate(150%);
+}
+
+/* Tarjeta «isla» del contenido: blanca, borde de 1 px, radio 14 px y sombra suave. */
+.surface-card,
+.ax-tarjeta {
+    background-color: var(--ax-tarjeta);
+    border-radius: var(--ax-radio);
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        var(--ax-sombra);
+}
+
+/*
+ * Aura: fondo de color muy difuminado bajo toda la app. Casi imperceptible en claro (el fondo es
+ * el gris del sistema); deriva de 60 s y queda quieta con movimiento reducido.
  */
 .app-aura {
     position: fixed;
@@ -207,7 +328,7 @@
 }
 
 /*
- * Portal: cambio de sección de `/cuenta`, corto y sin rebote (resorte ~0,2 s, curva de la skill).
+ * Portal: cambio de sección de `/cuenta`, corto y sin rebote (~0,2 s).
  * Con movimiento reducido la regla global lo deja en 0,01 ms.
  */
 .seccion-enter-active,
@@ -226,12 +347,294 @@
     opacity: 0;
 }
 
-/* Portal: sin el destello gris de WebKit al tocar; el estado activo lo pinta Nuxt UI. */
-html {
-    -webkit-tap-highlight-color: transparent;
+/* Entrada de la página: aparece y sube 4 px en 0,22 s. */
+.entrada-pagina {
+    animation: ax-aparecer 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-/* Luz de la acción primaria y del estado crítico. */
+@keyframes ax-aparecer {
+    from {
+        opacity: 0;
+        transform: translateY(0.25rem);
+    }
+}
+
+/*
+ * Marca: filo del encabezado (1 px del degradado sobre el borde) y acento superior de las tarjetas
+ * de saldo (`ax-acento`, 3 px). Decoración pura: no lleva texto encima.
+ */
+.ax-filo {
+    position: relative;
+}
+
+.ax-filo::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: -1px;
+    height: 1px;
+    background: var(--ax-gradiente);
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.ax-acento {
+    position: relative;
+    overflow: hidden;
+}
+
+.ax-acento::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 3px;
+    background: var(--ax-gradiente);
+    pointer-events: none;
+}
+
+/*
+ * Banner con degradado y texto blanco (bienvenida de `/cuenta`, panel del login). El blanco sobre
+ * `--ax-gradiente-texto` pasa AA en todo el recorrido; los círculos son solo luz decorativa.
+ */
+.ax-banner {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    color: #fff;
+    background: var(--ax-gradiente-texto);
+    border-radius: var(--ax-radio-banner);
+}
+
+.ax-banner::before,
+.ax-banner::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.ax-banner::before {
+    width: 22rem;
+    height: 22rem;
+    right: -7rem;
+    top: -11rem;
+    background: radial-gradient(closest-side, rgb(255 255 255 / 0.14), transparent);
+}
+
+.ax-banner::after {
+    width: 16rem;
+    height: 16rem;
+    right: 18%;
+    bottom: -10rem;
+    background: radial-gradient(closest-side, color-mix(in oklab, var(--ui-color-secondary-400) 22%, transparent), transparent);
+}
+
+/* Texto secundario del banner: blanco al 85 % (sigue sobre 4,5:1). */
+.ax-banner-suave {
+    color: rgb(255 255 255 / 0.88);
+}
+
+/* Pastilla sobre el banner (estado): borde y fondo blancos translúcidos, texto blanco. */
+.ax-banner-pastilla {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgb(15 23 42 / 0.28);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.35);
+}
+
+/* Acción del banner: pastilla blanca con texto índigo-700 (8,7:1). */
+.ax-banner-accion {
+    background: #fff !important;
+    color: var(--ui-color-primary-700) !important;
+}
+
+.ax-banner-accion:hover {
+    background: var(--ui-color-primary-50) !important;
+}
+
+.ax-banner-accion:focus-visible {
+    outline-color: #fff;
+}
+
+/*
+ * Pastilla de icono (accesos, KPI, filas de lista, modales): tinte del tono al 10–12 % y el icono en
+ * el tono. `data-tono` = primary (por defecto, con el degradado), success, warning, error, info o
+ * neutral. Una sola forma en todo el portal: radio 10 px.
+ */
+.ax-pastilla {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.625rem;
+    background: var(--ax-tinte);
+    color: var(--ui-primary);
+    font-weight: 600;
+}
+
+.ax-pastilla[data-tono="success"] {
+    background: color-mix(in oklab, var(--ui-success) 12%, transparent);
+    color: var(--ui-success);
+}
+
+.ax-pastilla[data-tono="warning"] {
+    background: color-mix(in oklab, var(--ui-warning) 12%, transparent);
+    color: var(--ui-warning);
+}
+
+.ax-pastilla[data-tono="error"] {
+    background: color-mix(in oklab, var(--ui-error) 12%, transparent);
+    color: var(--ui-error);
+}
+
+.ax-pastilla[data-tono="info"] {
+    background: color-mix(in oklab, var(--ui-info) 12%, transparent);
+    color: var(--ui-info);
+}
+
+.ax-pastilla[data-tono="neutral"] {
+    background: var(--ui-bg-elevated);
+    color: var(--ui-text-muted);
+}
+
+/*
+ * Lista que en escritorio es tabla: una tarjeta, cabecera opcional en mayúsculas pequeñas sobre
+ * gris claro, filas altas separadas por una línea y con hover suave. En el teléfono cada fila es
+ * una tarjeta compacta (la misma marca, sin cabecera).
+ */
+.ax-lista {
+    /* Las filas se acomodan al ancho de su lista (consulta de contenedor), no al de la pantalla. */
+    container-type: inline-size;
+    background-color: var(--ax-tarjeta);
+    border-radius: var(--ax-radio);
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        var(--ax-sombra);
+    overflow: hidden;
+}
+
+.ax-lista-cabecera {
+    display: none;
+    background: var(--ax-cabecera-tabla);
+    border-bottom: 1px solid var(--ax-borde);
+    color: var(--ui-text-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.ax-fila {
+    position: relative;
+    transition: background-color 0.15s ease;
+}
+
+.ax-fila + .ax-fila {
+    border-top: 1px solid var(--ax-borde);
+}
+
+.ax-fila[data-interactiva="true"] {
+    cursor: pointer;
+}
+
+@media (hover: hover) {
+    .ax-fila:hover {
+        background-color: var(--ax-fila-hover);
+    }
+}
+
+
+/*
+ * Tarjeta que se toca (accesos rápidos, KPI con destino): sube 1 px y toma el borde primario al
+ * pasar el puntero. Con movimiento reducido no se mueve.
+ */
+.ax-tocable {
+    transition:
+        transform 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
+        box-shadow 0.16s ease;
+}
+
+@media (hover: hover) {
+    .ax-tocable:hover {
+        transform: translateY(-1px);
+        box-shadow:
+            0 0 0 1px color-mix(in oklab, var(--ui-primary) 50%, var(--ax-borde)),
+            0 10px 24px -14px color-mix(in oklab, var(--ui-primary) 55%, transparent);
+    }
+}
+
+.ax-tocable:active {
+    transform: scale(0.99);
+}
+
+/* Zona de arrastrar y soltar (subir comprobante): borde punteado que se enciende al arrastrar. */
+.ax-soltar {
+    border: 1.5px dashed var(--ui-border-accented);
+    border-radius: var(--ax-radio);
+    background: var(--ui-bg-muted);
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease;
+}
+
+.ax-soltar:hover,
+.ax-soltar[data-dragging="true"] {
+    border-color: var(--ui-primary);
+    background: color-mix(in oklab, var(--ui-primary) 6%, var(--ax-tarjeta));
+}
+
+/*
+ * Pista (tooltip) de los botones de solo icono, sin JavaScript: `class="ax-pista"` y
+ * `data-pista="Texto"`. Aparece al pasar el puntero o con el foco del teclado; el nombre accesible
+ * sigue siendo el `aria-label` del botón. Sin proveedor de `UApp` ni librería: sirve en `/corte`.
+ */
+.ax-pista {
+    position: relative;
+}
+
+.ax-pista::after {
+    content: attr(data-pista);
+    position: absolute;
+    z-index: 40;
+    bottom: calc(100% + 0.375rem);
+    left: 50%;
+    translate: -50% 0.125rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    background: var(--ui-bg-inverted);
+    color: var(--ui-bg);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition:
+        opacity 0.12s ease,
+        translate 0.12s ease;
+}
+
+@media (hover: hover) {
+    .ax-pista:hover::after {
+        opacity: 1;
+        translate: -50% 0;
+        transition-delay: 0.3s;
+    }
+}
+
+.ax-pista:focus-visible::after {
+    opacity: 1;
+    translate: -50% 0;
+}
+
+/* Luz de la acción primaria y del estado crítico (solo en oscuro). */
 .glow-brand {
     box-shadow: 0 0 18px var(--hf-glow-brand);
 }
@@ -242,7 +645,7 @@ html {
         0 0 18px var(--hf-glow-crit);
 }
 
-/* Punto "En vivo" (estado en vivo de `/corte`). */
+/* Punto "En vivo" (estado en vivo de `/corte`): late con un anillo que se expande. */
 .live-dot {
     position: relative;
     display: inline-block;
@@ -251,6 +654,22 @@ html {
     border-radius: 50%;
     background: var(--ui-primary);
     box-shadow: 0 0 8px var(--hf-glow-brand);
+}
+
+.live-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--ui-primary);
+    animation: ax-latido 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
+}
+
+@keyframes ax-latido {
+    to {
+        opacity: 0;
+        transform: scale(2.6);
+    }
 }
 
 /*
@@ -278,16 +697,10 @@ html {
         backdrop-filter: none;
     }
 
-    /* Portal: también los modales (vidrio fuerte) y las `UCard` pasan a sólidos. */
     :root,
     .light,
     .dark {
         --hf-glass-strong: var(--ui-bg);
-        --hf-card: var(--ui-bg-muted);
-    }
-
-    .surface-card {
-        background-color: var(--ui-bg-muted);
     }
 
     .app-aura {
@@ -300,11 +713,13 @@ html {
     .light {
         --ui-text-muted: var(--ui-color-neutral-800);
         --ui-border: var(--ui-color-neutral-500);
+        --ax-borde: var(--ui-color-neutral-500);
     }
 
     .dark {
         --ui-text-muted: var(--ui-color-neutral-200);
         --ui-border: var(--ui-color-neutral-400);
+        --ax-borde: var(--ui-color-neutral-400);
         --hf-glow-brand: transparent;
         --hf-glow-crit: transparent;
     }
@@ -322,5 +737,171 @@ html {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+
+    .live-dot::after,
+    .entrada-pagina {
+        animation: none;
+    }
+
+    .ax-tocable:hover,
+    .ax-tocable:active {
+        transform: none;
+    }
+}
+
+/*
+ * Grilla de las filas de lista (`PortalFila` y la cabecera de `PortalLista`). En el teléfono:
+ * pastilla | título y subtítulo | monto, y debajo el estado y el menú. Con la lista de 640 px o más
+ * (consulta de contenedor: una lista en la columna lateral sigue compacta) es una fila de tabla: pastilla | concepto | monto | estado | acciones. Lo adicional (notas) va debajo del concepto.
+ */
+.ax-grilla {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+    grid-template-areas:
+        "ico txt monto"
+        "ico est act"
+        ". extra extra";
+    column-gap: 0.75rem;
+    row-gap: 0.375rem;
+    align-items: center;
+    padding: 0.875rem 1rem;
+}
+
+.ax-grilla > .ax-a-ico {
+    grid-area: ico;
+    align-self: start;
+}
+
+.ax-grilla > .ax-a-txt {
+    grid-area: txt;
+    min-width: 0;
+}
+
+.ax-grilla > .ax-a-monto {
+    grid-area: monto;
+    justify-self: end;
+    text-align: end;
+}
+
+.ax-grilla > .ax-a-est {
+    grid-area: est;
+    justify-self: start;
+    min-width: 0;
+}
+
+.ax-grilla > .ax-a-act {
+    grid-area: act;
+    justify-self: end;
+}
+
+.ax-grilla > .ax-a-extra {
+    grid-area: extra;
+    min-width: 0;
+}
+
+/* La cabecera de columnas solo con una lista ancha (`.ax-grilla` la volvería a mostrar). */
+.ax-lista-cabecera.ax-grilla {
+    display: none;
+}
+
+@container (width >= 40rem) {
+    .ax-lista-cabecera.ax-grilla {
+        display: grid;
+    }
+
+    .ax-grilla {
+        grid-template-columns: 2.5rem minmax(0, 1fr) 9rem 11rem 5.5rem;
+        grid-template-areas:
+            "ico txt monto est act"
+            ". extra extra extra extra";
+        column-gap: 1rem;
+        padding: 1rem 1.25rem;
+    }
+
+    .ax-lista-cabecera.ax-grilla {
+        padding-block: 0.625rem;
+    }
+}
+
+/* Botón secundario sobre el banner (Actualizar): texto blanco y un velo al pasar. */
+.ax-banner-boton {
+    color: #fff !important;
+}
+
+.ax-banner-boton:hover,
+.ax-banner-boton:active {
+    background: rgb(255 255 255 / 0.14) !important;
+}
+
+.ax-banner-boton:focus-visible {
+    outline-color: #fff;
+}
+
+/*
+ * Rediseño del portal (diseño aprobado, tableros `NuevoPortal` y `Portal`).
+ *
+ * - `.ax-en-tarjeta`: lo que va dentro de una tarjeta con pestañas segmentadas (listas, tarjetas)
+ *   conserva su borde fino pero no su sombra: pestañas y contenido son una sola isla.
+ * - `.barra-accion`: en el teléfono (< 768 px) la acción principal queda fija abajo, de vidrio, sobre
+ *   la barra de secciones si la hay (`--ax-nav-inferior`, la pone el layout); desde `md`, en su lugar.
+ */
+/*
+ * Menú lateral «isla» del portal: el mismo del panel (`apps/web`, `.lateral-argos` y
+ * `.boton-flotante`, diseño IslasA5/A6). Flota a 16 px del borde, radio 22 px, vidrio y sombra
+ * suave; 76 px compacto y 244 px expandido. Pendiente: extraerlo con el del panel a `packages/`.
+ */
+.lateral-portal {
+    border-radius: 1.375rem;
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        0 18px 40px -18px rgb(30 27 75 / 0.28);
+}
+
+.dark .lateral-portal {
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        0 18px 40px -12px rgb(0 0 0 / 0.6);
+}
+
+/* Botón flotante (el ‹ › de 28 px del menú): fondo de tarjeta, borde fino y sombra corta. */
+@layer components {
+    .boton-flotante {
+        background-color: var(--ax-tarjeta);
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 6px 18px -8px rgb(15 23 42 / 0.16);
+    }
+
+    .dark .boton-flotante {
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 6px 16px -8px rgb(0 0 0 / 0.6);
+    }
+}
+
+.ax-en-tarjeta {
+    --ax-sombra: 0 0 0 0 transparent;
+}
+
+@media (max-width: 767.98px) {
+    .barra-accion {
+        position: fixed;
+        inset-inline: 0;
+        bottom: var(--ax-nav-inferior, 0px);
+        z-index: 25;
+        padding: 0.75rem max(1rem, env(safe-area-inset-right)) calc(0.75rem + var(--ax-barra-seguro, env(safe-area-inset-bottom))) max(1rem, env(safe-area-inset-left));
+        background-color: var(--hf-glass-strong);
+        -webkit-backdrop-filter: blur(20px) saturate(150%);
+        backdrop-filter: blur(20px) saturate(150%);
+        box-shadow: 0 -1px 0 var(--ax-borde), 0 -10px 24px -16px rgb(30 27 75 / 0.25);
+    }
+
+    /*
+     * Aire al final de la página (después del pie, con sus enlaces de políticas) para que la barra
+     * no tape lo último: en el `body`, no en `main`.
+     */
+    body:has(.barra-accion) {
+        padding-bottom: calc(7rem + env(safe-area-inset-bottom));
     }
 }

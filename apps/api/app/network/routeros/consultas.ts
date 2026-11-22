@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import { leerPromocion, sqlPromocionVigente, velocidadConPromocion } from '#core/promociones_velocidad'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
 import {
@@ -52,6 +53,8 @@ import type { ServidorGateway } from '#network/routeros/red_acceso'
  */
 
 interface FilaServicio {
+    /** tramo abierto de una promoción de velocidad (`#core/promociones_velocidad`) */
+    promocion?: unknown
     servicio_id: number
     estado: EstadoServicioConPendiente
     tipo_conexion: TipoConexion
@@ -155,6 +158,8 @@ function consultaServicios(cliente: QueryClientContract) {
                    WHERE ses.servicio_id = s.id AND ses.fin IS NULL
                    ORDER BY ses.inicio DESC, ses.id DESC LIMIT 1) AS sesion`,
             ),
+            // promoción de velocidad de A1 (decisión del PM 18): la cola simple sigue la velocidad efectiva
+            cliente.raw(`${sqlPromocionVigente('s')} AS promocion`),
         )
 }
 
@@ -222,7 +227,7 @@ function aServicio(fila: FilaServicio): ServicioRed {
         sesion: fila.sesion
             ? { ipv4: fila.sesion.ipv4, enlace: fila.sesion.enlace, delegado: fila.sesion.delegado }
             : null,
-        velocidad: velocidadEfectiva(plan, excepcion),
+        velocidad: velocidadConPromocion(velocidadEfectiva(plan, excepcion), leerPromocion(fila.promocion)),
     }
 }
 

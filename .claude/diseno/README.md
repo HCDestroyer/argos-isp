@@ -65,6 +65,14 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
   - control de velocidad con **3 opciones visibles y «Ver las otras»**;
   - tipo de cola con su **«?»** que explica cómo funciona.
 
+## Portal del cliente
+
+- Tableros: `Portal` (teléfono: inicio, corte y entrar), `NuevoPortal` (escritorio) y los de la página «Portal del cliente» del artifact: `PortalFacturas` (Facturas y pagos con pestañas segmentadas y el corte con la acción fija abajo), `PortalSoporte` (tickets y solicitudes, reportar un problema, conversación) y `PortalContactos` («Mis contactos», un contacto con sus permisos, «Está a tu cargo»). Generador: `generadores/portal_tableros.py`.
+- **Saldo una sola vez** por pantalla: en el banner. Ni los indicadores ni el botón de pagar lo repiten («Pagar en línea», no «Pagar Q …»).
+- Escritorio: **el mismo menú isla del panel** (pedido del PM): compacto (76 px, de fábrica) o expandido (244 px), logo de 36 px y el botón ‹ › de 28 px sobre el borde derecho a la altura del logo, en el mismo lugar en los dos modos. Secciones: «Inicio, Facturas y pagos, Soporte, Mis puntos, Mi cuenta» (en el compacto, los nombres cortos) y el tema abajo; sin barra superior. Hoy es una réplica en el portal; pendiente extraerlo con el del panel a `packages/`. Teléfono: barra inferior (Inicio, Facturas, Soporte, Puntos, Cuenta) y la acción principal fija abajo en corte y formularios.
+- «Facturas y pagos» es una tarjeta con dos pestañas segmentadas, Facturas y Pagar (`?seccion=facturas|pagar`).
+- «Mi WiFi» del tablero `NuevoPortal` queda fuera hasta que exista la API (nombre de la red y cambio de clave); «Solicitar servicio» va como tarjeta del inicio, no en el menú.
+
 ## Decisiones de negocio que acompañan al diseño (contrato con Iris 0.9.0–0.12.0)
 
 - **Prospecto:** vive en Iris; Argos lo registra con `telefonos[]`.
@@ -74,3 +82,4 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
 - **Promesas:** son por servicio.
 - **Equipos:** el técnico nunca decide pérdidas ni cobros. Declarar no recuperado exige 2 intentos de técnicos distintos o un contacto registrado (de fábrica). Equipo dañado o en garantía no vuelve como «funciona».
 - Lo que el diseño muestra se construye de verdad en el código (pedido del PM: «todo en código es posible»), sin pantallas con datos inventados.
+- Decisiones del PM sobre estas pantallas: `decisiones-pm.md`.

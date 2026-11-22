@@ -1,6 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { NoEncontrado, ValidacionFallida } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
 
 /**
@@ -20,6 +20,22 @@ import { PAIS_PLAN } from '#ledger/plan_cuentas'
 
 export type TipoConceptoCargo = 'producto' | 'otro'
 
+/**
+ * Códigos de sistema de un concepto (`billing.conceptos_cargo.codigo_sistema`, contrato Iris 0.14.3).
+ * `instalacion`: el concepto sembrado de instalación de cada empresa (uno por empresa, fijo). Iris lo
+ * identifica solo por este código; nadie lo cambia, lo quita, lo da a otro concepto ni lo desactiva
+ * (`422 concepto_de_sistema`); un trigger impide además cambiarlo o borrar su fila.
+ */
+export const CODIGOS_SISTEMA_CONCEPTO = ['instalacion'] as const
+export type CodigoSistemaConcepto = (typeof CODIGOS_SISTEMA_CONCEPTO)[number]
+
+/** 422 `concepto_de_sistema`: la edición rompería un concepto que el sistema reconoce por código. */
+export class ConceptoDeSistema extends ReglaNegocio {
+    constructor(detalle: string, campo: 'codigo_sistema' | 'activo') {
+        super(detalle, 'concepto_de_sistema', [{ field: campo, message: detalle }])
+    }
+}
+
 export interface ConceptoCargoVista {
     id: number
     empresa_id: number
@@ -29,6 +45,8 @@ export interface ConceptoCargoVista {
     cuenta_nombre: string | null
     gravable: boolean
     activo: boolean
+    /** Código fijo de un concepto que el sistema reconoce (`instalacion`); null en los demás. */
+    codigo_sistema: CodigoSistemaConcepto | null
     version: number
     created_at: Date
     updated_at: Date
@@ -59,6 +77,7 @@ function consultaConceptos(cliente: QueryClientContract) {
             'c.nombre as cuenta_nombre',
             'k.gravable',
             'k.activo',
+            'k.codigo_sistema',
             'k.version',
             'k.created_at',
             'k.updated_at',

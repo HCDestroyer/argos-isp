@@ -22,15 +22,26 @@ import MigracionPermisosIris070 from '#database/migrations/1794338490345_alter_p
  * de los permisos del usuario técnico.
  */
 
+/**
+ * Entidad que audita la acción de prueba. No es `comprobante`: el `:id` de la ruta de prueba no es
+ * un comprobante real, y una fila `comprobantes.aprobar` con vía sobre `comprobante` 7 se cruzaba
+ * con el comprobante 7 que otra suite creaba después (invariante 26.via_revision_fuera_de_iris del
+ * auditor, CI de la PR #307).
+ */
+const ENTIDAD_PRUEBA = 'prueba_actuacion'
+
 /** Acción de prueba con el nombre del permiso de la ruta (como `AprobarComprobante`). */
 class AprobarPrueba extends DomainAction<{ id: number }, Record<string, unknown>> {
     readonly nombre = 'comprobantes.aprobar'
     static ejecuciones = 0
+    /** request_id de cada ejecución de toda la suite, para revisar lo que dejó en la auditoría. */
+    static readonly peticiones = new Set<string>()
 
     protected async handle(input: { id: number }, t: Transaccion) {
         AprobarPrueba.ejecuciones++
-        t.fijarEntidad('comprobante', input.id)
-        await t.registrarCambios({ tipo: 'comprobante', id: input.id }, { nota: null }, { nota: 'ok' })
+        AprobarPrueba.peticiones.add(t.ctx.requestId)
+        t.fijarEntidad(ENTIDAD_PRUEBA, input.id)
+        await t.registrarCambios({ tipo: ENTIDAD_PRUEBA, id: input.id }, { nota: null }, { nota: 'ok' })
         return {
             ejecucion: AprobarPrueba.ejecuciones,
             actor: t.ctx.actor,
@@ -627,5 +638,33 @@ test.group('Iris 0.7.0 · ticket de autologin sin destino («Vincular mi usuario
             410,
         )
         assert.include(r.body().detail, 'desde Iris')
+    })
+})
+
+test.group('Iris 0.7.0 · actuación vinculada: lo que la suite deja en la auditoría', () => {
+    test('la acción de prueba no audita comprobantes que no existen (otra suite los crea con ese id)', async ({
+        assert,
+    }) => {
+        const peticiones = [...AprobarPrueba.peticiones]
+        // corre al final del archivo: las ejecuciones de los grupos anteriores ya quedaron auditadas
+        assert.isAbove(peticiones.length, 0)
+        const acciones = await db
+            .from('audit.acciones')
+            .whereIn('request_id', peticiones)
+            .where('accion', 'comprobantes.aprobar')
+            .where('resultado', 'ok')
+            .select('id', 'entidad_tipo', 'entidad_id', 'via_token_id')
+        assert.isAbove(acciones.length, 0)
+        assert.deepEqual(
+            acciones.filter((fila) => fila.entidad_tipo === 'comprobante'),
+            [],
+            'una fila comprobantes.aprobar sobre `comprobante` :id se cruza con el comprobante real de ese id',
+        )
+        const cambios = await db
+            .from('audit.cambios')
+            .whereIn('request_id', peticiones)
+            .where('entidad_tipo', 'comprobante')
+            .select('id', 'entidad_id')
+        assert.deepEqual(cambios, [])
     })
 })

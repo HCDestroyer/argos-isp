@@ -126,6 +126,13 @@ function corregir() {
         title="Solicitar promesa de pago"
         description="Elige el día en que vas a pagar. Si se aprueba, tu servicio se reactiva de inmediato."
     >
+        <template #title>
+            <PortalTituloModal
+                :texto="'Solicitar promesa de pago'"
+                :icono="'i-lucide-calendar-check'"
+                :tono="'primary'"
+            />
+        </template>
         <template #body>
             <div
                 v-if="cargando"
@@ -253,7 +260,7 @@ function corregir() {
                         class="flex gap-2"
                     >
                         <UIcon
-                            name="i-lucide-hand-coins"
+                            name="i-lucide-calendar-check"
                             class="mt-0.5 size-4 shrink-0 text-muted"
                         />
                         <span>
@@ -359,7 +366,7 @@ function corregir() {
                     <UButton
                         type="submit"
                         label="Solicitar promesa"
-                        icon="i-lucide-hand-coins"
+                        icon="i-lucide-calendar-check"
                         size="xl"
                         block
                         :loading="enviando"
