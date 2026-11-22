@@ -37,7 +37,7 @@ onMounted(() => {
             variant="subtle"
             icon="i-lucide-building-2"
             title="Elige una empresa"
-            :description="conSelector ? 'La configuración fiscal es de cada empresa (NIT): elige una en las pastillas de arriba.' : 'No hay una empresa activa en tu sesión.'"
+            :description="conSelector ? 'La configuración fiscal es de cada empresa (NIT): elige una en las pastillas de arriba. Los feriados, abajo, valen para todas.' : 'No hay una empresa activa en tu sesión.'"
             data-prueba="elegir-empresa"
         />
         <template v-else>

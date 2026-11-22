@@ -57,7 +57,7 @@ const QUE_TRAE = [
                 color="neutral"
                 variant="outline"
                 disabled
-                title="Falta la API: bitácora de corridas de la importación."
+                title="La bitácora de corridas estará disponible en una próxima versión."
                 data-prueba="corridas-importacion"
             />
         </template>
@@ -134,7 +134,7 @@ const QUE_TRAE = [
                     </template>
                     <SeccionSinApi
                         titulo="La importación desde el panel todavía no está disponible"
-                        descripcion="Hoy se corre por la línea de comandos del servidor. Falta su API (subir el respaldo, vista previa con cuadre, ejecutar y corridas): cuando llegue, esta pantalla la usa sin cambios."
+                        descripcion="Por ahora la importación la corre el equipo técnico en el servidor. Cuando esté disponible aquí, podrás subir el respaldo, ver la vista previa con el cuadre, importar y revisar las corridas."
                         icono="i-lucide-construction"
                     />
                 </div>
@@ -176,7 +176,7 @@ const QUE_TRAE = [
                         :icon="paso === 3 ? 'i-lucide-upload' : undefined"
                         class="glow-brand"
                         :disabled="paso === 3"
-                        :title="paso === 3 ? 'Falta la API de la importación.' : undefined"
+                        :title="paso === 3 ? 'La importación estará disponible en una próxima versión.' : undefined"
                         data-prueba="importar-siguiente"
                         @click="paso += 1"
                     />

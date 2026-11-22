@@ -36,7 +36,7 @@ const abierto = ref(false)
 const columnas: TableColumn<CuentaBancaria>[] = [
     { accessorKey: 'banco_nombre', header: 'Banco' },
     { accessorKey: 'numero', header: 'Número', meta: SOLO_ANCHO },
-    { accessorKey: 'tipo', header: 'Tipo', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'tipo', header: 'Tipo y titular', meta: SOLO_ESCRITORIO },
     { accessorKey: 'alias', header: 'Alias', meta: SOLO_ESCRITORIO },
     { id: 'ofrece', header: 'Se ofrece al cliente', meta: SOLO_ESCRITORIO },
     { accessorKey: 'activa', header: 'Activa' },
@@ -196,7 +196,13 @@ onMounted(() => {
                     >{{ row.original.numero }}</span>
                 </template>
                 <template #tipo-cell="{ row }">
-                    <span v-if="row.original.tipo">{{ TIPOS_CUENTA_BANCARIA[row.original.tipo] }} · {{ row.original.moneda }}</span>
+                    <div
+                        v-if="row.original.titular || row.original.tipo"
+                        class="flex flex-col"
+                    >
+                        <span>{{ row.original.tipo ? TIPOS_CUENTA_BANCARIA[row.original.tipo] : 'Sin tipo' }} · {{ row.original.moneda }}</span>
+                        <span class="text-xs text-muted">{{ row.original.titular ?? 'Sin titular' }}</span>
+                    </div>
                     <UBadge
                         v-else
                         label="Falta titular y tipo"

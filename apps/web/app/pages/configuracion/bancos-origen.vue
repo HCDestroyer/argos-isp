@@ -55,7 +55,7 @@ const visibles = computed(() => {
                 icon="i-lucide-plus"
                 class="self-start sm:self-center"
                 disabled
-                title="Falta la API: agregar un banco al catálogo (decisión 23 del PM)."
+                title="Agregar bancos al catálogo estará disponible en una próxima versión."
                 data-prueba="agregar-banco"
             />
         </div>

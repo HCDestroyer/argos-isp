@@ -28,12 +28,12 @@ const props = defineProps<{
         <div class="flex shrink-0 flex-col items-start gap-1 sm:items-end">
             <span class="text-sm text-muted">{{ props.fabrica }}</span>
             <UBadge
-                label="Falta la API"
+                label="Próximamente"
                 icon="i-lucide-construction"
                 color="neutral"
                 variant="subtle"
                 size="sm"
-                :title="props.decision ? `Decisión ${props.decision} del PM: la pantalla está lista y espera su endpoint.` : 'La pantalla está lista y espera su endpoint.'"
+                title="Este ajuste se podrá cambiar en una próxima versión."
             />
         </div>
     </div>

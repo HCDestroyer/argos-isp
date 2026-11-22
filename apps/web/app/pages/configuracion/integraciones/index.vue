@@ -339,7 +339,7 @@ onMounted(() => {
                             color="neutral"
                             variant="outline"
                             disabled
-                            title="Falta la API (agente/a6-equipos)."
+                            title="Disponible en una próxima versión."
                         />
                         <UButton
                             label="Probar conexión"
@@ -347,7 +347,7 @@ onMounted(() => {
                             color="neutral"
                             variant="outline"
                             disabled
-                            title="Falta la API (agente/a6-equipos)."
+                            title="Disponible en una próxima versión."
                         />
                     </div>
                 </ConfiguracionBloque>
