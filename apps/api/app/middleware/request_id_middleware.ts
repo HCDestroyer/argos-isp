@@ -44,10 +44,13 @@ export default class RequestIdMiddleware {
             const usuario = 'auth' in ctx ? ctx.auth.user : undefined
             const guard = usuario !== undefined ? ctx.auth.authenticatedViaGuard : undefined
             // Iris 0.6.0 §7.1: con `X-Iris-Actor` ya validado, el canal sale del actor de Iris
+            // Iris 0.14.2: `sistema` (lecturas sin persona) audita con canal `sistema`
             const canalIris: Canal | null = ctx.iris
                 ? ctx.iris.actor === 'asistente_ia'
                     ? 'ia'
-                    : 'api'
+                    : ctx.iris.actor === 'sistema'
+                      ? 'sistema'
+                      : 'api'
                 : null
             // Iris 0.7.0 (A23): la ruta pidió actuar como el usuario vinculado y el middleware
             // `actuarComoVinculado` ya lo resolvió; canal `api`, la vía queda en la auditoría

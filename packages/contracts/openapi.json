@@ -4398,10 +4398,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). También `sistema` (contrato Iris 0.14.2 §7.1): lectura sin persona, sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (400 `cabecera_iris_requerida`), auditada con canal `sistema`",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -7939,7 +7939,8 @@
                 "worker",
                 "webhook",
                 "interno",
-                "consola"
+                "consola",
+                "sistema"
               ]
             }
           },
@@ -7959,7 +7960,8 @@
                 "worker",
                 "webhook",
                 "interno",
-                "consola"
+                "consola",
+                "sistema"
               ]
             }
           },
@@ -11370,10 +11372,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -18378,10 +18380,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -18610,10 +18612,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -18727,7 +18729,7 @@
             "description": "Obligatoria con el token del usuario técnico Iris: `usuario:<id en Iris>` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). `asistente_ia` responde 403 `actor_ia_no_permitido`. Con `Idempotency-Key`, la misma clave con otro actor es 422",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -18965,7 +18967,7 @@
             "description": "Obligatoria con el token del usuario técnico Iris: `usuario:<id en Iris>` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). `asistente_ia` responde 403 `actor_ia_no_permitido`. Con `Idempotency-Key`, la misma clave con otro actor es 422",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -19265,10 +19267,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -20627,10 +20629,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). También `sistema` (contrato Iris 0.14.2 §7.1): lectura sin persona, sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (400 `cabecera_iris_requerida`), auditada con canal `sistema`",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -36714,10 +36716,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -73941,10 +73943,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
@@ -74468,10 +74470,10 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1)",
             "schema": {
               "type": "string",
-              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+              "pattern": "^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$"
             }
           },
           {
