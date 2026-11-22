@@ -21,6 +21,16 @@ function migracionDe(routerId: number): Migracion {
  * `GET /routers/:id/resumen-sesiones`, con las mismas reglas que la API.
  */
 export const rutasRed: RutasFixture = {
+    /** `GET /ip/:ip` (`ip.resolver`): la sesión activa gana sobre la asignación; 404 si nadie la tiene (solo IPv4 en fixtures). */
+    'GET /api/v1/ip/:ip': conPermiso('ip.resolver', (solicitud) => {
+        const ip = solicitud.params.ip ?? ''
+        const sesion = bd.sesiones.find(s => s.fin === null && s.ipv4 === ip && s.servicio_id !== null)
+        const servicio = bd.servicios.find(s => s.id === sesion?.servicio_id) ?? bd.servicios.find(s => s.ipv4 === ip && s.estado !== 'retirado')
+        return servicio
+            ? { status: 200, cuerpo: { servicio_id: servicio.id, cliente_id: servicio.cliente_id, prefijo: `${ip}/32` } satisfies Schema<'ResolucionIp'> }
+            : noEncontrado(`un servicio con la IP ${ip}`)
+    }),
+
     'GET /api/v1/red/eventos': conPermiso('red.ver', (solicitud) => {
         const router = numeroQuery(solicitud, 'router_id')
         const servicio = numeroQuery(solicitud, 'servicio_id')

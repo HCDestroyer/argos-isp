@@ -15,11 +15,13 @@ Al terminar, el cliente tiene un servicio con su router, su plan, su IP, su usua
 ## Pasos
 
 1. Abre la ficha del cliente y toca «Nuevo servicio». También puedes ir a **Servicios → Nuevo servicio** y elegir al cliente en el primer paso.
-2. **Conexión:** elige el **Router** y el **Plan** (solo aparecen los planes de ese router). El **Tipo de conexión** lo define el router. Con varias empresas, revisa la **Empresa que factura**.
-3. **Red y PPPoE:**
+2. **Conexión:**
+    - **Router:** toca uno de los sugeridos (los de la zona del cliente y los últimos que usaste) o búscalo por nombre, zona o tipo en la lista (en el teléfono se abre a pantalla completa). Cada router dice su tipo de conexión, si está en línea y cuántas IP le quedan; uno sin IP libres no se puede elegir y dice por qué.
+    - **Plan:** solo aparecen los planes de ese router. El **Tipo de conexión** lo define el router. Con varias empresas, revisa la **Empresa que factura**.
+    - **IP del servicio:** «Automática» (de fábrica) toma la siguiente IP libre de las redes del router; «Elegir red» te deja escoger la red, con cuántas IP le quedan (una llena no se puede elegir); «Escribir IP» es para una IP fija: dice si está «Libre» u «Ocupada por S-…» antes de guardar. En routers de IP estática o DHCP fija la IP es obligatoria: «Automática» la reserva al guardar.
+    - **Avanzado: IPv6:** viene lo recomendado según el plan. «Cambiar» te deja elegir el **Modo IPv6** y, si hace falta, el **DUID del equipo** o el **Prefijo delegado**.
+3. **Acceso PPPoE** (o **Equipo** sin PPPoE):
     - **Servidor** PPPoE del router, si tiene varios.
-    - **IPv4**, en **Asignación**: «Automática» toma la siguiente IP libre de las redes del router (puedes elegir la **Red**); «IP fija» la escribes tú.
-    - **IPv6**: viene lo recomendado según el plan. «Cambiar» te deja elegir el **Modo IPv6** y, si hace falta, el **DUID del equipo** o el **Prefijo delegado**.
     - **Usuario PPP** y **Contraseña PPP**: vienen generados. Puedes editarlos, generar otros o copiar la contraseña para configurar el equipo.
 4. **Instalación y cobro:**
     - Activa «Pendiente de instalación» si todavía no instalas el equipo (ver [Activar un servicio pendiente](./activar-instalacion.md)). Si ya lo dejas instalado hoy, déjalo apagado.
@@ -29,7 +31,7 @@ Al terminar, el cliente tiene un servicio con su router, su plan, su IP, su usua
 5. **Resumen:** revisa todo. «Cambiar» en cada grupo te regresa a ese paso.
 6. Toca «Crear servicio».
 
-![Alta de servicio en pasos: Cliente, Conexión, Red y PPPoE, Instalación y cobro, y Resumen](/capturas/tecnico/nuevo-servicio.png)
+![Alta de servicio en pasos: Cliente, Conexión, Acceso PPPoE, Instalación y cobro, y Resumen](/capturas/tecnico/nuevo-servicio.png)
 
 ## Qué pasa después
 
