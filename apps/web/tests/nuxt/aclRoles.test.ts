@@ -7,6 +7,7 @@ import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaSinPermiso from '~/pages/sin-permiso.vue'
 import { esperar } from '../ayudas/esperar'
+import { opcionesMasServicio } from '../ayudas/fichaServicio'
 
 /**
  * Revisión de ACL del panel en ejecución (semana 3, tarea 3; checklist en
@@ -196,7 +197,8 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         for (const ruta of [`/servicios/${suspendido?.id}`, `/facturas/${pendiente?.id}`]) {
             useUsuarioActual().value = LECTURA
             const lectura = await montar(ruta)
-            await esperar(() => expect(lectura.text()).toMatch(/Historial|Líneas|Aviso/))
+            // OperServicioFicha: la ficha del servicio tiene la pestaña «Bitácora» (ya no «Historial»).
+            await esperar(() => expect(lectura.text()).toMatch(/Historial|Líneas|Aviso|Bitácora/))
             await new Promise(listo => setTimeout(listo, 50))
             expect(botones(lectura.element).filter(texto => ACCION.test(texto)), ruta).toEqual([])
             lectura.unmount()
@@ -214,8 +216,11 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         useUsuarioActual().value = meCajero
         const activo = bd.servicios.find(servicio => servicio.estado === 'activo')
         const wrapper = await montar(`/servicios/${activo?.id}`)
-        await esperar(() => expect(botones(wrapper.element)).toContain('Promesa de pago'))
-        const textos = botones(wrapper.element)
+        // OperServicioFicha: «Promesa de pago» va en el menú «Más» de la ficha, con el resto de acciones.
+        await esperar(() => expect(wrapper.find('[data-prueba="mas-acciones-servicio"]').exists()).toBe(true))
+        const opciones = await opcionesMasServicio(wrapper)
+        expect(opciones).toContain('Promesa de pago')
+        const textos = [...botones(wrapper.element), ...opciones]
         for (const accion of ['Suspender', 'Limitar', 'Retirar', 'Desconectar', 'Editar', 'Mostrar']) {
             expect(textos.some(texto => texto.startsWith(accion)), accion).toBe(false)
         }

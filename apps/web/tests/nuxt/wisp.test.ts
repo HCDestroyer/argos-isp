@@ -120,7 +120,13 @@ describe('semana 2 · servicios WISP', () => {
         expect(vista.text()).not.toContain('Desconectar')
         expect(vista.find('[data-prueba="editar-servicio"]').exists()).toBe(true)
 
-        const pppoe = await mountSuspended(PaginaServicio, { route: '/servicios/1' })
+        // OperServicioFicha: las credenciales van en la pestaña «Red y equipo».
+        const redWisp = await mountSuspended(PaginaServicio, { route: `/servicios/${servicio.id}?pestana=red` })
+        await esperar(() => expect(redWisp.text()).toContain('Ubicación y contacto en sitio'))
+        expect(redWisp.text()).not.toContain('Credenciales PPPoE')
+        redWisp.unmount()
+
+        const pppoe = await mountSuspended(PaginaServicio, { route: '/servicios/1?pestana=red' })
         await esperar(() => expect(pppoe.text()).toContain('Credenciales PPPoE'))
         expect(pppoe.find('[data-prueba="tipo-conexion"]').text()).toBe('PPPoE')
     })

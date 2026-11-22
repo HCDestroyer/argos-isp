@@ -100,7 +100,8 @@ describe('contacto de los routers', () => {
         expect(contacto.find('[data-prueba="ultimo-contacto-9"]').attributes('title')).toBe(formatearFechaHora('2026-10-24T15:00:00Z'))
     })
 
-    it('la lista muestra Desconocido mientras nada lo mide', async () => {
+    // Tablero RedRouters: el que nunca respondió está «Por conectar» y debajo dice «nunca respondió».
+    it('la lista muestra «Por conectar» mientras nada lo mide', async () => {
         const router = bd.routers[0]
         if (router) {
             Object.assign(router, { en_linea: true, ultimo_contacto: new Date(Date.now() - 120_000).toISOString() })
@@ -108,8 +109,8 @@ describe('contacto de los routers', () => {
         const pagina = await mountSuspended(conApp(PaginaRouters))
         await esperar(() => expect(pagina.find('[data-prueba="contacto-2"]').exists()).toBe(true))
         expect(pagina.find('[data-prueba="en-linea-1"]').text()).toBe('En línea')
-        expect(pagina.find('[data-prueba="ultimo-contacto-1"]').text()).toBe('hace 2 min')
-        expect(pagina.find('[data-prueba="en-linea-2"]').text()).toBe('Desconocido')
-        expect(pagina.find('[data-prueba="ultimo-contacto-2"]').text()).toBe('Nunca respondió')
+        expect(pagina.find('[data-prueba="ultimo-contacto-1"]').text()).toBe('contacto hace 2 min')
+        expect(pagina.find('[data-prueba="en-linea-2"]').text()).toBe('Por conectar')
+        expect(pagina.find('[data-prueba="ultimo-contacto-2"]').text()).toBe('nunca respondió')
     })
 })
