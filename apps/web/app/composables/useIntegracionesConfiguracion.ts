@@ -78,7 +78,7 @@ export function useIntegracionesConfiguracion() {
             const presentacion = iris.value ? presentacionConectorIris(iris.value) : null
             lista.push({
                 id: 'iris', nombre: 'Iris', frase: 'Soporte, órdenes, chat y avisos', icono: 'i-lucide-message-square', tono: 'tono-exito', to: '/configuracion/integraciones/iris',
-                estado: presentacion ? { etiqueta: presentacion.etiqueta, color: presentacion.color, icono: presentacion.icono, prueba: 'estado-tarjeta-iris' } : null,
+                estado: presentacion ? { etiqueta: presentacion.etiqueta, color: presentacion.color, icono: presentacion.icono, prueba: 'estado-lista-iris' } : null,
             })
         }
         if (puede('horus.ver')) {
@@ -86,7 +86,7 @@ export function useIntegracionesConfiguracion() {
             lista.push({
                 id: 'horus', nombre: 'Horus', frase: 'Tráfico y seguridad de la red', icono: 'i-lucide-activity', tono: 'tono-exito', to: '/configuracion/integraciones/horus',
                 estado: conector
-                    ? { etiqueta: conector.activo ? 'Activa' : (conector.version === 0 ? 'Sin conectar' : 'Apagada'), color: conector.activo ? 'success' : 'neutral', icono: conector.activo ? 'i-lucide-plug-zap' : 'i-lucide-power-off', prueba: 'estado-tarjeta-horus' }
+                    ? { etiqueta: conector.activo ? 'Activa' : (conector.version === 0 ? 'Sin conectar' : 'Apagada'), color: conector.activo ? 'success' : 'neutral', icono: conector.activo ? 'i-lucide-plug-zap' : 'i-lucide-power-off', prueba: 'estado-lista-horus' }
                     : null,
             })
         }
