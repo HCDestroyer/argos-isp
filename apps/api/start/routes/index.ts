@@ -22,6 +22,7 @@ import monitoreo from '#start/routes/monitoreo'
 import apariencia from '#start/routes/apariencia'
 import extractosBancarios from '#start/routes/extractos_bancarios'
 import irisProspectos from '#start/routes/iris_prospectos'
+import equiposIris from '#start/routes/equipos_iris'
 
 export const registroRutas: Ruta[] = [
     ...core,
@@ -36,6 +37,7 @@ export const registroRutas: Ruta[] = [
     ...notify,
     ...integraciones,
     ...irisProspectos,
+    ...equiposIris,
     ...monitoreo,
     ...apariencia,
 ]

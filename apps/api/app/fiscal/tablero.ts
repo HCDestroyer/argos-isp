@@ -104,10 +104,25 @@ export async function tableroFiscal(empresas: number[] | null): Promise<TableroF
     return { hoy, empresas: salida }
 }
 
+/**
+ * Solo algunos bloques del tablero de una empresa (las alertas del panel financiero, `#billing/panel`):
+ * mismas funciones y mismo manejo de errores que el tablero completo; los demás no se calculan.
+ */
+export async function bloquesDelTablero(
+    empresaId: number,
+    nombres: readonly NombreBloque[],
+    c: QueryClientContract = db.connection(),
+    hoy: string = hoyFiscal(),
+): Promise<Partial<Record<NombreBloque, Bloque>> & { regimen: string | null }> {
+    const t = await tableroEmpresa(c, empresaId, hoy, nombres)
+    return { ...t.bloques, regimen: t.regimen }
+}
+
 async function tableroEmpresa(
     c: QueryClientContract,
     empresaId: number,
     hoy: string,
+    nombres: readonly NombreBloque[] = BLOQUES_TABLERO,
 ): Promise<TableroEmpresa> {
     let ctx: Contexto | null = null
     let falla: Bloque | null = null
@@ -127,7 +142,7 @@ async function tableroEmpresa(
         falla = await calcularBloque(empresaId, 'facturado', () => Promise.reject(error))
     }
     const bloques = {} as Record<NombreBloque, Bloque>
-    for (const nombre of BLOQUES_TABLERO) {
+    for (const nombre of nombres) {
         bloques[nombre] = falla ?? (await calcularBloque(empresaId, nombre, () => CALCULOS[nombre](ctx!)))
     }
     return { empresa_id: empresaId, regimen: ctx?.regimen ?? null, bloques }

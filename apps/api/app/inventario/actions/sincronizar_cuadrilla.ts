@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import { usuarioIris } from '#core/integraciones_iris'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
-import { bodegasDelUsuario } from '#inventario/tecnicos'
+import { validarTecnicoDeEmpresa } from '#inventario/vinculos_iris'
 
 /**
  * `inventario.sincronizar_cuadrilla`: aplica un `cuadrilla.creada` / `cuadrilla.actualizada` de Iris
@@ -271,29 +271,6 @@ export default class SincronizarCuadrilla extends DomainAction<
         idExterno: string | null,
         empresaId: number,
     ): Promise<{ usuarioId: number | null; motivo: string | null }> {
-        if (idExterno === null) return { usuarioId: null, motivo: 'sin_vinculo' }
-        if (!/^\d{1,18}$/.test(idExterno)) return { usuarioId: null, motivo: 'usuario_inexistente' }
-        const usuarioId = Number(idExterno)
-        const usuario = await t.trx.from('core.usuarios').where('id', usuarioId).select('activo').first()
-        if (!usuario) return { usuarioId: null, motivo: 'usuario_inexistente' }
-        if (!usuario.activo) return { usuarioId, motivo: 'usuario_inactivo' }
-        // técnico de la empresa: con bodega de técnico en ella, o con el rol `tecnico` y la empresa en su alcance
-        const propias = await bodegasDelUsuario(t.trx, usuarioId, [empresaId])
-        if (propias.length > 0) {
-            return { usuarioId, motivo: null }
-        }
-        const rol = await t.trx
-            .from('core.usuarios_roles as ur')
-            .join('core.roles as r', 'r.id', 'ur.role_id')
-            .where('ur.usuario_id', usuarioId)
-            .where('r.nombre', 'tecnico')
-            .select('ur.usuario_id')
-            .first()
-        if (!rol) return { usuarioId, motivo: 'no_es_tecnico' }
-        const alcance = await alcanceEmpresasDeUsuario(usuarioId, t.trx)
-        if (!alcance.alcanceGlobal && !alcance.empresas.includes(empresaId)) {
-            return { usuarioId, motivo: 'fuera_de_la_empresa' }
-        }
-        return { usuarioId, motivo: null }
+        return validarTecnicoDeEmpresa(t.trx, idExterno, empresaId)
     }
 }

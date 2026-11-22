@@ -111,6 +111,15 @@ export interface DefinicionRuta<
      * `idempotency_key_requerida` (operaciones que llaman otros sistemas, p. ej. Iris)
      */
     idempotente?: boolean | 'obligatoria'
+    /**
+     * Al repetir una `Idempotency-Key` ya completada, en vez de la respuesta guardada tal cual, la que
+     * devuelva esta función a partir de ella (p. ej. un `202 en_proceso` que ya terminó → `200` con el
+     * estado final, contrato Iris 0.9.0 §12.2). `null`: la guardada.
+     */
+    releerRepeticion?: (guardada: {
+        status: number
+        body: unknown
+    }) => Promise<{ status: number; body: unknown } | null>
     /** la edición exige `version` y puede responder 409 */
     versionada?: boolean
     /**
@@ -129,6 +138,11 @@ export interface DefinicionRuta<
      * contexto igual. Otros actores no las necesitan.
      */
     cabecerasIris?: boolean | 'opcional' | ((ctx: HttpContext) => boolean)
+    /**
+     * La huella de `Idempotency-Key` incluye `X-Iris-Actor` sin exigir las cabeceras de §7 (contrato Iris
+     * 0.14.0 §3.10: `…/cambiar` y `…/no-recuperado`): la misma clave con otro actor es 422.
+     */
+    huellaActorIris?: boolean
     /**
      * Iris 0.7.0 (A23): con el token de Iris y `X-Iris-Actor: usuario:<id>`, la acción corre y se
      * audita como el usuario de Argos vinculado (`#core/actuacion_vinculada`). Debe ser igual a
@@ -169,7 +183,9 @@ export function validarActuacionVinculada(ruta: Ruta): void {
 
 /** ¿La huella de `Idempotency-Key` incluye `X-Iris-Actor`? (rutas de atención de Iris). */
 export function idempotenciaPorActorIris(ruta: Ruta): boolean {
-    return Boolean(ruta.cabecerasIris) || ruta.actuarComoVinculado !== undefined
+    return (
+        Boolean(ruta.cabecerasIris) || ruta.actuarComoVinculado !== undefined || ruta.huellaActorIris === true
+    )
 }
 
 /** Ayuda de tipos: infiere cuerpo y query del handler a partir de los validadores. */
