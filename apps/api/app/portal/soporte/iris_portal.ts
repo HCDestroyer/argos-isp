@@ -19,9 +19,12 @@ import { configIris, contratoAdmite, leerFilaIris } from '#integraciones/iris/co
  * - `Idempotency-Key: argos:portal:<operacion>:<id>` en todo `POST` (§11.2).
  *
  * Disponibilidad (`disponibilidadSoporte`): conector Iris activo con URL, contrato ≥ 0.9.0
- * (`conectorAdmite`), `token_portal` guardado y `capacidades.portal_argos` en
- * `GET <iris>/api/v1/integraciones/argosisp/estado` (§4.3; se lee con el token del panel, el de
- * §1.2, en cada consulta: sin caché, regla 5). Sin conector configurado (`sin_iris`) el portal no
+ * (`conectorAdmite`), `token_portal` guardado y `capacidades.portal_argos` (§4.3; se lee con el
+ * token del panel, el de §1.2, en cada consulta: sin caché, regla 5). Con un Iris ≥ 0.14.2 se lee
+ * de `GET <iris>/api/v1/integraciones/argosisp/capacidades` (`{ contrato_iris, capacidades }`, permiso
+ * `integraciones.ver_capacidades` del rol `integracion_argos`); su `403` o `404` es un error de
+ * configuración visible (`sin_respuesta`, con «Reintentar»), nunca capacidades supuestas. Un Iris
+ * anterior todavía responde en `GET …/argosisp/estado`. Sin conector configurado (`sin_iris`) el portal no
  * muestra la sección; en los demás casos la muestra con el error y «Reintentar».
  *
  * Errores: los de Iris se traducen a problemas de Argos con el mismo código (`urn:argosisp:problema:<codigo>`)
@@ -37,6 +40,10 @@ export const CONTRATO_CONTACTOS_IRIS = '0.12.1'
 
 const RUTA_BASE = '/api/v1/integraciones/argosisp/portal/clientes'
 const RUTA_ESTADO = '/api/v1/integraciones/argosisp/estado'
+/** Ruta propia de las capacidades (contrato Iris 0.14.2 §4.3). */
+const RUTA_CAPACIDADES = '/api/v1/integraciones/argosisp/capacidades'
+/** Desde esta versión Argos lee `RUTA_CAPACIDADES` en lugar de `RUTA_ESTADO`. */
+export const CONTRATO_CAPACIDADES_IRIS = '0.14.2'
 const TIMEOUT_MS = 10_000
 
 export interface CapacidadesIris {
@@ -136,15 +143,26 @@ export async function disponibilidadSoporte(): Promise<DisponibilidadSoporte> {
     }
     if (!conector.tokenPortal) return { estado: 'sin_token', capacidades: null, contactos: false }
     let capacidades: CapacidadesIris | null = null
+    const ruta = contratoAdmite(conector.contrato, CONTRATO_CAPACIDADES_IRIS) ? RUTA_CAPACIDADES : RUTA_ESTADO
     try {
-        const respuesta = await fetchIris(`${conector.urlBase}${RUTA_ESTADO}`, {
+        const respuesta = await fetchIris(`${conector.urlBase}${ruta}`, {
             headers: {
                 Accept: 'application/json',
                 ...(conector.tokenPanel ? { Authorization: `Bearer ${conector.tokenPanel}` } : {}),
             },
             signal: AbortSignal.timeout(TIMEOUT_MS),
         })
-        if (!respuesta.ok) return { estado: 'sin_respuesta', capacidades: null, contactos: false }
+        if (!respuesta.ok) {
+            if (respuesta.status === 403 || respuesta.status === 404) {
+                // 0.14.2: token de otro conector, conector apagado en Iris o el `token_portal` en
+                // lugar del del panel; es configuración, no una caída
+                logger.error(
+                    { status: respuesta.status, ruta },
+                    'portal: Iris rechazó la lectura de capacidades (revisar el token del panel del conector)',
+                )
+            }
+            return { estado: 'sin_respuesta', capacidades: null, contactos: false }
+        }
         const cuerpo = (await respuesta.json()) as { capacidades?: unknown }
         capacidades = capacidadesDe(cuerpo.capacidades)
     } catch (error) {
