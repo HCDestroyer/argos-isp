@@ -29009,7 +29009,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). También `sistema` (contrato Iris 0.14.2 §7.1): lectura sin persona, sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (400 `cabecera_iris_requerida`), auditada con canal `sistema` */
                 "X-Iris-Actor"?: string;
                 /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -30859,9 +30859,9 @@ export interface operations {
                 hasta?: string;
                 /** @description Acciones del cliente y de sus servicios, facturas, pagos y promesas */
                 cliente_id?: number;
-                canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
+                canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola" | "sistema";
                 /** @description Oculta las acciones de este canal (p. ej. portal) */
-                excluir_canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
+                excluir_canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola" | "sistema";
                 /** @description Acciones de esta conversación de Iris (`X-Iris-Conversacion`, contrato Iris 0.6.0) */
                 iris_conversacion?: string;
                 /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
@@ -32699,7 +32699,7 @@ export interface operations {
                 telefono?: string;
             };
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -36029,7 +36029,7 @@ export interface operations {
             header: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
                 "Idempotency-Key": string;
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -36143,7 +36143,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -36524,7 +36524,7 @@ export interface operations {
             header: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
                 "Idempotency-Key": string;
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -37303,7 +37303,7 @@ export interface operations {
                 activa?: boolean;
             };
             header?: {
-                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). También `sistema` (contrato Iris 0.14.2 §7.1): lectura sin persona, sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (400 `cabecera_iris_requerida`), auditada con canal `sistema` */
                 "X-Iris-Actor"?: string;
                 /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -46394,7 +46394,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -66769,7 +66769,7 @@ export interface operations {
             header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
                 "Idempotency-Key"?: string;
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
@@ -67088,7 +67088,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`). `sistema` aquí responde 403 `actor_no_permitido` (422 en una escritura; contrato Iris 0.14.2 §7.1) */
                 "X-Iris-Actor"?: string;
                 /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;

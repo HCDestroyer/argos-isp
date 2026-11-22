@@ -29,6 +29,8 @@ export const CANALES = [
     'webhook',
     'interno',
     'consola',
+    /** lecturas de Iris sin persona (`X-Iris-Actor: sistema`, contrato Iris 0.14.2 §7.1) */
+    'sistema',
 ] as const
 export type Canal = (typeof CANALES)[number]
 
