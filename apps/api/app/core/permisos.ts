@@ -251,6 +251,12 @@ export const PERMISOS = {
     'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
     'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
 
+    'equipos.ver':
+        'Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización',
+    'equipos.configurar':
+        'Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin',
+    'equipos.probar': 'Probar la conexión con SmartOLT y GenieACS con la configuración guardada',
+
     'iris.ver': 'Ver el conector con Iris (sin secretos) y los tokens de su usuario técnico (sin el valor)',
     'iris.configurar':
         'Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin',
@@ -327,6 +333,12 @@ export const PERMISOS = {
     // contrato Iris 0.12.0 §3.10 (A48): equipos del cliente
     'servicios.cambiar_equipo':
         'Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación',
+    // contrato Iris 0.9.0 §12 (A32, A33, A35 y A37): equipos del cliente y bienvenida
+    'servicios.aprovisionar':
+        'Aprovisionar y activar un servicio pendiente con su equipo (ONT por SmartOLT, router o CPE por el ACS TR-069)',
+    'servicios.ver_equipo': 'Ver el estado del equipo del cliente (en línea, señal y firmware)',
+    'servicios.cambiar_wifi': 'Cambiar el nombre o la clave del Wi-Fi del equipo del cliente',
+    'servicios.reenviar_bienvenida': 'Reenviar la bienvenida de un servicio activo por sus canales',
     'inventario.ver_unidad':
         'Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor',
     'inventario.cobrar_equipo':
@@ -338,6 +350,14 @@ export const PERMISOS = {
     'inventario.registrar_contacto_recuperacion':
         'Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)',
     // contrato Iris 0.11.0 §3.9 (A47): la membresía de la bodega de cuadrilla llega de Iris (sistema)
+    // contrato Iris 0.14.0 (§3.10, §4.5, §6.6): verificación de intentos y cambios, intentos anteriores a la
+    // verificación y vínculos de técnicos (el webhook y el worker corren como sistema)
+    'inventario.verificar_operacion_iris':
+        'Verificar con Iris los intentos de recuperación y los cambios con cobro propuesto (al abrir la declaración)',
+    'inventario.decidir_intento_recuperacion':
+        'Decidir si cuenta un intento de recuperación anterior a la verificación con Iris',
+    'inventario.sincronizar_vinculo_tecnico':
+        'Aplicar o conciliar con Iris el vínculo de un técnico con su usuario de Argos (solo inventario)',
     'inventario.sincronizar_cuadrilla':
         'Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)',
     'tipos_producto.crear': 'Crear tipos de producto',
@@ -561,6 +581,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.registrar_identidad',
             'servicios.completar_datos',
             'servicios.cambiar_titular',
+            'servicios.ver_equipo',
+            'servicios.cambiar_wifi',
+            'servicios.reenviar_bienvenida',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -617,6 +640,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.registrar_identidad',
             'servicios.completar_datos',
             'servicios.cambiar_titular',
+            'servicios.aprovisionar',
+            'servicios.ver_equipo',
+            'servicios.cambiar_wifi',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',

@@ -183,6 +183,31 @@ export interface PayloadComprobante {
     verificado_iris_actor?: string | null
 }
 
+/** Equipo del cliente (contrato Iris 0.9.0 §12). */
+export type TipoEquipoCliente = 'ont' | 'cpe_wireless' | 'router_tr069'
+export const CAUSAS_APROVISIONAMIENTO = [
+    'equipo_no_encontrado',
+    'equipo_en_uso',
+    'sin_puerto',
+    'perfil_sin_mapear',
+    'sin_ip_disponible',
+    'olt_sin_respuesta',
+    'acs_sin_respuesta',
+    'servicio_no_pendiente',
+    'otro',
+] as const
+export type CausaAprovisionamiento = (typeof CAUSAS_APROVISIONAMIENTO)[number]
+
+interface PayloadInstalacion {
+    aprovisionamiento_id: number
+    servicio_id: number
+    empresa_id: number
+    cliente_id: number
+    origen_tipo: 'iris_orden' | null
+    origen_id: string | null
+    idempotency_key: string | null
+}
+
 interface PayloadSesion {
     servicio_id: number | null
     /** null solo en una sesión de sondeo de un router sin RADIUS y sin `nas_ip` */
@@ -744,6 +769,55 @@ export interface CatalogoEventos {
         campos: CampoClienteActualizado[]
     }
     /**
+     * Contrato Iris 0.9.0 §6.6 (A30): un ticket del cliente cambió de estado en Iris (webhook
+     * `ticket.estado_cambiado`). Para notify: con `a = resuelto` («revisa y confirma»,
+     * `puede_confirmar`) o `cerrado`, avisa al cliente. Nunca el cuerpo de un mensaje ni un motivo
+     * escrito por una persona. `ticket_id` es el id de Iris (texto).
+     */
+    'soporte.ticket_estado_cambiado': {
+        ticket_id: string
+        numero: string | null
+        empresa_id: number | null
+        cliente_id: number
+        servicio_id: number | null
+        origen: string | null
+        de: string | null
+        a: string
+        puede_confirmar: boolean
+        webhook_id: string
+    }
+    /**
+     * Contrato Iris 0.9.0 §6.6 (A30): hay una respuesta en el ticket (webhook `ticket.respondido`).
+     * Para notify: «tienes una respuesta en tu ticket TK-…»; con `aviso_por_correo` no manda correo
+     * (Iris ya lo mandó); con `masivo` (falla general), un solo aviso por cliente.
+     */
+    'soporte.ticket_respondido': {
+        ticket_id: string
+        numero: string | null
+        empresa_id: number | null
+        cliente_id: number
+        mensaje_id: string | null
+        autor_tipo: 'agente' | 'sistema'
+        masivo: boolean
+        aviso_por_correo: boolean
+        webhook_id: string
+    }
+    /**
+     * Contrato Iris 0.9.0 §6.6 y §11.7 (A31): una solicitud de servicio del cliente cambió de estado
+     * (webhook `solicitud_servicio.estado_cambiado`, `a` = `estado_cliente`). Para notify: avisa al cliente.
+     */
+    'soporte.solicitud_estado_cambiado': {
+        solicitud_id: string
+        numero: string | null
+        empresa_id: number | null
+        cliente_id: number
+        tipo: string | null
+        servicio_id: number | null
+        de: string | null
+        a: string
+        webhook_id: string
+    }
+    /**
      * Contrato Iris 0.10.0 §3.5 (A42) y 0.10.1 §3.8 (A46): se creó, editó o quitó un contacto del
      * cliente. `campos[]` solo nombres (`nombre`, `relacion`, `servicios`, `permisos`, `telefonos`,
      * `persona_cliente_id`); nunca números ni documentos. `persona_anterior_id` y `motivo:
@@ -962,6 +1036,78 @@ export interface CatalogoEventos {
         canal: CanalNotificacion
         evento_origen: string
         estado: 'enviado' | 'fallido'
+    }
+    /**
+     * Contrato Iris 0.9.0 §12.5 (A37): cambió el estado de la bienvenida de un servicio en algún
+     * canal (al programarla, al enviarse o fallar, y con el acuse de WhatsApp de Iris). Uno por cambio.
+     * `canales[]` siempre trae los tres canales. Nunca el texto ni las cuentas.
+     */
+    'servicio.bienvenida_cambiada': {
+        bienvenida_id: number
+        servicio_id: number
+        empresa_id: number | null
+        cliente_id: number
+        origen_tipo: 'iris_orden' | null
+        origen_id: string | null
+        canales: Array<{
+            canal: 'whatsapp' | 'correo' | 'telegram'
+            estado: 'pendiente' | 'enviada' | 'fallida' | 'omitida'
+            motivo: string | null
+            aviso_id: string | null
+        }>
+        reenvio: boolean
+    }
+    /**
+     * Contrato Iris 0.9.0 §12.2 (A32, A6): terminó un aprovisionamiento pedido desde Iris (uno final
+     * por aprovisionamiento). Nunca la clave Wi-Fi ni credenciales. `senal` con ONT: rx/tx en dBm.
+     */
+    'instalacion.aprovisionada': PayloadInstalacion & {
+        servicio_estado: string
+        equipo: {
+            tipo: TipoEquipoCliente
+            serie: string | null
+            mac: string | null
+            unidad_id: number | null
+        }
+        senal: { rx_dbm: number | null; tx_dbm: number | null } | null
+        activado_en: string
+    }
+    'instalacion.fallida': PayloadInstalacion & {
+        causa: CausaAprovisionamiento
+        reintentable: boolean
+        /** texto para la persona, sin secretos */
+        detalle: string | null
+    }
+    /**
+     * Contrato Iris 0.9.0 §12.4 (A35, A6): se resolvió un cambio de Wi-Fi. Nunca el SSID ni la clave.
+     * Con `aplicado`, notify avisa al titular por sus canales registrados.
+     */
+    'equipo.wifi_resuelto': {
+        solicitud_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        origen_tipo: 'iris_orden' | 'iris_ticket' | 'iris_conversacion'
+        origen_id: string
+        idempotency_key: string | null
+        estado: 'aplicado' | 'fallido'
+        causa: 'equipo_sin_gestion' | 'equipo_sin_respuesta' | 'rechazado_por_equipo' | 'otro' | null
+    }
+    /**
+     * Contrato Iris 0.9.0 §12.5 (A37): se pidió reenviar la bienvenida de un servicio
+     * (`servicios.reenviar_bienvenida`). Interno de notify: su worker la programa por los canales
+     * pedidos (`canales` null = todos) con el origen de envíos `origen_envios`. No va a Iris (Iris recibe
+     * `servicio.bienvenida_cambiada`).
+     */
+    'servicio.bienvenida_solicitada': {
+        bienvenida_id: number
+        servicio_id: number
+        empresa_id: number | null
+        cliente_id: number
+        origen_tipo: 'iris_orden' | null
+        origen_id: string | null
+        origen_envios: string
+        canales: Array<'whatsapp' | 'correo' | 'telegram'> | null
     }
     /**
      * Cambió la configuración de canales de notificación (global si `empresa_id` es null). Los
@@ -1222,6 +1368,61 @@ export interface CatalogoEventos {
     'inventario.unidad_estado_cambiado': PayloadUnidadEstado
     'inventario.equipo_cambiado': PayloadEquipoCambiado
     'inventario.recuperacion_intentada': PayloadRecuperacionIntentada
+    /**
+     * Iris 0.14.0 §3.10: terminó la verificación de un intento de recuperación o de un cambio con cobro
+     * propuesto (verificado o no). Nunca la foto, la nota ni la clave.
+     */
+    'inventario.operacion_verificada': {
+        verificacion_id: number
+        empresa_id: number
+        operacion: 'no_recuperado' | 'cambio'
+        intento_id: number | null
+        cambio_id: number | null
+        unidad_id: number | null
+        servicio_id: number | null
+        estado: 'verificado' | 'no_verificado'
+        motivo: string | null
+    }
+    /** Iris respondió 401/403 a la verificación (aviso al admin en el registro del sistema; R-03). */
+    'inventario.verificacion_sin_acceso': {
+        verificacion_id: number
+        empresa_id: number
+        operacion: 'no_recuperado' | 'cambio'
+        status: number | null
+    }
+    /** Cambió el vínculo de un técnico de Iris con su usuario de Argos (§6.6, R-10). Solo inventario. */
+    'inventario.vinculo_tecnico_cambiado': {
+        vinculo_id: number
+        empresa_id: number
+        iris_usuario_id: string
+        usuario_id: number | null
+        estado: 'vinculado' | 'rechazado' | 'desvinculado'
+        anterior: 'vinculado' | 'rechazado' | 'desvinculado' | null
+        motivo: string | null
+        version: number
+        origen: 'webhook' | 'conciliacion'
+    }
+    /**
+     * Riesgo aceptado T-12: un técnico vinculado registró movimientos fuera de una orden informada por Iris
+     * o más que el volumen diario configurado (aviso al admin en el registro del sistema).
+     */
+    'inventario.alerta_tecnico': {
+        alerta_id: number
+        empresa_id: number
+        usuario_id: number
+        actor_tecnico: string
+        motivo: 'sin_orden' | 'volumen_diario'
+        dia: string
+        movimientos: number
+        umbral: number | null
+        idempotency_key: string | null
+    }
+    /** Iris informó un contrato menor que el último aceptado (409 contrato_regresivo; aviso al admin). */
+    'iris.contrato_regresivo': {
+        empresa_id: null
+        aceptado: string
+        informado: string
+    }
     /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
     'inventario.existencia_minima': {
         empresa_id: number
@@ -1634,6 +1835,9 @@ export const EVENTOS = [
     'router.redes_cambiadas',
     'router.radius_cambiado',
     'cliente.actualizado',
+    'soporte.ticket_estado_cambiado',
+    'soporte.ticket_respondido',
+    'soporte.solicitud_estado_cambiado',
     'cliente.contactos_cambiados',
     'cliente.identidad_registrada',
     'servicio.titular_cambiado',
@@ -1673,6 +1877,11 @@ export const EVENTOS = [
     'libro.checks_verificados',
     'libro.emitido',
     'notificacion.enviada',
+    'servicio.bienvenida_cambiada',
+    'servicio.bienvenida_solicitada',
+    'instalacion.aprovisionada',
+    'instalacion.fallida',
+    'equipo.wifi_resuelto',
     'notificaciones.config_cambiada',
     'portal.config_cambiada',
     'portal.codigo_corte_emitido',
@@ -1707,6 +1916,11 @@ export const EVENTOS = [
     'inventario.unidad_estado_cambiado',
     'inventario.equipo_cambiado',
     'inventario.recuperacion_intentada',
+    'inventario.operacion_verificada',
+    'inventario.verificacion_sin_acceso',
+    'inventario.vinculo_tecnico_cambiado',
+    'inventario.alerta_tecnico',
+    'iris.contrato_regresivo',
     'inventario.existencia_minima',
     'inventario.conteo_cerrado',
     'inventario.traslado_enviado',

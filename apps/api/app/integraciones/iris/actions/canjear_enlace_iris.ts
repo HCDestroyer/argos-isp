@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { capacidadesIris, type CapacidadesIris } from '#integraciones/equipos/equipos'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { cifrar, descifrar } from '#shared/cifrado'
@@ -55,6 +56,12 @@ export interface EntradaCanjearEnlaceIris {
      * B1, siempre true). Se guarda en el conector; ausente: null (desconocido, un Iris anterior)
      */
     receptor_argos?: boolean | null
+    /**
+     * Contrato 0.9.0 §1.2: segundo `iris_pat_` recortado a `portal_argos.*` para el servidor del portal
+     * del cliente. Se guarda cifrado (`token_portal_cifrado`) y se rota con cada canje; ausente: null.
+     * Se audita como `***` (su nombre empieza por `token`).
+     */
+    token_portal?: string | null
 }
 
 export interface SalidaCanjearEnlaceIris {
@@ -76,6 +83,8 @@ export interface SalidaCanjearEnlaceIris {
     version_argos: string
     /** versión del contrato que habla este Argos (`CONTRATO_IRIS`) */
     contrato: string
+    /** 0.9.0 §4.3: qué puede aprovisionar Argos por empresa y tecnología */
+    capacidades: CapacidadesIris
 }
 
 export interface EmpresaDelAlcance {
@@ -220,7 +229,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             t.anotarAuditoria({ repeticion: true })
             const guardada = JSON.parse(descifrar(enlace.respuesta_cifrada)) as Omit<
                 SalidaCanjearEnlaceIris,
-                'panel_url' | 'version_argos' | 'contrato'
+                'panel_url' | 'version_argos' | 'contrato' | 'capacidades'
             > & { panel_url?: string }
             // 0.6.3: si Iris ya revocó ese token (rechazó el canje) o venció sin uso, el canje no se repite
             if (await tokenRevocado(t, guardada.token)) throw new EnlaceVencido()
@@ -228,6 +237,7 @@ export default class CanjearEnlaceIris extends DomainAction<
                 ...guardada,
                 panel_url: guardada.panel_url ?? urlPanel(),
                 ...(await versionesIris()),
+                capacidades: await capacidadesIris(t.trx),
             }
             if (completa.empresas) return completa
             // canje guardado antes de 0.3.1: se completa con el alcance actual del usuario Iris
@@ -273,6 +283,7 @@ export default class CanjearEnlaceIris extends DomainAction<
                 webhook_entrada_secreto: secretoEntrada,
                 contrato: input.contrato ?? null,
                 receptor_argos: input.receptor_argos ?? null,
+                token_portal: input.token_portal ?? null,
             }
             despues = await guardarConectorIris(t, antes, {
                 pendiente_token_argos_id: Number(emitido.datos.id),
@@ -286,6 +297,7 @@ export default class CanjearEnlaceIris extends DomainAction<
                 activo: false,
                 url_base: urlBase,
                 token_cifrado: cifrar(input.token),
+                token_portal_cifrado: input.token_portal ? cifrar(input.token_portal) : null,
                 webhook_salida_url: input.webhook.url,
                 webhook_salida_secreto_cifrado: cifrar(input.webhook.secreto),
                 webhook_entrada_secreto_cifrado: cifrar(secretoEntrada),
@@ -308,6 +320,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             ...(await empresasDelAlcance(emitido.usuario_id, t.trx)),
             panel_url: urlPanel(),
             ...(await versionesIris()),
+            capacidades: await capacidadesIris(t.trx),
         }
         await t.trx
             .from('integraciones.iris_enlaces')
@@ -355,6 +368,7 @@ export function hashPeticionIris(input: EntradaCanjearEnlaceIris): string {
     if (input.receptor_argos !== undefined && input.receptor_argos !== null) {
         campos.push(`receptor_argos:${input.receptor_argos}`)
     }
+    if (input.token_portal) campos.push(`token_portal:${input.token_portal}`)
     return createHash('sha256').update(JSON.stringify(campos), 'utf8').digest('hex')
 }
 
@@ -367,6 +381,20 @@ export function validarDatosDeIris(input: EntradaCanjearEnlaceIris): ErrorCampo[
     if (error) errores.push({ field: 'base_url', message: error, rule: 'url' })
     if (!FORMATO_TOKEN_IRIS.test(input.token)) {
         errores.push({ field: 'token', message: 'Se espera un token iris_pat_ de Iris', rule: 'formato' })
+    }
+    if (input.token_portal && !FORMATO_TOKEN_IRIS.test(input.token_portal)) {
+        errores.push({
+            field: 'token_portal',
+            message: 'Se espera un token iris_pat_ de Iris',
+            rule: 'formato',
+        })
+    }
+    if (input.token_portal && input.token_portal === input.token) {
+        errores.push({
+            field: 'token_portal',
+            message: 'El token del portal debe ser distinto del token del panel',
+            rule: 'distinto',
+        })
     }
     const errorWebhook = errorUrlIris(input.webhook.url)
     if (errorWebhook) errores.push({ field: 'webhook.url', message: errorWebhook, rule: 'url' })
