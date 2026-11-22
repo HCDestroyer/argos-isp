@@ -277,41 +277,55 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                             name="bajada_kbps"
                             required
                         >
-                            <UInputNumber
-                                v-model="bajadaMbps"
-                                :min="0.001"
-                                :step="1"
-                                :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
-                                :step-snapping="false"
-                                size="xl"
+                            <UFieldGroup
                                 class="w-full"
-                                :ui="{ base: 'text-xl font-semibold' }"
-                                data-prueba="plan-bajada"
+                                size="xl"
                             >
-                                <template #trailing>
-                                    <span class="text-sm text-muted">Mbps</span>
-                                </template>
-                            </UInputNumber>
+                                <UInputNumber
+                                    v-model="bajadaMbps"
+                                    :min="0.001"
+                                    :step="1"
+                                    :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
+                                    :step-snapping="false"
+                                    size="xl"
+                                    class="w-full"
+                                    :ui="{ base: 'text-xl font-semibold' }"
+                                    data-prueba="plan-bajada"
+                                />
+                                <UBadge
+                                    label="Mbps"
+                                    color="neutral"
+                                    variant="outline"
+                                    class="shrink-0 text-muted"
+                                />
+                            </UFieldGroup>
                         </UFormField>
                         <UFormField
                             label="Subida"
                             name="subida_kbps"
                             required
                         >
-                            <UInputNumber
-                                v-model="subidaMbps"
-                                :min="0.001"
-                                :step="1"
-                                :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
-                                :step-snapping="false"
-                                size="xl"
+                            <UFieldGroup
                                 class="w-full"
-                                :ui="{ base: 'text-xl font-semibold' }"
+                                size="xl"
                             >
-                                <template #trailing>
-                                    <span class="text-sm text-muted">Mbps</span>
-                                </template>
-                            </UInputNumber>
+                                <UInputNumber
+                                    v-model="subidaMbps"
+                                    :min="0.001"
+                                    :step="1"
+                                    :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
+                                    :step-snapping="false"
+                                    size="xl"
+                                    class="w-full"
+                                    :ui="{ base: 'text-xl font-semibold' }"
+                                />
+                                <UBadge
+                                    label="Mbps"
+                                    color="neutral"
+                                    variant="outline"
+                                    class="shrink-0 text-muted"
+                                />
+                            </UFieldGroup>
                         </UFormField>
                         <UFormField
                             label="Bajada limitada"
@@ -319,36 +333,48 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                             required
                             help="Cuando está en mora."
                         >
-                            <UInputNumber
-                                v-model="bajadaLimitadaMbps"
-                                :min="0.001"
-                                :step="0.5"
-                                :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
-                                :step-snapping="false"
+                            <UFieldGroup
                                 class="w-full"
                             >
-                                <template #trailing>
-                                    <span class="text-sm text-muted">Mbps</span>
-                                </template>
-                            </UInputNumber>
+                                <UInputNumber
+                                    v-model="bajadaLimitadaMbps"
+                                    :min="0.001"
+                                    :step="0.5"
+                                    :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
+                                    :step-snapping="false"
+                                    class="w-full"
+                                />
+                                <UBadge
+                                    label="Mbps"
+                                    color="neutral"
+                                    variant="outline"
+                                    class="shrink-0 text-muted"
+                                />
+                            </UFieldGroup>
                         </UFormField>
                         <UFormField
                             label="Subida limitada"
                             name="subida_limitada_kbps"
                             required
                         >
-                            <UInputNumber
-                                v-model="subidaLimitadaMbps"
-                                :min="0.001"
-                                :step="0.5"
-                                :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
-                                :step-snapping="false"
+                            <UFieldGroup
                                 class="w-full"
                             >
-                                <template #trailing>
-                                    <span class="text-sm text-muted">Mbps</span>
-                                </template>
-                            </UInputNumber>
+                                <UInputNumber
+                                    v-model="subidaLimitadaMbps"
+                                    :min="0.001"
+                                    :step="0.5"
+                                    :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
+                                    :step-snapping="false"
+                                    class="w-full"
+                                />
+                                <UBadge
+                                    label="Mbps"
+                                    color="neutral"
+                                    variant="outline"
+                                    class="shrink-0 text-muted"
+                                />
+                            </UFieldGroup>
                         </UFormField>
                     </div>
                 </FormularioSeccion>
@@ -365,19 +391,25 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                 required
                                 help="1 = dedicado"
                             >
-                                <UInputNumber
-                                    v-model="estado.reuso"
-                                    :min="1"
-                                    :max="64"
-                                    :format-options="{ useGrouping: false }"
-                                    :step-snapping="false"
+                                <UFieldGroup
                                     class="w-full"
-                                    data-prueba="plan-reuso"
                                 >
-                                    <template #leading>
-                                        <span class="text-sm text-muted">1 :</span>
-                                    </template>
-                                </UInputNumber>
+                                    <UBadge
+                                        label="1 :"
+                                        color="neutral"
+                                        variant="outline"
+                                        class="shrink-0 text-muted"
+                                    />
+                                    <UInputNumber
+                                        v-model="estado.reuso"
+                                        :min="1"
+                                        :max="64"
+                                        :format-options="{ useGrouping: false }"
+                                        :step-snapping="false"
+                                        class="w-full"
+                                        data-prueba="plan-reuso"
+                                    />
+                                </UFieldGroup>
                             </UFormField>
                             <UFormField
                                 label="Garantizado"
@@ -385,21 +417,27 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                 :help="estado.garantia_automatica ? `Automático: 100 / reuso${vistaPrevia ? ` = ${vistaPrevia.garantizado_pct_efectivo} %` : ''}` : `Hasta 100 / ${estado.reuso || 'reuso'} %`"
                             >
                                 <div class="flex flex-col gap-2">
-                                    <UInputNumber
-                                        v-if="!estado.garantia_automatica"
-                                        v-model="estado.garantizado_pct"
-                                        :min="0.01"
-                                        :max="100"
-                                        :step="0.01"
-                                        :format-options="{ maximumFractionDigits: 2, useGrouping: false }"
-                                        :step-snapping="false"
+                                    <UFieldGroup
                                         class="w-full"
-                                        data-prueba="plan-garantizado"
                                     >
-                                        <template #trailing>
-                                            <span class="text-sm text-muted">%</span>
-                                        </template>
-                                    </UInputNumber>
+                                        <UInputNumber
+                                            v-if="!estado.garantia_automatica"
+                                            v-model="estado.garantizado_pct"
+                                            :min="0.01"
+                                            :max="100"
+                                            :step="0.01"
+                                            :format-options="{ maximumFractionDigits: 2, useGrouping: false }"
+                                            :step-snapping="false"
+                                            class="w-full"
+                                            data-prueba="plan-garantizado"
+                                        />
+                                        <UBadge
+                                            label="%"
+                                            color="neutral"
+                                            variant="outline"
+                                            class="shrink-0 text-muted"
+                                        />
+                                    </UFieldGroup>
                                     <USwitch
                                         v-model="estado.garantia_automatica"
                                         label="Automático"
@@ -435,72 +473,96 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                     label="Ráfaga de bajada"
                                     name="rafaga_bajada_kbps"
                                 >
-                                    <UInputNumber
-                                        v-model="rafagaBajadaMbps"
-                                        :min="0.001"
-                                        :step="1"
-                                        :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
-                                        :step-snapping="false"
+                                    <UFieldGroup
                                         class="w-full"
-                                        data-prueba="plan-rafaga-bajada"
                                     >
-                                        <template #trailing>
-                                            <span class="text-xs text-muted">Mbps</span>
-                                        </template>
-                                    </UInputNumber>
+                                        <UInputNumber
+                                            v-model="rafagaBajadaMbps"
+                                            :min="0.001"
+                                            :step="1"
+                                            :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
+                                            :step-snapping="false"
+                                            class="w-full"
+                                            data-prueba="plan-rafaga-bajada"
+                                        />
+                                        <UBadge
+                                            label="Mbps"
+                                            color="neutral"
+                                            variant="outline"
+                                            class="shrink-0 text-muted"
+                                        />
+                                    </UFieldGroup>
                                 </UFormField>
                                 <UFormField
                                     label="Ráfaga de subida"
                                     name="rafaga_subida_kbps"
                                 >
-                                    <UInputNumber
-                                        v-model="rafagaSubidaMbps"
-                                        :min="0.001"
-                                        :step="1"
-                                        :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
-                                        :step-snapping="false"
+                                    <UFieldGroup
                                         class="w-full"
                                     >
-                                        <template #trailing>
-                                            <span class="text-xs text-muted">Mbps</span>
-                                        </template>
-                                    </UInputNumber>
+                                        <UInputNumber
+                                            v-model="rafagaSubidaMbps"
+                                            :min="0.001"
+                                            :step="1"
+                                            :format-options="{ maximumFractionDigits: 3, useGrouping: false }"
+                                            :step-snapping="false"
+                                            class="w-full"
+                                        />
+                                        <UBadge
+                                            label="Mbps"
+                                            color="neutral"
+                                            variant="outline"
+                                            class="shrink-0 text-muted"
+                                        />
+                                    </UFieldGroup>
                                 </UFormField>
                                 <UFormField
                                     label="Umbral"
                                     name="rafaga_umbral_pct"
                                     required
                                 >
-                                    <UInputNumber
-                                        v-model="estado.rafaga_umbral_pct"
-                                        :min="1"
-                                        :max="99"
-                                        :format-options="{ useGrouping: false }"
-                                        :step-snapping="false"
+                                    <UFieldGroup
                                         class="w-full"
                                     >
-                                        <template #trailing>
-                                            <span class="text-xs text-muted">%</span>
-                                        </template>
-                                    </UInputNumber>
+                                        <UInputNumber
+                                            v-model="estado.rafaga_umbral_pct"
+                                            :min="1"
+                                            :max="99"
+                                            :format-options="{ useGrouping: false }"
+                                            :step-snapping="false"
+                                            class="w-full"
+                                        />
+                                        <UBadge
+                                            label="%"
+                                            color="neutral"
+                                            variant="outline"
+                                            class="shrink-0 text-muted"
+                                        />
+                                    </UFieldGroup>
                                 </UFormField>
                                 <UFormField
                                     label="Tiempo"
                                     name="rafaga_segundos"
                                     required
                                 >
-                                    <UInputNumber
-                                        v-model="estado.rafaga_segundos"
-                                        :min="1"
-                                        :max="3600"
-                                        :format-options="{ useGrouping: false }"
-                                        :step-snapping="false"
+                                    <UFieldGroup
                                         class="w-full"
                                     >
-                                        <template #trailing>
-                                            <span class="text-xs text-muted">s</span>
-                                        </template>
-                                    </UInputNumber>
+                                        <UInputNumber
+                                            v-model="estado.rafaga_segundos"
+                                            :min="1"
+                                            :max="3600"
+                                            :format-options="{ useGrouping: false }"
+                                            :step-snapping="false"
+                                            class="w-full"
+                                        />
+                                        <UBadge
+                                            label="s"
+                                            color="neutral"
+                                            variant="outline"
+                                            class="shrink-0 text-muted"
+                                        />
+                                    </UFieldGroup>
                                 </UFormField>
                             </div>
                         </div>
