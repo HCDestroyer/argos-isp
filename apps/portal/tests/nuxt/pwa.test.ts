@@ -6,11 +6,11 @@ import { politicaCsp } from '~~/server/utils/cabecerasSeguridad'
 import { redireccionPortalCautivo } from '~~/server/utils/portalCautivo'
 
 describe('manifiesto PWA', () => {
-    it('standalone, teal de la marca, sin salir del origen', () => {
+    it('standalone, índigo de la marca, sin salir del origen', () => {
         const manifiesto = manifiestoPwa('Red Altiplano')
         expect(manifiesto.display).toBe('standalone')
         expect(manifiesto.theme_color).toBe(TEMA_MARCA)
-        expect(TEMA_MARCA).toBe('#0f766e')
+        expect(TEMA_MARCA).toBe('#4f46e5')
         expect(manifiesto.name).toBe('Red Altiplano · Portal del cliente')
         expect(manifiesto.short_name).toBe('Mi servicio')
         expect(manifiesto.start_url.startsWith('/')).toBe(true)
