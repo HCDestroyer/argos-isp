@@ -20,6 +20,9 @@ const EVENTOS_SERVICIO = new Set([
     'servicio.config_cambiada',
     'servicio.eliminado',
     'asignacion.cambiada',
+    // promoción de velocidad (A1, decisión del PM 18): la cola simple toma la velocidad del tramo
+    'servicio.promocion_velocidad_iniciada',
+    'servicio.promocion_velocidad_terminada',
 ])
 
 /**

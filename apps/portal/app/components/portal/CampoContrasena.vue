@@ -9,9 +9,12 @@ const modelo = defineModel<string>({ required: true })
 withDefaults(defineProps<{
     autocomplete?: 'current-password' | 'new-password'
     testid?: string
+    /** Icono al inicio del campo (el candado en los formularios de acceso). */
+    icon?: string
 }>(), {
     autocomplete: 'current-password',
     testid: undefined,
+    icon: undefined,
 })
 
 const visible = ref(false)
@@ -22,6 +25,7 @@ const visible = ref(false)
         v-model="modelo"
         :type="visible ? 'text' : 'password'"
         :autocomplete="autocomplete"
+        :icon="icon"
         autocapitalize="off"
         autocorrect="off"
         spellcheck="false"
@@ -38,6 +42,7 @@ const visible = ref(false)
                 :icon="visible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
                 :aria-label="visible ? 'Ocultar contraseña' : 'Mostrar contraseña'"
                 :aria-pressed="visible"
+                class="rounded-full"
                 @click="visible = !visible"
             />
         </template>

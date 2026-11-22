@@ -68,7 +68,7 @@ export const METODOS_PAGO: Record<Schema<'PortalPago'>['metodo'], string> = {
 }
 
 export const ESTADOS_PROMESA: Record<Schema<'PortalPromesa'>['estado'], Presentacion> = {
-    activa: { etiqueta: 'Activa', color: 'info', icono: 'i-lucide-hand-coins' },
+    activa: { etiqueta: 'Activa', color: 'info', icono: 'i-lucide-calendar-check' },
     pendiente_aprobacion: { etiqueta: 'Pendiente de aprobación', color: 'warning', icono: 'i-lucide-hourglass' },
     cumplida: { etiqueta: 'Cumplida', color: 'success', icono: 'i-lucide-circle-check' },
     incumplida: { etiqueta: 'Incumplida', color: 'error', icono: 'i-lucide-calendar-x' },
@@ -135,4 +135,19 @@ const ORIGENES_BONIFICACION: Record<Schema<'PortalBonificacion'>['origen'], stri
 /** Por qué no se paga, en palabras del cliente (nunca el motivo interno: la API no lo manda). */
 export function origenBonificacion(origen: Schema<'PortalBonificacion'>['origen']): string {
     return ORIGENES_BONIFICACION[origen]
+}
+
+/**
+ * La factura pendiente más urgente del estado de cuenta: la vencida más vieja o, si no hay
+ * vencidas, la que vence primero. `null` sin pendientes (banner e indicadores del inicio).
+ */
+export function proximoVencimiento(cuenta: Pick<Schema<'PortalCuenta'>, 'empresas'>): { factura: Schema<'PortalFacturaPendiente'>, vencidas: number } | null {
+    const pendientes = cuenta.empresas.flatMap(e => e.facturas_pendientes)
+    const ordenar = (lista: typeof pendientes) => [...lista].sort((a, b) => a.vence_en.localeCompare(b.vence_en))
+    const vencidas = ordenar(pendientes.filter(f => f.vencida))
+    if (vencidas.length > 0) {
+        return { factura: vencidas[0]!, vencidas: vencidas.length }
+    }
+    const porVencer = ordenar(pendientes)
+    return porVencer.length > 0 ? { factura: porVencer[0]!, vencidas: 0 } : null
 }

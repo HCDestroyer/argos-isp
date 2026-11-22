@@ -213,7 +213,7 @@ describe('/cuenta: inicio y secciones', () => {
 })
 
 describe('barra de navegación del cliente', () => {
-    it('sin sesión no aparece; con sesión, cuatro destinos de 44 px con la sección marcada', async () => {
+    it('sin sesión no aparece; con sesión, los destinos de 44 px con la sección marcada y el menú lateral', async () => {
         const sinSesion = await mountSuspended(Layout, { route: '/cuenta' })
         montados.push(sinSesion)
         expect(sinSesion.find('[data-testid="navegacion-inferior"]').exists()).toBe(false)
@@ -226,13 +226,26 @@ describe('barra de navegación del cliente', () => {
         expect(barra.exists()).toBe(true)
         expect(barra.classes()).toContain('pb-[env(safe-area-inset-bottom)]')
         const destinos = barra.findAll('a')
-        expect(destinos.map(d => d.text())).toEqual(['Inicio', 'Pagar', 'Facturas', 'Cuenta'])
+        expect(destinos.map(d => d.text())).toEqual(['Inicio', 'Facturas', 'Cuenta'])
         for (const destino of destinos) {
             expect(destino.classes()).toContain('min-h-14')
         }
         expect(barra.find('[data-testid="nav-facturas"]').attributes('aria-current')).toBe('page')
         expect(barra.find('[data-testid="nav-inicio"]').attributes('aria-current')).toBeUndefined()
-        expect(conSesion.find('[data-testid="navegacion-superior"]').exists()).toBe(true)
+        // Escritorio: el menú isla del panel, compacto de fábrica (nombres cortos) con la misma sección
+        // marcada; el botón ‹ › lo expande con los nombres largos.
+        const lateral = conSesion.find('[data-testid="navegacion-lateral"]')
+        expect(lateral.exists()).toBe(true)
+        expect(lateral.attributes('data-compacto')).toBe('si')
+        expect(lateral.classes()).toContain('w-[4.75rem]')
+        expect(lateral.findAll('li a').map(d => d.text())).toEqual(['Inicio', 'Facturas', 'Cuenta'])
+        expect(lateral.find('a[aria-current="page"]').text()).toBe('Facturas')
+        await lateral.find('[data-testid="alternar-menu"]').trigger('click')
+        await esperar()
+        expect(lateral.attributes('data-compacto')).toBe('no')
+        expect(lateral.classes()).toContain('w-[15.25rem]')
+        expect(lateral.findAll('li a').map(d => d.text())).toEqual(['Inicio', 'Facturas y pagos', 'Mi cuenta'])
+        expect(lateral.find('a[aria-current="page"]').text()).toBe('Facturas y pagos')
     })
 })
 
@@ -275,5 +288,14 @@ describe('/corte y la sesión', () => {
         fijarPromesaFixture('con_pago_previo')
         const wrapper = await montarCorte()
         expect(wrapper.find('[data-testid="solicitar-promesa"]').exists()).toBe(false)
+    })
+})
+
+describe('«Facturas y pagos»', () => {
+    it('«Pagar» es una pestaña de «Facturas y pagos» y marca esa misma sección', () => {
+        expect(seccionDeLaRuta('pagar')).toBe('pagar')
+        expect(seccionActiva({ path: '/cuenta', query: { seccion: 'pagar' } })).toBe('facturas')
+        expect(seccionActiva({ path: '/corte', query: {} })).toBeNull()
+        expect(seccionesVisibles(false, false).map(s => s.seccion)).toEqual(['inicio', 'facturas', 'cuenta'])
     })
 })
