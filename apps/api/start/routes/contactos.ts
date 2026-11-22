@@ -102,6 +102,8 @@ const contactos: Ruta[] = [
             '`X-Iris-Actor` y tiene los límites de `GET /contactos/buscar`.',
         etiqueta: 'clientes',
         permiso: 'contactos.buscar',
+        // Iris 0.14.2 §7.1: su caché de contactos se refresca con `X-Iris-Actor: sistema`
+        actorSistemaIris: true,
         limitada: true,
         antes: limitarBusqueda,
         respuesta: { status: 200, descripcion: 'Contactos', esquema: pagina(ContactoCliente) },
