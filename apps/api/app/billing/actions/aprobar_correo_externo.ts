@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { serializarCorreo, type CorreoExterno } from '#billing/reportes/envios'
 
 export interface EntradaAprobarCorreo {
@@ -28,7 +29,7 @@ export default class AprobarCorreoExterno extends DomainAction<EntradaAprobarCor
         if (!antes) {
             const [fila] = (await t.trx
                 .table('billing.reportes_correos_externos')
-                .insert({ correo, nombre: input.nombre, aprobado_por: t.ctx.actor.id })
+                .insert({ correo, nombre: input.nombre, aprobado_por: usuarioDelActor(t.ctx.actor) })
                 .returning('id')) as Array<{ id: number }>
             id = Number(fila!.id)
             accion = 'aprobado'
@@ -44,7 +45,7 @@ export default class AprobarCorreoExterno extends DomainAction<EntradaAprobarCor
                         ...(reactivar
                             ? {
                                   activo: true,
-                                  aprobado_por: t.ctx.actor.id,
+                                  aprobado_por: usuarioDelActor(t.ctx.actor),
                                   aprobado_en: t.trx.knexRawQuery('now()'),
                                   retirado_por: null,
                                   retirado_en: null,

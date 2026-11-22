@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { NoEncontrado } from '#shared/errores'
 import { serializarCorreo, type CorreoExterno } from '#billing/reportes/envios'
 
@@ -25,7 +26,7 @@ export default class RetirarCorreoExterno extends DomainAction<{ id: number }, C
                 .where('id', input.id)
                 .update({
                     activo: false,
-                    retirado_por: t.ctx.actor.id,
+                    retirado_por: usuarioDelActor(t.ctx.actor),
                     retirado_en: t.trx.knexRawQuery('now()'),
                     version: t.trx.knexRawQuery('version + 1'),
                     updated_at: t.trx.knexRawQuery('now()'),

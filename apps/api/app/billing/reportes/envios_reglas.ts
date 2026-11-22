@@ -1,6 +1,7 @@
 import type { Transaccion } from '#shared/domain_action'
 import { Prohibido, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { alcanceDePermiso } from '#core/acl'
+import { usuarioDelActor } from '#shared/contexto'
 import { motivoNoCompartible, type DefinicionReporte } from '#billing/reportes/catalogo'
 import type { Frecuencia } from '#billing/reportes/envios'
 
@@ -53,7 +54,7 @@ export function diaDeEnvio(campos: CamposEnvio): number | null {
  * envío nunca le da a nadie un reporte que su autor no puede ver. 403 si no.
  */
 export async function exigirAutorPuedeVer(t: Transaccion, def: DefinicionReporte): Promise<void> {
-    const actor = t.ctx.actor.id
+    const actor = usuarioDelActor(t.ctx.actor)
     if (actor === null) return
     const alcance = await alcanceDePermiso(actor, def.permiso)
     if (!alcance) throw new Prohibido(`Se requiere el permiso ${def.permiso} para programar este reporte`)

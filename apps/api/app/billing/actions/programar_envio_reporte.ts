@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Prohibido } from '#shared/errores'
 import { exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
 import { exigirDefinicion } from '#billing/reportes/catalogo'
@@ -56,7 +57,7 @@ export default class ProgramarEnvioReporte extends DomainAction<EntradaProgramar
                 dia,
                 hora: input.hora,
                 proximo_en: proximo,
-                creado_por: t.ctx.actor.id,
+                creado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         const id = Number(fila!.id)
