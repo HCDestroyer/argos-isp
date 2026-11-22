@@ -310,16 +310,30 @@ test.group('Inventario · equipos del cliente (Iris 0.12.0, A48)', (group) => {
                 })
         const sinFoto = await estado(noRecuperado({ motivo: 'se_nego' }), 422)
         assert.equal(sinFoto.body().errors[0].field, 'foto_ref')
+        // Iris sin contrato 0.14.0: el intento queda «anterior a la verificación» (§4.5): no cambia la unidad
+        // ni avisa al titular; lo decide una persona
         const intento = await estado(noRecuperado({}), 201)
-        assert.containSubset(intento.body(), { intento_n: 1, estado: 'por_recuperar' })
+        assert.containSubset(intento.body(), {
+            intento_n: 1,
+            estado: 'en_comodato',
+            verificacion: 'anterior',
+        })
         const otroDia = await estado(noRecuperado({}), 429)
         assert.match(otroDia.body().type, /demasiados_intentos$/)
-        const aviso = await db
+        const sinAviso = await db
             .from('audit.outbox')
             .where('evento', 'inventario.recuperacion_intentada')
             .whereRaw(`(payload->>'intento_id')::bigint = ?`, [intento.body().id])
-            .firstOrFail()
-        assert.equal(aviso.payload.serie_enmascarada, `…${b!.serie.slice(-4)}`)
+            .first()
+        assert.isNull(sinAviso)
+        const decidir = (intentoId: number) =>
+            client
+                .post(`/api/v1/inventario/intentos-recuperacion/${intentoId}/decidir`)
+                .bearerToken(e.token)
+                .headers(cabecera)
+                .json({ aceptar: true, motivo: 'revisado con la foto de la orden' })
+        const aceptado = await estado(decidir(intento.body().id), 200)
+        assert.containSubset(aceptado.body(), { verificacion: 'aceptado', por_recuperar: true })
 
         // 7. declarar no recuperada: falta otro técnico
         const declarar = () =>
@@ -346,6 +360,10 @@ test.group('Inventario · equipos del cliente (Iris 0.12.0, A48)', (group) => {
             201,
         )
         assert.equal(segundo.body().intento_n, 2)
+        // anterior a la verificación: no cuenta hasta que una persona lo acepta
+        const todaviaNo = await estado(declarar(), 422)
+        assert.match(todaviaNo.body().type, /intentos_insuficientes$/)
+        await estado(decidir(segundo.body().id), 200)
         const declarada = await estado(declarar(), 200)
         assert.containSubset(declarada.body(), { estado: 'no_recuperada', estado_equipo: 'no_recuperada' })
         assert.isNotNull(declarada.body().factura_id)

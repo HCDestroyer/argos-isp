@@ -7,6 +7,7 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { dec, aTexto, tieneCentavosExactos } from '#ledger/dinero'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 import CrearConceptoCargo from '#billing/actions/crear_concepto_cargo'
+import { SQL_CUENTA } from '#inventario/recuperacion'
 
 /**
  * Cola de cobros de equipo (contrato Iris 0.12.0 §3.10, A48): «Equipo no devuelto» y los cobros que un
@@ -123,7 +124,7 @@ export interface CobroEquipoVista {
     cambio_id: number | null
     motivo: string | null
     nota: string | null
-    estado: 'propuesto' | 'aprobado' | 'rechazado'
+    estado: 'propuesto' | 'aprobado' | 'rechazado' | 'por_verificar' | 'no_verificado'
     monto: string | null
     factura_id: number | null
     decidido_por: number | null
@@ -174,11 +175,16 @@ export async function verCobroEquipo(
 }
 
 export interface FiltrosCobrosEquipo extends OpcionesPaginacion {
-    estado?: 'propuesto' | 'aprobado' | 'rechazado'
+    estado?: 'propuesto' | 'aprobado' | 'rechazado' | 'por_verificar' | 'no_verificado'
 }
 
 export async function listarCobrosEquipo(filtros: FiltrosCobrosEquipo, empresas: number[] | null) {
-    const q = consultaCobros().if(filtros.estado, (c) => c.where('c.estado', filtros.estado!))
+    // 0.14.0 (T-7): un cobro propuesto sin verificar no está en la cola; solo se ve si se pide su estado
+    const q = consultaCobros().if(
+        filtros.estado,
+        (c) => c.where('c.estado', filtros.estado!),
+        (c) => c.whereNotIn('c.estado', ['por_verificar', 'no_verificado']),
+    )
     filtrarPorEmpresa(q, empresas, (c, ids) => c.whereIn('c.empresa_id', ids))
     return paginar<CobroEquipoVista>(q, filtros, { columna: 'c.id' })
 }
@@ -193,7 +199,12 @@ export interface PendienteDeDeclarar {
     cliente_id: number
     cliente_nombre: string
     intentos: number
+    /** técnicos distintos con intentos que cuentan (verificados, de Argos o aceptados) */
     tecnicos_distintos: number
+    /** intentos pendientes de verificar con Iris (0.14.0) */
+    por_verificar: number
+    /** intentos anteriores a la verificación, que decide una persona (§4.5) */
+    anteriores: number
     contactos: number
     ultimo_intento: Date
 }
@@ -208,6 +219,7 @@ export async function pendientesDeDeclarar(empresas: number[] | null): Promise<P
         .join('inventario.intentos_recuperacion as i', (j) =>
             j.on('i.unidad_id', 'u.id').andOn('i.servicio_id', 'u.servicio_id'),
         )
+        .leftJoin('inventario.verificaciones_iris as v', 'v.intento_id', 'i.id')
         .whereIn('u.estado', ['en_comodato', 'por_recuperar'])
         .groupBy('u.id', 'p.nombre', 's.id', 'cl.id', 'cl.nombre')
         .orderBy('u.id')
@@ -222,10 +234,12 @@ export async function pendientesDeDeclarar(empresas: number[] | null): Promise<P
             'cl.nombre as cliente_nombre',
             db.raw('count(*)::int as intentos'),
             db.raw(
-                'count(distinct coalesce(i.actor_tecnico, i.actor_tecnico_id::text, i.registrado_por::text))::int as tecnicos_distintos',
+                `count(distinct coalesce(i.actor_tecnico, i.actor_tecnico_id::text, i.registrado_por::text)) filter (where ${SQL_CUENTA})::int as tecnicos_distintos`,
             ),
+            db.raw(`count(*) filter (where v.estado = 'pendiente')::int as por_verificar`),
+            db.raw(`count(*) filter (where v.estado = 'anterior')::int as anteriores`),
             db.raw(
-                '(select count(*)::int from inventario.contactos_recuperacion c where c.unidad_id = u.id) as contactos',
+                `(select count(*)::int from inventario.contactos_recuperacion c where c.unidad_id = u.id and coalesce(c.actor_tipo, 'usuario') = 'usuario') as contactos`,
             ),
             db.raw('max(i.fecha) as ultimo_intento'),
         )

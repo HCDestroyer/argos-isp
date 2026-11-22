@@ -261,6 +261,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 }),
                 precio_unitario: precio.toFixed(2),
                 cuenta_codigo: concepto.cuenta_codigo,
+                concepto_cargo_id: Number(l.concepto_id),
                 ...(l.producto_id
                     ? {
                           producto_id: l.producto_id,

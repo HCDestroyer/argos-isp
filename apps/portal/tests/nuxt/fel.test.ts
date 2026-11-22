@@ -16,7 +16,7 @@ mockNuxtImport('navigateTo', () => navegar)
 
 async function montarFacturas() {
     clearNuxtData('portal:cuenta')
-    const wrapper = await mountSuspended(PaginaCuenta, { route: '/cuenta?seccion=facturas' })
+    const wrapper = await mountSuspended(PaginaCuenta, { route: '/cuenta?seccion=facturas', attachTo: document.body })
     await flushPromises()
     await flushPromises()
     return wrapper
@@ -26,6 +26,17 @@ function tarjeta(wrapper: Awaited<ReturnType<typeof montarFacturas>>, texto: str
     const encontrada = wrapper.findAll('[data-testid="factura"]').find(t => t.text().includes(texto))
     expect(encontrada, texto).toBeDefined()
     return encontrada!
+}
+
+/**
+ * El detalle (DTE, XML, montos) se abre en un drawer sin salir de la lista: tocar la fila. El drawer
+ * se monta fuera del componente (portal), así que se lee del documento.
+ */
+async function abrirDetalle(fila: ReturnType<typeof tarjeta>) {
+    await fila.trigger('click')
+    await flushPromises()
+    await flushPromises()
+    return document.querySelector('[data-testid="detalle"]') as HTMLElement | null
 }
 
 afterEach(() => {
@@ -39,9 +50,11 @@ describe('FEL en /cuenta?seccion=facturas', () => {
         fijarSesionFixture(true)
         const wrapper = await montarFacturas()
         const aviso = tarjeta(wrapper, 'Aviso de cobro 1203')
-        expect(aviso.find('[data-testid="dte"]').exists()).toBe(false)
-        expect(aviso.find('[data-testid="descargar-xml"]').exists()).toBe(false)
         expect(aviso.find('[data-testid="descargar-pdf"]').text()).toContain('Ver aviso de cobro (PDF)')
+        const detalle = await abrirDetalle(aviso)
+        expect(detalle?.textContent).toContain('Aviso de cobro 1203')
+        expect(detalle?.querySelector('[data-testid="dte"]')).toBeNull()
+        expect(document.querySelector('[data-testid="detalle-xml"]')).toBeNull()
     })
 
     it('con el DTE certificado es «Factura» con serie-número, autorización, PDF y XML', async () => {
@@ -49,13 +62,16 @@ describe('FEL en /cuenta?seccion=facturas', () => {
         const wrapper = await montarFacturas()
         const certificada = FACTURAS_FIXTURE.find(f => f.id === 1040)!
         const fel = tarjeta(wrapper, `Factura ${certificada.numero}`)
-        expect(fel.find('[data-testid="dte"]').text()).toContain(certificada.dte!.autorizacion)
-        expect(fel.find('[data-testid="dte"]').text()).toContain('certificada el')
         expect(fel.find('[data-testid="descargar-pdf"]').text()).toContain('Ver factura (PDF)')
         expect(fel.find('[data-testid="descargar-pdf"]').attributes('href')).toBe('/api/v1/portal/facturas/1040/pdf')
-        const xml = fel.find('[data-testid="descargar-xml"]')
-        expect(xml.attributes('href')).toBe('/api/v1/portal/facturas/1040/xml')
-        expect(xml.attributes('download')).toBeDefined()
+        const detalle = (await abrirDetalle(fel))!
+        const dte = detalle.querySelector('[data-testid="dte"]')!
+        expect(dte.textContent).toContain(certificada.dte!.autorizacion)
+        expect(dte.textContent).toContain('certificada el')
+        const xml = document.querySelector('[data-testid="detalle-xml"]')!
+        expect(xml.getAttribute('href')).toBe('/api/v1/portal/facturas/1040/xml')
+        expect(xml.hasAttribute('download')).toBe(true)
+        expect(document.querySelector('[data-testid="detalle-pdf"]')!.getAttribute('href')).toBe('/api/v1/portal/facturas/1040/pdf')
     })
 
     it('la sustituida dice «Sustituida» y a cuál la reemplaza; la nueva, a cuál sustituye', async () => {

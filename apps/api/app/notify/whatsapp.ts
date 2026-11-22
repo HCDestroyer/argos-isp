@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { configIris, conectorAdmite } from '#integraciones/iris/configuracion'
 import { ZONA, monto } from '#notify/formato'
+import { leerPrecioEfectivo } from '#billing/configuracion'
 import type { Variables } from '#notify/variables'
 
 /**
@@ -37,6 +38,8 @@ export const VARIABLES_IRIS = {
     corte_por_falta_de_pago: ['monto', 'moneda'],
     servicio_reactivado: [],
     bienvenida: ['plan'],
+    // 0.9.0 §6.3 y §12.5 (A37): con un Iris ≥ 0.9.0 en lugar de `bienvenida`. Las cuentas las pone Iris
+    bienvenida_servicio: ['nombre', 'plan', 'precio_mensual', 'moneda', 'codigo_cliente'],
 } as const satisfies Record<string, readonly string[]>
 
 export type CodigoIris = keyof typeof VARIABLES_IRIS
@@ -103,6 +106,16 @@ function entero(valor: unknown): number | null {
     return valor !== null && valor !== undefined && valor !== '' && Number.isInteger(n) && n > 0 ? n : null
 }
 
+/**
+ * Texto de una variable de `bienvenida_servicio` (§12.5): una sola línea, sin espacios repetidos y
+ * hasta `max` caracteres. Iris valida además URLs y secuencias de dígitos (responde 422 y el envío
+ * queda `fallido`): Argos no reescribe el nombre del cliente.
+ */
+function limpio(valor: unknown, max: number): string | null {
+    const t = texto(valor)?.replace(/\s+/g, ' ').trim()
+    return t ? t.slice(0, max) : null
+}
+
 /** `dd/MM/yyyy HH:mm` (Guatemala, `formato.fechaHora`) → `YYYY-MM-DD`. */
 function fechaIso(valor: unknown): string | null {
     const t = texto(valor)
@@ -158,6 +171,21 @@ export async function variablesParaIris(
         case 'bienvenida':
             salida = { plan: texto(servicio.plan) }
             break
+        case 'bienvenida_servicio': {
+            const titular = grupo(variables, 'cliente')
+            const servicioId = entero(servicio.id)
+            const codigoCliente = texto(titular.codigo)
+            salida = {
+                nombre: limpio(titular.nombre, 60),
+                plan: limpio(servicio.plan, 80),
+                precio_mensual: servicioId ? await leerPrecioEfectivo(cliente, servicioId) : null,
+                moneda: MONEDA,
+                // §12.5: `^[A-Za-z0-9-]{1,30}$`; otro código no se manda (el envío queda omitido)
+                codigo_cliente:
+                    codigoCliente && /^[A-Za-z0-9-]{1,30}$/.test(codigoCliente) ? codigoCliente : null,
+            }
+            break
+        }
         case 'servicio_reactivado':
             salida = {}
             break

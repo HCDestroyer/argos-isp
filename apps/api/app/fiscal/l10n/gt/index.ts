@@ -4,7 +4,13 @@ import {
     CUENTAS_PAQUETE_GT_2026_2,
     CUENTAS_PAQUETE_GT_2026_4,
 } from '#fiscal/l10n/gt/cuentas'
-import { PARAMETROS_GT, PARAMETROS_GT_2026_3, REGIMENES_GT, type RegimenGt } from '#fiscal/l10n/gt/parametros'
+import {
+    PARAMETROS_GT,
+    PARAMETROS_GT_2026_3,
+    PARAMETROS_GT_2026_5,
+    REGIMENES_GT,
+    type RegimenGt,
+} from '#fiscal/l10n/gt/parametros'
 import { CUADRICULAS_GT, IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 
 /**
@@ -159,4 +165,16 @@ export const PAQUETE_GT_2026_4: PaqueteLocalizacion = {
     version: '2026.4.0',
     publicada_en: '2026-10-24',
     cuentas: CUENTAS_PAQUETE_GT_2026_4,
+}
+
+/**
+ * `gt-2026.5` (decisión 12 del PM): igual que 2026.4 con un valor nuevo de `pc_alertas` (80, 95 y 100)
+ * vigente desde el 21 nov 2026. Instalarla sobre 2026.4 solo agrega ese valor.
+ */
+export const PAQUETE_GT_2026_5: PaqueteLocalizacion = {
+    ...PAQUETE_GT_2026_4,
+    codigo: 'gt-2026.5',
+    version: '2026.5.0',
+    publicada_en: '2026-11-21',
+    parametros: PARAMETROS_GT_2026_5,
 }
