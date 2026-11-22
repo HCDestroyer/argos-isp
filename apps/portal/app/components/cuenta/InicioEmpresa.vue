@@ -187,7 +187,7 @@ const accesos = computed(() => {
                             <UButton
                                 v-if="props.promesaPorServicio[servicio.id] === true"
                                 label="Pedir promesa"
-                                icon="i-lucide-hand-coins"
+                                icon="i-lucide-calendar-check"
                                 color="neutral"
                                 variant="link"
                                 size="sm"

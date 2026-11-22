@@ -118,3 +118,19 @@ export async function reducirFotoSiHaceFalta(archivo: File): Promise<File> {
         return archivo
     }
 }
+
+/**
+ * Ruta de la página para subir el comprobante desde `/cuenta`: con el servicio y la empresa del
+ * grupo (sus cuentas de destino) y vuelta a «Pagar».
+ */
+export function rutaComprobante(servicioId?: number, empresaId?: number): string {
+    const query = new URLSearchParams()
+    if (servicioId !== undefined) {
+        query.set('servicio', String(servicioId))
+    }
+    if (empresaId !== undefined) {
+        query.set('empresa', String(empresaId))
+    }
+    query.set('volver', '/cuenta?seccion=pagar')
+    return `/comprobante?${query.toString()}`
+}

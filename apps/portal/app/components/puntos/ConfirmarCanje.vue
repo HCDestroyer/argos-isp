@@ -76,6 +76,13 @@ async function confirmar(evento: FormSubmitEvent<Datos>) {
         :title="hecho ? '¡Listo, canjeaste tu premio!' : 'Confirmar canje'"
         :description="hecho ? undefined : 'Revisa el premio antes de canjear tus puntos.'"
     >
+        <template #title>
+            <PortalTituloModal
+                :texto="hecho ? '¡Listo, canjeaste tu premio!' : 'Confirmar canje'"
+                :icono="hecho ? 'i-lucide-party-popper' : 'i-lucide-gift'"
+                :tono="hecho ? 'success' : 'primary'"
+            />
+        </template>
         <template #body>
             <div
                 v-if="hecho"
@@ -168,12 +175,13 @@ async function confirmar(evento: FormSubmitEvent<Datos>) {
                     data-testid="canje-error"
                 />
 
-                <div class="flex flex-col gap-2 sm:flex-row-reverse">
+                <div class="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
                     <UButton
                         type="submit"
-                        label="Canjear ahora"
+                        label="Canjear premio"
                         icon="i-lucide-gift"
                         size="lg"
+                        class="sm:w-auto"
                         block
                         :loading="enviando"
                         :disabled="elegibles.length === 0"
@@ -184,6 +192,7 @@ async function confirmar(evento: FormSubmitEvent<Datos>) {
                         color="neutral"
                         variant="outline"
                         size="lg"
+                        class="sm:w-auto"
                         block
                         @click="open = false"
                     />
