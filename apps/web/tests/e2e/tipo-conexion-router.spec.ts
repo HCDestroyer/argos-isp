@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Tipo de conexión por router (`contratos/tipo-conexion-router.md`): en la ficha del router, junto al
@@ -13,9 +13,11 @@ test('cambiar el tipo de conexión de un router con vista previa', async ({ page
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/, { timeout: 20_000 })
 
+    // RedRouterFicha: el tipo y el control de velocidad van en la pestaña «Velocidad».
+    await pestanaRouter(page, 'Velocidad')
     const seccion = page.locator('[data-prueba="router-tipo-conexion"]')
     await expect(seccion.locator('[data-prueba="router-tipo-actual"]')).toHaveText('PPPoE')
-    await expect(page.locator('[data-prueba="router-velocidad"]')).toBeVisible()
+    await expect(page.locator('[data-prueba="router-velocidad-panel"]')).toBeVisible()
 
     await seccion.getByRole('button', { name: 'Cambiar tipo' }).click()
     const modal = page.getByRole('dialog', { name: /Cambiar tipo de conexión de RB-Centro/ })

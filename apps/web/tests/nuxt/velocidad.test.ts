@@ -85,11 +85,12 @@ describe('semana 2 · formularios de velocidad', () => {
         expect(!duplicado.ok && duplicado.problema.type).toBe('urn:argosisp:problema:plan_duplicado')
     })
 
+    // Tablero RedPlanForm: el formulario va en su página, no en un modal; se monta adjunto al documento.
     it('el formulario muestra la vista previa con la cadena completa', async () => {
         const planes = await usePlanes().listar()
         const primero = planes.ok ? planes.data.data[0] : undefined
         expect(primero).toBeDefined()
-        const wrapper = await mountSuspended(PlanFormulario, { props: { plan: primero, open: true } })
+        const wrapper = await mountSuspended(PlanFormulario, { props: { plan: primero }, attachTo: document.body })
         await esperar(() => expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')?.textContent?.trim()).toBe('5M/10M 0/0 0/0 0/0 8 5M/10M'), { timeout: 3000 })
         expect(document.body.querySelector('[data-prueba="rate-limit-limitado"]')?.textContent?.trim()).toBe('512k/1M 0/0 0/0 0/0 8 512k/1M')
         expect(document.body.querySelector('[data-prueba="vista-padre"]')?.textContent).toContain('max-limit 100M/200M')
@@ -103,14 +104,14 @@ describe('semana 2 · formularios de velocidad', () => {
         if (!primero) {
             return
         }
-        const invalido = await mountSuspended(PlanFormulario, { props: { plan: { ...primero, reuso: 4, garantizado_pct: 50 }, open: true } })
+        const invalido = await mountSuspended(PlanFormulario, { props: { plan: { ...primero, reuso: 4, garantizado_pct: 50 } }, attachTo: document.body })
         await esperar(() => expect(document.body.querySelector('[data-prueba="vista-rate-limit-errores"]')?.textContent).toContain('no puede pasar de 25 %'), { timeout: 3000 })
         expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')).toBeNull()
         invalido.unmount()
         document.body.innerHTML = ''
 
         simularFalla('POST /api/v1/planes/vista-previa', 501)
-        const caida = await mountSuspended(PlanFormulario, { props: { plan: primero, open: true } })
+        const caida = await mountSuspended(PlanFormulario, { props: { plan: primero }, attachTo: document.body })
         await esperar(() => expect(document.body.textContent).toContain('Reintentar'), { timeout: 3000 })
         expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')).toBeNull()
         caida.unmount()

@@ -18,6 +18,7 @@ import PaginaRouter from '~/pages/routers/[id].vue'
 import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
+import { opcionesMasServicio } from '../ayudas/fichaServicio'
 
 /**
  * PPPoE sin RADIUS (`contratos/pppoe-local.md`, PR #206): en un router `api` el panel ofrece PPPoE
@@ -206,10 +207,13 @@ describe('PPPoE sin RADIUS', () => {
             expect(pagina.find('[data-prueba="sesion-activa-sondeo"]').text()).toBe('Por sondeo')
             expect(pagina.find('[data-prueba="sesion-activa-consumo"]').text()).toContain('— (sin RADIUS no hay consumo)')
             expect(pagina.text()).toContain('— · sondeo:')
-            expect(pagina.text()).toContain('Desconectar sesión')
+            // OperServicioFicha: «Desconectar sesión» va en el menú «Más» de la ficha.
+            expect(await opcionesMasServicio(pagina)).toContain('Desconectar sesión')
 
+            // El historial de sesiones va en la pestaña «Red y equipo».
+            const red = await mountSuspended(enApp(PaginaServicio), { route: `/servicios/${servicio.id}?pestana=red` })
             const historial = await esperar(() => {
-                const tabla = pagina.find('[data-prueba="sesiones-servicio"]')
+                const tabla = red.find('[data-prueba="sesiones-servicio"]')
                 expect(tabla.text()).toContain('Ya no estaba en el router')
                 return tabla
             })
@@ -242,7 +246,9 @@ describe('PPPoE sin RADIUS', () => {
             expect(texto).toContain('secrets locales')
             expect(texto).toContain('cada minuto')
             expect(texto).toContain('no hay consumo')
-            expect(pagina.text()).toContain('Sin usuario y contraseña de la API no se pueden crear servicios PPPoE aquí.')
+            // RedRouterFicha: el aviso va en la lista de lo que pide atención del Resumen.
+            expect(pagina.text()).toContain('Sin usuario y clave de la API')
+            expect(pagina.text()).toContain('Sin RADIUS no se pueden crear servicios PPPoE aquí.')
         })
 
         it('pasar de «Sin RADIUS» a RADIUS avisa que se borran los secrets locales', async () => {

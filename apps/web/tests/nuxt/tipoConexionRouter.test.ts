@@ -101,13 +101,14 @@ describe('tipo de conexión por router', () => {
         expect(aviso.querySelector('a')!.getAttribute('href')).toMatch(/^\/servicios\/\d+$/)
     })
 
+    // RedRouterFicha: el tipo de conexión y el control de velocidad van en la pestaña «Velocidad».
     it('ficha: tipo junto al control de velocidad; «Cambiar tipo» con vista previa, faltantes y aplicar', async () => {
         const conFalta = bd.servicios.find(s => s.router_id === 1 && s.estado !== 'retirado')!
         conFalta.mac = null
-        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1' })
+        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1?pestana=velocidad' })
         await esperar(() => expect(pagina.find('[data-prueba="router-tipo-actual"]').exists()).toBe(true))
         expect(pagina.find('[data-prueba="router-tipo-actual"]').text()).toBe('PPPoE')
-        expect(pagina.find('[data-prueba="router-velocidad"]').exists()).toBe(true)
+        expect(pagina.find('[data-prueba="router-velocidad-panel"]').exists()).toBe(true)
         expect(pagina.find('[data-prueba="router-tipo-difieren"]').exists()).toBe(false)
 
         await pagina.find('[data-prueba="abrir-cambio-tipo"]').trigger('click')
@@ -128,7 +129,7 @@ describe('tipo de conexión por router', () => {
     })
 
     it('ficha: 409 en el cambio pide «Recargar» la vista previa', async () => {
-        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1' })
+        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1?pestana=velocidad' })
         await esperar(() => expect(pagina.find('[data-prueba="abrir-cambio-tipo"]').exists()).toBe(true))
         await pagina.find('[data-prueba="abrir-cambio-tipo"]').trigger('click')
         opcion('[data-prueba="tipo-conexion-elegir"]', 'ip_estatica').click()
@@ -151,7 +152,7 @@ describe('tipo de conexión por router', () => {
     it('ficha: servicios que difieren del router → aviso con «Unificar»', async () => {
         const distinto = bd.servicios.find(s => s.router_id === 1 && s.estado !== 'retirado')!
         Object.assign(distinto, { tipo_conexion: 'ip_estatica', user_ppp: null, ipv6_modo: 'ninguno' })
-        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1' })
+        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1?pestana=velocidad' })
         await esperar(() => expect(pagina.find('[data-prueba="router-tipo-difieren"]').exists()).toBe(true))
         const aviso = pagina.find('[data-prueba="router-tipo-difieren"]')
         expect(aviso.text()).toContain('1 servicio no usa el tipo del router')

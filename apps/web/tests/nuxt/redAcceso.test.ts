@@ -173,7 +173,8 @@ describe('red de acceso', () => {
 
     it('la ficha del servicio muestra su servidor PPPoE y el gateway (local-address)', async () => {
         const servicio = bd.servicios.find(s => s.router_id === 1 && (s.tipo_conexion ?? 'pppoe') === 'pppoe' && s.estado === 'activo')!
-        const pagina = await mountSuspended(enApp(PaginaServicio), { route: `/servicios/${servicio.id}` })
+        // OperServicioFicha: el servidor PPPoE y el gateway van en la pestaña «Red y equipo».
+        const pagina = await mountSuspended(enApp(PaginaServicio), { route: `/servicios/${servicio.id}?pestana=red` })
         await esperar(() => expect(pagina.find('[data-prueba="servicio-servidor-pppoe"]').text()).toContain('PPPoE Centro'))
         expect(pagina.find('[data-prueba="servicio-local-address"]').text()).toContain('100.64.10.1')
     })
