@@ -27,8 +27,29 @@ import type { OrigenIris } from '#shared/contexto'
 export const CABECERA_IRIS_ACTOR = 'X-Iris-Actor'
 export const CABECERA_IRIS_CONVERSACION = 'X-Iris-Conversacion'
 
-/** `asistente_ia` o `usuario:<id en Iris>` (hasta 64 caracteres `A-Z a-z 0-9 _ -`). */
-export const FORMATO_IRIS_ACTOR = /^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$/
+/**
+ * `asistente_ia`, `sistema` (0.14.2, solo en `RUTAS_ACTOR_SISTEMA`) o `usuario:<id en Iris>` (hasta
+ * 64 caracteres `A-Z a-z 0-9 _ -`).
+ */
+export const FORMATO_IRIS_ACTOR = /^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$/
+/** Cabecera del contacto que pide algo desde Iris (0.10.1 §7.1); nunca con `sistema`. */
+export const CABECERA_IRIS_CONTACTO = 'X-Iris-Contacto'
+/**
+ * Actor de Iris sin una persona detrás (contrato Iris 0.14.2 §7.1): lecturas que Iris hace por su
+ * cuenta (caché de contactos, catálogo de bancos y cuentas). Canal de auditoría `sistema`.
+ */
+export const ACTOR_IRIS_SISTEMA = 'sistema'
+/**
+ * Lista cerrada de rutas (`<metodo> <ruta>`) que aceptan `X-Iris-Actor: sistema` (0.14.2 §7.1). Una
+ * ruta la usa declarando `actorSistemaIris: true` en `definirRuta`; `montarRuta` falla al arrancar si
+ * la declara una ruta fuera de esta lista (`validarActorSistemaIris`; solo las rutas de prueba
+ * `/__pruebas/*` quedan fuera de la regla).
+ */
+export const RUTAS_ACTOR_SISTEMA: ReadonlySet<string> = new Set([
+    'get /clientes/:id/contactos',
+    'get /cuentas-bancarias',
+    'get /bancos',
+])
 /** Id de la conversación en Iris: hasta 128 caracteres `A-Z a-z 0-9 . _ : -`. */
 export const FORMATO_IRIS_CONVERSACION = /^[A-Za-z0-9._:-]{1,128}$/
 
@@ -49,6 +70,63 @@ export class CabeceraIrisRequerida extends Problema {
     }
 }
 
+/**
+ * `X-Iris-Actor: sistema` fuera de su lista cerrada (0.14.2 §7.1): `403` en una lectura, `422` en una
+ * escritura.
+ */
+/** Falla al montar si una ruta declara `actorSistemaIris` fuera de `RUTAS_ACTOR_SISTEMA`. */
+export function validarActorSistemaIris(ruta: { metodo: string; ruta: string; actorSistemaIris?: boolean }) {
+    if (!ruta.actorSistemaIris) return
+    if (ruta.metodo !== 'get') throw new Error(`${ruta.ruta}: actorSistemaIris solo en lecturas (GET)`)
+    if (ruta.ruta.startsWith('/__pruebas/')) return
+    if (!RUTAS_ACTOR_SISTEMA.has(`${ruta.metodo} ${ruta.ruta}`)) {
+        throw new Error(
+            `${ruta.metodo} ${ruta.ruta}: actorSistemaIris fuera de la lista cerrada del contrato Iris 0.14.2`,
+        )
+    }
+}
+
+export class ActorNoPermitido extends Problema {
+    constructor(escritura: boolean) {
+        super(
+            escritura ? 422 : 403,
+            'actor_no_permitido',
+            'Actor de Iris no permitido',
+            escritura
+                ? '`X-Iris-Actor: sistema` no puede escribir: una escritura la pide una persona o el asistente de Iris'
+                : '`X-Iris-Actor: sistema` solo vale en `GET /clientes/:id/contactos`, `GET /cuentas-bancarias` y `GET /bancos`',
+        )
+    }
+}
+
+/**
+ * Contrato Iris 0.14.2 §7.1: con el token de Iris y `X-Iris-Actor: sistema`.
+ *
+ * - Escritura (cualquier método que no sea `GET`/`HEAD`): `422 actor_no_permitido`.
+ * - Lectura fuera de la lista cerrada (`permitida = false`): `403 actor_no_permitido`.
+ * - Con `X-Iris-Conversacion` o `X-Iris-Contacto`: `400 cabecera_iris_requerida`.
+ * - Si pasa, deja `ctx.iris = { actor: 'sistema', conversacion: null }` (canal de auditoría
+ *   `sistema`, actor el token del conector, sin persona) y devuelve true.
+ *
+ * Otro actor de Iris, u otro usuario que no sea el token de Iris: false, sin tocar nada (las demás
+ * validaciones siguen igual). La llaman `despachar` (toda ruta del registro) y el middleware
+ * `actuarComoVinculado` (que corre antes).
+ */
+export function exigirActorSistemaIris(ctx: HttpContext, permitida: boolean): boolean {
+    if (!esTokenIris(ctx)) return false
+    if (ctx.request.header(CABECERA_IRIS_ACTOR)?.trim() !== ACTOR_IRIS_SISTEMA) return false
+    const metodo = ctx.request.method().toUpperCase()
+    if (metodo !== 'GET' && metodo !== 'HEAD') throw new ActorNoPermitido(true)
+    if (!permitida) throw new ActorNoPermitido(false)
+    for (const cabecera of [CABECERA_IRIS_CONVERSACION, CABECERA_IRIS_CONTACTO]) {
+        if (ctx.request.header(cabecera) !== undefined) {
+            throw new CabeceraIrisRequerida(`Con \`${CABECERA_IRIS_ACTOR}: sistema\` no se envía ${cabecera}`)
+        }
+    }
+    ctx.iris = { actor: ACTOR_IRIS_SISTEMA, conversacion: null }
+    return true
+}
+
 /** Valida las dos cabeceras (sin mirar el actor). */
 export function leerCabecerasIris(actor: string | undefined, conversacion: string | undefined): OrigenIris {
     const a = actor?.trim()
@@ -58,6 +136,8 @@ export function leerCabecerasIris(actor: string | undefined, conversacion: strin
             `${CABECERA_IRIS_ACTOR} es obligatoria: \`asistente_ia\` o \`usuario:<id en Iris>\` (id de hasta 64 caracteres A-Z a-z 0-9 _ -)`,
         )
     }
+    // 0.14.2: `sistema` solo pasa por `exigirActorSistemaIris` (lista cerrada, sin conversación)
+    if (a === ACTOR_IRIS_SISTEMA) throw new ActorNoPermitido(false)
     if (!c || !FORMATO_IRIS_CONVERSACION.test(c)) {
         throw new CabeceraIrisRequerida(
             `${CABECERA_IRIS_CONVERSACION} es obligatoria: id de la conversación (hasta 128 caracteres A-Z a-z 0-9 . _ : -)`,
@@ -128,6 +208,8 @@ export function exigirActorIris(
                     `${CABECERA_IRIS_ACTOR} es obligatoria: \`asistente_ia\` o \`usuario:<id en Iris>\``,
                 )
             }
+            // 0.14.2: `sistema` solo pasa por `exigirActorSistemaIris` (lista cerrada)
+            if (actor === ACTOR_IRIS_SISTEMA) throw new ActorNoPermitido(false)
             const conversacion = ctx.request.header(CABECERA_IRIS_CONVERSACION)?.trim()
             if (conversacion !== undefined && !FORMATO_IRIS_CONVERSACION.test(conversacion)) {
                 throw new CabeceraIrisRequerida(

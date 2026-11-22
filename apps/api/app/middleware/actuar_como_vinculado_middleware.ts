@@ -6,7 +6,7 @@ import {
     type PermisoActuacionVinculada,
 } from '#core/actuacion_vinculada'
 import { CABECERA_EMPRESA } from '#middleware/empresa_middleware'
-import { esTokenIris, exigirCabecerasIris } from '#integraciones/iris/atencion'
+import { esTokenIris, exigirActorSistemaIris, exigirCabecerasIris } from '#integraciones/iris/atencion'
 import { NoAutenticado } from '#shared/errores'
 
 /**
@@ -29,6 +29,8 @@ export default class ActuarComoVinculadoMiddleware {
         const usuario = ctx.auth.user
         const token = ctx.auth.use('tokens').token
         if (!usuario || !token || !ctx.empresa) throw new NoAutenticado()
+        // Iris 0.14.2: `sistema` nunca actúa como una persona (422 en escritura, 403 en lectura)
+        exigirActorSistemaIris(ctx, false)
 
         const origen = exigirCabecerasIris(ctx)!
         const actuacion = await resolverActuacionIris({
