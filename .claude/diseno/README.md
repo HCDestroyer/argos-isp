@@ -82,3 +82,4 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
 - **Promesas:** son por servicio.
 - **Equipos:** el técnico nunca decide pérdidas ni cobros. Declarar no recuperado exige 2 intentos de técnicos distintos o un contacto registrado (de fábrica). Equipo dañado o en garantía no vuelve como «funciona».
 - Lo que el diseño muestra se construye de verdad en el código (pedido del PM: «todo en código es posible»), sin pantallas con datos inventados.
+- Decisiones del PM sobre estas pantallas: `decisiones-pm.md`.
