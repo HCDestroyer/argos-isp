@@ -9,6 +9,7 @@ import {
     validarActuacionVinculada,
     type Ruta,
 } from '#shared/rutas'
+import { validarActorSistemaIris } from '#integraciones/iris/atencion'
 
 /**
  * Monta una ruta del registro en el router de AdonisJS con su cadena de middleware:
@@ -19,6 +20,8 @@ import {
 export function montarRuta(ruta: Ruta) {
     // falla al arrancar si una ruta declara `actuarComoVinculado` fuera de lo permitido
     validarActuacionVinculada(ruta)
+    // falla al arrancar si una ruta acepta `X-Iris-Actor: sistema` fuera de la lista cerrada (0.14.2)
+    validarActorSistemaIris(ruta)
     const seguridad = ruta.seguridad ?? 'sesion'
     const cadena = []
     if (seguridad === 'sesion' && ruta.nodoPortal) {
