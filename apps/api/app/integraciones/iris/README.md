@@ -435,11 +435,13 @@ manda `X-Iris-Contacto` en §11 (B28).
 al conciliar un «cobro por confirmar».
 
 - `empresa_id` y `origen_id` obligatorios, más `numero` (número interno de Argos = id de la factura,
-  el «Factura #n» del panel) o `serie` + `numero_dte` (DTE certificado, anulación pendiente o anulado),
+  el «Factura #n» del panel; aceptado por Iris en la 0.14.3 final) o `serie` + `numero_dte` (DTE certificado, anulación pendiente o anulado),
   excluyentes: `422 validacion` si faltan o se mezclan.
 - Responde `{ factura_id, numero, empresa_id, servicio_id, cliente_id, origen_tipo, origen_id, estado,
-  lineas[{ concepto_id, precio_unitario, cantidad }], total, moneda, emitida_en, dte }`, sin pagos,
-  NIT, nombre ni dirección; montos como texto de `decimal.js`. Las líneas `descuento` no salen.
+  lineas[{ concepto_id, precio_unitario, cantidad }], total, saldo, moneda, emitida_en, dte }`, sin
+  pagos, NIT, nombre ni dirección; montos como texto de `decimal.js`. `saldo` es el de `factura.*` de
+  A36 (`extrasIrisFactura`: total − cubierto, `0.00` en una anulada), sin el detalle de los pagos. Una
+  anulada responde 200 con `estado: anulada`, nunca 404. Las líneas `descuento` no salen.
   `concepto_id` sale de `billing.facturas_lineas.concepto_cargo_id` (migración
   `1795329379100_create_facturas_lineas_concepto_cargos_table`, lo guarda `EmitirCargoUnico` y lo copia
   la sustitución); en cargos anteriores es `null` y Iris no concilia con ellos.

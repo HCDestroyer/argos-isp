@@ -4,6 +4,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { idEntidad } from '#shared/validadores'
 import { Problema, ValidacionFallida } from '#shared/errores'
 import { dec } from '#ledger/dinero'
+import { extrasIrisFactura } from '#billing/iris_eventos'
 import { claveLimite, exigirBajoLimite } from '#core/limite_ventana'
 import { CABECERA_IRIS_ACTOR, CabeceraIrisRequerida, esTokenIris } from '#integraciones/iris/atencion'
 
@@ -154,6 +155,8 @@ export interface FacturaOrigenIris {
     estado: string
     lineas: Array<{ concepto_id: number | null; precio_unitario: string; cantidad: string }>
     total: string
+    /** total − cubierto (0.00 en una anulada): el mismo cálculo que `factura.emitida` de A36 */
+    saldo: string
     moneda: 'GTQ'
     emitida_en: string
     dte: { serie: string; numero: string } | null
@@ -164,7 +167,8 @@ const ESTADOS_DTE_CERTIFICADO = ['certificado', 'anulacion_pendiente', 'anulado'
 
 /**
  * La factura de `busqueda` si es `iris_orden` de ese `origen_id`, de esa empresa y dentro de
- * `permitidas` (null = todas); si no, null (el `404` es el mismo en todos los casos).
+ * `permitidas` (null = todas), en cualquier estado (una anulada sale con `estado: anulada`, nunca
+ * como `404`); si no, null (el `404` es el mismo en todos los casos).
  */
 export async function buscarFacturaOrigenIris(
     cliente: QueryClientContract,
@@ -232,6 +236,10 @@ export async function buscarFacturaOrigenIris(
         .select('serie', 'numero')
         .first()) as { serie: string; numero: string } | null
 
+    // el saldo con el mismo cálculo que viaja en `factura.*` de una factura `iris_orden` (A36)
+    const extras: { saldo?: string } = await extrasIrisFactura(cliente, Number(f.id))
+    const saldo = extras.saldo ?? dec(f.total).toFixed(2)
+
     return {
         factura_id: Number(f.id),
         numero: String(f.id),
@@ -248,6 +256,7 @@ export async function buscarFacturaOrigenIris(
             cantidad: dec(l.cantidad).toString(),
         })),
         total: dec(f.total).toFixed(2),
+        saldo,
         moneda: 'GTQ',
         emitida_en: new Date(f.emitida_en).toISOString(),
         dte: dte ? { serie: dte.serie, numero: dte.numero } : null,

@@ -7,6 +7,9 @@ import { crearClienteFila } from '#tests/core/fabricas'
 import { conActor, tokenIris } from '#tests/core/ayudas_iris_0100'
 import { claveLimite } from '#core/limite_ventana'
 import { redis } from '#shared/redis'
+import RegistrarPago from '#billing/actions/registrar_pago'
+import AnularFactura from '#billing/actions/anular_factura'
+import { extrasIrisFactura } from '#billing/iris_eventos'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 
 /**
@@ -29,6 +32,7 @@ const CLAVES = [
     'numero',
     'origen_id',
     'origen_tipo',
+    'saldo',
     'servicio_id',
     'total',
 ]
@@ -122,6 +126,7 @@ test.group('Iris 0.14.3 · lectura de una factura de origen Iris', (group) => {
             origen_id: orden,
             estado: 'emitida',
             total: '163.00',
+            saldo: '163.00',
             moneda: 'GTQ',
             dte: null,
         })
@@ -131,7 +136,7 @@ test.group('Iris 0.14.3 · lectura de una factura de origen Iris', (group) => {
         ])
         assert.match(cuerpo.emitida_en, /^\d{4}-\d{2}-\d{2}T.*Z$/)
         const texto = JSON.stringify(cuerpo)
-        for (const prohibido of ['nit', 'nombre', 'direccion', 'pagos', 'pagado', 'saldo']) {
+        for (const prohibido of ['nit', 'nombre', 'direccion', 'pagos', 'pagado', 'pago_id', 'acreditado']) {
             assert.notInclude(texto, `"${prohibido}`)
         }
 
@@ -170,6 +175,61 @@ test.group('Iris 0.14.3 · lectura de una factura de origen Iris', (group) => {
             serie: 'A1B2C3D4',
             numero_dte: '1234567890',
         })
+    })
+
+    test('saldo con un pago parcial, sin los pagos; una anulada responde 200 con estado anulada', async ({
+        client,
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const orden = randomUUID()
+        const { facturaId, clienteId } = await cargoIris(e, e.B, orden)
+        const ctx = { ...e.ctx, empresaId: e.B }
+        await new RegistrarPago().execute(
+            { cliente_id: clienteId, metodo: 'caja', monto: '50.00', empresa_id: e.B },
+            ctx,
+        )
+        const token = await tokenIris([e.B])
+        const parcial = await conActor(
+            client.get(RUTA).qs({ empresa_id: e.B, origen_id: orden, numero: facturaId }).bearerToken(token),
+        )
+        parcial.assertStatus(200)
+        assert.deepEqual(Object.keys(parcial.body()).toSorted(), CLAVES)
+        assert.containSubset(parcial.body(), { estado: 'parcial', total: '163.00', saldo: '113.00' })
+        const texto = JSON.stringify(parcial.body())
+        for (const prohibido of ['pagos', 'pagado', 'pago_id', 'metodo', 'acreditado']) {
+            assert.notInclude(texto, `"${prohibido}`)
+        }
+        // mismo cálculo que el `factura.emitida` de A36: total − pagado
+        const extras: { saldo?: string } = await extrasIrisFactura(db.connection(), facturaId)
+        assert.equal(parcial.body().saldo, extras.saldo)
+
+        // anulada: 200 con estado anulada y el mismo cuerpo, nunca 404
+        const otraOrden = randomUUID()
+        const { facturaId: anuladaId } = await cargoIris(e, e.B, otraOrden)
+        await new AnularFactura().execute({ factura_id: anuladaId, motivo: 'orden cancelada' }, ctx)
+        const anulada = await conActor(
+            client
+                .get(RUTA)
+                .qs({ empresa_id: e.B, origen_id: otraOrden, numero: anuladaId })
+                .bearerToken(token),
+        )
+        anulada.assertStatus(200)
+        assert.deepEqual(Object.keys(anulada.body()).toSorted(), CLAVES)
+        assert.containSubset(anulada.body(), {
+            factura_id: anuladaId,
+            estado: 'anulada',
+            total: '163.00',
+            saldo: '0.00',
+            origen_id: otraOrden,
+        })
+        assert.lengthOf(anulada.body().lineas, 2)
+        // anulada con otro origen_id sigue siendo 404
+        const otra = await conActor(
+            client.get(RUTA).qs({ empresa_id: e.B, origen_id: orden, numero: anuladaId }).bearerToken(token),
+        )
+        otra.assertStatus(404)
+        assert.equal(otra.body().type, NO_ENCONTRADA)
     })
 
     test('404 factura_no_encontrada único: no existe, sin origen Iris, otra orden, otra empresa o fuera del token', async ({

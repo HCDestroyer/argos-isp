@@ -3216,7 +3216,7 @@ export interface paths {
         };
         /**
          * Leer una factura de origen Iris para conciliar un «cobro por confirmar» (contrato Iris 0.14.3 §3)
-         * @description `empresa_id` y `origen_id` (id de la orden en Iris) obligatorios, más `numero` (número interno de Argos) o `serie` + `numero_dte` (DTE certificado), excluyentes: si faltan o se mezclan, `422 validacion`. Sin pagos, NIT, nombre ni dirección. Si no existe, no es `iris_orden`, su `origen_id` no es el pedido o su empresa está fuera del token (también un `empresa_id` fuera del token): el mismo `404 factura_no_encontrada`. Con el token de Iris, `X-Iris-Actor: usuario:<id>` obligatoria (`400 cabecera_iris_requerida`); con `asistente_ia` o `sistema`, `403 actor_no_permitido`; sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (se ignoran). Máximo 60 lecturas por minuto por token (`429 demasiadas_peticiones` con `Retry-After`). Cada lectura queda auditada con el actor de Iris y canal `api`, con solo los parámetros como entrada.
+         * @description `empresa_id` y `origen_id` (id de la orden en Iris) obligatorios, más `numero` (número interno de Argos) o `serie` + `numero_dte` (DTE certificado), excluyentes: si faltan o se mezclan, `422 validacion`. Sin pagos, NIT, nombre ni dirección; `saldo` sin el detalle de los pagos. Una anulada responde 200 con `estado: anulada`. Si no existe, no es `iris_orden`, su `origen_id` no es el pedido o su empresa está fuera del token (también un `empresa_id` fuera del token): el mismo `404 factura_no_encontrada`. Con el token de Iris, `X-Iris-Actor: usuario:<id>` obligatoria (`400 cabecera_iris_requerida`); con `asistente_ia` o `sistema`, `403 actor_no_permitido`; sin `X-Iris-Conversacion` ni `X-Iris-Contacto` (se ignoran). Máximo 60 lecturas por minuto por token (`429 demasiadas_peticiones` con `Retry-After`). Cada lectura queda auditada con el actor de Iris y canal `api`, con solo los parámetros como entrada.
          */
         get: operations["facturasOrigenIris"];
         put?: never;
@@ -17466,6 +17466,8 @@ export interface components {
                 cantidad: string;
             }[];
             total: string;
+            /** @description Total menos lo cubierto (pagos, saldos a favor y notas de crédito); 0.00 en una anulada. Sin el detalle de los pagos */
+            saldo: string;
             /** @enum {string} */
             moneda: "GTQ";
             /** Format: date-time */
