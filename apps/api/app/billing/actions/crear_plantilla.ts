@@ -26,6 +26,8 @@ export interface EntradaCrearPlantilla {
     mora_tipo?: 'ninguna' | 'fija' | 'porcentaje'
     mora_valor?: string
     mora_recurrente?: boolean
+    /** decisión del PM 14 (false de fábrica) */
+    rechazar_monto_distinto?: boolean
     hora_corte?: string
     certificar_al?: 'emitir' | 'pagar' | 'nunca'
     reglas_promesa?: ReglasPromesaParciales
@@ -43,6 +45,7 @@ export const VALORES_POR_DEFECTO = {
     mora_tipo: 'ninguna',
     mora_valor: '0.00',
     mora_recurrente: false,
+    rechazar_monto_distinto: false,
     hora_corte: '08:00',
     certificar_al: 'pagar',
 } as const
@@ -62,6 +65,8 @@ export default class CrearPlantilla extends DomainAction<EntradaCrearPlantilla, 
             mora_tipo: input.mora_tipo ?? VALORES_POR_DEFECTO.mora_tipo,
             mora_valor: input.mora_valor ?? VALORES_POR_DEFECTO.mora_valor,
             mora_recurrente: input.mora_recurrente ?? VALORES_POR_DEFECTO.mora_recurrente,
+            rechazar_monto_distinto:
+                input.rechazar_monto_distinto ?? VALORES_POR_DEFECTO.rechazar_monto_distinto,
             hora_corte: input.hora_corte ?? VALORES_POR_DEFECTO.hora_corte,
             certificar_al: input.certificar_al ?? VALORES_POR_DEFECTO.certificar_al,
             reglas_promesa: normalizarReglasPromesa(input.reglas_promesa),

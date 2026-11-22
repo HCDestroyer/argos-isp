@@ -109,6 +109,8 @@ export interface RedIpv4Vista {
     rango_fin: string | null
     dns_primario: string | null
     dns_secundario: string | null
+    /** red de IPs públicas (decisión del PM 30) */
+    publica: boolean
     ocupacion: Ocupacion
     version: number
     created_at: string
@@ -232,6 +234,7 @@ const COLUMNAS_RED = [
     db.raw('host(r.rango_fin) AS rango_fin'),
     db.raw('host(r.dns_primario) AS dns_primario'),
     db.raw('host(r.dns_secundario) AS dns_secundario'),
+    'r.publica',
     db.raw(`host(${sqlGatewayEfectivo('r')}) AS gateway_efectivo`),
     db.raw('r.gateway IS NULL AS gateway_derivado'),
     db.raw(

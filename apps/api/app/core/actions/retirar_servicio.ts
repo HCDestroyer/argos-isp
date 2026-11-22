@@ -7,10 +7,18 @@ import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { registrarTramo } from '#network/historial'
 import { cancelarPorRetiro } from '#core/planes_temporales'
 import { darDeBajaPorRetiro } from '#core/adicionales'
+import { ajusteBooleano } from '#core/ajustes_operacion'
+import { usuarioDelActor } from '#shared/contexto'
+import { cerrarTramosAbiertos } from '#core/actions/quitar_promocion_velocidad'
 
 export interface EntradaRetirarServicio {
     id: number
     motivo: string
+    /**
+     * Casilla «el equipo ya se entregó» (decisión del PM 17): no se pide la orden de retiro a Iris ni
+     * quedan equipos «por recuperar». Por defecto false.
+     */
+    equipo_entregado?: boolean
 }
 
 /**
@@ -20,6 +28,11 @@ export interface EntradaRetirarServicio {
  * `aaa:user:<user_ppp>` queda con una lápida. Un plan temporal programado o activo queda
  * `cancelado` (motivo `retiro`) y el servicio vuelve a su plan base. Sus adicionales activos pasan a
  * `baja` (`servicio.adicional_quitado`, `origen: retiro`).
+ *
+ * Decisión del PM 17: de fábrica (`retiro.orden_iris`) se pide a Iris la orden de retiro y los equipos
+ * en comodato quedan «por recuperar» (`recuperar_equipo: true` en `servicio.estado_cambiado`); con
+ * `equipo_entregado` o el ajuste apagado, `recuperar_equipo: false`. La decisión queda en
+ * `core.servicios_retiros`. Las promociones de velocidad del servicio se quitan (tramo cerrado).
  */
 export default class RetirarServicio extends DomainAction<EntradaRetirarServicio, ServicioVista> {
     readonly nombre = 'servicios.retirar'
@@ -56,7 +69,21 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
             { id: input.id, empresa_id: empresaId, cliente_id: antes.cliente_id },
             input.motivo,
         )
+        await quitarPromocionesPorRetiro(t, input.id)
         await liberarAsignaciones(t.trx, input.id)
+        const equipoEntregado = input.equipo_entregado ?? false
+        const recuperarEquipo = !equipoEntregado && (await ajusteBooleano('retiro.orden_iris', null, t.trx))
+        await t.trx
+            .insertQuery()
+            .table('core.servicios_retiros')
+            .insert({
+                servicio_id: input.id,
+                empresa_id: empresaId,
+                motivo: input.motivo,
+                equipo_entregado: equipoEntregado,
+                recuperar_equipo: recuperarEquipo,
+                creado_por: usuarioDelActor(t.ctx.actor),
+            })
         // cierra el tramo vigente del historial (un retirado no abre otro)
         await registrarTramo(t.trx, input.id, `retiro: ${input.motivo}`)
 
@@ -69,6 +96,8 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
             de: fila.estado,
             a: 'retirado',
             motivo: input.motivo,
+            recuperar_equipo: recuperarEquipo,
+            equipo_entregado: equipoEntregado,
         })
         await t.emit('asignacion.cambiada', {
             servicio_id: input.id,
@@ -82,5 +111,29 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
         // retirado → lápida en aaa:user:<user_ppp>
         refrescarAaaAlConfirmar(t, { servicioId: input.id })
         return despues
+    }
+}
+
+/** Promociones de velocidad del servicio retirado: cierra el tramo abierto y quita las asignaciones. */
+async function quitarPromocionesPorRetiro(t: Transaccion, servicioId: number) {
+    await cerrarTramosAbiertos(t, { servicioId }, 'retiro')
+    const asignaciones = (await t.trx
+        .from('core.promociones_velocidad_servicios')
+        .where({ servicio_id: servicioId, estado: 'vigente' })
+        .update(
+            {
+                estado: 'quitada',
+                quitada_en: t.trx.knexRawQuery('now()'),
+                motivo: 'retiro',
+                updated_at: t.trx.knexRawQuery('now()'),
+            } as Record<string, unknown>,
+            ['id'],
+        )) as Array<{ id: number }>
+    for (const a of asignaciones) {
+        await t.registrarCambios(
+            { tipo: 'promocion_servicio', id: Number(a.id) },
+            { estado: 'vigente' },
+            { estado: 'quitada' },
+        )
     }
 }

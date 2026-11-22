@@ -1,6 +1,9 @@
 import env from '#start/env'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import type { FilaSesion } from '#network/sesiones/sesiones'
+import { verAjustesOperacion } from '#core/ajustes_operacion'
+import { sqlEnIncidenteAbierto } from '#network/incidentes_red'
 
 /**
  * Caídas repetidas de un servicio (pedido A6 de Iris, `contratos/eventos.md`): al cerrarse una
@@ -20,6 +23,11 @@ import type { FilaSesion } from '#network/sesiones/sesiones'
  * - **Concurrencia:** dos Stop del mismo servicio en workers distintos se ordenan con
  *   `pg_advisory_xact_lock(4107, servicio_id)`, tomado solo cuando se alcanzó el umbral.
  * - No decide estados ni toca la red: es un aviso.
+ * - **Umbral** (decisión del PM 31, contrato Iris 0.13.0): ajustes de operación por empresa
+ *   (`caidas.activo`, `caidas.umbral`, `caidas.ventana_min`; 3 caídas en 60 minutos de fábrica). Iris decide
+ *   con su propio umbral si abre ticket; en Argos queda la alerta (`GET /red/caidas-repetidas`).
+ * - **Falla general**: si el servicio está en un incidente abierto o en el alcance de uno
+ *   (`network.incidentes_red`), no se emite: el ticket es el general del incidente.
  */
 
 // 4105 es `LOCK_SONDEO_PPP` (por router): con el mismo espacio, servicio 7 y router 7 se bloqueaban entre sí.
@@ -40,13 +48,20 @@ export interface ConfigCaidas {
     causasIgnoradas: string[]
 }
 
-export function configCaidas(): ConfigCaidas {
-    const umbral = env.get('CAIDAS_REPETIDAS_SESIONES') ?? 5
-    const ventana = env.get('CAIDAS_REPETIDAS_VENTANA_MIN') ?? 120
+/**
+ * Configuración de la empresa: `caidas.*` de los ajustes de operación (empresa → global → fábrica: 3 en
+ * 60 min); `caidas.activo` apagado da `umbral: 0`. Las causas ignoradas siguen en
+ * `CAIDAS_REPETIDAS_CAUSAS_IGNORADAS`.
+ */
+export async function configCaidas(
+    empresaId: number | null = null,
+    cliente?: QueryClientContract,
+): Promise<ConfigCaidas> {
+    const { efectivo } = await verAjustesOperacion(empresaId, cliente)
     const lista = env.get('CAIDAS_REPETIDAS_CAUSAS_IGNORADAS')
     return {
-        umbral: Number.isInteger(umbral) && umbral > 0 ? umbral : 0,
-        ventanaMinutos: Number.isInteger(ventana) && ventana > 0 ? ventana : 120,
+        umbral: efectivo['caidas.activo'] ? Number(efectivo['caidas.umbral']) : 0,
+        ventanaMinutos: Number(efectivo['caidas.ventana_min']),
         causasIgnoradas:
             lista === undefined
                 ? [...CAUSAS_IGNORADAS_POR_DEFECTO]
@@ -69,9 +84,18 @@ function consulta(t: Transaccion, sql: string, valores: unknown[]): Promise<unkn
 export async function detectarCaidasRepetidas(
     t: Transaccion,
     sesion: FilaSesion,
-    config: ConfigCaidas = configCaidas(),
+    configFija?: ConfigCaidas,
 ): Promise<boolean> {
-    if (config.umbral === 0 || sesion.servicio_id === null || !sesion.fin) return false
+    if (sesion.servicio_id === null || !sesion.fin) return false
+    const { rows: datos } = (await consulta(
+        t,
+        `SELECT s.empresa_id, ${sqlEnIncidenteAbierto('s', 'cl')} AS en_incidente
+           FROM core.servicios s JOIN core.clientes cl ON cl.id = s.cliente_id WHERE s.id = ?`,
+        [sesion.servicio_id],
+    )) as { rows: Array<{ empresa_id: number; en_incidente: boolean }> }
+    if (!datos[0] || datos[0].en_incidente) return false
+    const config = configFija ?? (await configCaidas(Number(datos[0].empresa_id), t.trx))
+    if (config.umbral === 0) return false
     const causa = sesion.causa_fin ?? 'Desconocida'
     if (config.causasIgnoradas.includes(causa)) return false
 

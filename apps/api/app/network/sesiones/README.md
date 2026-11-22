@@ -61,12 +61,12 @@ Cron `cerrar_colgadas` en la cola `sesiones-cron`, dentro de `node ace sesiones:
 
 ## Caídas repetidas (pedido A6 de Iris)
 
-`caidas.ts` (`detectarCaidasRepetidas`), llamada desde `emitirTerminada` en la misma transacción que cierra la sesión: si el servicio acumula `CAIDAS_REPETIDAS_SESIONES` (5) sesiones terminadas en `CAIDAS_REPETIDAS_VENTANA_MIN` (120) minutos, emite **`servicio.caidas_repetidas`** `{ servicio_id, empresa_id, cliente_id, router_id, sesion_id, sesiones, desde, hasta, umbral, ventana_minutos, causas }` por outbox. A6 lo reenvía por webhook a Iris (ticket proactivo).
+`caidas.ts` (`detectarCaidasRepetidas`), llamada desde `emitirTerminada` en la misma transacción que cierra la sesión: si el servicio acumula `caidas.umbral` (3) sesiones terminadas en `caidas.ventana_min` (60) minutos (ajustes de operación por empresa de A1, decisión del PM 31), emite **`servicio.caidas_repetidas`** `{ servicio_id, empresa_id, cliente_id, router_id, sesion_id, sesiones, desde, hasta, umbral, ventana_minutos, causas }` por outbox. A6 lo reenvía por webhook a Iris (ticket proactivo).
 
 - Ventana: `(hasta − ventana, hasta]`, con `hasta` = `fin` de la sesión que se cerró; `desde` = `fin` de la primera contada. `causas` cuenta por `causa_fin`.
 - No cuentan las causas de `CAIDAS_REPETIDAS_CAUSAS_IGNORADAS` (por defecto `Admin-Reset`: CoA/Disconnect de Argos por corte, reactivación o desconexión manual; `Admin-Reboot` y `NAS-Reboot`: el router entero; `NAS-Request`; `sin_interim`: cierre del cron sin dato del NAS). `Sesion-Reemplazada` sí cuenta (el CPE volvió a entrar sin Stop). Una causa ignorada ni siquiera consulta.
 - A lo sumo una vez por ventana: cada emisión deja fila en `network.caidas_repetidas` (solo inserción) y no se emite otra mientras la última del servicio tenga `hasta` dentro de la ventana; así las sesiones de un aviso nuevo son todas posteriores al anterior. `pg_advisory_xact_lock(4105, servicio_id)` ordena dos Stop concurrentes del mismo servicio. Un Stop repetido no hace nada (la sesión ya estaba cerrada).
-- `CAIDAS_REPETIDAS_SESIONES=0` lo apaga. Sin auditoría propia: queda en la fila de la acción que cerró la sesión (`sesiones.terminar`, `sesiones.iniciar` con reemplazadas) y su evento en el mismo outbox.
+- El ajuste `caidas.activo` (por empresa) lo apaga. Tampoco se emite si el servicio está en un incidente de falla general abierto o en su alcance (`network.incidentes_red`, A1). Sin auditoría propia: queda en la fila de la acción que cerró la sesión (`sesiones.terminar`, `sesiones.iniciar` con reemplazadas) y su evento en el mismo outbox.
 
 ## Contacto de los routers (`Router.en_linea`)
 
@@ -149,7 +149,7 @@ Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 
 - `tests/network/sesiones_eliminado.spec.ts`: `servicio.eliminado` sin sesión (nada, sin auditoría), con una sesión abierta después del borrado (Disconnect con su payload, auditoría, repetición mientras siga abierta y nada tras el Stop), `user_ppp` del payload y payload sin id.
 - `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados y pendientes de instalación fuera, 404/422/403, alcance).
-- `tests/network/caidas_repetidas.spec.ts`: la quinta caída en 120 min emite el aviso con su fila y el payload completo; una vez por ventana y otra pasada la ventana; causas ignoradas y caídas espaciadas no cuentan.
+- `tests/network/caidas_repetidas.spec.ts`: la tercera caída en 60 min emite el aviso con su fila y el payload completo; una vez por ventana y otra pasada la ventana; causas ignoradas y caídas espaciadas no cuentan.
 - `tests/network/sesiones_colgadas.spec.ts`: cierre con `sin_interim`, evento con `motivo`, auditoría, idempotencia, NAS silencioso, lotes, lock, reapertura por Interim, corrección por Stop y programación del job.
 - `tests/network/migracion_aaa.spec.ts`: marcar, volver a marcar, desmarcar, auditoría, 409/422/404/403, alcance, `Idempotency-Key` y `desde` por defecto del resumen.
 - `tests/network/eventos_red.spec.ts`: `GET /red/eventos` (filtros, fechas, cursor, credenciales como `***`, permiso y alcance).

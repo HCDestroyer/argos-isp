@@ -3,13 +3,15 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { CERO, D as Decimal, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
-import { hoyGuatemala } from '#ledger/fechas'
+import { DateTime } from 'luxon'
+import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { dteVigente } from '#fiscal/fel/dte'
 import { bloquearCliente, type FacturaPendiente } from '#billing/cobros'
 import { ESTADOS_PENDIENTES, pendienteDe, type EstadoFactura } from '#billing/facturas'
 import { verCastigo, type CastigoVista } from '#ledger/cartera'
+import { resumenGestiones, type ResumenGestiones } from '#billing/gestiones_cobro'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
@@ -17,7 +19,10 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  * `cartera.castigar` (`POST /cartera/castigos`): castigo de facturas incobrables de **un** cliente
  * (contrato de localización fiscal §10.9 y §10.1; LAT art. 21.20).
  *
- * - Motivo y evidencia de la gestión de cobro obligatorios (422 `castigo_sin_evidencia`).
+ * - Motivo y evidencia de la gestión de cobro obligatorios (422 `castigo_sin_evidencia`). Decisión
+ *   del PM 8: si `evidencia` viene vacía y el cliente tiene gestiones de cobro registradas en la
+ *   empresa (`billing.gestiones_cobro`), la evidencia es su resumen («3 gestiones de cobro
+ *   registradas…»); sin texto ni gestiones, 422. La vista del castigo lista las gestiones.
  * - Cada factura: su saldo pendiente. En un **aviso sin DTE** el IVA de ese saldo nunca se causó y
  *   sale de `2.1.11` (proporcional a lo que el aviso tiene por certificar; todo, si nada se pagó).
  *   En una factura con DTE (o con FEL desactivada) el IVA ya es débito: no se recupera aquí (solo con
@@ -33,7 +38,8 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 export interface EntradaCastigarCartera {
     facturas: number[]
     motivo: string
-    evidencia: string
+    /** vacía: el resumen de las gestiones de cobro del cliente */
+    evidencia?: string | null
 }
 
 interface FacturaCastigo extends FacturaPendiente {
@@ -43,28 +49,38 @@ interface FacturaCastigo extends FacturaPendiente {
     iva: string
 }
 
+function sinEvidencia(motivo: boolean, evidencia: boolean): Problema {
+    return new Problema(
+        422,
+        'castigo_sin_evidencia',
+        'Castigo sin evidencia',
+        'El castigo exige motivo y la evidencia de la gestión de cobro (LAT art. 21.20): escríbela o registra las gestiones del cliente',
+        [
+            ...(motivo ? [{ field: 'motivo', message: 'Obligatorio', rule: 'castigo_sin_evidencia' }] : []),
+            ...(evidencia
+                ? [{ field: 'evidencia', message: 'Obligatoria', rule: 'castigo_sin_evidencia' }]
+                : []),
+        ],
+    )
+}
+
+/** «3 gestiones de cobro registradas (1 con adjunto); última: 2026-11-12». */
+export function textoEvidencia(g: ResumenGestiones): string {
+    const plural = g.cantidad === 1 ? 'gestión de cobro registrada' : 'gestiones de cobro registradas'
+    const adjuntos = g.con_adjunto > 0 ? ` (${g.con_adjunto} con adjunto)` : ''
+    const ultima = g.ultima
+        ? `; última: ${DateTime.fromJSDate(new Date(g.ultima)).setZone(ZONA_NEGOCIO).toISODate()}`
+        : ''
+    return `${g.cantidad} ${plural}${adjuntos}${ultima}`
+}
+
 export default class CastigarCartera extends DomainAction<EntradaCastigarCartera, CastigoVista> {
     readonly nombre = 'cartera.castigar'
 
     protected async handle(input: EntradaCastigarCartera, t: Transaccion): Promise<CastigoVista> {
         const motivo = input.motivo?.trim() ?? ''
-        const evidencia = input.evidencia?.trim() ?? ''
-        if (motivo.length < 3 || evidencia.length < 3) {
-            throw new Problema(
-                422,
-                'castigo_sin_evidencia',
-                'Castigo sin evidencia',
-                'El castigo exige motivo y la evidencia de la gestión de cobro (LAT art. 21.20)',
-                [
-                    ...(motivo.length < 3
-                        ? [{ field: 'motivo', message: 'Obligatorio', rule: 'castigo_sin_evidencia' }]
-                        : []),
-                    ...(evidencia.length < 3
-                        ? [{ field: 'evidencia', message: 'Obligatoria', rule: 'castigo_sin_evidencia' }]
-                        : []),
-                ],
-            )
-        }
+        let evidencia = input.evidencia?.trim() ?? ''
+        if (motivo.length < 3) throw sinEvidencia(true, false)
         const ids = [...new Set(input.facturas ?? [])]
         if (ids.length === 0) {
             throw new ValidacionFallida([
@@ -131,6 +147,12 @@ export default class CastigarCartera extends DomainAction<EntradaCastigarCartera
         }
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
+        // decisión del PM 8: las gestiones de cobro registradas son la evidencia; sin texto, se resume
+        if (evidencia.length < 3) {
+            const gestiones = await resumenGestiones(t.trx, clienteId, empresaId)
+            if (gestiones.cantidad === 0) throw sinEvidencia(false, true)
+            evidencia = textoEvidencia(gestiones)
+        }
 
         const partes: Array<{ factura: FacturaCastigo; monto: Dec; iva: Dec }> = []
         for (const id of ids) {

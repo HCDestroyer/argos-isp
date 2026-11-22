@@ -574,6 +574,11 @@ export async function construirVariables(
         variables.contacto = payload.contacto as Variables
     }
     if (payload.equipo && typeof payload.equipo === 'object') variables.equipo = payload.equipo as Variables
+    // Avisos de soporte (`soporte.ts`): número, tipo y estado; nunca el texto de un mensaje
+    if (payload.ticket && typeof payload.ticket === 'object') variables.ticket = payload.ticket as Variables
+    if (payload.solicitud && typeof payload.solicitud === 'object') {
+        variables.solicitud = payload.solicitud as Variables
+    }
 
     return variables
 }

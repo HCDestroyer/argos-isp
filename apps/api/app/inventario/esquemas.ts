@@ -514,9 +514,14 @@ export const ConfiguracionInventario = definirEsquema(
                 description:
                     'Técnicos distintos con intentos para declarar un equipo no recuperado (2 de fábrica)',
             },
+            iris_movimientos_diarios_alerta: {
+                ...entero,
+                description:
+                    'Iris 0.14.0: movimientos al día de un técnico vinculado desde los que se avisa al admin (40 de fábrica)',
+            },
             version: { ...entero, description: '0 = sin configurar (valores por defecto)' },
         },
-        ['recuperacion_tecnicos_minimos'],
+        ['recuperacion_tecnicos_minimos', 'iris_movimientos_diarios_alerta'],
     ),
 )
 
@@ -753,6 +758,141 @@ const EstadoHistorial = objeto(
     ['origen_externo_tipo', 'origen_externo_id'],
 )
 
+const ESTADOS_VERIFICACION_IRIS = [
+    'no_aplica',
+    'pendiente',
+    'verificado',
+    'no_verificado',
+    'anterior',
+    'aceptado',
+    'descartado',
+] as const
+
+/** Un intento de recuperación con su verificación con Iris (pantalla de declaración, 0.14.0 §3.10). */
+export const IntentoConVerificacion = definirEsquema(
+    'IntentoRecuperacionVerificado',
+    objeto(
+        {
+            id,
+            servicio_id: id,
+            intento_n: entero,
+            motivo: enumerado(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro']),
+            foto_ref: {
+                ...nulable(texto),
+                description: 'Id opaco del adjunto de la orden en Iris (se abre por autologin)',
+            },
+            lat: texto,
+            lng: texto,
+            precision_m: texto,
+            nota: nulable(texto),
+            fecha: instante,
+            dia: { ...fecha, description: 'Día de Guatemala de la fecha del intento (el del cupo)' },
+            actor_tecnico: nulable(texto),
+            actor_tecnico_id: nulable(id),
+            actor_tecnico_nombre: nulable(texto),
+            origen_externo_id: nulable(texto),
+            created_at: instante,
+            verificacion_id: nulable(id),
+            verificacion: {
+                ...enumerado(ESTADOS_VERIFICACION_IRIS),
+                description:
+                    'no_aplica (registrado en Argos), pendiente, verificado, no_verificado (con motivo), anterior (anterior a la verificación: lo decide una persona), aceptado o descartado',
+            },
+            verificacion_motivo: {
+                ...nulable(texto),
+                description:
+                    'envio_en_curso, foto_pendiente, no_enviado_por_iris, no_coincide, foto_invalida, desconocido_en_iris, error_iris, timeout, sin_acceso, limitado, sin_conector o respuesta_invalida',
+            },
+            verificado_en: nulable(instante),
+            verificacion_consultas: entero,
+            verificacion_proxima_en: nulable(instante),
+            decidido_por: nulable(id),
+            decidido_en: nulable(instante),
+            motivo_decision: nulable(texto),
+            cuenta: { ...booleano, description: 'Cuenta para el mínimo de técnicos distintos' },
+            afirmado_por_iris: {
+                ...booleano,
+                description: 'La ubicación y la autoría las afirma Iris (Argos no las revalida)',
+            },
+        },
+        [
+            'dia',
+            'verificacion_id',
+            'verificacion',
+            'verificacion_motivo',
+            'verificado_en',
+            'verificacion_consultas',
+            'verificacion_proxima_en',
+            'decidido_por',
+            'decidido_en',
+            'motivo_decision',
+            'cuenta',
+            'afirmado_por_iris',
+        ],
+    ),
+)
+
+/** Intentos de una unidad para la pantalla de declaración (0.14.0). */
+export const IntentosDeUnidad = definirEsquema(
+    'IntentosRecuperacionDeUnidad',
+    objeto({
+        unidad_id: id,
+        aviso: {
+            ...texto,
+            description: 'Texto fijo para la pantalla: la ubicación y la autoría las afirma Iris',
+        },
+        tecnicos_minimos: entero,
+        tecnicos_que_cuentan: entero,
+        contactos: { ...entero, description: 'Contactos registrados por una persona en el panel de Argos' },
+        intentos: lista(IntentoConVerificacion),
+    }),
+)
+
+export const DecisionIntento = definirEsquema(
+    'DecisionIntentoRecuperacion',
+    objeto({
+        intento_id: id,
+        verificacion: enumerado(['aceptado', 'descartado']),
+        por_recuperar: booleano,
+    }),
+)
+
+export const VinculoTecnicoIris = definirEsquema(
+    'VinculoTecnicoIris',
+    objeto({
+        id,
+        empresa_id: id,
+        iris_usuario_id: texto,
+        iris_tecnico_id: nulable(texto),
+        id_externo: nulable(texto),
+        usuario_id: nulable(id),
+        usuario_nombre: nulable(texto),
+        estado: {
+            ...enumerado(['vinculado', 'rechazado', 'desvinculado']),
+            description: 'rechazado = vinculo_rechazado (con su motivo)',
+        },
+        motivo: {
+            ...nulable(texto),
+            description:
+                'Rechazo: usuario_inexistente, usuario_inactivo, no_es_tecnico, fuera_de_la_empresa, id_externo_en_uso; desvinculado: el de Iris (desactivado)',
+        },
+        version: entero,
+        origen: enumerado(['webhook', 'conciliacion']),
+        reevaluar_en: nulable(instante),
+        updated_at: instante,
+    }),
+)
+
+export const ConciliacionVinculo = definirEsquema(
+    'ConciliacionVinculoTecnico',
+    objeto({
+        resultado: enumerado(['aplicado', 'no_encontrado', 'error']),
+        estado: nulable(enumerado(['vinculado', 'rechazado', 'desvinculado'])),
+        ignorado: nulable(texto),
+        motivo: nulable(texto),
+    }),
+)
+
 export const UnidadDetalle = definirEsquema(
     'UnidadInventarioDetalle',
     objeto({
@@ -776,28 +916,7 @@ export const UnidadDetalle = definirEsquema(
                 nota: nulable(texto),
             }),
         ),
-        intentos: lista(
-            objeto({
-                id,
-                servicio_id: id,
-                intento_n: entero,
-                motivo: enumerado(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro']),
-                foto_ref: {
-                    ...nulable(texto),
-                    description: 'Id opaco del adjunto de la orden en Iris (se abre por autologin)',
-                },
-                lat: texto,
-                lng: texto,
-                precision_m: texto,
-                nota: nulable(texto),
-                fecha: instante,
-                actor_tecnico: nulable(texto),
-                actor_tecnico_id: nulable(id),
-                actor_tecnico_nombre: nulable(texto),
-                origen_externo_id: nulable(texto),
-                created_at: instante,
-            }),
-        ),
+        intentos: lista(IntentoConVerificacion),
         contactos: lista(
             objeto({
                 id,
@@ -842,25 +961,41 @@ export const UnidadEquipoIris = definirEsquema(
 
 export const CambioEquipo = definirEsquema(
     'CambioEquipo',
-    objeto({
-        cambio_id: id,
-        sale: objeto({ unidad_id: id, estado: enumerado(ESTADOS_EQUIPO) }),
-        entra: objeto({ unidad_id: id, estado: enumerado(ESTADOS_EQUIPO) }),
-        cobro_propuesto_id: { ...nulable(id), description: 'El cobro propuesto en la cola (sin monto)' },
-    }),
+    objeto(
+        {
+            cambio_id: id,
+            sale: objeto({ unidad_id: id, estado: enumerado(ESTADOS_EQUIPO) }),
+            entra: objeto({ unidad_id: id, estado: enumerado(ESTADOS_EQUIPO) }),
+            cobro_propuesto_id: { ...nulable(id), description: 'El cobro propuesto en la cola (sin monto)' },
+            cobro_verificacion: {
+                ...nulable(enumerado(['pendiente', 'no_aplica'])),
+                description:
+                    '0.14.0: pendiente = el cobro propuesto espera la verificación de Iris y no está en la cola; null sin cobro',
+            },
+        },
+        ['cobro_verificacion'],
+    ),
 )
 
 export const IntentoRecuperacion = definirEsquema(
     'IntentoRecuperacion',
-    objeto({
-        id,
-        unidad_id: id,
-        servicio_id: id,
-        intento_n: entero,
-        motivo: enumerado(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro']),
-        estado: enumerado(ESTADOS_EQUIPO),
-        fecha: instante,
-    }),
+    objeto(
+        {
+            id,
+            unidad_id: id,
+            servicio_id: id,
+            intento_n: entero,
+            motivo: enumerado(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro']),
+            estado: enumerado(ESTADOS_EQUIPO),
+            fecha: instante,
+            verificacion: {
+                ...enumerado(['pendiente', 'anterior', 'no_aplica']),
+                description:
+                    '0.14.0: pendiente (se verifica con Iris; hasta entonces no cambia la unidad ni avisa), anterior (Iris < 0.14.0: lo decide una persona) o no_aplica (registrado en Argos)',
+            },
+        },
+        ['verificacion'],
+    ),
 )
 
 export const ContactoRecuperacion = definirEsquema(
@@ -884,7 +1019,11 @@ export const CobroEquipo = definirEsquema(
         cambio_id: nulable(id),
         motivo: nulable(texto),
         nota: nulable(texto),
-        estado: enumerado(['propuesto', 'aprobado', 'rechazado']),
+        estado: {
+            ...enumerado(['propuesto', 'aprobado', 'rechazado', 'por_verificar', 'no_verificado']),
+            description:
+                'por_verificar y no_verificado (0.14.0): cobro propuesto de un cambio que espera la verificación de Iris o que Iris no confirmó; no están en la cola',
+        },
         monto: nulable(Dinero),
         factura_id: nulable(id),
         decidido_por: nulable(id),
@@ -897,20 +1036,28 @@ export const CobroEquipo = definirEsquema(
 
 export const PendienteNoRecuperado = definirEsquema(
     'PendienteNoRecuperado',
-    objeto({
-        unidad_id: id,
-        empresa_id: id,
-        serie: nulable(texto),
-        mac: nulable(texto),
-        producto_nombre: texto,
-        servicio_id: id,
-        cliente_id: id,
-        cliente_nombre: texto,
-        intentos: entero,
-        tecnicos_distintos: entero,
-        contactos: entero,
-        ultimo_intento: instante,
-    }),
+    objeto(
+        {
+            unidad_id: id,
+            empresa_id: id,
+            serie: nulable(texto),
+            mac: nulable(texto),
+            producto_nombre: texto,
+            servicio_id: id,
+            cliente_id: id,
+            cliente_nombre: texto,
+            intentos: entero,
+            tecnicos_distintos: { ...entero, description: 'Técnicos distintos con intentos que cuentan' },
+            por_verificar: { ...entero, description: 'Intentos pendientes de verificar con Iris (0.14.0)' },
+            anteriores: {
+                ...entero,
+                description: 'Intentos anteriores a la verificación (los decide una persona)',
+            },
+            contactos: entero,
+            ultimo_intento: instante,
+        },
+        ['por_verificar', 'anteriores'],
+    ),
 )
 
 export const UnidadNoRecuperada = definirEsquema(

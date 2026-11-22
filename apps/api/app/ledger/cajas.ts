@@ -10,6 +10,9 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
  * en `actions/`. Alcance ACL por caja: un cajero con rol acotado a su caja solo la ve y la opera.
  */
 
+export const FORMATOS_IMPRESION = ['pos_80', 'carta'] as const
+export type FormatoImpresion = (typeof FORMATOS_IMPRESION)[number]
+
 export interface CajaVista {
     id: number
     /** empresa (NIT) de la caja: sus cobros y su cierre van al libro de esa empresa */
@@ -22,6 +25,9 @@ export interface CajaVista {
     turno_abierto_id: number | null
     turno_abierto_por: number | null
     turno_abierto_por_nombre: string | null
+    /** decisión del PM 20: formato del recibo (`pos_80` de fábrica) y de la factura (`carta`) */
+    formato_recibo: FormatoImpresion
+    formato_factura: FormatoImpresion
     version: number
     created_at: Date
     updated_at: Date
@@ -97,6 +103,8 @@ export async function listarCajas(
             db.raw(
                 '(select u.nombre from core.usuarios u where u.id = t.abierto_por) as turno_abierto_por_nombre',
             ),
+            'c.formato_recibo',
+            'c.formato_factura',
             'c.version',
             'c.created_at',
             'c.updated_at',
