@@ -144,6 +144,9 @@ export const ESTADOS_COBRO_EQUIPO: Record<Schema<'CobroEquipo'>['estado'], Estad
     propuesto: { etiqueta: 'Por decidir', color: 'warning', icono: 'i-lucide-hourglass' },
     aprobado: { etiqueta: 'Cobrado al cliente', color: 'success', icono: 'i-lucide-circle-check' },
     rechazado: { etiqueta: 'Sin cobro (decisión)', color: 'neutral', icono: 'i-lucide-circle-slash' },
+    // contrato Iris 0.14.0 §3.10: el cobro propuesto espera la verificación de Iris antes de entrar a la cola
+    por_verificar: { etiqueta: 'Verificando con Iris', color: 'neutral', icono: 'i-lucide-hourglass' },
+    no_verificado: { etiqueta: 'Sin cobro (Iris no lo verificó)', color: 'neutral', icono: 'i-lucide-shield-x' },
 }
 
 export const ORIGENES_COBRO_EQUIPO: Record<Schema<'CobroEquipo'>['origen'], string> = {
