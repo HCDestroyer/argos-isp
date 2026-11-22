@@ -28,7 +28,7 @@ const emit = defineEmits<{
                 :data-testid="`premio-${premio.id}`"
             >
                 <div class="flex items-start gap-3">
-                    <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <div class="ax-pastilla size-10">
                         <UIcon
                             :name="ICONOS_PREMIO[premio.tipo]"
                             class="size-5"

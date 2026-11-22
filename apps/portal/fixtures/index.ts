@@ -6,7 +6,7 @@
  * memoria: se abre con el código `123456` (`POST /portal/verificar`) y se cierra con `salir`.
  */
 import type { Problem, Schema } from '@argosisp/contracts'
-import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
+import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { ESCENARIOS_CORTE, ESTADO_REACTIVADO, estadoDe, type EscenarioCorte } from './corte'
 import {
     BONIFICACIONES_FIXTURE,
@@ -45,6 +45,7 @@ import {
     promesaSolicitadaFixture,
     type EscenarioResultadoFixture,
 } from './promesas'
+import { rutasSoporte } from './soporte'
 
 /**
  * Escenario de `/corte` en fixtures: `?fixture=activo|suspendido|desconocido|pendiente` en la URL del
@@ -331,6 +332,11 @@ function conSesion(responder: () => RespuestaFixture): () => RespuestaFixture {
     return () => !sesion.abierta ? SIN_SESION() : sesion.debeCambiar ? CAMBIO_REQUERIDO() : responder()
 }
 
+/** `conSesion` para manejadores que leen la solicitud (soporte y contactos). */
+function conSesionSolicitud(responder: (s: SolicitudFixture) => RespuestaFixture): (s: SolicitudFixture) => RespuestaFixture {
+    return s => !sesion.abierta ? SIN_SESION() : sesion.debeCambiar ? CAMBIO_REQUERIDO() : responder(s)
+}
+
 /** Pruebas: el cliente de fixtures ya usa la contraseña por defecto (`null`) o una propia. */
 export function fijarContrasenaFixture(propia: string | null): void {
     sesion.propia = propia
@@ -573,6 +579,7 @@ function sorteosActivos(): boolean {
 sorteosActivos()
 
 const rutasBase: RutasFixture = {
+    ...rutasSoporte(conSesionSolicitud),
     'GET /api/v1/portal/anuncios': () => ({
         status: 200,
         cuerpo: { data: anuncios.lista ?? anunciosDeLaUrl() },
@@ -1036,3 +1043,5 @@ const rutasBase: RutasFixture = {
 }
 
 export const rutasFixture: RutasFixture = conFallas(rutasBase)
+
+export { fijarSoporteFixture } from './soporte'
