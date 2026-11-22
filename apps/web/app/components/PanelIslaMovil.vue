@@ -83,7 +83,7 @@ function claseDestino(destino: { id: string, exito?: boolean }): string {
 
 <template>
     <nav
-        aria-label="Navegación del teléfono"
+        aria-label="Navegación inferior"
         class="isla-movil fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 lg:hidden"
         data-prueba="isla-movil"
     >
