@@ -138,6 +138,9 @@ const descripcion = computed(() => {
     return [quien, t?.vencido ? `${formatearQuetzales(String(t.vencido))} vencidos` : null].filter(Boolean).join(' · ') || undefined
 })
 
+/** Tramos vencidos de los totales; null si falta algún monto (se muestra «—», nunca un 0). */
+const tramosPorCobrar = computed(() => (porCobrar.value ? tramosCartera(porCobrar.value.totales, false) : null))
+
 /* Pestañas y la lista por cobrar. */
 const route = useRoute()
 const pestana = ref(['castigos', 'estimacion'].includes(String(route.query.tab)) ? String(route.query.tab) : 'cobrar')
@@ -297,9 +300,15 @@ onMounted(() => {
                         v-else-if="!porCobrar"
                         class="h-12 w-full"
                     />
+                    <p
+                        v-else-if="!tramosPorCobrar"
+                        class="text-sm text-muted"
+                    >
+                        —
+                    </p>
                     <ContaAntiguedad
                         v-else
-                        :tramos="tramosCartera(porCobrar.totales, false)"
+                        :tramos="tramosPorCobrar"
                         etiqueta="Vencido por antigüedad"
                         modo="barra"
                     />

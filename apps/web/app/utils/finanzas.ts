@@ -34,11 +34,30 @@ export const TRAMOS_ANTIGUEDAD = [
     { clave: 'dias_mas_90', etiqueta: 'Más de 90 días' },
 ] as const
 
-/** Tramos de una fila (o los totales) del reporte de cartera vencida; sin «por vencer» si se pide. */
-export function tramosCartera(fila: Pick<FilaCartera, 'por_vencer' | 'dias_0_30' | 'dias_31_60' | 'dias_61_90' | 'dias_mas_90'>, conPorVencer = true): TramoAntiguedad[] {
-    return TRAMOS_ANTIGUEDAD
-        .filter(t => conPorVencer || t.clave !== 'por_vencer')
-        .map(t => ({ clave: t.clave, etiqueta: t.etiqueta, monto: fila[t.clave] }))
+type ClaveTramo = typeof TRAMOS_ANTIGUEDAD[number]['clave']
+
+/** Totales del reporte de cartera vencida: cada monto puede venir null (sin dato). */
+export type TotalesCartera = Schema<'ReporteCarteraVencida'>['totales']
+
+/**
+ * Tramos de una fila (o los totales) del reporte de cartera vencida; sin «por vencer» si se pide.
+ * Con los totales, si falta algún monto devuelve null: nunca se dibujan tramos con un 0 inventado.
+ */
+export function tramosCartera(fila: Pick<FilaCartera, ClaveTramo>, conPorVencer?: boolean): TramoAntiguedad[]
+export function tramosCartera(fila: Pick<TotalesCartera, ClaveTramo>, conPorVencer?: boolean): TramoAntiguedad[] | null
+export function tramosCartera(fila: Record<ClaveTramo, string | null>, conPorVencer = true): TramoAntiguedad[] | null {
+    const tramos: TramoAntiguedad[] = []
+    for (const t of TRAMOS_ANTIGUEDAD) {
+        if (!conPorVencer && t.clave === 'por_vencer') {
+            continue
+        }
+        const monto = fila[t.clave]
+        if (monto === null) {
+            return null
+        }
+        tramos.push({ clave: t.clave, etiqueta: t.etiqueta, monto })
+    }
+    return tramos
 }
 
 /** Miles de quetzales sin decimales («Q 231 mil»), para titulares de gráficas. */

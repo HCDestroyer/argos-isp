@@ -176,7 +176,7 @@ type Obligacion = NonNullable<Schema<'BloqueVencimientos'>['datos']>['obligacion
 
 const impuestos = computed<Obligacion[]>(() => (tablero.value?.empresas ?? [])
     .flatMap(e => (e.bloques.vencimientos.datos?.obligaciones ?? []).map(o => ({ ...o, empresaId: e.empresa_id })))
-    .filter(o => o.estado !== 'no_aplica' && !(o.pagado && o.estado === 'presentada'))
+    .filter(o => !(o.pagado && o.estado === 'presentada'))
     .sort((a, b) => a.vence_en.localeCompare(b.vence_en)))
 
 /** Suma de lo calculado; sin ningún borrador calculado no hay total (nunca un Q 0.00 inventado). */
@@ -210,8 +210,12 @@ const hallazgoSerie = computed(() => (cobranza.value && faltaCobrar.value
     : undefined))
 
 const totalesCartera = computed(() => cartera.value?.totales ?? null)
-const tramos = computed(() => (totalesCartera.value ? tramosCartera(totalesCartera.value) : []))
-const masDe60 = computed(() => (totalesCartera.value ? new Decimal(totalesCartera.value.dias_61_90).plus(totalesCartera.value.dias_mas_90).toFixed(2) : null))
+/** null si falta algún monto de los totales: se muestra «—», nunca tramos con un 0 inventado. */
+const tramos = computed(() => (totalesCartera.value ? tramosCartera(totalesCartera.value) : null))
+const masDe60 = computed(() => {
+    const t = totalesCartera.value
+    return t && t.dias_61_90 !== null && t.dias_mas_90 !== null ? new Decimal(t.dias_61_90).plus(t.dias_mas_90).toFixed(2) : null
+})
 
 /* Teléfono: por pantallas (Resumen, Empresas, Reportes; tablero ContaPanelMovil2). */
 const vistaMovil = ref('resumen')
@@ -431,7 +435,7 @@ const TONO_AVISO = {
                                 v-if="totalesCartera"
                                 class="text-xs text-muted"
                             >
-                                Lo que deben por antigüedad · {{ totalesCartera.facturas.toLocaleString('es-GT') }} facturas
+                                Lo que deben por antigüedad · {{ totalesCartera.facturas === null ? '—' : totalesCartera.facturas.toLocaleString('es-GT') }} facturas
                             </p>
                         </div>
                         <UButton
@@ -453,6 +457,12 @@ const TONO_AVISO = {
                         v-else-if="!totalesCartera"
                         class="h-48 w-full"
                     />
+                    <p
+                        v-else-if="!tramos"
+                        class="text-sm text-muted"
+                    >
+                        —
+                    </p>
                     <ContaAntiguedad
                         v-else
                         :tramos="tramos"

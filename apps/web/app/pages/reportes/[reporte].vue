@@ -4,6 +4,7 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
 import type { LocationQuery } from 'vue-router'
 import Decimal from 'decimal.js'
 import { h } from 'vue'
+import type { TotalesCartera } from '~/utils/finanzas'
 
 definePageMeta({ permiso: 'reportes.ver' })
 
@@ -327,7 +328,7 @@ const carteraGrupos = computed(() => {
         }))
 })
 
-const totalesCarteraVencida = computed(() => (clave.value === 'cartera-vencida' && reporte.value ? reporte.value.totales as unknown as Partial<Record<keyof FilaCarteraVencida, string | number | null>> : null))
+const totalesCarteraVencida = computed(() => (clave.value === 'cartera-vencida' && reporte.value ? reporte.value.totales as unknown as TotalesCartera : null))
 
 const hallazgoCartera = computed(() => {
     const total = carteraGrupos.value.reduce((suma, g) => suma.plus(g.vencido), new Decimal(0))
@@ -345,12 +346,13 @@ const resumenCartera = computed(() => {
         return []
     }
     const vencido = new Decimal(t.vencido)
-    const mas60 = new Decimal(t.dias_61_90 ?? 0).plus(t.dias_mas_90 ?? 0)
+    // sin alguno de los dos tramos no hay suma: «—», nunca un 0 inventado
+    const mas60 = t.dias_61_90 !== null && t.dias_mas_90 !== null ? new Decimal(t.dias_61_90).plus(t.dias_mas_90) : null
     const parte = new Decimal(t.total).isZero() ? null : vencido.div(t.total).times(100).round()
     return [
         { etiqueta: 'Total vencido', valor: formatearQuetzales(vencido), detalle: parte === null ? '' : `${parte.toString()} % de lo pendiente` },
         { etiqueta: 'Más de 60 días', valor: formatearQuetzales(mas60), detalle: 'candidato a gestión de cobro o castigo' },
-        { etiqueta: 'Pendiente total', valor: formatearQuetzales(t.total), detalle: `${t.facturas ?? 0} facturas` },
+        { etiqueta: 'Pendiente total', valor: formatearQuetzales(t.total), detalle: `${t.facturas ?? '—'} facturas` },
     ]
 })
 
