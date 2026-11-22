@@ -9,7 +9,7 @@ pantallas:
 
 Un conteo compara lo que hay de verdad en una bodega con lo que dice el sistema. Al cerrarlo, los faltantes y sobrantes se ajustan solos, con su costo y su registro contable.
 
-Menú: **Inventario → Conteos físicos**.
+Menú: **Inventario → Movimientos → Conteos físicos**.
 
 ## Quién la usa
 

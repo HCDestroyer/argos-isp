@@ -44,7 +44,7 @@ Después de pagar en línea, de una promesa aprobada o de subir un comprobante, 
 
 ![Ya tienes servicio, con el recordatorio de la promesa](/capturas/portal/04-ya-tienes-servicio.png)
 
-Un comprobante no reactiva solo: la página queda esperando hasta que alguien lo apruebe en **Cobros → Comprobantes** ([Comprobantes](../cobros/comprobantes.md)).
+Un comprobante no reactiva solo: la página queda esperando hasta que alguien lo apruebe en **Comprobantes** ([Comprobantes](../cobros/comprobantes.md)).
 
 ## Cómo reconoce Argos al cliente
 
@@ -85,7 +85,7 @@ Si varios clientes del mismo router dicen lo mismo, el problema es de red, no de
 
 ## Qué pasa con la conexión al suspender
 
-En **Configuración → Portal de corte** el administrador elige una de dos formas ([Portal de corte](./portal-de-corte.md)):
+En **Configuración → Red y portal → Portal de corte** el administrador elige una de dos formas ([Portal de corte](./portal-de-corte.md)):
 
 - **Desconectar la sesión** (recomendado): el equipo del cliente se vuelve a conectar ya suspendido y ve la página de corte de inmediato.
 - **Mantener la sesión y cambiar velocidad (CoA)**: el cliente no se desconecta, pero descargas o llamadas ya abiertas pueden seguir un rato hasta que se cierren.
@@ -106,7 +106,7 @@ Esta parte es para quien administra el servidor y los routers. El detalle comple
 
 ### El camino de una visita
 
-1. **Primer salto.** El router hace `dst-nat` del HTTP (puerto 80) de los suspendidos hacia la IPv4 y el puerto de **Configuración → Portal de corte** (por IPv6 solo si hay IPv6 del portal). Ahí responde el portal, que identifica al cliente y lo redirige con `302` a `https://<dominio del portal>/corte?c=<código>`. Si la empresa tiene su propia URL de corte (en **Configuración → Empresas**), después de identificar redirige a esa URL.
+1. **Primer salto.** El router hace `dst-nat` del HTTP (puerto 80) de los suspendidos hacia la IPv4 y el puerto de **Configuración → Red y portal → Portal de corte** (por IPv6 solo si hay IPv6 del portal). Ahí responde el portal, que identifica al cliente y lo redirige con `302` a `https://<dominio del portal>/corte?c=<código>`. Si la empresa tiene su propia URL de corte (en **Configuración → Empresa y fiscal → Empresas**), después de identificar redirige a esa URL.
 2. **Segundo salto.** La página y sus consultas (estado, promesa, comprobante, pago) viajan por HTTPS con el código de la suspensión. Ya no dependen de la IP.
 
 El problema clásico: el masquerade del router (o Nginx Proxy Manager y Docker en el servidor) cambia la IP del cliente por la del router o la del proxy. Por eso existen los dos modos.
@@ -126,7 +126,7 @@ El problema clásico: el masquerade del router (o Nginx Proxy Manager y Docker e
 
 ### Nodo del portal
 
-El portal puede correr en otro servidor (otra oficina o la nube) que habla con el central por HTTPS con su token. Se crea en **Configuración → Nodos del portal** ([Nodos del portal](./nodos-del-portal.md)) o con `argosisp nodo-portal crear <nombre>`, y se instala con `instalar.sh --rol portal --central https://api.<dominio> --token <token>`. Con routers por el túnel, el primer salto lo atiende el central y redirige al nodo con el código.
+El portal puede correr en otro servidor (otra oficina o la nube) que habla con el central por HTTPS con su token. Se crea en **Configuración → Red y portal → Nodos del portal** ([Nodos del portal](./nodos-del-portal.md)) o con `argosisp nodo-portal crear <nombre>`, y se instala con `instalar.sh --rol portal --central https://api.<dominio> --token <token>`. Con routers por el túnel, el primer salto lo atiende el central y redirige al nodo con el código.
 
 ### Diagnóstico
 

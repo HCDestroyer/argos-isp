@@ -9,7 +9,7 @@ pantallas:
 
 Una bodega es un lugar donde se guarda inventario (la bodega central, una sucursal) o el vehículo de un técnico, que responde por lo que lleva.
 
-Menú: **Inventario → Bodegas** y **Inventario → Mi bodega**.
+Menú: **Inventario → Catálogos y kardex → Bodegas** y **Inventario → Movimientos → Mi bodega**.
 
 ## Quién la usa
 
@@ -40,7 +40,7 @@ Solo la mueve su técnico o quien tenga el permiso con alcance global. Para que 
 
 ## Mi bodega
 
-Menú: **Inventario → Mi bodega**. Permiso `inventario.ver`.
+Menú: **Inventario → Movimientos → Mi bodega**. Permiso `inventario.ver`.
 
 Es la pantalla del técnico: lo que tiene en su vehículo y lo que le están enviando.
 
@@ -53,7 +53,7 @@ Si tienes alcance global (un encargado), arriba puedes elegir un técnico para v
 
 ## Preguntas frecuentes y errores
 
-- **«No tienes una bodega de técnico».** Pide a un encargado que la cree en **Inventario → Bodegas** con tu usuario.
+- **«No tienes una bodega de técnico».** Pide a un encargado que la cree en **Inventario → Catálogos y kardex → Bodegas** con tu usuario.
 - **«Bodega con existencias».** No se puede desactivar ni cambiar de técnico mientras tenga algo. Trasládalo antes.
 - **«Bodega con traslados en tránsito».** Recibe o cancela esas órdenes primero.
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * Logo de ArgosIsp: ojo con ondas de señal (geometría del video, viewBox de 64).
- * - `marca`: trazo blanco sobre recuadro teal 700 con radio 7/32 (barra lateral, favicon).
- *   El recuadro no cambia de color en oscuro ni por pantalla.
+ * - `marca`: trazo blanco sobre recuadro con el degradado de marca índigo → cian (`--argos-marca-1`
+ *   → `--argos-marca-2`), radio 7/32 (barra lateral, favicon). No cambia en oscuro ni por pantalla.
  * - `linea`: solo el trazo en `currentColor`, para tamaños grandes (login).
  * Decorativo por defecto; con `titulo` se anuncia como imagen.
  */
@@ -21,6 +21,9 @@ const TRAZOS = [
     'M15.31 15.29 A31.5 31.5 0 0 1 48.69 15.29',
 ]
 
+/** Id único del degradado: puede haber varios logos en la misma página. */
+const idDegradado = `argos-marca-${useId()}`
+
 const accesible = computed(() => (props.titulo ? { 'role': 'img', 'aria-label': props.titulo } : { 'aria-hidden': 'true' as const }))
 </script>
 
@@ -31,12 +34,31 @@ const accesible = computed(() => (props.titulo ? { 'role': 'img', 'aria-label': 
         v-bind="accesible"
         :data-variante="variante"
     >
+        <defs v-if="variante === 'marca'">
+            <linearGradient
+                :id="idDegradado"
+                x1="0"
+                y1="0"
+                x2="64"
+                y2="64"
+                gradientUnits="userSpaceOnUse"
+            >
+                <stop
+                    offset="0.15"
+                    class="[stop-color:var(--argos-marca-1)]"
+                />
+                <stop
+                    offset="1"
+                    class="[stop-color:var(--argos-marca-2)]"
+                />
+            </linearGradient>
+        </defs>
         <rect
             v-if="variante === 'marca'"
             width="64"
             height="64"
             rx="14"
-            class="fill-(--argos-marca-fondo)"
+            :fill="`url(#${idDegradado})`"
         />
         <g
             :transform="variante === 'marca' ? 'translate(8 8.09) scale(0.75)' : undefined"

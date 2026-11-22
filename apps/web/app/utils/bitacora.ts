@@ -58,6 +58,10 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'roles.editar': 'Rol editado',
     'tokens.crear': 'Token de API creado',
     'tokens.revocar': 'Token de API revocado',
+    'apariencia.subir_logo_login': 'Logo del inicio de sesión subido',
+    'apariencia.quitar_logo_login': 'Logo del inicio de sesión quitado',
+    'apariencia.subir_fondo_login': 'Fondo del inicio de sesión subido',
+    'apariencia.quitar_fondo_login': 'Fondo del inicio de sesión quitado',
     'routers.crear': 'Router creado',
     'routers.editar': 'Router editado',
     'routers.generar_script': 'Script de conexión generado',
@@ -320,6 +324,13 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'portal.entrar_con_contrasena': 'Entrada al portal con documento y contraseña',
     'portal.cambiar_contrasena': 'Contraseña del portal cambiada por el cliente',
     'portal.abrir_sesion_corte': 'Cuenta abierta desde la página de corte',
+    'portal.abrir_ticket': 'Ticket de soporte abierto desde el portal',
+    'portal.responder_ticket': 'Respuesta del cliente en su ticket desde el portal',
+    'portal.confirmar_solucion': 'Solución del ticket confirmada desde el portal',
+    'portal.solicitar_servicio': 'Servicio solicitado desde el portal',
+    'portal.agregar_contacto': 'Contacto agregado desde el portal',
+    'portal.cambiar_contacto': 'Contacto cambiado desde el portal',
+    'portal.quitar_contacto': 'Contacto quitado desde el portal',
     'portal.configurar_contrasena_defecto': 'Contraseña del portal por defecto configurada',
     'clientes.restaurar_contrasena_portal': 'Contraseña del portal restaurada a la de por defecto',
     'promesas.rechazar': 'Promesa de pago rechazada',
@@ -341,6 +352,9 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'inventario.resolver_garantia': 'Garantía de equipo resuelta',
     'inventario.registrar_contacto_recuperacion': 'Contacto para recuperar equipo registrado',
     'inventario.sincronizar_cuadrilla': 'Cuadrilla sincronizada desde Iris',
+    'inventario.verificar_operacion_iris': 'Intento o cambio de equipo verificado con Iris',
+    'inventario.decidir_intento_recuperacion': 'Intento de recuperación anterior a la verificación decidido',
+    'inventario.sincronizar_vinculo_tecnico': 'Vínculo de técnico de Iris aplicado',
     'servicios.cambiar_equipo': 'Equipo del servicio cambiado',
     'servicios.aprovisionar': 'Aprovisionamiento del equipo pedido',
     'servicios.cambiar_wifi': 'Cambio de Wi-Fi pedido',
@@ -579,6 +593,10 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     unidad_inventario: { etiqueta: 'Equipo (unidad)', ruta: id => `/inventario/unidades?unidad=${id}` },
     // Portal de corte (A5): configuración global; la pantalla la hace A4.
     portal_corte: { etiqueta: 'Portal de corte' },
+    // Portal con Iris (A5, contrato Iris 0.9.0 §11): el ticket y la solicitud viven en Iris.
+    ticket_iris: { etiqueta: 'Ticket en Iris' },
+    solicitud_iris: { etiqueta: 'Solicitud de servicio en Iris' },
+    contacto_cliente: { etiqueta: 'Contacto del cliente' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

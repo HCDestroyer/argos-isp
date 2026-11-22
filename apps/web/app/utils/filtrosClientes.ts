@@ -12,6 +12,8 @@ export interface EstadoFiltrosClientes {
     routerId: number | null
     planId: number | null
     conDeuda: boolean
+    /** Sin ninguna factura vencida (`con_deuda_vencida=false`): el contador «Al día». */
+    alDia: boolean
     conPromesa: boolean
     /** NIT/CUI marcado inválido al migrar a la localización fiscal (A1). */
     nitInvalido: boolean
@@ -24,12 +26,16 @@ export const FILTROS_CLIENTES_VACIOS: Readonly<EstadoFiltrosClientes> = Object.f
     routerId: null,
     planId: null,
     conDeuda: false,
+    alDia: false,
     conPromesa: false,
     nitInvalido: false,
 })
 
-/** Accesos rápidos de la lista: "Todos", "Cortados" (suspendido) y "Con deuda" vencida. */
-export type AccesoRapidoClientes = 'todos' | 'cortados' | 'deuda'
+/**
+ * Contadores y pestañas de la lista (tablero NuevoClientes): «Todos», «Al día» (sin facturas
+ * vencidas), «Con deuda» vencida, «Suspendidos» y «Con promesa». Son excluyentes entre sí.
+ */
+export type AccesoRapidoClientes = 'todos' | 'al_dia' | 'deuda' | 'cortados' | 'promesa'
 
 function texto(valor: LocationQuery[string] | undefined): string {
     const primero = Array.isArray(valor) ? valor[0] : valor
@@ -59,7 +65,8 @@ export function leerFiltrosClientes(query: LocationQuery): EstadoFiltrosClientes
         estado: esEstadoServicio(estado) ? estado : null,
         routerId: idPositivo(query.router),
         planId: idPositivo(query.plan),
-        conDeuda: bandera(query.deuda),
+        conDeuda: bandera(query.deuda) && !bandera(query.al_dia),
+        alDia: bandera(query.al_dia),
         conPromesa: bandera(query.promesa),
         nitInvalido: bandera(query.nit_invalido),
     }
@@ -86,6 +93,9 @@ export function queryFiltrosClientes(filtros: EstadoFiltrosClientes): Record<str
     }
     if (filtros.conDeuda) {
         query.deuda = '1'
+    }
+    if (filtros.alDia) {
+        query.al_dia = '1'
     }
     if (filtros.conPromesa) {
         query.promesa = '1'
@@ -121,6 +131,9 @@ export function filtrosApiClientes(filtros: EstadoFiltrosClientes): FiltrosClien
     if (filtros.conDeuda) {
         resultado.con_deuda_vencida = true
     }
+    else if (filtros.alDia) {
+        resultado.con_deuda_vencida = false
+    }
     if (filtros.conPromesa) {
         resultado.con_promesa_activa = true
     }
@@ -132,7 +145,7 @@ export function filtrosApiClientes(filtros: EstadoFiltrosClientes): FiltrosClien
 
 /** Filtros del panel puestos (la búsqueda no cuenta: se ve en su propia caja). */
 export function contarFiltrosClientes(filtros: EstadoFiltrosClientes): number {
-    return [filtros.zonaId, filtros.estado, filtros.routerId, filtros.planId, filtros.conDeuda, filtros.conPromesa, filtros.nitInvalido]
+    return [filtros.zonaId, filtros.estado, filtros.routerId, filtros.planId, filtros.conDeuda, filtros.alDia, filtros.conPromesa, filtros.nitInvalido]
         .filter(valor => valor !== null && valor !== false)
         .length
 }
@@ -143,26 +156,38 @@ export function hayFiltrosClientes(filtros: EstadoFiltrosClientes): boolean {
 
 /**
  * Acceso rápido que corresponde a los filtros, o `null` si hay otra combinación.
- * "Todos" es sin estado ni deuda (la búsqueda y los demás filtros se respetan).
+ * "Todos" es sin estado, deuda ni promesa (la búsqueda y los demás filtros se respetan).
  */
 export function accesoRapidoClientes(filtros: EstadoFiltrosClientes): AccesoRapidoClientes | null {
-    if (filtros.estado === null && !filtros.conDeuda) {
+    const marcas = [filtros.estado !== null, filtros.conDeuda, filtros.alDia, filtros.conPromesa].filter(Boolean).length
+    if (marcas === 0) {
         return 'todos'
     }
-    if (filtros.estado === 'suspendido' && !filtros.conDeuda) {
+    if (marcas > 1) {
+        return null
+    }
+    if (filtros.estado === 'suspendido') {
         return 'cortados'
     }
-    if (filtros.estado === null && filtros.conDeuda) {
+    if (filtros.conDeuda) {
         return 'deuda'
+    }
+    if (filtros.alDia) {
+        return 'al_dia'
+    }
+    if (filtros.conPromesa) {
+        return 'promesa'
     }
     return null
 }
 
-/** Aplica un acceso rápido: solo toca estado y deuda, el resto de filtros sigue igual. */
+/** Aplica un acceso rápido: solo toca estado, deuda y promesa; el resto de filtros sigue igual. */
 export function aplicarAccesoRapidoClientes(filtros: EstadoFiltrosClientes, acceso: AccesoRapidoClientes): EstadoFiltrosClientes {
     return {
         ...filtros,
         estado: acceso === 'cortados' ? 'suspendido' : null,
         conDeuda: acceso === 'deuda',
+        alDia: acceso === 'al_dia',
+        conPromesa: acceso === 'promesa',
     }
 }

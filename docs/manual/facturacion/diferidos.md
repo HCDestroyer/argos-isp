@@ -19,7 +19,7 @@ Cada mes que termina, el sistema registra la cuota de ese mes en el libro.
 - **Ver:** `libro.ver` (`admin`, `contabilidad`, `lectura`).
 - **Amortizar a mano y diferir:** `libro.registrar_asiento` (`admin`, `contabilidad`).
 
-Se llega desde **Compras → Diferidos**.
+Se llega desde **Finanzas → Compras → Diferidos**.
 
 ## Qué ves
 

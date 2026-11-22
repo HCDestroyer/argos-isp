@@ -9,7 +9,7 @@ pantallas:
 
 El kardex es la historia de cada producto: cada entrada y cada salida con su costo y el saldo que fue quedando. El inventario valorizado dice cuánto había y cuánto valía a una fecha.
 
-Menú: **Inventario → Kardex** y **Inventario → Inventario valorizado**. Permiso `inventario.ver` (todos los roles base).
+Menú: **Inventario → Catálogos y kardex → Kardex** y **Inventario → Catálogos y kardex → Inventario valorizado**. Permiso `inventario.ver` (todos los roles base).
 
 ## Kardex
 

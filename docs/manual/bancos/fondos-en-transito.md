@@ -13,7 +13,7 @@ El dinero que ya salió de un lugar pero todavía no aparece en el banco: los de
 - **Ver:** `bancos.ver` (`admin`, `contabilidad`, `lectura`). Para ver los depósitos de caja hace falta además `cajas.ver`.
 - **Trasladar entre bancos:** `bancos.trasladar` (`admin`, `contabilidad`).
 
-Se llega desde **Bancos → Fondos en tránsito**.
+Se llega desde **Finanzas → Bancos → Fondos en tránsito**.
 
 ## Qué ves
 

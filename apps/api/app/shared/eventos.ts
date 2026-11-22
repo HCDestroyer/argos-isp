@@ -1315,6 +1315,61 @@ export interface CatalogoEventos {
     'inventario.unidad_estado_cambiado': PayloadUnidadEstado
     'inventario.equipo_cambiado': PayloadEquipoCambiado
     'inventario.recuperacion_intentada': PayloadRecuperacionIntentada
+    /**
+     * Iris 0.14.0 §3.10: terminó la verificación de un intento de recuperación o de un cambio con cobro
+     * propuesto (verificado o no). Nunca la foto, la nota ni la clave.
+     */
+    'inventario.operacion_verificada': {
+        verificacion_id: number
+        empresa_id: number
+        operacion: 'no_recuperado' | 'cambio'
+        intento_id: number | null
+        cambio_id: number | null
+        unidad_id: number | null
+        servicio_id: number | null
+        estado: 'verificado' | 'no_verificado'
+        motivo: string | null
+    }
+    /** Iris respondió 401/403 a la verificación (aviso al admin en el registro del sistema; R-03). */
+    'inventario.verificacion_sin_acceso': {
+        verificacion_id: number
+        empresa_id: number
+        operacion: 'no_recuperado' | 'cambio'
+        status: number | null
+    }
+    /** Cambió el vínculo de un técnico de Iris con su usuario de Argos (§6.6, R-10). Solo inventario. */
+    'inventario.vinculo_tecnico_cambiado': {
+        vinculo_id: number
+        empresa_id: number
+        iris_usuario_id: string
+        usuario_id: number | null
+        estado: 'vinculado' | 'rechazado' | 'desvinculado'
+        anterior: 'vinculado' | 'rechazado' | 'desvinculado' | null
+        motivo: string | null
+        version: number
+        origen: 'webhook' | 'conciliacion'
+    }
+    /**
+     * Riesgo aceptado T-12: un técnico vinculado registró movimientos fuera de una orden informada por Iris
+     * o más que el volumen diario configurado (aviso al admin en el registro del sistema).
+     */
+    'inventario.alerta_tecnico': {
+        alerta_id: number
+        empresa_id: number
+        usuario_id: number
+        actor_tecnico: string
+        motivo: 'sin_orden' | 'volumen_diario'
+        dia: string
+        movimientos: number
+        umbral: number | null
+        idempotency_key: string | null
+    }
+    /** Iris informó un contrato menor que el último aceptado (409 contrato_regresivo; aviso al admin). */
+    'iris.contrato_regresivo': {
+        empresa_id: null
+        aceptado: string
+        informado: string
+    }
     /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
     'inventario.existencia_minima': {
         empresa_id: number
@@ -1779,6 +1834,11 @@ export const EVENTOS = [
     'inventario.unidad_estado_cambiado',
     'inventario.equipo_cambiado',
     'inventario.recuperacion_intentada',
+    'inventario.operacion_verificada',
+    'inventario.verificacion_sin_acceso',
+    'inventario.vinculo_tecnico_cambiado',
+    'inventario.alerta_tecnico',
+    'iris.contrato_regresivo',
     'inventario.existencia_minima',
     'inventario.conteo_cerrado',
     'inventario.traslado_enviado',

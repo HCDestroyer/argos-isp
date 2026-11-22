@@ -704,6 +704,7 @@ onMounted(cargarCatalogos)
                     <UButton
                         :to="egresoId ? '/egresos' : '/compras'"
                         label="Cancelar"
+                        :icon="ICONOS.cancelar"
                         color="neutral"
                         variant="ghost"
                     />

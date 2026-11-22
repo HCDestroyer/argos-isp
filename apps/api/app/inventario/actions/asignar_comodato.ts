@@ -54,6 +54,8 @@ export interface EntradaAsignarComodato {
     /** `X-Iris-Actor` (de la cabecera) y la ventana de Iris 0.12.0 */
     iris_actor?: string | null
     recibido_en_iris?: string | null
+    /** `Idempotency-Key` de la petición (la pone la ruta; queda en el kardex, T-12) */
+    idempotency_key?: string | null
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
