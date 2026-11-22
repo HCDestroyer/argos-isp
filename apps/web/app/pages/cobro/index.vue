@@ -1444,6 +1444,7 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                         <UFormField
                             v-else
                             name="monto"
+                            required
                             :ui="{ root: 'flex flex-col gap-1' }"
                         >
                             <div class="flex items-center justify-between gap-3">
