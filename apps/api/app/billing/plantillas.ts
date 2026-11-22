@@ -17,6 +17,8 @@ export interface Plantilla extends PlantillaBase {
     /** retirada (`plantillas.retirar`): sigue facturando a sus servicios, no se asigna a nuevos */
     retirada_en: Date | null
     retirada_por: number | null
+    /** decisión del PM 14 (no es excepción por servicio) */
+    rechazar_monto_distinto: boolean
     motivo_retiro: string | null
     version: number
     created_at: Date
@@ -35,6 +37,7 @@ const COLUMNAS = (cliente: QueryClientContract) => [
     'mora_tipo',
     'mora_valor',
     'mora_recurrente',
+    'rechazar_monto_distinto',
     cliente.raw(`to_char(hora_corte, 'HH24:MI') as hora_corte`),
     'certificar_al',
     'reglas_promesa',
@@ -109,6 +112,8 @@ export interface CamposPlantilla {
     hora_corte: string
     certificar_al: 'emitir' | 'pagar' | 'nunca'
     reglas_promesa: ReglasPromesa
+    /** decisión del PM 14: no aprobar un comprobante cuyo monto no coincide con lo que debe cubrir */
+    rechazar_monto_distinto: boolean
 }
 
 /**

@@ -221,6 +221,7 @@ import { verificacionSorteo } from '#lealtad/sorteos'
 import { VerificacionSorteo } from '#lealtad/esquemas'
 import { PortalBonificacion } from '#portal/esquemas'
 import { bonificacionesPortal } from '#portal/bonificaciones'
+import { rutasSoportePortal } from '#portal/soporte/rutas'
 
 /** Responde un PDF en línea (se abre en el navegador; el usuario lo guarda si quiere). */
 function enviarPdf(ctx: HttpContext, documento: DocumentoPdf): void {
@@ -2413,6 +2414,7 @@ const portal: Ruta[] = [
     ...portalCorte,
     ...puntosPortalRutas,
     ...sorteosPortalRutas,
+    ...rutasSoportePortal,
 ]
 
 export default portal
