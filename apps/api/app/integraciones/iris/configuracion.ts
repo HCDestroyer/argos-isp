@@ -37,6 +37,21 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
 // del receptor) y el portal no manda `X-Iris-Contacto` en §11.
 export const CONTRATO_IRIS = '0.12.0'
 
+/**
+ * Contrato que habla este Argos ahora: `CONTRATO_IRIS`, salvo en las pruebas, que pueden hablar otro
+ * (`fijarContratoArgosParaPruebas`) para ejercitar lo que se activa con una versión mayor (0.14.0 §4.5)
+ * sin publicarla antes de tiempo. Nunca se fija fuera de las pruebas: no hay estado entre peticiones.
+ */
+let contratoArgosDePrueba: string | null = null
+
+export function fijarContratoArgosParaPruebas(contrato?: string | null): void {
+    contratoArgosDePrueba = contrato ?? null
+}
+
+export function contratoArgos(): string {
+    return contratoArgosDePrueba ?? CONTRATO_IRIS
+}
+
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
 
@@ -160,6 +175,10 @@ export interface FilaConectorIris {
     encender_al_confirmar: boolean
     /** 0.8.0: lo último que informó Iris de su sincronización (`PUT /integraciones/iris/sincronizacion`) */
     sincronizacion: SincronizacionIris | null
+    /** 0.14.0 §6.6: vínculos de técnicos que Iris dijo haber enviado al cerrar su carga inicial */
+    vinculos_cargados: number | null
+    /** 0.14.0 §6.6: cierre de la carga inicial de vínculos; null con contrato ≥ 0.14.0 = en carga */
+    vinculos_cargados_en: Date | null
     version: number
     created_at: Date
     updated_at: Date
@@ -355,6 +374,9 @@ export async function bloquearConectorIris(t: Transaccion): Promise<FilaConector
  * Guarda cambios en la fila (la crea si no existe), con control de `version` si se pide y diff en
  * `audit.cambios` (secretos como `***`). La configuración es de la instalación, no de una empresa.
  */
+/** Versión desde la que Argos conoce el vínculo de cada técnico (§6.6). */
+export const CONTRATO_CARGA_VINCULOS = '0.14.0'
+
 export async function guardarConectorIris(
     t: Transaccion,
     antes: FilaConectorIris | null,
@@ -363,6 +385,16 @@ export async function guardarConectorIris(
 ): Promise<FilaConectorIris> {
     if (opciones.version !== undefined && (antes?.version ?? 0) !== opciones.version) {
         throw new ConflictoVersion(TABLA_CONECTOR_IRIS, 1)
+    }
+    // 0.14.0 §6.6 (N-1): al pasar a ≥ 0.14.0 (PUT del contrato o canje) se abre la carga inicial de
+    // vínculos de técnicos; la cierra Iris con `vinculos_cargados`
+    if (
+        typeof cambios.contrato === 'string' &&
+        contratoAdmite(cambios.contrato, CONTRATO_CARGA_VINCULOS) &&
+        !contratoAdmite(antes?.contrato, CONTRATO_CARGA_VINCULOS) &&
+        !('vinculos_cargados_en' in cambios)
+    ) {
+        cambios = { ...cambios, vinculos_cargados: null, vinculos_cargados_en: null }
     }
     let despues: FilaConectorIris
     if (antes) {
@@ -544,5 +576,5 @@ export async function estadoConectorIris(): Promise<EstadoConectorIris> {
 /** `version_argos` y `contrato` (canje, estado y `PUT /integraciones/iris/contrato`). */
 export async function versionesIris(): Promise<VersionesIris> {
     const { version } = await versionInstalada()
-    return { version_argos: version, contrato: CONTRATO_IRIS }
+    return { version_argos: version, contrato: contratoArgos() }
 }

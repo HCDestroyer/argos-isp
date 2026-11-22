@@ -61,6 +61,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/inventario/tipos-producto',
     '/api/v1/inventario/traslados',
     '/api/v1/inventario/unidades',
+    '/api/v1/inventario/vinculos-tecnicos',
     '/api/v1/lealtad/canjes',
     '/api/v1/lealtad/premios',
     '/api/v1/lealtad/programas',

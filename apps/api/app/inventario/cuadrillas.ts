@@ -5,6 +5,7 @@ import { Problema, ValidacionFallida } from '#shared/errores'
 import { hoyGuatemala } from '#ledger/fechas'
 import { bodegasDelUsuario, type TecnicoExterno } from '#inventario/tecnicos'
 import { fijarActorTecnico } from '#inventario/actor_tecnico'
+import { exigirVinculoIris } from '#inventario/vinculos_iris'
 
 /**
  * Bodega de cuadrilla (contrato Iris 0.11.0 §3.9, A47; decisiones del PM §10.6 a–m) y la ventana de la
@@ -38,6 +39,8 @@ export interface PeticionTecnico {
     fecha?: string | Date | null
     /** la hora del servidor de Iris al aceptar el lote */
     recibido_en_iris?: string | Date | null
+    /** `Idempotency-Key` de la petición (se guarda en el kardex, T-12) */
+    idempotency_key?: string | null
 }
 
 export function esInstante(valor: string | Date | null | undefined): boolean {
@@ -356,6 +359,8 @@ export async function bodegaDeUnidadDelTecnico(
     sinBodega: (usuarioId: number) => Promise<unknown>,
 ): Promise<{ bodegaId: number; usuarioId: number; acceso: AccesoTecnico }> {
     const usuarioId = await resolver(t, peticion.tecnico!)
+    // 0.14.0 (§3.9, R-10): el actor de Iris debe tener vínculo y ser el técnico, antes de mirar bodegas
+    await exigirVinculoIris(t, { usuarioId, empresaId, iris_actor: peticion.iris_actor })
     const momento = momentoDeLaOperacion(peticion)
     const acceso = await accesoDelTecnico(t.trx, usuarioId, empresaId, momento.instante)
     let bodegaId: number
@@ -379,6 +384,7 @@ export async function bodegaDeUnidadDelTecnico(
         actor: actor ?? (idIris ? `usuario:${idIris}` : null),
         usuarioId,
         ocurridoEn: momento.ocurridoEn,
+        idempotencyKey: peticion.idempotency_key ?? null,
     })
     return { bodegaId, usuarioId, acceso }
 }

@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { envioDeClaveAviso } from '#notify/canales/whatsapp'
 import { aplicarAcuseIris } from '#notify/acuses_iris'
 import SincronizarCuadrilla from '#inventario/actions/sincronizar_cuadrilla'
+import SincronizarVinculoTecnico from '#inventario/actions/sincronizar_vinculo_tecnico'
 import { aplicarEstadoProspecto } from '#integraciones/iris/prospectos'
 
 /** Eventos de Iris → Argos (contrato Iris 0.6.0 §6.6). */
@@ -12,6 +13,9 @@ export const EVENTOS_DE_IRIS = [
     // contrato 0.11.0 §3.9 (A47): membresía de la bodega de cuadrilla
     'cuadrilla.creada',
     'cuadrilla.actualizada',
+    // contrato 0.14.0 §6.6 (R-10): vínculo de cada técnico con su usuario de Argos (solo inventario)
+    'tecnico.argos_vinculado',
+    'tecnico.argos_desvinculado',
     // 0.10.0 (A44, §3.6 y §6.6): solo de prospectos registrados desde Argos
     'prospecto.estado_cambiado',
     // 0.9.0 (A30 y A31, §6.6 y §11): tickets y solicitudes del cliente; notify avisa al cliente
@@ -165,6 +169,17 @@ export default class RecibirWebhookIris extends DomainAction<
                 estado: r.aplicado ? 'procesado' : 'ignorado',
                 resultado: r.resultado,
             }
+        } else if (
+            input.evento === 'tecnico.argos_vinculado' ||
+            input.evento === 'tecnico.argos_desvinculado'
+        ) {
+            const r = await this.vinculo(t, input.evento === 'tecnico.argos_vinculado', input.payload)
+            enlace = { empresa_id: r.empresaId }
+            salida = {
+                duplicado: false,
+                estado: r.aplicado ? 'procesado' : 'ignorado',
+                resultado: r.resultado,
+            }
         } else if (input.evento === 'prospecto.estado_cambiado') {
             const prospectoId =
                 texto(input.payload.prospecto_id) ?? entero(input.payload.prospecto_id)?.toString() ?? null
@@ -301,6 +316,56 @@ export default class RecibirWebhookIris extends DomainAction<
             a,
         })
         return { procesado: true, resultado: 'aviso_emitido', clienteId, empresaId }
+    }
+
+    /**
+     * `tecnico.argos_vinculado` / `tecnico.argos_desvinculado` (0.14.0 §6.6): los aplica el inventario
+     * (`inventario.sincronizar_vinculo_tecnico`), solo con `version` mayor. Resultado `vinculo_aplicado`,
+     * `vinculo_rechazado` o el motivo por el que se ignoró.
+     */
+    private async vinculo(
+        t: Transaccion,
+        vinculado: boolean,
+        p: Record<string, unknown>,
+    ): Promise<{ aplicado: boolean; resultado: string; empresaId: number | null }> {
+        const empresaId = entero(p.empresa_id)
+        const version = entero(p.version)
+        const usuarioId = texto(p.usuario_id) ?? entero(p.usuario_id)?.toString() ?? null
+        const idExterno = texto(p.id_externo) ?? entero(p.id_externo)?.toString() ?? null
+        if (
+            !empresaId ||
+            !version ||
+            !usuarioId ||
+            !/^[A-Za-z0-9_-]{1,64}$/.test(usuarioId) ||
+            (vinculado && !idExterno)
+        ) {
+            return { aplicado: false, resultado: 'payload_invalido', empresaId: null }
+        }
+        const r = await new SincronizarVinculoTecnico().execute(
+            {
+                empresa_id: empresaId,
+                usuario_id: usuarioId,
+                tecnico_id: texto(p.tecnico_id) ?? entero(p.tecnico_id)?.toString() ?? null,
+                id_externo: idExterno,
+                version,
+                activo: vinculado,
+                motivo: texto(p.motivo),
+                origen: 'webhook',
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        return {
+            aplicado: r.aplicado,
+            resultado: !r.aplicado
+                ? (r.ignorado ?? 'ignorado')
+                : r.estado === 'rechazado'
+                  ? 'vinculo_rechazado'
+                  : r.estado === 'desvinculado'
+                    ? 'vinculo_quitado'
+                    : 'vinculo_aplicado',
+            empresaId: r.aplicado ? empresaId : null,
+        }
     }
 
     /** `cuadrilla.*` (0.11.0 §3.9): la aplica el inventario (`inventario.sincronizar_cuadrilla`). */
