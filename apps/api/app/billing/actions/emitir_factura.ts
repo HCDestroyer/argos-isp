@@ -229,6 +229,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             precio: aTexto(servicio.precio),
             plan_id: servicio.plan_id,
             plan_nombre: servicio.plan_nombre,
+            ...(servicio.promocion_precio ? { promocion_velocidad: servicio.promocion_precio } : {}),
             periodo: input.periodo,
             ...(input.manual
                 ? {
