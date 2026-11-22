@@ -371,7 +371,8 @@ export const CATALOGO_CRONS: readonly CronCatalogo[] = [
         clave: 'core.promociones_velocidad',
         nombre: 'Promociones de velocidad',
         modulo: 'nucleo',
-        descripcion: 'Cierra los tramos de promociones de velocidad que terminaron y abre los que tocan ahora.',
+        descripcion:
+            'Cierra los tramos de promociones de velocidad que terminaron y abre los que tocan ahora.',
         horario: cada(MIN),
         ...core('promociones_velocidad'),
         manual: true,
