@@ -103,6 +103,10 @@ function donde(plan: Plan): { texto: string, global: boolean } {
     if (plan.global) {
         return { texto: 'Todos los routers', global: true }
     }
+    // `routers` es opcional en la API: sin el dato no se dice «En ningún router»
+    if (!plan.routers) {
+        return { texto: '—', global: false }
+    }
     if (!plan.routers.length) {
         return { texto: 'En ningún router', global: false }
     }

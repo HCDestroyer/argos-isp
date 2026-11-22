@@ -123,7 +123,7 @@ const garantizado = computed(() => {
                     class="size-4 text-success"
                 />Todos los routers</span>
                 <span
-                    v-for="id in plan.global ? [] : plan.routers"
+                    v-for="id in plan.global ? [] : (plan.routers ?? [])"
                     :key="id"
                     class="flex items-center gap-1.5 text-sm"
                 ><UIcon
@@ -131,9 +131,13 @@ const garantizado = computed(() => {
                     class="size-4 text-primary"
                 />{{ routerNombres.get(id) ?? `Router ${id}` }}</span>
                 <span
-                    v-if="!plan.global && !plan.routers.length"
+                    v-if="!plan.global && plan.routers && !plan.routers.length"
                     class="text-sm text-muted"
                 >En ningún router todavía</span>
+                <span
+                    v-else-if="!plan.global && !plan.routers"
+                    class="text-sm text-muted"
+                >—</span>
             </div>
         </div>
         <div class="mt-auto flex gap-2 border-t border-(--ax-borde) p-4">

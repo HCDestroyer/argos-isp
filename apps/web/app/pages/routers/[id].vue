@@ -435,42 +435,7 @@ async function alProbar() {
                             :router="nas"
                         />
                         <div class="grid gap-4 lg:grid-cols-2">
-                            <RedTarjeta
-                                titulo="Datos del equipo"
-                                icono="i-lucide-hard-drive"
-                            >
-                                <dl>
-                                    <RedFila
-                                        etiqueta="Host"
-                                        :valor="nas.host"
-                                        mono
-                                    />
-                                    <RedFila
-                                        etiqueta="API"
-                                        :valor="nas.api_url ?? `https://${nas.host}`"
-                                        mono
-                                    />
-                                    <RedFila
-                                        etiqueta="Serial"
-                                        :valor="nas.serial ?? 'Sin leer'"
-                                        :mono="Boolean(nas.serial)"
-                                    />
-                                    <RedFila
-                                        etiqueta="Servidor DHCP"
-                                        :valor="nas.dhcp_servidor ?? 'El de la configuración'"
-                                        :mono="Boolean(nas.dhcp_servidor)"
-                                    />
-                                    <RedFila
-                                        etiqueta="Interfaz de clientes"
-                                        :valor="nas.interfaz_clientes ?? 'La de la configuración'"
-                                        :mono="Boolean(nas.interfaz_clientes)"
-                                    />
-                                    <RedFila
-                                        etiqueta="Último contacto"
-                                        :valor="nas.ultimo_contacto ? `${formatearFechaHora(nas.ultimo_contacto)} (${textoUltimoContacto(nas)})` : 'Nunca respondió'"
-                                    />
-                                </dl>
-                            </RedTarjeta>
+                            <RouterDatosEquipo :router="nas" />
                             <RedTarjeta
                                 v-if="puede('routers.editar') || puedeEliminar"
                                 titulo="Baja del router"

@@ -99,7 +99,15 @@ async function cargarMatriz() {
 
 const tipoVelocidad = computed(() => estado.tipo_conexion)
 
-function itemAplicacion(valor: Aplicacion): RadioGroupItem {
+/** Opción de «Cómo se aplica la velocidad» (objeto, no un valor suelto: se lee `value` y `disabled`). */
+interface ItemAplicacion {
+    label: string
+    value: Aplicacion
+    description: string
+    disabled: boolean
+}
+
+function itemAplicacion(valor: Aplicacion): ItemAplicacion {
     const disponible = matriz.value ? aplicacionDisponible(matriz.value, valor, tipoVelocidad.value) : { valida: true, motivo: null }
     const sinRadius = estado.modo_seguridad === 'api' && (valor === 'radius_rate_limit' || valor === 'perfil_ppp')
     return {
@@ -118,7 +126,7 @@ watch(() => [estado.tipo_conexion, estado.modo_seguridad, matriz.value], () => {
     if (todas.find(i => i.value === estado.aplicacion)?.disabled) {
         const primera = todas.find(i => !i.disabled)
         if (primera) {
-            estado.aplicacion = primera.value as Aplicacion
+            estado.aplicacion = primera.value
         }
     }
     if (OTRAS.includes(estado.aplicacion)) {
@@ -217,7 +225,7 @@ async function seguir() {
     if (paso.value === 1) {
         const valido = await formulario1.value?.validate({ silent: true }).catch(() => null)
         if (!valido) {
-            await formulario1.value?.validate().catch(() => null)
+            await formulario1.value?.validate({ silent: false }).catch(() => null)
             return
         }
         paso.value = 2
@@ -229,7 +237,7 @@ async function seguir() {
     if (paso.value === 2) {
         const valido = await formulario2.value?.validate({ silent: true }).catch(() => null)
         if (!valido) {
-            await formulario2.value?.validate().catch(() => null)
+            await formulario2.value?.validate({ silent: false }).catch(() => null)
             return
         }
         await crear()
