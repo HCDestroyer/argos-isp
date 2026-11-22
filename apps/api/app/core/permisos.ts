@@ -20,6 +20,8 @@ export const PERMISOS = {
         'Registrar la identidad del titular (foto del documento, número y nombre; contrato Iris 0.10.0 §3.4.3)',
     'clientes.ver_identidad':
         'Ver la identidad del titular (número y foto del documento); cada vista queda auditada',
+    'clientes.verificar_nit':
+        'Marcar el NIT de un cliente como verificado (con el documento o la consulta SAT/FEL); solo una persona desde el panel',
     'clientes.restaurar_contrasena_portal':
         'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
     'contactos.buscar':
@@ -58,6 +60,10 @@ export const PERMISOS = {
         'Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio',
     'servicios.cambiar_titular':
         'Pasar un servicio pendiente de instalación a otro titular (Argos decide si es un cliente existente por documento y nombre)',
+    'servicios.aprobar_titular_empresa':
+        'Aprobar un cambio de titular a una empresa que quedó en revisión (representante nuevo o varios candidatos); exige además clientes.ver_identidad',
+    'servicios.rechazar_titular_empresa':
+        'Rechazar un cambio de titular a una empresa que quedó en revisión; exige además clientes.ver_identidad',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -522,6 +528,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'contactos.gestionar',
             'clientes.crear',
             'clientes.editar',
+            // Iris 0.14.1: confirma el NIT de una empresa (marca nit_verificado_en)
+            'clientes.verificar_nit',
             'notificaciones.registrar_consentimiento',
             'prospectos.registrar',
             'clientes.estado_cuenta',

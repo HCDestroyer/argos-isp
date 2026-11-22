@@ -9,6 +9,7 @@ import {
     compararConCliente,
     huella,
     normalizarNombre,
+    representanteRegistrado,
     validarDocumentoIdentidad,
     type DocumentoIdentidad,
     type FotoIdentidad,
@@ -97,19 +98,44 @@ export default class RegistrarIdentidadCliente extends DomainAction<
         if (errores.length > 0) throw new ValidacionFallida(errores)
         const numero = validarDocumentoIdentidad(input.documento_tipo, input.documento_numero)
 
-        const cliente = await t.trx
+        const cliente = (await t.trx
             .from('core.clientes')
             .where('id', input.cliente_id)
             .forUpdate()
-            .select('id')
-            .first()
+            .select('id', 'tipo')
+            .first()) as { id: number; tipo: string } | null
         if (!cliente) throw new NoEncontrado(`El cliente ${input.cliente_id} no existe`)
 
         const servicio = await servicioPendiente(t, input)
         t.fijarEmpresa(servicio?.empresa_id ?? null)
 
         let confirmada = true
-        if (!input.sinRevisarHistorial && (await clienteConHistorial(t.trx, input.cliente_id))) {
+        if (
+            !input.sinRevisarHistorial &&
+            cliente.tipo === 'empresa' &&
+            (await clienteConHistorial(t.trx, input.cliente_id))
+        ) {
+            // Iris 0.14.1: en una empresa con historial, el representante se compara con sus
+            // identidades A41 (vigente o anterior); uno nuevo nunca reemplaza la vigente
+            const tiene = await t.trx
+                .from('core.clientes_identidades')
+                .where('cliente_id', input.cliente_id)
+                .select('id')
+                .first()
+            if (
+                tiene &&
+                (await representanteRegistrado(
+                    t.trx,
+                    input.cliente_id,
+                    input.documento_tipo,
+                    numero,
+                    input.nombre,
+                )) === null
+            ) {
+                throw new TitularNoCoincide()
+            }
+            confirmada = Boolean(tiene)
+        } else if (!input.sinRevisarHistorial && (await clienteConHistorial(t.trx, input.cliente_id))) {
             const conocido = await compararConCliente(
                 t.trx,
                 input.cliente_id,

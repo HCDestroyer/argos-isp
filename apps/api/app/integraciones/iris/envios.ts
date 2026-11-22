@@ -163,6 +163,9 @@ export const EVENTOS_DESDE_0120 = [
 
 export const CONTRATO_EVENTOS_0120 = '0.12.0'
 
+/** Contrato 0.14.1 (§3.4.4): `tipo_titular` en `servicio.titular_cambiado`; a un conector anterior no sale. */
+export const CONTRATO_TITULAR_EMPRESA = '0.14.1'
+
 /** Versión mínima propia de este módulo (0.5.0, 0.8.0, 0.9.0, 0.10.0, 0.12.0); la de 0.6.0 la decide A1. */
 function contratoMinimoEnvio(evento: string): string | null {
     if ((EVENTOS_DESDE_050 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_050
@@ -467,6 +470,8 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                     motivo_codigo: unoDe(p.motivo_codigo, MOTIVOS_TITULAR) ?? 'otro',
                     origen_tipo: unoDe(p.origen_tipo, ORIGENES_EXTERNOS),
                     origen_id: unoDe(p.origen_tipo, ORIGENES_EXTERNOS) ? texto(p.origen_id) : null,
+                    // contrato 0.14.1 (aditivo): titular persona o empresa; nunca el representante
+                    tipo_titular: p.tipo_titular === 'empresa' ? 'empresa' : 'persona',
                 },
                 empresas,
             }
@@ -1010,6 +1015,9 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
         !(await conectorAdmite(CONTRATO_PERSONA_CLIENTE))
     ) {
         payload.persona_cliente_id = null
+    }
+    if (evento.evento === 'servicio.titular_cambiado' && !(await conectorAdmite(CONTRATO_TITULAR_EMPRESA))) {
+        delete payload.tipo_titular
     }
     if (evento.evento === 'cliente.actualizado' && !alcance.global) {
         // Iris solo ve las empresas de su alcance

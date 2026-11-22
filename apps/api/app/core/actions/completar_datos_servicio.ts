@@ -125,7 +125,9 @@ export default class CompletarDatosServicio extends DomainAction<EntradaCompleta
         const vacio = (valor: unknown) => valor === null || valor === undefined || String(valor).trim() === ''
 
         if (datos.nombre !== undefined) {
-            const nombre = await nombreDeIdentidad(t, clienteId, input.identidad_id)
+            // Iris 0.14.1: en una empresa la identidad es la del representante; nunca corrige la razón social
+            const nombre =
+                antes.tipo === 'empresa' ? null : await nombreDeIdentidad(t, clienteId, input.identidad_id)
             if (nombre === null) yaRegistrados.push('nombre')
             else if (normalizarNombre(nombre) !== normalizarNombre(datos.nombre)) {
                 throw new ValidacionFallida([

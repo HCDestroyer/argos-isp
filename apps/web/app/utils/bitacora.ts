@@ -362,6 +362,9 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'contactos.gestionar': 'Contacto del cliente cambiado',
     'servicios.cambiar_plan_pendiente': 'Plan cambiado antes de instalar',
     'servicios.cambiar_titular': 'Titular del servicio cambiado',
+    'servicios.aprobar_titular_empresa': 'Cambio de titular a empresa aprobado',
+    'servicios.rechazar_titular_empresa': 'Cambio de titular a empresa rechazado',
+    'clientes.verificar_nit': 'NIT del cliente verificado',
     'servicios.completar_datos': 'Datos del servicio completados',
     'servicios.reservar_ip': 'IP reservada para la instalación',
     'servicios.vencer_reserva_ip': 'Reserva de IP vencida',
@@ -585,6 +588,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     ticket_iris: { etiqueta: 'Ticket en Iris' },
     solicitud_iris: { etiqueta: 'Solicitud de servicio en Iris' },
     contacto_cliente: { etiqueta: 'Contacto del cliente' },
+    // Iris 0.14.1: revisión de un cambio de titular a empresa (la pantalla la hace A4)
+    titular_empresa_revision: { etiqueta: 'Revisión de titular empresa' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

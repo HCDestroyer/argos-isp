@@ -12510,6 +12510,119 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/verificar-nit": {
+      "post": {
+        "operationId": "clientesVerificarNit",
+        "summary": "Marcar el NIT del cliente como verificado (contrato Iris 0.14.1)",
+        "description": "Una persona del panel confirma el NIT (con el documento o la consulta SAT/FEL) y queda `nit_verificado_en` y `nit_verificado_por`. Solo un cliente `tipo = empresa` con NIT verificado cuenta como titular existente por NIT en `cambiar-titular`. Nunca con un token de API, el de Iris o un agente (403). La marca se borra cuando cambia `nit_cui`. `422 nit_no_verificable` si el cliente no tiene un NIT válido; `409` si la `version` no coincide.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "documento",
+                      "consulta_sat"
+                    ],
+                    "description": "Cómo lo confirmó: con el documento (RTU, patente) o con la consulta SAT/FEL"
+                  }
+                },
+                "required": [
+                  "version",
+                  "metodo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "NIT verificado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NitVerificado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.verificar_nit; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.verificar_nit",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/vincular-telegram": {
       "post": {
         "operationId": "clientesVincularTelegram",
@@ -74630,6 +74743,7 @@
                         "clientes.ver",
                         "clientes.ver_identidad",
                         "clientes.verificar_identidad",
+                        "clientes.verificar_nit",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
                         "cobros.liquidar",
@@ -74830,6 +74944,7 @@
                         "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
+                        "servicios.aprobar_titular_empresa",
                         "servicios.cambiar_empresa",
                         "servicios.cambiar_equipo",
                         "servicios.cambiar_plan_pendiente",
@@ -74846,6 +74961,7 @@
                         "servicios.quitar_adicional",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
+                        "servicios.rechazar_titular_empresa",
                         "servicios.reservar_ip",
                         "servicios.retirar",
                         "servicios.sincronizar_router",
@@ -75049,6 +75165,7 @@
                         "clientes.ver",
                         "clientes.ver_identidad",
                         "clientes.verificar_identidad",
+                        "clientes.verificar_nit",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
                         "cobros.liquidar",
@@ -75249,6 +75366,7 @@
                         "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
+                        "servicios.aprobar_titular_empresa",
                         "servicios.cambiar_empresa",
                         "servicios.cambiar_equipo",
                         "servicios.cambiar_plan_pendiente",
@@ -75265,6 +75383,7 @@
                         "servicios.quitar_adicional",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
+                        "servicios.rechazar_titular_empresa",
                         "servicios.reservar_ip",
                         "servicios.retirar",
                         "servicios.sincronizar_router",
@@ -83728,8 +83847,8 @@
     "/api/v1/servicios/{id}/cambiar-titular": {
       "post": {
         "operationId": "serviciosCambiarTitular",
-        "summary": "Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4)",
-        "description": "`multipart/form-data`: la parte `datos` (JSON) y las fotos `frente` y `reverso?` de A41. Quién es el titular lo decide Argos (nunca se manda `cliente_id`): mismo documento y nombre normalizado en la empresa del servicio → ese cliente (`existente: true`, aviso informativo); mismo documento y otro nombre → `422 titular_no_coincide`; si no, un cliente nuevo. Solo en pendiente (`422 servicio_no_pendiente`); sin `frente` o sin `coincide`, `422 evidencia_requerida`; 2 cambios por servicio y 10 por empresa y actor al día (`429 demasiados_cambios_titular` con `Retry-After`). El cliente anterior sin servicios ni movimientos se elimina. Emite `servicio.titular_cambiado` y `cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`.",
+        "summary": "Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4; empresa 0.14.1)",
+        "description": "`multipart/form-data`: la parte `datos` (JSON) y las fotos `frente` y `reverso?` de A41. Quién es el titular lo decide Argos (nunca se manda `cliente_id`): mismo documento y nombre normalizado en la empresa del servicio → ese cliente (`existente: true`, aviso informativo); mismo documento y otro nombre → `422 titular_no_coincide`; si no, un cliente nuevo. Solo en pendiente (`422 servicio_no_pendiente`); sin `frente` o sin `coincide`, `422 evidencia_requerida`; 2 cambios por servicio y 10 por empresa y actor al día (`429 demasiados_cambios_titular` con `Retry-After`). El cliente anterior sin servicios ni movimientos se elimina. Emite `servicio.titular_cambiado` y `cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`. Titular empresa (0.14.1): `cliente.tipo: empresa` con NIT (`422 nit_requerido`) y `representante` (`422 representante_requerido`; con persona, `422 representante_no_permitido`); las fotos son del representante. Existente solo por NIT verificado en el panel y entre clientes empresa: misma razón social y representante ya registrado → al momento; representante nuevo o varios candidatos → `422 titular_empresa_en_revision` (no cambia nada; lo decide una persona en `/titulares-empresa/revisiones`); otra razón social → `422 titular_no_coincide`.",
         "tags": [
           "servicios"
         ],
@@ -83774,7 +83893,7 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 10000,
-                    "description": "JSON: { cliente: { nombre, documento_tipo, documento_numero, mayor_de_edad, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id }"
+                    "description": "JSON: { cliente: { tipo?, nombre, documento_tipo?, documento_numero?, mayor_de_edad?, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, representante?: { nombre, documento_tipo, documento_numero, mayor_de_edad }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id }. Con cliente.tipo empresa (0.14.1): NIT y representante obligatorios, sin documento de persona en cliente"
                   },
                   "frente": {
                     "type": "string",
@@ -88818,6 +88937,550 @@
         "x-implementado": true
       }
     },
+    "/api/v1/titulares-empresa/revisiones": {
+      "get": {
+        "operationId": "titularesEmpresaRevisiones",
+        "summary": "Cambios de titular a una empresa en revisión (contrato Iris 0.14.1)",
+        "description": "Los que respondieron `422 titular_empresa_en_revision`: el representante no coincide con una identidad de la empresa del NIT o hay más de un candidato. Sin datos del representante (salvo el tipo de documento). Filtrado por las empresas de la petición. Nunca con el token de Iris (403).",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto, todas",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "aprobada",
+                "rechazada",
+                "reemplazada"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revisiones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RevisionTitularEmpresa"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/titulares-empresa/revisiones/{id}": {
+      "get": {
+        "operationId": "titularesEmpresaVerRevision",
+        "summary": "Ver una revisión de titular empresa con el documento del representante (cada vista queda auditada)",
+        "description": "Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revisión",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionTitularEmpresaDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/titulares-empresa/revisiones/{id}/aprobar": {
+      "post": {
+        "operationId": "titularesEmpresaAprobar",
+        "summary": "Aprobar un cambio de titular a una empresa en revisión (contrato Iris 0.14.1)",
+        "description": "Una persona del panel con `clientes.ver_identidad` aprueba al representante: el servicio pasa al cliente empresa (con varios candidatos, el `cliente_id` elegido) y su identidad queda registrada en la empresa. Emite `servicio.titular_cambiado` (`existente: true`, `tipo_titular: empresa`) y `cliente.identidad_registrada`. `422 servicio_no_pendiente`, `409 titular_ya_cambiado`, `422 candidato_no_valido`, `422 revision_no_pendiente`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Con varios candidatos, el cliente empresa al que se asigna (uno de `candidatos`); con uno, opcional"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "motivo",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Titular cambiado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TitularEmpresaAprobado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.aprobar_titular_empresa; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.aprobar_titular_empresa",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/titulares-empresa/revisiones/{id}/fotos/{parte}": {
+      "get": {
+        "operationId": "titularesEmpresaVerFotoRevision",
+        "summary": "Ver una foto del documento del representante en revisión (cada vista queda auditada)",
+        "description": "`parte` = `frente` o `reverso`. Solo con `clientes.ver_identidad`; nunca con el token de Iris (403). Después de decidir, las fotos se borran (404).",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "parte",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "frente",
+                "reverso"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Foto (JPEG o PNG)",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver_identidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/titulares-empresa/revisiones/{id}/rechazar": {
+      "post": {
+        "operationId": "titularesEmpresaRechazar",
+        "summary": "Rechazar un cambio de titular a una empresa en revisión (contrato Iris 0.14.1)",
+        "description": "No cambia nada del servicio ni del cliente; se borran el documento y las fotos del representante. Persona del panel con `clientes.ver_identidad`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "motivo",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revisión rechazada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionTitularEmpresa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.rechazar_titular_empresa; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.rechazar_titular_empresa",
+        "x-implementado": true
+      }
+    },
     "/api/v1/tokens": {
       "get": {
         "operationId": "tokensListar",
@@ -89010,6 +89673,7 @@
                             "clientes.ver",
                             "clientes.ver_identidad",
                             "clientes.verificar_identidad",
+                            "clientes.verificar_nit",
                             "clientes.vincular_telegram",
                             "cobros.configurar",
                             "cobros.liquidar",
@@ -89210,6 +89874,7 @@
                             "servicios.activar_instalacion",
                             "servicios.adicional_cortesia",
                             "servicios.agregar_adicional",
+                            "servicios.aprobar_titular_empresa",
                             "servicios.cambiar_empresa",
                             "servicios.cambiar_equipo",
                             "servicios.cambiar_plan_pendiente",
@@ -89226,6 +89891,7 @@
                             "servicios.quitar_adicional",
                             "servicios.quitar_limite",
                             "servicios.reactivar",
+                            "servicios.rechazar_titular_empresa",
                             "servicios.reservar_ip",
                             "servicios.retirar",
                             "servicios.sincronizar_router",
@@ -114400,6 +115066,33 @@
           }
         }
       },
+      "NitVerificado": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "nit_verificado_en",
+          "nit_verificado_por",
+          "version"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nit_verificado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nit_verificado_por": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Usuario de Argos que lo verificó"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "NodoPortal": {
         "type": "object",
         "required": [
@@ -114598,6 +115291,7 @@
           "clientes.ver",
           "clientes.ver_identidad",
           "clientes.verificar_identidad",
+          "clientes.verificar_nit",
           "clientes.vincular_telegram",
           "cobros.configurar",
           "cobros.liquidar",
@@ -114798,6 +115492,7 @@
           "servicios.activar_instalacion",
           "servicios.adicional_cortesia",
           "servicios.agregar_adicional",
+          "servicios.aprobar_titular_empresa",
           "servicios.cambiar_empresa",
           "servicios.cambiar_equipo",
           "servicios.cambiar_plan_pendiente",
@@ -114814,6 +115509,7 @@
           "servicios.quitar_adicional",
           "servicios.quitar_limite",
           "servicios.reactivar",
+          "servicios.rechazar_titular_empresa",
           "servicios.reservar_ip",
           "servicios.retirar",
           "servicios.sincronizar_router",
@@ -114909,6 +115605,7 @@
           "Ver y buscar clientes",
           "Ver la identidad del titular (número y foto del documento); cada vista queda auditada",
           "Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)",
+          "Marcar el NIT de un cliente como verificado (con el documento o la consulta SAT/FEL); solo una persona desde el panel",
           "Vincular el chat de Telegram de un cliente",
           "Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN",
           "Registrar la liquidación de un proveedor de cobro (banco neto y comisión)",
@@ -115109,6 +115806,7 @@
           "Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)",
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
           "Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado",
+          "Aprobar un cambio de titular a una empresa que quedó en revisión (representante nuevo o varios candidatos); exige además clientes.ver_identidad",
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
           "Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación",
           "Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)",
@@ -115125,6 +115823,7 @@
           "Dar de baja un adicional de un servicio (con fecha; no se borra)",
           "Quitar el límite de velocidad",
           "Reactivar servicios manualmente",
+          "Rechazar un cambio de titular a una empresa que quedó en revisión; exige además clientes.ver_identidad",
           "Reservar en sitio la IP de un servicio pendiente de instalación (IP fija o amarre; vence a los 30 días)",
           "Retirar servicios",
           "Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió",
@@ -130428,6 +131127,325 @@
           }
         }
       },
+      "RevisionTitularEmpresa": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "de_cliente_id",
+          "candidatos",
+          "motivo_revision",
+          "estado",
+          "razon_social",
+          "nit",
+          "representante_documento_tipo",
+          "motivo_codigo",
+          "origen_tipo",
+          "origen_id",
+          "cliente_asignado_id",
+          "decidida_por",
+          "decidida_en",
+          "version",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Titular del servicio al pedir el cambio"
+          },
+          "candidatos": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Clientes empresa con ese NIT verificado"
+          },
+          "motivo_revision": {
+            "type": "string",
+            "enum": [
+              "representante_nuevo",
+              "varios_candidatos"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "aprobada",
+              "rechazada",
+              "reemplazada"
+            ]
+          },
+          "razon_social": {
+            "type": "string"
+          },
+          "nit": {
+            "type": "string",
+            "description": "Normalizado: sin guiones ni espacios, en mayúsculas"
+          },
+          "representante_documento_tipo": {
+            "type": "string",
+            "enum": [
+              "dpi",
+              "pasaporte"
+            ]
+          },
+          "motivo_codigo": {
+            "type": "string"
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cliente_asignado_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidida_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidida_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RevisionTitularEmpresaDetalle": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "de_cliente_id",
+          "candidatos",
+          "motivo_revision",
+          "estado",
+          "razon_social",
+          "nit",
+          "representante_documento_tipo",
+          "motivo_codigo",
+          "origen_tipo",
+          "origen_id",
+          "cliente_asignado_id",
+          "decidida_por",
+          "decidida_en",
+          "version",
+          "created_at",
+          "telefono",
+          "email",
+          "relacion",
+          "motivo",
+          "decision_motivo",
+          "representante",
+          "tiene_frente",
+          "tiene_reverso"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Titular del servicio al pedir el cambio"
+          },
+          "candidatos": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Clientes empresa con ese NIT verificado"
+          },
+          "motivo_revision": {
+            "type": "string",
+            "enum": [
+              "representante_nuevo",
+              "varios_candidatos"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "aprobada",
+              "rechazada",
+              "reemplazada"
+            ]
+          },
+          "razon_social": {
+            "type": "string"
+          },
+          "nit": {
+            "type": "string",
+            "description": "Normalizado: sin guiones ni espacios, en mayúsculas"
+          },
+          "representante_documento_tipo": {
+            "type": "string",
+            "enum": [
+              "dpi",
+              "pasaporte"
+            ]
+          },
+          "motivo_codigo": {
+            "type": "string"
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cliente_asignado_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidida_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidida_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "relacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo": {
+            "type": "string",
+            "description": "El motivo que escribió quien pidió el cambio"
+          },
+          "decision_motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "representante": {
+            "type": "object",
+            "required": [
+              "documento_tipo",
+              "documento_numero",
+              "nombre"
+            ],
+            "properties": {
+              "documento_tipo": {
+                "type": "string",
+                "enum": [
+                  "dpi",
+                  "pasaporte"
+                ]
+              },
+              "documento_numero": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "null después de decidir (se borra)"
+              },
+              "nombre": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "null después de decidir (se borra)"
+              }
+            }
+          },
+          "tiene_frente": {
+            "type": "boolean"
+          },
+          "tiene_reverso": {
+            "type": "boolean"
+          }
+        }
+      },
       "RevocacionVinculaciones": {
         "type": "object",
         "required": [
@@ -130570,6 +131588,7 @@
               "clientes.ver",
               "clientes.ver_identidad",
               "clientes.verificar_identidad",
+              "clientes.verificar_nit",
               "clientes.vincular_telegram",
               "cobros.configurar",
               "cobros.liquidar",
@@ -130770,6 +131789,7 @@
               "servicios.activar_instalacion",
               "servicios.adicional_cortesia",
               "servicios.agregar_adicional",
+              "servicios.aprobar_titular_empresa",
               "servicios.cambiar_empresa",
               "servicios.cambiar_equipo",
               "servicios.cambiar_plan_pendiente",
@@ -130786,6 +131806,7 @@
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
               "servicios.reactivar",
+              "servicios.rechazar_titular_empresa",
               "servicios.reservar_ip",
               "servicios.retirar",
               "servicios.sincronizar_router",
@@ -130882,6 +131903,7 @@
               "clientes.registrar_identidad",
               "clientes.restaurar_contrasena_portal",
               "clientes.ver",
+              "clientes.verificar_nit",
               "clientes.vincular_telegram",
               "contactos.buscar",
               "contactos.gestionar",
@@ -134511,6 +135533,53 @@
           "posible_duplicado": {
             "type": "boolean",
             "description": "Otro cliente con el mismo nombre o teléfono y otro documento: lo revisa una persona de Argos"
+          },
+          "identidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de_cliente_eliminado": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TitularEmpresaAprobado": {
+        "type": "object",
+        "required": [
+          "revision",
+          "servicio_id",
+          "titular",
+          "identidad_id",
+          "de_cliente_id",
+          "de_cliente_eliminado"
+        ],
+        "properties": {
+          "revision": {
+            "$ref": "#/components/schemas/RevisionTitularEmpresa"
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "titular": {
+            "type": "object",
+            "required": [
+              "cliente_id",
+              "existente"
+            ],
+            "properties": {
+              "cliente_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "existente": {
+                "type": "boolean"
+              }
+            }
           },
           "identidad_id": {
             "type": "integer",
