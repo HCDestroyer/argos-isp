@@ -7,6 +7,7 @@ import FormularioComprobante from '~/components/comprobante/Formulario.vue'
 import PaginaComprobante from '~/pages/comprobante.vue'
 import PaginaCorte from '~/pages/corte.vue'
 import PaginaCuenta from '~/pages/cuenta.vue'
+import { simularDecodificacion } from './simularFotos'
 
 const HOY = '2026-10-16'
 
@@ -58,10 +59,13 @@ function adjuntar(elegido: File) {
     campo.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
-async function llenarYEnviar(elegido: File = archivo('boleta.jpg', 'image/jpeg')) {
+/** Con `conArchivo` en `false` se envía con el archivo que ya quedó elegido (o ninguno). */
+async function llenarYEnviar(elegido: File = archivo('boleta.jpg', 'image/jpeg'), conArchivo = true) {
     escribir('input[inputmode="decimal"]', '275.00')
     escribir('input[autocapitalize="characters"]', '845120377')
-    adjuntar(elegido)
+    if (conArchivo) {
+        adjuntar(elegido)
+    }
     await esperar()
     document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await esperar()
@@ -102,9 +106,12 @@ describe('esquema del comprobante', () => {
         expect(mensajes({ archivo: undefined })).toEqual(['archivo: Adjunta la foto o el PDF del comprobante'])
     })
 
-    it('archivo: solo foto o PDF y hasta 5 MB', () => {
+    it('archivo: solo JPG, PNG o PDF (lo demás se convierte antes) y hasta 5 MB', () => {
         expect(mensajes({ archivo: archivo('boleta.heic', 'image/heic') })).toEqual([
-            'archivo: Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.',
+            'archivo: Sube una foto (JPG o PNG) o un PDF del comprobante.',
+        ])
+        expect(mensajes({ archivo: archivo('boleta.webp', 'image/webp') })).toEqual([
+            'archivo: Sube una foto (JPG o PNG) o un PDF del comprobante.',
         ])
         expect(mensajes({ archivo: archivo('boleta.pdf', 'application/pdf', TAMANO_MAXIMO_ARCHIVO + 1) })).toEqual([
             'archivo: El archivo pesa 5.0 MB; el máximo es 5 MB.',
@@ -139,10 +146,11 @@ describe('esquema del comprobante', () => {
 })
 
 describe('página "Subir comprobante de pago"', () => {
-    it('cámara y galería: acepta foto o PDF y la cámara se pide solo con "Tomar foto"', async () => {
+    it('cámara y galería: acepta JPEG, PNG o PDF y la cámara se pide solo con "Tomar foto"', async () => {
         await montarFormulario()
         const selector = document.querySelector<HTMLInputElement>('input[type="file"]')!
-        expect(selector.accept).toBe('image/*,application/pdf')
+        // tipos concretos y no image/*: iOS entrega la foto HEIC de la galería ya en JPEG
+        expect(selector.accept).toBe('image/jpeg,image/png,application/pdf')
         expect(selector.hasAttribute('capture')).toBe(false)
         // happy-dom no tiene diálogo de archivos: basta saber que se abrió
         let abierto = 0
@@ -203,11 +211,45 @@ describe('página "Subir comprobante de pago"', () => {
         expect(document.querySelector('[data-testid="comprobante-enviado"]')).toBeNull()
     })
 
-    it('archivo no permitido: no se envía', async () => {
+    it('archivo no permitido (ni foto ni PDF): no se envía', async () => {
         const wrapper = await montarFormulario()
-        await llenarYEnviar(archivo('boleta.heic', 'image/heic'))
+        await llenarYEnviar(archivo('boleta.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
         expect(wrapper.emitted('enviado')).toBeUndefined()
-        expect(texto()).toContain('Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.')
+        expect(texto()).toContain('Sube una foto (JPG o PNG) o un PDF del comprobante.')
+    })
+
+    it('foto HEIC: se convierte a JPEG en el navegador y se envía', async () => {
+        const sim = simularDecodificacion()
+        try {
+            const wrapper = await montarFormulario()
+            adjuntar(archivo('IMG_0042.HEIC', 'image/heic'))
+            await esperar()
+            const vista = document.querySelector('[data-testid="comprobante-vista-previa"]')!.textContent ?? ''
+            expect(vista).toContain('IMG_0042.jpg')
+            expect(sim.exportados).toEqual([{ tipo: 'image/jpeg', calidad: 0.85 }])
+            await llenarYEnviar(undefined, false)
+            expect(wrapper.emitted('enviado')).toHaveLength(1)
+        }
+        finally {
+            sim.restaurar()
+        }
+    })
+
+    it('foto que el navegador no puede leer: pide otra y no se envía nada', async () => {
+        const sim = simularDecodificacion()
+        sim.falla = true
+        try {
+            const wrapper = await montarFormulario()
+            adjuntar(archivo('IMG_0042.heic', 'image/heic'))
+            await esperar()
+            expect(texto()).toContain('No pudimos leer esta foto. Tómala de nuevo o elige otra en JPG o PNG.')
+            expect(document.querySelector('[data-testid="comprobante-vista-previa"]')).toBeNull()
+            await llenarYEnviar(undefined, false)
+            expect(wrapper.emitted('enviado')).toBeUndefined()
+        }
+        finally {
+            sim.restaurar()
+        }
     })
 
     it('cuentas de destino con el número completo a la vista (nada truncado en el teléfono)', async () => {

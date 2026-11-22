@@ -11,7 +11,8 @@ import type { Form, FormError, FormSubmitEvent, RadioGroupItem, SelectItem } fro
  * Las cuentas de destino son las de `GET /portal/empresa` de la empresa del servicio (`empresaId` en
  * `/cuenta`; en `/corte`, la de la IP), las mismas de "Ver datos de depósito": nunca de otra empresa;
  * el banco de origen, del catálogo `GET /portal/bancos`, solo en transferencia y ACH. El archivo
- * (foto o PDF, 5 MB) se elige de la galería o se toma con la cámara del teléfono, con vista previa.
+ * (foto o PDF, 5 MB) se elige de la galería o se toma con la cámara del teléfono, con vista previa;
+ * una foto que no es JPEG ni PNG (HEIC, WebP…) se convierte a JPEG antes (`utils/fotos`).
  *
  * La decisión es del backend (`RegistrarComprobante` de A3): queda en revisión y no reactiva nada
  * por sí solo. Cada 422 se muestra en su campo con el texto de la API; el 409 de referencia
@@ -104,26 +105,48 @@ watch(conBanco, (pide) => {
     }
 })
 
-/* Archivo: vista previa y foto reducida si pesa más de 5 MB. */
+/*
+ * Archivo: JPEG, PNG y PDF pasan igual; otra foto (HEIC, WebP…) o una de más de 5 MB se convierte a
+ * JPEG en el navegador (`prepararArchivo`). Si no se puede leer, no se adjunta y se pide otra.
+ */
 const capturar = ref(false)
-const reduciendo = ref(false)
+const preparando = ref(false)
+const errorFoto = ref<string | null>(null)
 const vistaPrevia = ref<string | null>(null)
 const esImagen = computed(() => estado.archivo?.type.startsWith('image/') ?? false)
+/** Solo cuenta la última elección: si el cliente cambia la foto a mitad de la conversión. */
+let eleccion = 0
+/** Lo que ya salió de `prepararArchivo` (no se vuelve a procesar al asignarlo). */
+let preparado: File | undefined
 
-watch(() => estado.archivo, async (archivo, anterior) => {
+watch(() => estado.archivo, async (archivo) => {
     if (vistaPrevia.value) {
         URL.revokeObjectURL(vistaPrevia.value)
         vistaPrevia.value = null
     }
     if (!archivo) {
+        eleccion += 1
+        preparando.value = false
         return
     }
-    if (archivo !== anterior && archivo.size > TAMANO_MAXIMO_ARCHIVO && archivo.type.startsWith('image/')) {
-        reduciendo.value = true
-        const reducido = await reducirFotoSiHaceFalta(archivo)
-        reduciendo.value = false
-        if (reducido !== archivo) {
-            estado.archivo = reducido
+    if (archivo !== preparado) {
+        eleccion += 1
+        const turno = eleccion
+        errorFoto.value = null
+        preparando.value = true
+        const resultado = await prepararArchivo(archivo, TAMANO_MAXIMO_ARCHIVO)
+        if (turno !== eleccion) {
+            return
+        }
+        preparando.value = false
+        if (!resultado.ok) {
+            errorFoto.value = resultado.error
+            estado.archivo = undefined
+            return
+        }
+        preparado = resultado.archivo
+        if (resultado.archivo !== archivo) {
+            estado.archivo = resultado.archivo
             return
         }
     }
@@ -421,7 +444,8 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
             <UFormField
                 label="Foto o PDF del comprobante"
                 name="archivo"
-                help="JPG, PNG, WebP o PDF de hasta 5 MB. Que se lean el monto y la referencia."
+                help="Foto o PDF de hasta 5 MB. Que se lean el monto y la referencia."
+                :error="errorFoto ?? undefined"
                 required
             >
                 <UFileUpload
@@ -435,7 +459,19 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                 >
                     <template #default="{ open: abrir, removeFile: quitar }">
                         <div
-                            v-if="estado.archivo"
+                            v-if="preparando"
+                            class="ax-lista flex items-center gap-3 p-2 text-sm text-muted"
+                            aria-live="polite"
+                            data-testid="comprobante-preparando"
+                        >
+                            <UIcon
+                                name="i-lucide-loader-circle"
+                                class="size-5 shrink-0 animate-spin"
+                            />
+                            Preparando la foto…
+                        </div>
+                        <div
+                            v-else-if="estado.archivo"
                             class="ax-lista flex items-center gap-3 p-2"
                             data-testid="comprobante-vista-previa"
                         >
@@ -467,7 +503,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                                     {{ estado.archivo.name }}
                                 </p>
                                 <p class="text-xs text-muted">
-                                    {{ reduciendo ? 'Reduciendo la foto…' : tamanoLegible(estado.archivo.size) }}
+                                    {{ tamanoLegible(estado.archivo.size) }}
                                 </p>
                             </div>
                             <UButton
@@ -531,7 +567,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     size="xl"
                     block
                     :loading="enviando"
-                    :disabled="reduciendo"
+                    :disabled="preparando"
                     data-testid="comprobante-enviar"
                 />
             </PortalBarraAccion>
