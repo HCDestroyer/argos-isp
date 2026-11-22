@@ -67,6 +67,7 @@ watch(servicios, (lista) => {
 }, { immediate: true })
 
 const archivos = ref<File[]>([])
+const preparandoAdjuntos = ref(false)
 const formulario = useTemplateRef('formulario')
 const enviando = ref(false)
 const error = ref<string | null>(null)
@@ -74,7 +75,7 @@ const creado = ref<TicketSoporte | null>(null)
 let clave = claveIdempotencia()
 
 async function enviar(evento: FormSubmitEvent<DatosTicket>) {
-    if (errorAdjuntos(archivos.value)) {
+    if (preparandoAdjuntos.value || errorAdjuntos(archivos.value)) {
         return
     }
     enviando.value = true
@@ -267,6 +268,7 @@ const volver = computed(() => contactoId.value ? '/cuenta' : '/cuenta?seccion=so
                     <SoporteAdjuntos
                         v-if="!porIp"
                         v-model="archivos"
+                        v-model:preparando="preparandoAdjuntos"
                     />
 
                     <!-- Acción principal, fija abajo en el teléfono. -->
@@ -278,7 +280,7 @@ const volver = computed(() => contactoId.value ? '/cuenta' : '/cuenta?seccion=so
                             size="xl"
                             block
                             :loading="enviando"
-                            :disabled="Boolean(contactoId && (!servicioACargo || soporte.disponibilidad.value?.contactos === false))"
+                            :disabled="preparandoAdjuntos || Boolean(contactoId && (!servicioACargo || soporte.disponibilidad.value?.contactos === false))"
                             data-testid="ticket-enviar"
                         />
                     </PortalBarraAccion>
