@@ -242,8 +242,13 @@ test.group('monitoreo · crons · API', (group) => {
             CATALOGO_CRONS.map((c) => c.clave),
         )
         const generar = data.find((c) => c.clave === 'billing.generar')!
-        assert.equal(generar.estado, 'atrasada')
-        assert.isTrue(generar.atrasada)
+        // El atraso también mira audit.acciones, que es inmutable y comparte base con otras suites:
+        // si otra suite corrió el cron de facturación hace poco, «ahora» no sirve. Tres horas
+        // después de este momento, ninguna corrida correcta (de esta prueba ni de otra) es reciente.
+        const despues = await listarCrons({ ahora: new Date(Date.now() + 3 * 3_600_000) })
+        const generarDespues = despues.data.find((c) => c.clave === 'billing.generar')!
+        assert.equal(generarDespues.estado, 'atrasada')
+        assert.isTrue(generarDespues.atrasada)
         assert.equal(generar.ultima.resumen, '5 facturas emitidas')
         assert.equal(generar.horario.texto, 'Cada hora')
         assert.isTrue(generar.manual)
