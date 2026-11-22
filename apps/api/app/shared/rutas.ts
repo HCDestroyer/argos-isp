@@ -8,6 +8,7 @@ import { esPermisoActuacionVinculada, type PermisoActuacionVinculada } from '#co
 import {
     esRespuestaJson,
     esTokenIris,
+    exigirActorSistemaIris,
     exigirCabecerasIris,
     ocultarDocumentoIris,
 } from '#integraciones/iris/atencion'
@@ -151,6 +152,13 @@ export interface DefinicionRuta<
      */
     actuarComoVinculado?: PermisoActuacionVinculada
     /**
+     * Contrato Iris 0.14.2 §7.1: la ruta acepta `X-Iris-Actor: sistema` (lectura sin persona, sin
+     * `X-Iris-Conversacion` ni `X-Iris-Contacto`; canal de auditoría `sistema`). Solo las rutas de
+     * `RUTAS_ACTOR_SISTEMA` (`#integraciones/iris/atencion`); en cualquier otra, `sistema` responde
+     * `403 actor_no_permitido` (`422` en una escritura).
+     */
+    actorSistemaIris?: true
+    /**
      * Gancho que corre después de autenticar, autorizar e idempotencia, pero **antes** de validar
      * cuerpo y query con VineJS. Para el límite de peticiones: un cuerpo inválido (422) también
      * consume el cupo. Si lanza, ni se valida ni corre el handler.
@@ -253,6 +261,8 @@ export async function despachar(ruta: Ruta, ctx: HttpContext) {
             'Esta operación exige el header Idempotency-Key',
         )
     }
+    // Iris 0.14.2 §7.1: `X-Iris-Actor: sistema` solo en la lista cerrada (403/422/400 si no)
+    exigirActorSistemaIris(ctx, ruta.actorSistemaIris === true)
     if (ruta.cabecerasIris === 'opcional') {
         exigirCabecerasIris(ctx, { opcional: true })
     } else if (typeof ruta.cabecerasIris === 'function' ? ruta.cabecerasIris(ctx) : ruta.cabecerasIris) {

@@ -1592,6 +1592,8 @@ const bancos: Ruta[] = [
         etiqueta: 'pagos',
         permiso: null,
         cabecerasIris: 'opcional',
+        // Iris 0.14.2 §7.1: lectura sin persona con `X-Iris-Actor: sistema`
+        actorSistemaIris: true,
         respuesta: { status: 200, descripcion: 'Bancos activos', esquema: lista(Banco) },
         // decisión del PM 23: sin los que la empresa activa ocultó
         handler: (ctx) => listarBancos(undefined, true, ctx.empresa?.activa ?? null),
@@ -1604,6 +1606,8 @@ const bancos: Ruta[] = [
         etiqueta: 'pagos',
         permiso: 'cuentas_bancarias.ver',
         cabecerasIris: 'opcional',
+        // Iris 0.14.2 §7.1: lectura sin persona con `X-Iris-Actor: sistema`
+        actorSistemaIris: true,
         query: v.listarCuentasBancariasValidator,
         respuesta: { status: 200, descripcion: 'Cuentas bancarias', esquema: lista(CuentaBancaria) },
         handler: (ctx, { query }) =>
