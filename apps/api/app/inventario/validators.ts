@@ -696,6 +696,17 @@ export const configurarInventarioValidator = vine.compile(
                 description:
                     'Iris 0.12.0 §3.10: técnicos distintos con intentos de recuperación para declarar un equipo no recuperado (2 de fábrica); sin él se conserva',
             }),
+        iris_movimientos_diarios_alerta: vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .max(10000)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Iris 0.14.0 (T-12): movimientos al día de un técnico vinculado desde los que se avisa al admin (40 de fábrica); sin él se conserva',
+            }),
         version: vine.number().withoutDecimals().min(0).meta({ description: '0 la primera vez' }),
     }),
 )
@@ -947,6 +958,16 @@ export const cambiarEquipoValidator = vine.compile(
             .meta({
                 description: 'Sin monto: entra en la cola de cobros de equipo (inventario.cobrar_equipo)',
             }),
+        foto_ref: vine
+            .string()
+            .trim()
+            .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Id opaco del adjunto de la orden en Iris; obligatoria con cobro_propuesto desde el contrato 0.14.0',
+            }),
         nota: notaIris(),
         tecnico: tecnicoExterno().nullable().optional().meta({
             description:
@@ -968,7 +989,7 @@ export const noRecuperadoValidator = vine.compile(
             .optional()
             .meta({
                 description:
-                    'Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido',
+                    'Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido y, con un Iris ≥ 0.14.0, con cualquier motivo',
             }),
         ubicacion: vine.object({
             lat: vine.number().min(-90).max(90),
@@ -1034,7 +1055,13 @@ export const resolverGarantiaValidator = vine.compile(
 
 export const listarCobrosEquipoValidator = vine.compile(
     vine.object({
-        estado: vine.enum(['propuesto', 'aprobado', 'rechazado'] as const).optional(),
+        estado: vine
+            .enum(['propuesto', 'aprobado', 'rechazado', 'por_verificar', 'no_verificado'] as const)
+            .optional()
+            .meta({
+                description:
+                    'Sin estado, la cola sin los cobros por verificar ni los no verificados (Iris 0.14.0)',
+            }),
         empresas: empresasConsulta(),
         ...reglasPaginacion,
     }),
@@ -1051,4 +1078,29 @@ export const aprobarCobroEquipoValidator = vine.compile(
 
 export const rechazarCobroEquipoValidator = vine.compile(
     vine.object({ version: versionEsperada(), motivo: motivo() }),
+)
+
+export const decidirIntentoValidator = vine.compile(
+    vine.object({
+        aceptar: vine.boolean().meta({ description: 'true: cuenta para el mínimo; false: se descarta' }),
+        motivo: motivo(),
+    }),
+)
+
+export const listarVinculosTecnicosValidator = vine.compile(
+    vine.object({
+        estado: vine.enum(['vinculado', 'rechazado', 'desvinculado'] as const).optional(),
+        empresas: empresasConsulta(),
+    }),
+)
+
+export const conciliarVinculoValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad(),
+        usuario_id: vine
+            .string()
+            .trim()
+            .regex(/^[A-Za-z0-9_-]{1,64}$/)
+            .meta({ description: 'Usuario de Iris del técnico' }),
+    }),
 )

@@ -524,9 +524,12 @@ export const cancelarPromesaValidator = vine.compile(vine.object({ motivo: motiv
 */
 
 const formato = vine
-    .enum(['json', 'csv', 'xlsx'] as const)
+    .enum(['json', 'csv', 'xlsx', 'pdf'] as const)
     .optional()
-    .meta({ description: 'json (por defecto), csv o xlsx (descarga con Content-Disposition)' })
+    .meta({
+        description:
+            'json (por defecto), csv, xlsx o pdf (descarga con Content-Disposition; el PDF lleva logo, empresa, filtros y fecha)',
+    })
 const rango = {
     desde: fechaIso().optional().meta({ description: 'Por defecto: el día 1 del mes de hace 11 meses' }),
     hasta: fechaIso().optional().meta({ description: 'Por defecto: hoy (Guatemala)' }),

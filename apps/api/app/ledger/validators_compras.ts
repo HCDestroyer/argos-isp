@@ -239,7 +239,7 @@ export const listarComprasValidator = vine.compile(
     }),
 )
 
-const formato = vine.enum(['json', 'csv', 'xlsx'] as const).optional()
+const formato = vine.enum(['json', 'csv', 'xlsx', 'pdf'] as const).optional()
 
 export const libroComprasValidator = vine.compile(
     vine.object({

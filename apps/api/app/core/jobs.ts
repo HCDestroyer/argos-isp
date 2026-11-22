@@ -9,6 +9,12 @@ import TerminarPlanTemporal from '#core/actions/terminar_plan_temporal'
 import VencerCanjeIris, { type SalidaVencerCanjeIris } from '#integraciones/iris/actions/vencer_canje_iris'
 import { canjeIrisPorRevisar } from '#integraciones/iris/desconexion'
 import VencerReservaIp, { reservasIpVencidas } from '#core/actions/vencer_reserva_ip'
+import { promocionesPendientes } from '#core/promociones_velocidad'
+import AbrirTramoPromocion from '#core/actions/abrir_tramo_promocion'
+import CerrarTramoPromocion from '#core/actions/cerrar_tramo_promocion'
+import EvaluarFallasGenerales, {
+    type SalidaEvaluarFallasGenerales,
+} from '#network/actions/evaluar_fallas_generales'
 import BorrarIdentidadesCliente, {
     clientesConIdentidadVencida,
 } from '#core/actions/borrar_identidades_cliente'
@@ -22,6 +28,8 @@ import BorrarIdentidadesCliente, {
  * | `planes_temporales` | 1 min | Termina los planes temporales activos con `fin ≤ ahora` y luego inicia los programados con `inicio ≤ ahora` (todo lo pendiente hasta ahora, nunca "los de hoy") |
  * | `reservas_ip_vencidas` | 1 h | Contrato Iris 0.10.0 §3.4.1 (A38): libera la IP reservada en sitio de los servicios que siguen pendientes 30 días después (`servicios.vencer_reserva_ip`, uno por servicio) |
  * | `identidades_vencidas` | 24 h | Contrato Iris 0.10.0 §3.4.3 (A41): borra la identidad (fotos y documento) de los clientes retirados hace más de 12 meses (`clientes.borrar_identidades`) |
+ * | `promociones_velocidad` | 1 min | Decisión del PM 18: cierra los tramos de promociones de velocidad con `fin ≤ ahora` y abre el tramo de ahora de cada asignación vigente que aún no se abrió (clave única `promocion + servicio + inicio`) |
+ * | `fallas_generales` | 1 min | Decisión del PM 31: abre, amplía y cierra incidentes de falla general (`incidentes_red.evaluar`) |
  * | `iris_canjes_sin_uso` | 5 min | Contrato Iris 0.6.3: confirma el canje del conector Iris cuyo `atk_` ya se usó y revoca (desconectando el conector) el que lleva 24 h sin uso. Solo llama a `iris.vencer_canje` si hay algo que hacer |
  *
  * Lock: el worker tiene concurrencia 1 y el job toma un advisory lock de Postgres
@@ -35,6 +43,8 @@ export const NOMBRE_COLA_CORE = 'core-cron'
 
 export const CRONS_CORE = {
     planes_temporales: 60_000,
+    promociones_velocidad: 60_000,
+    fallas_generales: 60_000,
     iris_canjes_sin_uso: 5 * 60_000,
     reservas_ip_vencidas: 60 * 60_000,
     identidades_vencidas: 24 * 60 * 60_000,
@@ -132,6 +142,52 @@ export async function procesarPlanesTemporales(ahora: Date = new Date()): Promis
     return resultado
 }
 
+export interface ResultadoPromociones {
+    abiertos: number[]
+    cerrados: number[]
+    fallidos: string[]
+}
+
+/** Tramos de promociones de velocidad pendientes hasta `ahora`: primero cierra y después abre. */
+export async function procesarPromocionesVelocidad(ahora: Date = new Date()): Promise<ResultadoPromociones> {
+    const ctx = contextoSistema('cron', `core-promociones_velocidad-${ahora.toISOString()}`)
+    const { porCerrar, porAbrir } = await promocionesPendientes(ahora)
+    const resultado: ResultadoPromociones = { abiertos: [], cerrados: [], fallidos: [] }
+    for (const id of porCerrar) {
+        try {
+            const salida = await new CerrarTramoPromocion().execute(
+                { tramo_id: id, motivo: 'fin', ahora },
+                ctx,
+            )
+            if (salida.cerrado) resultado.cerrados.push(id)
+        } catch (error) {
+            resultado.fallidos.push(`tramo:${id}`)
+            logger.error({ err: error, tramo_id: id }, 'No se pudo cerrar el tramo de promoción')
+        }
+    }
+    for (const p of porAbrir) {
+        try {
+            const salida = await new AbrirTramoPromocion().execute(
+                { promocion_id: p.promocion_id, servicio_id: p.servicio_id, ahora },
+                ctx,
+            )
+            if (salida.tramo_id) resultado.abiertos.push(salida.tramo_id)
+        } catch (error) {
+            resultado.fallidos.push(`${p.promocion_id}:${p.servicio_id}`)
+            logger.error({ err: error, ...p }, 'No se pudo abrir el tramo de promoción')
+        }
+    }
+    return resultado
+}
+
+/** Fallas generales de red hasta `ahora` (una acción: abre, amplía y cierra incidentes). */
+export async function procesarFallasGenerales(
+    ahora: Date = new Date(),
+): Promise<SalidaEvaluarFallasGenerales> {
+    const ctx = contextoSistema('cron', `core-fallas_generales-${ahora.toISOString()}`)
+    return new EvaluarFallasGenerales().execute({ ahora }, ctx)
+}
+
 /**
  * Canje del conector Iris pendiente de confirmar hasta `ahora` (contrato Iris 0.6.3). La fila es
  * una sola; la acción vuelve a leerla bloqueada. null si no había nada que hacer.
@@ -197,6 +253,10 @@ export async function ejecutarCronCore(nombre: string, ahora: Date = new Date())
     switch (nombre) {
         case 'planes_temporales':
             return conLock(nombre, () => procesarPlanesTemporales(ahora))
+        case 'promociones_velocidad':
+            return conLock(nombre, () => procesarPromocionesVelocidad(ahora))
+        case 'fallas_generales':
+            return conLock(nombre, () => procesarFallasGenerales(ahora))
         case 'iris_canjes_sin_uso':
             return conLock(nombre, () => procesarCanjesIrisSinUso(ahora))
         case 'reservas_ip_vencidas':
