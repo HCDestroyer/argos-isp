@@ -31,7 +31,7 @@ import GenerarEnlaceIris from '#integraciones/iris/actions/generar_enlace_iris'
 import CanjearEnlaceIris from '#integraciones/iris/actions/canjear_enlace_iris'
 import AbrirEnIris from '#integraciones/iris/actions/abrir_en_iris'
 import AutorizarIris from '#integraciones/iris/actions/autorizar_iris'
-import InformarContratoIris from '#integraciones/iris/actions/informar_contrato_iris'
+import InformarContratoIris, { ContratoRegresivo } from '#integraciones/iris/actions/informar_contrato_iris'
 import InformarSincronizacionIris from '#integraciones/iris/actions/informar_sincronizacion_iris'
 import RevocarConexionIris from '#integraciones/iris/actions/revocar_conexion_iris'
 import { vistaPreviaAutorizacionIris } from '#integraciones/iris/autorizacion'
@@ -123,20 +123,36 @@ const iris: Ruta[] = [
             '0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. ' +
             'Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos). ' +
             'Contrato 0.6.2: `receptor_argos` opcional (false = Iris no tiene el receptor de Argos: ' +
-            '`GET /integraciones/iris` pasa a `requiere_reconectar: true`); omitido, se conserva el anterior.',
+            '`GET /integraciones/iris` pasa a `requiere_reconectar: true`); omitido, se conserva el anterior. ' +
+            'Contrato 0.14.0 (§3.3, §4.5): una versión menor que la última aceptada responde 409 contrato_regresivo ' +
+            '(no se guarda y se avisa al admin; bajar exige un canje nuevo aprobado en el panel); una mayor que el ' +
+            '`contrato` que habla Argos, 422 contrato_no_soportado (no se registra). Al pasar a ≥ 0.14.0 empieza la ' +
+            'carga inicial de vínculos de técnicos, que Iris cierra con `vinculos_cargados` (§6.6, N-1).',
         etiqueta: 'integraciones',
         permiso: 'sso.emitir',
         cuerpo: vi.contratoIrisValidator,
         respuesta: { status: 200, descripcion: 'Contrato guardado', esquema: ContratoConectorIris },
-        handler: (ctx, { cuerpo }) =>
-            new InformarContratoIris().execute(
+        handler: async (ctx, { cuerpo }) => {
+            const salida = await new InformarContratoIris().execute(
                 {
                     contrato: cuerpo.contrato,
                     receptor_argos: cuerpo.receptor_argos ?? null,
+                    ...(cuerpo.token_portal !== undefined ? { token_portal: cuerpo.token_portal } : {}),
+                    ...(cuerpo.vinculos_cargados !== undefined
+                        ? { vinculos_cargados: cuerpo.vinculos_cargados }
+                        : {}),
                     atk_id: tokenDeLaPeticion(ctx),
                 },
                 ctx.contextoAccion(),
-            ),
+            )
+            // 0.14.0: el aviso al admin quedó guardado (outbox); la respuesta es el 409
+            if (salida.regresivo) throw new ContratoRegresivo(salida.contrato_iris, cuerpo.contrato)
+            return {
+                contrato_iris: salida.contrato_iris,
+                version_argos: salida.version_argos,
+                contrato: salida.contrato,
+            }
+        },
     }),
     definirRuta({
         metodo: 'put',
@@ -264,6 +280,7 @@ const iris: Ruta[] = [
                     code_verifier: cuerpo.code_verifier ?? null,
                     contrato: cuerpo.contrato ?? null,
                     receptor_argos: cuerpo.receptor_argos ?? null,
+                    token_portal: cuerpo.token_portal ?? null,
                 },
                 ctx.contextoAccion('webhook'),
             ),

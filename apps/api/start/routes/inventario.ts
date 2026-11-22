@@ -45,7 +45,13 @@ import { esTokenIris } from '#integraciones/iris/atencion'
 import equiposA48 from '#start/routes/inventario_equipos'
 import { miembrosDeCuadrilla } from '#inventario/cuadrillas'
 import { exigirPermiso } from '#inventario/acceso_http'
-import { accesoBodegas, exigirActorIrisDeCampo, exigirBodega, irisActorDe } from '#inventario/acceso_http'
+import {
+    accesoBodegas,
+    exigirActorIrisDeCampo,
+    exigirBodega,
+    idempotenciaDe,
+    irisActorDe,
+} from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
 import CrearProductosLote from '#inventario/actions/crear_productos_lote'
@@ -353,7 +359,7 @@ const operaciones: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             await exigirBodegaDeConsumo(ctx, cuerpo)
             return new ConsumirInventario().execute(
-                { ...cuerpo, iris_actor: irisActorDe(ctx) },
+                { ...cuerpo, iris_actor: irisActorDe(ctx), idempotency_key: idempotenciaDe(ctx) },
                 ctx.contextoAccion(),
             )
         },
@@ -588,6 +594,7 @@ const comodato: Ruta[] = [
                     origen_id: cuerpo.origen_id,
                     recibido_en_iris: cuerpo.recibido_en_iris,
                     iris_actor: irisActorDe(ctx),
+                    idempotency_key: idempotenciaDe(ctx),
                 },
                 ctx.contextoAccion(),
             )
@@ -618,6 +625,7 @@ const comodato: Ruta[] = [
                     servicio_id: id,
                     unidad_id: Number(params.unidadId),
                     iris_actor: irisActorDe(ctx),
+                    idempotency_key: idempotenciaDe(ctx),
                 },
                 ctx.contextoAccion(),
             )

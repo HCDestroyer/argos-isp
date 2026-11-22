@@ -1,0 +1,2 @@
+# Certificado automático de Let's Encrypt para ACS_DOMINIO (Caddy lo renueva solo).
+tls {$ACME_EMAIL}

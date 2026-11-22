@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { capacidadesIris } from '#integraciones/equipos/equipos'
 import { test } from '@japa/runner'
 import app from '@adonisjs/core/services/app'
 import db from '@adonisjs/lucid/services/db'
@@ -131,7 +132,12 @@ test.group('Iris · version_argos es la versión publicada', (group) => {
         assert.equal(segundo.body().version_argos, version)
         const leido = await leerComoIris(client, segundo.body().token)
         assert.equal(leido.puesto.version_argos, version)
-        assert.deepEqual(leido.leido, { activo: true, version_argos: version, contrato: CONTRATO_IRIS })
+        assert.deepEqual(leido.leido, {
+            activo: true,
+            version_argos: version,
+            contrato: CONTRATO_IRIS,
+            capacidades: await capacidadesIris(),
+        })
 
         await estado(
             client

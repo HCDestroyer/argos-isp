@@ -65,6 +65,16 @@ export const PERMISOS = {
         'Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)',
     'servicios.cancelar_plan_temporal':
         'Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)',
+    'servicios.generar_codigo_identificacion':
+        'Generar el código de un solo uso con el que el cliente se identifica en el portal (vale 15 min de fábrica)',
+    'promociones_velocidad.ver': 'Ver las promociones de velocidad y a qué servicios se asignaron',
+    'promociones_velocidad.crear':
+        'Crear promociones de velocidad (multiplicador o plan destino, por días o franja horaria)',
+    'promociones_velocidad.asignar': 'Asignar una promoción de velocidad a servicios',
+    'promociones_velocidad.quitar': 'Quitar una promoción de velocidad de un servicio',
+    'promociones_velocidad.cancelar': 'Cancelar una promoción de velocidad (vuelve la velocidad del plan)',
+    'ajustes_operacion.ver': 'Ver los ajustes de operación (retiro, código de corte, caídas, falla general…)',
+    'ajustes_operacion.editar': 'Cambiar los ajustes de operación, globales o por empresa',
     'servicios.agregar_adicional':
         'Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado',
     'servicios.editar_adicional':
@@ -137,6 +147,11 @@ export const PERMISOS = {
     'sesiones.desconectar': 'Desconectar sesiones PPPoE',
     'red.ver': 'Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)',
     'ip.resolver': 'Resolver una IP a su servicio',
+    'ip.buscar_historial':
+        'Buscar quién tenía una IP en una fecha y hora pasada (servicio, cliente y sesión); cada consulta queda auditada',
+    'incidentes_red.leer': 'Ver las fallas generales de red (incidentes) y los servicios afectados',
+    'incidentes_red.abrir': 'Abrir a mano un incidente de falla general (con motivo)',
+    'incidentes_red.cerrar': 'Cerrar un incidente de falla general',
 
     'plantillas.ver': 'Ver plantillas de facturación',
     'plantillas.crear': 'Crear plantillas de facturación',
@@ -163,6 +178,8 @@ export const PERMISOS = {
         'Cambiar el total calculado de una factura de periodo emitida a mano, con motivo (junto con facturas.emitir_periodos)',
     'facturas.cargo_sin_costo':
         'Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)',
+    'facturas.leer_origen_iris':
+        'Leer una factura de origen Iris por su número o su DTE, sin pagos ni datos del cliente (solo el token de Iris, contrato Iris 0.14.3 §3)',
     'facturas.configurar_motivos': 'Administrar el catálogo de motivos de facturas en Q0 por empresa',
     'facturas.configurar_conceptos':
         'Administrar el catálogo de conceptos de cargo único por empresa (cuenta de ingreso e IVA)',
@@ -190,6 +207,9 @@ export const PERMISOS = {
     'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
     'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
     'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
+    'libro.aprobar_asiento':
+        'Aprobar el borrador de asiento manual de otro usuario (lo registra en el libro; decisión del PM 10)',
+    'libro.rechazar_asiento': 'Rechazar con motivo el borrador de asiento manual de otro usuario',
     'libro.cerrar_periodo': 'Cerrar un mes del libro (no admite más asientos con fecha en él)',
     'libro.reabrir_periodo': 'Reabrir un mes cerrado del libro (con motivo)',
     'cierres.verificar': 'Correr la lista de verificación de cierre (checks del mes o del año)',
@@ -200,6 +220,19 @@ export const PERMISOS = {
     'egresos.registrar_sin_limite':
         'Registrar egresos de cualquier caja, banco o cuenta, sin el tope egreso_cajero_maximo ni motivo obligatorio',
     'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
+    // panel financiero y reportes (A3, decisiones del PM 2, 4, 6 y 12; contratos/reportes.md)
+    'panel_financiero.ver':
+        'Ver el panel financiero: ingreso mensual recurrente, bajas, ingreso promedio, efectivo (con libro.ver) y alertas',
+    'panel_financiero.configurar':
+        'Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja)',
+    'inicio.configurar_rol': 'Elegir la pantalla de inicio de un rol (panel financiero o día a día)',
+    'inicio.configurar_usuario': 'Elegir la pantalla de inicio de otro usuario',
+    'reportes.programar_envio':
+        'Programar el envío de un reporte por correo a usuarios con permiso o a correos externos aprobados',
+    'reportes.editar_envio': 'Editar, pausar o reanudar un envío programado de reportes',
+    'reportes.aprobar_correo_externo':
+        'Aprobar un correo externo (contador, socio) para recibir reportes contables programados; solo admin',
+    'reportes.retirar_correo_externo': 'Retirar un correo externo de la lista aprobada; solo admin',
     // Cobros y bancos (localización fiscal §10.3 y §10.9, fase 4; los endpoints son de A3)
     'cobros.configurar':
         'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
@@ -219,6 +252,26 @@ export const PERMISOS = {
     'cartera.provisionar': 'Registrar la estimación para cuentas incobrables (hasta el tope legal)',
     'cartera.castigar': 'Castigar facturas incobrables con motivo y evidencia de gestión de cobro',
     'pagos.cerrar_diferencia': 'Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)',
+    // Decisiones del PM del 21 nov (operación de cobro, A3)
+    'gestiones_cobro.ver':
+        'Ver las gestiones de cobro de un cliente (llamadas, mensajes, visitas, cartas) y su adjunto',
+    'gestiones_cobro.registrar':
+        'Registrar una gestión de cobro de un cliente (solo informativa; evidencia para el castigo de cartera)',
+    'gestiones_cobro.adjuntar': 'Agregar el archivo de respaldo de una gestión de cobro (una sola vez)',
+    'comprobantes.reconectar':
+        'Dar desde el panel la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (mismas reglas y cupo que Iris)',
+    'servicios.pausar_sin_cobro':
+        'Pausar un servicio sin cobro (lo suspende, no se facturan los periodos de la pausa y se reactiva solo al terminar)',
+    'servicios.terminar_pausa': 'Terminar antes de tiempo la pausa sin cobro de un servicio (lo reactiva)',
+    'ajustes_cobro.ver': 'Ver los ajustes de cobro y libro de la empresa',
+    'ajustes_cobro.editar':
+        'Editar los ajustes de cobro y libro de la empresa (aprobación de asientos manuales, tope de la pausa sin cobro)',
+    'cajas.configurar_impresion': 'Elegir el formato de impresión de recibos y facturas de una caja',
+    'bancos_origen.crear':
+        'Agregar un banco al catálogo de bancos de origen del sistema (todas las empresas)',
+    'bancos_origen.editar': 'Editar nombre, orden o estado de un banco del catálogo de bancos de origen',
+    'bancos_origen.ocultar': 'Ocultar en la empresa un banco de origen que no usa',
+    'bancos_origen.mostrar': 'Volver a mostrar en la empresa un banco de origen oculto',
 
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
@@ -235,6 +288,12 @@ export const PERMISOS = {
         'Configurar el conector con Horus Flow (URL, código de conexión, webhooks, enlace de conexión); solo admin',
     'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
     'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
+
+    'equipos.ver':
+        'Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización',
+    'equipos.configurar':
+        'Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin',
+    'equipos.probar': 'Probar la conexión con SmartOLT y GenieACS con la configuración guardada',
 
     'iris.ver': 'Ver el conector con Iris (sin secretos) y los tokens de su usuario técnico (sin el valor)',
     'iris.configurar':
@@ -312,6 +371,12 @@ export const PERMISOS = {
     // contrato Iris 0.12.0 §3.10 (A48): equipos del cliente
     'servicios.cambiar_equipo':
         'Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación',
+    // contrato Iris 0.9.0 §12 (A32, A33, A35 y A37): equipos del cliente y bienvenida
+    'servicios.aprovisionar':
+        'Aprovisionar y activar un servicio pendiente con su equipo (ONT por SmartOLT, router o CPE por el ACS TR-069)',
+    'servicios.ver_equipo': 'Ver el estado del equipo del cliente (en línea, señal y firmware)',
+    'servicios.cambiar_wifi': 'Cambiar el nombre o la clave del Wi-Fi del equipo del cliente',
+    'servicios.reenviar_bienvenida': 'Reenviar la bienvenida de un servicio activo por sus canales',
     'inventario.ver_unidad':
         'Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor',
     'inventario.cobrar_equipo':
@@ -323,6 +388,14 @@ export const PERMISOS = {
     'inventario.registrar_contacto_recuperacion':
         'Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)',
     // contrato Iris 0.11.0 §3.9 (A47): la membresía de la bodega de cuadrilla llega de Iris (sistema)
+    // contrato Iris 0.14.0 (§3.10, §4.5, §6.6): verificación de intentos y cambios, intentos anteriores a la
+    // verificación y vínculos de técnicos (el webhook y el worker corren como sistema)
+    'inventario.verificar_operacion_iris':
+        'Verificar con Iris los intentos de recuperación y los cambios con cobro propuesto (al abrir la declaración)',
+    'inventario.decidir_intento_recuperacion':
+        'Decidir si cuenta un intento de recuperación anterior a la verificación con Iris',
+    'inventario.sincronizar_vinculo_tecnico':
+        'Aplicar o conciliar con Iris el vínculo de un técnico con su usuario de Argos (solo inventario)',
     'inventario.sincronizar_cuadrilla':
         'Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)',
     'tipos_producto.crear': 'Crear tipos de producto',
@@ -503,6 +576,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.aprobar',
             'comprobantes.rechazar',
             'comprobantes.registrar',
+            'comprobantes.reconectar',
+            'gestiones_cobro.ver',
+            'gestiones_cobro.registrar',
+            'gestiones_cobro.adjuntar',
             'fel.ver',
             'cajas.depositar',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
@@ -512,6 +589,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'lealtad.canjear',
             'inventario.ver',
             'prospectos.registrar',
+            // decisión del PM 19: el código para identificarse en el portal
+            'servicios.generar_codigo_identificacion',
         ],
     },
     soporte: {
@@ -525,6 +604,12 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'notificaciones.registrar_consentimiento',
             'prospectos.registrar',
             'clientes.estado_cuenta',
+            'gestiones_cobro.ver',
+            'gestiones_cobro.registrar',
+            'gestiones_cobro.adjuntar',
+            'comprobantes.reconectar',
+            'servicios.pausar_sin_cobro',
+            'servicios.terminar_pausa',
             'clientes.vincular_telegram',
             'clientes.desvincular_telegram',
             'clientes.asignar_responsable_pago',
@@ -544,6 +629,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.registrar_identidad',
             'servicios.completar_datos',
             'servicios.cambiar_titular',
+            'servicios.ver_equipo',
+            'servicios.cambiar_wifi',
+            'servicios.reenviar_bienvenida',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -574,6 +662,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'notificaciones.ver',
             'servicios.programar_plan_temporal',
             'servicios.cancelar_plan_temporal',
+            'servicios.generar_codigo_identificacion',
+            'promociones_velocidad.ver',
+            'promociones_velocidad.asignar',
+            'promociones_velocidad.quitar',
+            'incidentes_red.leer',
             'lealtad.ver',
             'lealtad.canjear',
             'sorteos.ver',
@@ -595,6 +688,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.registrar_identidad',
             'servicios.completar_datos',
             'servicios.cambiar_titular',
+            'servicios.aprovisionar',
+            'servicios.ver_equipo',
+            'servicios.cambiar_wifi',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -640,6 +736,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'sesiones.desconectar',
             'red.ver',
             'ip.resolver',
+            'incidentes_red.leer',
+            'incidentes_red.abrir',
+            'incidentes_red.cerrar',
             'inventario.ver',
             'inventario.consumir',
             'inventario.trasladar',
@@ -690,6 +789,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'pagos.anular',
             'cajas.ver',
             'cajas.crear',
+            'cajas.configurar_impresion',
+            'bancos_origen.ocultar',
+            'bancos_origen.mostrar',
             'cuentas_bancarias.ver',
             'cuentas_bancarias.editar',
             'promesas.ver',
@@ -700,9 +802,17 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.aprobar',
             'comprobantes.rechazar',
             'comprobantes.registrar',
+            'comprobantes.reconectar',
+            'gestiones_cobro.ver',
+            'gestiones_cobro.registrar',
+            'gestiones_cobro.adjuntar',
             'libro.ver',
             'libro.registrar_asiento',
             'libro.revertir_asiento',
+            'libro.aprobar_asiento',
+            'libro.rechazar_asiento',
+            'ajustes_cobro.ver',
+            'ajustes_cobro.editar',
             'libro.cerrar_periodo',
             'cierres.verificar',
             'cierres.revisar_check',
@@ -711,6 +821,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.registrar_sin_limite',
             'egresos.anular',
             'reportes.ver',
+            'panel_financiero.ver',
+            'panel_financiero.configurar',
+            'reportes.programar_envio',
+            'reportes.editar_envio',
             'bitacora.ver',
             'cobros.configurar',
             'cobros.liquidar',
@@ -759,6 +873,6 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
     },
     lectura: {
         descripcion: 'Solo lectura',
-        permisos: [...lectura, 'clientes.estado_cuenta'],
+        permisos: [...lectura, 'clientes.estado_cuenta', 'incidentes_red.leer'],
     },
 }

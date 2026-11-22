@@ -546,8 +546,10 @@ export function manualDe(
     motivo: string | null,
     monto: string | null = null,
     tramoDesde: string | null = null,
+    graciaCorte: { dias: number; desde: string } | null = null,
 ): NonNullable<EntradaEmitirFactura['manual']> {
     return {
+        gracia_corte: graciaCorte,
         motivo,
         antes_de_facturar_desde: p.estado === 'antes_de_facturar_desde',
         antes_del_inicio: p.estado === 'antes_del_inicio',

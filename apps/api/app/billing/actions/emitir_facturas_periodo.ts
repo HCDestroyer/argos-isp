@@ -77,6 +77,13 @@ export interface EntradaEmitirFacturasPeriodo {
     montos?: Array<{ periodo: string; monto: string }>
     /** qué hacer con el tramo entre el inicio del ciclo y la instalación */
     tramo_inicial?: { modo: ModoTramoInicial; monto?: string | null } | null
+    /**
+     * Decisión del PM 21: días de gracia antes del corte de los periodos pasados (los que empiezan
+     * antes de hoy) que se emiten aquí (0 a 90). Se guardan en cada factura (`dias_gracia_corte`,
+     * `corte_desde` = hoy + días) y `evaluarEstadoServicio` no las cuenta antes. Sin el dato, como
+     * siempre (el corte sigue a `vence_en`).
+     */
+    dias_gracia_corte?: number | null
     /** la ruta lo fija según `facturas.emitir_periodo_anterior`; nunca viene del cuerpo */
     puede_emitir_anterior?: boolean
     /** la ruta lo fija según `facturas.editar_monto_periodo`; nunca viene del cuerpo */
@@ -178,6 +185,7 @@ export default class EmitirFacturasPeriodo extends DomainAction<
         exigirAnteriores(elegidos, datos.facturar_desde, input.puede_emitir_anterior === true, motivo)
         const montos = montosPedidos(input.montos ?? [], elegidos)
         const tramo = exigirTramo(input, datos, elegidos, motivo)
+        const graciaCorte = graciaCorteDe(input.dias_gracia_corte, datos.hoy)
 
         const resultado: ResultadoEmitirFacturasPeriodo = {
             servicio_id: servicio.id,
@@ -218,6 +226,7 @@ export default class EmitirFacturasPeriodo extends DomainAction<
                         tramo?.modo === 'primera_factura' && p.periodo === tramo.primer_periodo
                             ? tramo.desde
                             : null,
+                        graciaCorte !== null && p.periodo < datos.hoy ? graciaCorte : null,
                     ),
                 },
                 t.ctx,
@@ -570,4 +579,15 @@ function elegirHasta(
 ): PeriodoDelServicio[] {
     exigirDentroDelMaximo(datos, hasta, 'hasta')
     return periodos.filter((p) => p.periodo <= hasta && !esPeriodoAnterior(p.estado))
+}
+
+/** Decisión del PM 21: los días que escribió quien emite y el día desde el que cuenta para el corte. */
+function graciaCorteDe(dias: number | null | undefined, hoy: string): { dias: number; desde: string } | null {
+    if (dias === undefined || dias === null) return null
+    if (!Number.isInteger(dias) || dias < 0 || dias > 90) {
+        throw new ValidacionFallida([
+            { field: 'dias_gracia_corte', message: 'De 0 a 90 días', rule: 'range' },
+        ])
+    }
+    return { dias, desde: sumarDias(hoy, dias) }
 }

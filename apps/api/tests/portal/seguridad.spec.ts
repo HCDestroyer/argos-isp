@@ -180,6 +180,29 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalAvisosSorteo: () => undefined,
     portalSorteoPublico: () => undefined,
     portalSorteoVerificacion: () => undefined,
+    // contrato Iris 0.9.0 §11 (A30, A31) y 0.10.x §3.5 y §3.8 (contactos y servicios a cargo)
+    portalSoporte: () => undefined,
+    portalSoporteCategorias: () => undefined,
+    portalSoporteTickets: () => undefined,
+    portalSoporteTicket: () => undefined,
+    portalSoporteMensajes: () => undefined,
+    portalSoporteAdjunto: () => undefined,
+    portalSoporteAbrirTicket: () => ({ asunto: 'Sin internet', descripcion: 'x' }),
+    portalSoporteResponder: () => ({ cuerpo: 'Gracias' }),
+    portalSoporteConfirmar: () => ({ version: 1 }),
+    portalSoporteSolicitudes: () => undefined,
+    portalSoporteSolicitud: () => undefined,
+    portalSoporteSolicitar: () => ({ tipo: 'otro' }),
+    portalSoportePlanes: () => undefined,
+    portalContactos: () => undefined,
+    portalAgregarContacto: () => ({
+        nombre: 'Luis',
+        relacion: 'familiar',
+        telefonos: [{ numero: '55123344' }],
+    }),
+    portalCambiarContacto: () => ({ version: 1 }),
+    portalQuitarContacto: () => ({ version: 1 }),
+    portalACargo: () => undefined,
 }
 
 test.group('Portal seguridad: límite de peticiones en todas las rutas', (group) => {

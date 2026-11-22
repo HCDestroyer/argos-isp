@@ -97,6 +97,8 @@ export interface DatosEmision {
     receptor?: ReceptorFiscal | null
     /** orden de Iris del cargo único (solo trazabilidad: no cambia el asiento) */
     origen_externo?: OrigenExterno | null
+    /** decisión del PM 21: días de gracia antes del corte que escribió quien emitió (y su fecha) */
+    gracia_corte?: { dias: number; desde: string } | null
 }
 
 export interface ResultadoEmision {
@@ -154,6 +156,9 @@ export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Pr
                 nombre: receptorFactura.nombre,
             }),
             ...columnasOrigenExterno(datos.origen_externo),
+            ...(datos.gracia_corte
+                ? { dias_gracia_corte: datos.gracia_corte.dias, corte_desde: datos.gracia_corte.desde }
+                : {}),
         })
         .onConflict('clave_unica')
         .ignore()

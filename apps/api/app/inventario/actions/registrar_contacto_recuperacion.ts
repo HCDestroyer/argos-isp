@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, ValidacionFallida } from '#shared/errores'
+import { Conflicto, Problema, ValidacionFallida } from '#shared/errores'
 import { empresaDeLaUnidad } from '#inventario/comodato'
 
 /**
@@ -8,6 +8,10 @@ import { empresaDeLaUnidad } from '#inventario/comodato'
  * A48): un contacto con el cliente para recuperar el equipo (llamada, WhatsApp, visita…). Cuenta como
  * alternativa al mínimo de técnicos distintos para declararlo no recuperado. Solo inserción; solo para una
  * unidad en comodato o por recuperar (409 `estado_unidad_cambiado`).
+ *
+ * Contrato Iris 0.14.0 (T-8): solo cuenta el contacto que registra **una persona en el panel de Argos**. Un
+ * token (Iris u otra integración), un agente o el sistema reciben 403 `contacto_solo_panel`; una gestión
+ * de cobro de Iris (§3.12) o un intento sin verificar nunca cuentan como contacto.
  */
 
 export const MEDIOS_CONTACTO = ['llamada', 'whatsapp', 'correo', 'visita', 'oficina', 'otro'] as const
@@ -32,6 +36,14 @@ export default class RegistrarContactoRecuperacion extends DomainAction<
             ])
         }
         t.fijarEntidad('unidad', input.unidad_id)
+        if (t.ctx.actor.tipo !== 'usuario') {
+            throw new Problema(
+                403,
+                'contacto_solo_panel',
+                'Contacto solo desde el panel',
+                'El contacto con el cliente lo registra una persona en el panel de Argos',
+            )
+        }
         const empresaId = await empresaDeLaUnidad(t, input.unidad_id)
         t.fijarEmpresa(empresaId)
         const unidad = (await t.trx
@@ -56,6 +68,7 @@ export default class RegistrarContactoRecuperacion extends DomainAction<
                 medio: input.medio,
                 nota,
                 registrado_por: usuarioDelActor(t.ctx.actor),
+                actor_tipo: t.ctx.actor.tipo,
             })
             .returning(['id', 'created_at'])) as Array<{ id: number; created_at: Date }>
         return {

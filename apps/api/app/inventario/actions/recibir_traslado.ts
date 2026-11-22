@@ -21,6 +21,7 @@ import {
     validarFirma,
 } from '#inventario/archivos'
 import { resolverTecnico, tecnicoDeUsuario, type TecnicoExterno } from '#inventario/tecnicos'
+import { exigirVinculoIris } from '#inventario/vinculos_iris'
 import { normalizarMac, normalizarSerie } from '#inventario/unidades'
 import { EMAIL_USUARIO_IRIS } from '#core/integraciones_iris'
 
@@ -139,6 +140,12 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
         })
         const actor = usuarioDelActor(t.ctx.actor)
         const global = input.registro_global === true
+
+        // 0.14.0 (§3.9, R-10): con el token de Iris, el vínculo del actor y el técnico que recibe
+        if (input.token_iris && input.recibido_por) {
+            const indicado = await resolverTecnico(t, input.recibido_por, 'recibido_por')
+            await exigirVinculoIris(t, { usuarioId: indicado, empresaId, iris_actor: input.iris_actor })
+        }
 
         // quién recibe
         let recibidoPor: number | null

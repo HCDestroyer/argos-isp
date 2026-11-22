@@ -567,6 +567,9 @@ test.group('Servicios · edición y retiro', () => {
                 de: 'activo',
                 a: 'retirado',
                 motivo: 'Cliente se mudó',
+                // decisión del PM 17: de fábrica se pide la orden de retiro
+                recuperar_equipo: true,
+                equipo_entregado: false,
             },
         })
         assert.containsSubset(evs[1], { evento: 'asignacion.cambiada', payload: { ipv4: [] } })

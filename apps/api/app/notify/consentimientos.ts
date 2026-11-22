@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -28,23 +28,34 @@ import { enmascararTelefono } from '#notify/contactos'
  *   otro `409`, → `fallido` sin reintento.
  */
 
+/**
+ * `Idempotency-Key` del permiso de contacto (§6.4). Con número (0.10.0, A42; forma del contrato
+ * 0.12.1) lleva `huella` = `huellaTelefono(telefono, secreto)`, nunca el número: dos números a la vez
+ * son dos permisos. La clave cuenta como dato personal: no va a logs ni a eventos.
+ */
 export function claveConsentimiento(
     empresaId: number,
     clienteId: number,
     canal: string,
     ocurridoEn: string,
-    telefono: string | null = null,
+    huella: string | null = null,
 ): string {
-    // Por número (0.10.0, A42; clave acordada con Iris para el contrato 0.12.1): dos números a la vez
-    // son dos permisos, pero el número nunca va en claro en la clave, solo su huella
-    return telefono
-        ? `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${huellaTelefono(telefono)}:${ocurridoEn}`
+    return huella
+        ? `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${huella}:${ocurridoEn}`
         : `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${ocurridoEn}`
 }
 
-/** Primeros 16 caracteres hexadecimales del sha256 del número en E.164 (clave del permiso por número). */
-export function huellaTelefono(telefono: string): string {
-    return createHash('sha256').update(telefono, 'utf8').digest('hex').slice(0, 16)
+/**
+ * Huella del número en la clave (contrato Iris 0.12.1 §6.4): los 16 primeros caracteres hex del
+ * HMAC-SHA256 de `"consentimiento:" + número E.164`, con el secreto del receptor de webhooks de Iris
+ * del conector (el mismo con que Argos firma los webhooks). Se calcula **una vez**, al registrar: la
+ * clave queda guardada y cada reintento manda esos bytes, aunque el secreto rote después.
+ */
+export function huellaTelefono(telefono: string, secreto: string): string {
+    return createHmac('sha256', secreto)
+        .update(`consentimiento:${telefono}`, 'utf8')
+        .digest('hex')
+        .slice(0, 16)
 }
 
 /** Contrato desde el que Iris acepta `telefono` en el permiso de contacto (§6.4, A42). */
@@ -276,7 +287,12 @@ export async function entregarConsentimientosIris(
             continue
         }
         // Si Iris repite el número en su error, no queda en claro ni en la fila ni en el log
-        if (datos.telefono) error = error.replaceAll(datos.telefono, enmascararTelefono(datos.telefono))
+        // Si Iris repite el número o la clave (dato personal) en su error, no quedan en la fila ni en el log
+        if (datos.telefono) {
+            error = error
+                .replaceAll(datos.telefono, enmascararTelefono(datos.telefono))
+                .replaceAll(datos.idempotency_key, 'argos:consentimiento:***')
+        }
         const espera = REINTENTOS_S[intento - 1]
         const definitivo = !reintentable || espera === undefined
         await db

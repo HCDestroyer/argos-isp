@@ -18,6 +18,7 @@ export interface EntradaEditarRedIpv4 {
     rango_fin?: string | null
     dns_primario?: string | null
     dns_secundario?: string | null
+    publica?: boolean
 }
 
 /**

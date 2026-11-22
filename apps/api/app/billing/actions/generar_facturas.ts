@@ -10,6 +10,7 @@ import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { empresasDelProceso } from '#billing/empresa'
 import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#billing/bloqueos_corrida'
 
+import { enPausa, rangosSinCobro } from '#billing/pausas'
 /**
  * `facturas.generar` (cron y `POST /facturas/generar`): emite **todo lo pendiente hasta `hasta`**
  * (por defecto hoy en Guatemala), nunca "lo de hoy".
@@ -173,7 +174,12 @@ export default class GenerarFacturas {
         })
         if (!config) return
         // sin facturar hacia atrás: lo anterior a `facturar_desde` nunca se emite
-        const periodos = periodosDesde(periodosHasta(config, servicio.inicio, hasta), servicio.facturar_desde)
+        const pausas = await rangosSinCobro(db.connection(), servicio.id)
+        // ni los periodos que empiezan en una pausa sin cobro (decisión del PM 16): nunca se emiten
+        const periodos = periodosDesde(
+            periodosHasta(config, servicio.inicio, hasta),
+            servicio.facturar_desde,
+        ).filter((p) => !enPausa(pausas, p.periodo))
         for (const periodo of periodos) {
             if (existentes.has(claveFactura(servicio.id, periodo.periodo))) {
                 resultado.omitidas += 1

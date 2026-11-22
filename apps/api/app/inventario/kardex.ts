@@ -1,4 +1,5 @@
 import { columnasActorTecnico } from '#inventario/actor_tecnico'
+import { revisarAlertaTecnico } from '#inventario/alertas_tecnico'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
@@ -526,6 +527,12 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
         origen_tipo: m.origen?.tipo ?? null,
         origen_id: m.origen?.id ?? null,
         ...columnasOrigenExterno(m.origenExterno),
+    })
+    // Iris 0.14.0 (T-12): alerta al admin por movimientos de un técnico vinculado fuera de orden o en volumen
+    await revisarAlertaTecnico(t, {
+        movimientoId: id,
+        empresaId: m.empresaId,
+        origenExterno: m.origenExterno,
     })
     if (antes !== null) {
         const minimo = dec(m.producto.existencia_minima!)
