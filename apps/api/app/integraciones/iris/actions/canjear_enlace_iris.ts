@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { capacidadesIris, type CapacidadesIris } from '#integraciones/equipos/equipos'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { cifrar, descifrar } from '#shared/cifrado'
@@ -82,6 +83,8 @@ export interface SalidaCanjearEnlaceIris {
     version_argos: string
     /** versión del contrato que habla este Argos (`CONTRATO_IRIS`) */
     contrato: string
+    /** 0.9.0 §4.3: qué puede aprovisionar Argos por empresa y tecnología */
+    capacidades: CapacidadesIris
 }
 
 export interface EmpresaDelAlcance {
@@ -226,7 +229,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             t.anotarAuditoria({ repeticion: true })
             const guardada = JSON.parse(descifrar(enlace.respuesta_cifrada)) as Omit<
                 SalidaCanjearEnlaceIris,
-                'panel_url' | 'version_argos' | 'contrato'
+                'panel_url' | 'version_argos' | 'contrato' | 'capacidades'
             > & { panel_url?: string }
             // 0.6.3: si Iris ya revocó ese token (rechazó el canje) o venció sin uso, el canje no se repite
             if (await tokenRevocado(t, guardada.token)) throw new EnlaceVencido()
@@ -234,6 +237,7 @@ export default class CanjearEnlaceIris extends DomainAction<
                 ...guardada,
                 panel_url: guardada.panel_url ?? urlPanel(),
                 ...(await versionesIris()),
+                capacidades: await capacidadesIris(t.trx),
             }
             if (completa.empresas) return completa
             // canje guardado antes de 0.3.1: se completa con el alcance actual del usuario Iris
@@ -316,6 +320,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             ...(await empresasDelAlcance(emitido.usuario_id, t.trx)),
             panel_url: urlPanel(),
             ...(await versionesIris()),
+            capacidades: await capacidadesIris(t.trx),
         }
         await t.trx
             .from('integraciones.iris_enlaces')

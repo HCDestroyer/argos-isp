@@ -7,7 +7,7 @@ import {
     contratoAdmite,
     guardarConectorIris,
     versionesIris,
-    type EstadoConectorIris,
+    type VersionesIris,
 } from '#integraciones/iris/configuracion'
 
 export interface EntradaInformarContratoIris {
@@ -28,7 +28,7 @@ export interface EntradaInformarContratoIris {
 }
 
 /** `contrato_iris`: el que quedó guardado; `contrato` y `version_argos`: los de Argos, como en el canje. */
-export type SalidaInformarContratoIris = { contrato_iris: string } & Omit<EstadoConectorIris, 'activo'>
+export type SalidaInformarContratoIris = { contrato_iris: string } & VersionesIris
 
 /**
  * `iris.informar_contrato` (`PUT /integraciones/iris/contrato`, contrato Iris 0.5.0, «Versión y

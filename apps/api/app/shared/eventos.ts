@@ -960,6 +960,42 @@ export interface CatalogoEventos {
         estado: 'enviado' | 'fallido'
     }
     /**
+     * Contrato Iris 0.9.0 §12.5 (A37): cambió el estado de la bienvenida de un servicio en algún
+     * canal (al programarla, al enviarse o fallar, y con el acuse de WhatsApp de Iris). Uno por cambio.
+     * `canales[]` siempre trae los tres canales. Nunca el texto ni las cuentas.
+     */
+    'servicio.bienvenida_cambiada': {
+        bienvenida_id: number
+        servicio_id: number
+        empresa_id: number | null
+        cliente_id: number
+        origen_tipo: 'iris_orden' | null
+        origen_id: string | null
+        canales: Array<{
+            canal: 'whatsapp' | 'correo' | 'telegram'
+            estado: 'pendiente' | 'enviada' | 'fallida' | 'omitida'
+            motivo: string | null
+            aviso_id: string | null
+        }>
+        reenvio: boolean
+    }
+    /**
+     * Contrato Iris 0.9.0 §12.5 (A37): se pidió reenviar la bienvenida de un servicio
+     * (`servicios.reenviar_bienvenida`). Interno de notify: su worker la programa por los canales
+     * pedidos (`canales` null = todos) con el origen de envíos `origen_envios`. No va a Iris (Iris recibe
+     * `servicio.bienvenida_cambiada`).
+     */
+    'servicio.bienvenida_solicitada': {
+        bienvenida_id: number
+        servicio_id: number
+        empresa_id: number | null
+        cliente_id: number
+        origen_tipo: 'iris_orden' | null
+        origen_id: string | null
+        origen_envios: string
+        canales: Array<'whatsapp' | 'correo' | 'telegram'> | null
+    }
+    /**
      * Cambió la configuración de canales de notificación (global si `empresa_id` es null). Los
      * procesos que envían recargan la suya (regla 5). `campos` son columnas, nunca valores.
      */
@@ -1643,6 +1679,8 @@ export const EVENTOS = [
     'libro.checks_verificados',
     'libro.emitido',
     'notificacion.enviada',
+    'servicio.bienvenida_cambiada',
+    'servicio.bienvenida_solicitada',
     'notificaciones.config_cambiada',
     'portal.config_cambiada',
     'portal.codigo_corte_emitido',

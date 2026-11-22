@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import { capacidadesIris, type CapacidadesIris } from '#integraciones/equipos/equipos'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
@@ -29,11 +30,12 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-// Se queda en 0.8.1 (revisión del 21 nov): de la 0.9.0 faltan en Argos `aprovisionar` y `capacidades`
-// (§12.2, A32), `GET /servicios/:id/equipo` (§12.3, A33), `POST /servicios/:id/wifi` y
-// `equipo.wifi_resuelto` (§12.4, A35) y la bienvenida con seguimiento (§12.5, A37). Anunciar 0.9.0
-// haría que Iris llamara rutas que no existen; 0.10.0 a 0.12.0 dependen de ella (son aditivas).
-export const CONTRATO_IRIS = '0.8.1'
+// 0.12.0 (A6, 21 nov): con la 0.9.0 completa del lado de Argos (bienvenida con seguimiento, avisos de
+// soporte, `capacidades`, y A32, A33 y A35 con su error de «sin capacidad» porque Argos no tiene SmartOLT
+// ni ACS: `capacidades.aprovisionamiento` en false) y 0.10.0 a 0.12.0 ya en main (A38–A48, `X-Iris-Contacto`).
+// No 0.12.1: la clave del consentimiento por número todavía usa sha256 (0.12.1 pide HMAC con el secreto
+// del receptor) y el portal no manda `X-Iris-Contacto` en §11.
+export const CONTRATO_IRIS = '0.12.0'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
@@ -518,7 +520,12 @@ export interface EstadoConectorIris {
     version_argos: string
     /** versión del contrato Iris que habla este Argos (`CONTRATO_IRIS`) */
     contrato: string
+    /** 0.9.0 §4.3: qué puede aprovisionar Argos por empresa y tecnología (hoy todo en false) */
+    capacidades: CapacidadesIris
 }
+
+/** `version_argos` y `contrato` del canje y de `PUT /integraciones/iris/contrato`. */
+export type VersionesIris = Omit<EstadoConectorIris, 'activo' | 'capacidades'>
 
 /**
  * Para quien solo tiene `iris.abrir` (botón "Ver en Iris") y para el token de Iris (contrato 0.5.0,
@@ -527,11 +534,15 @@ export interface EstadoConectorIris {
  */
 export async function estadoConectorIris(): Promise<EstadoConectorIris> {
     const config = await configIris()
-    return { activo: config.activo && Boolean(config.urlBase && config.token), ...(await versionesIris()) }
+    return {
+        activo: config.activo && Boolean(config.urlBase && config.token),
+        ...(await versionesIris()),
+        capacidades: await capacidadesIris(),
+    }
 }
 
 /** `version_argos` y `contrato` (canje, estado y `PUT /integraciones/iris/contrato`). */
-export async function versionesIris(): Promise<Omit<EstadoConectorIris, 'activo'>> {
+export async function versionesIris(): Promise<VersionesIris> {
     const { version } = await versionInstalada()
     return { version_argos: version, contrato: CONTRATO_IRIS }
 }
