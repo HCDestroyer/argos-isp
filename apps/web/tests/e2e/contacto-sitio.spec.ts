@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, verDatosCliente } from './ayudas'
 
 /**
  * Pedidos de Iris A12–A14 (contrato 0.5.0): alta de un cliente con referencia («cómo llegar») y de
@@ -10,9 +10,11 @@ test('alta de cliente con referencia y de su servicio con contacto en sitio', as
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
 
-    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
-    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
-    await expect(altaCliente).toBeVisible()
+    // Desde el rediseño el alta de cliente es una página propia (formulario largo).
+    await page.getByRole('link', { name: 'Nuevo cliente' }).first().click()
+    await expect(page).toHaveURL(/\/clientes\/nuevo$/)
+    const altaCliente = page.locator('#dashboard-panel-cliente-nuevo')
+    await expect(altaCliente.getByRole('button', { name: 'Crear cliente' })).toBeVisible()
     await altaCliente.getByLabel('Nombre', { exact: true }).fill('Julia Referencia Pruebas')
     await altaCliente.getByLabel('Referencia', { exact: true }).fill('Casa verde frente a la iglesia')
 
@@ -27,8 +29,9 @@ test('alta de cliente con referencia y de su servicio con contacto en sitio', as
     await altaCliente.getByRole('button', { name: 'Crear cliente' }).click()
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
     await expect(page.getByRole('heading', { name: 'Julia Referencia Pruebas' }).first()).toBeVisible()
+    await verDatosCliente(page)
     await expect(page.locator('[data-prueba="referencia-cliente"]')).toContainText('Casa verde frente a la iglesia')
-    await expect(page.getByText('+502 5512-3344')).toBeVisible()
+    await expect(page.getByText('+502 5512-3344').first()).toBeVisible()
 
     await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })

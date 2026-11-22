@@ -62342,6 +62342,65 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/a-cargo": {
+      "get": {
+        "operationId": "portalACargo",
+        "summary": "«Está a cargo de»: servicios de otros clientes que la persona de la sesión tiene a cargo (A46)",
+        "description": "Requiere la sesión del portal con código o contraseña (con la de /corte, lista vacía). Por cada contacto que apunta a este cliente (`persona_cliente_id`): sus permisos y sus servicios con `codigo`, `nombre`, estado y, solo con `consultar`, lo que deben. Nunca el nombre ni el documento del dueño, sus otros servicios ni sus contactos.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Servicios a cargo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalACargo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/anuncios": {
       "get": {
         "operationId": "portalAnuncios",
@@ -63354,6 +63413,523 @@
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/contactos": {
+      "get": {
+        "operationId": "portalContactos",
+        "summary": "«Mis contactos»: quién más puede consultar, reportar, pagar o recibir avisos de tus servicios",
+        "description": "Requiere la sesión del portal con código o contraseña (con la de /corte, 403 `sesion_insuficiente`). Solo los contactos de la cuenta del cliente; el titular no se edita ni se quita aquí (404). Delega en `contactos.gestionar` de A1 (diff en audit.cambios, aviso al titular y `cliente.contactos_cambiados`). El titular primero.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contactos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalContactoCliente"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalAgregarContacto",
+        "summary": "El titular agrega un contacto a su cuenta",
+        "description": "Requiere la sesión del portal con código o contraseña (con la de /corte, 403 `sesion_insuficiente`). Solo los contactos de la cuenta del cliente; el titular no se edita ni se quita aquí (404). Delega en `contactos.gestionar` de A1 (diff en audit.cambios, aviso al titular y `cliente.contactos_cambiados`). Permisos encendidos por defecto; números en E.164 con exactamente un principal (422 por posición, sin repetir el número). Acción `portal.agregar_contacto`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "relacion": {
+                    "type": "string",
+                    "enum": [
+                      "familiar",
+                      "inquilino",
+                      "empleado",
+                      "otro"
+                    ]
+                  },
+                  "servicios": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "description": "Servicios de tu cuenta a los que aplica; null o ausente = todos"
+                  },
+                  "permisos": {
+                    "type": "object",
+                    "properties": {
+                      "consultar": {
+                        "type": "boolean"
+                      },
+                      "reportar": {
+                        "type": "boolean"
+                      },
+                      "pagar": {
+                        "type": "boolean"
+                      },
+                      "avisos": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Los que no vienen, encendidos (al crear) o sin cambio (al editar)"
+                  },
+                  "telefonos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 25,
+                          "description": "E.164 (`+50255123344`) u 8 dígitos de Guatemala; se guarda en E.164"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        },
+                        "principal": {
+                          "description": "Exactamente uno por contacto",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "numero"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "relacion",
+                  "telefonos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contacto agregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalContactoCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/contactos/{contactoId}": {
+      "put": {
+        "operationId": "portalCambiarContacto",
+        "summary": "El titular cambia un contacto de su cuenta",
+        "description": "Requiere la sesión del portal con código o contraseña (con la de /corte, 403 `sesion_insuficiente`). Solo los contactos de la cuenta del cliente; el titular no se edita ni se quita aquí (404). Delega en `contactos.gestionar` de A1 (diff en audit.cambios, aviso al titular y `cliente.contactos_cambiados`). Con `version` (409 si cambió). Acción `portal.cambiar_contacto`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "contactoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "relacion": {
+                    "type": "string",
+                    "enum": [
+                      "familiar",
+                      "inquilino",
+                      "empleado",
+                      "otro"
+                    ]
+                  },
+                  "servicios": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "description": "Servicios de tu cuenta a los que aplica; null o ausente = todos"
+                  },
+                  "permisos": {
+                    "type": "object",
+                    "properties": {
+                      "consultar": {
+                        "type": "boolean"
+                      },
+                      "reportar": {
+                        "type": "boolean"
+                      },
+                      "pagar": {
+                        "type": "boolean"
+                      },
+                      "avisos": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Los que no vienen, encendidos (al crear) o sin cambio (al editar)"
+                  },
+                  "telefonos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 25,
+                          "description": "E.164 (`+50255123344`) u 8 dígitos de Guatemala; se guarda en E.164"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        },
+                        "principal": {
+                          "description": "Exactamente uno por contacto",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "numero"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contacto actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalContactoCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/contactos/{contactoId}/quitar": {
+      "post": {
+        "operationId": "portalQuitarContacto",
+        "summary": "El titular quita un contacto de su cuenta",
+        "description": "Requiere la sesión del portal con código o contraseña (con la de /corte, 403 `sesion_insuficiente`). Solo los contactos de la cuenta del cliente; el titular no se edita ni se quita aquí (404). Delega en `contactos.gestionar` de A1 (diff en audit.cambios, aviso al titular y `cliente.contactos_cambiados`). Con `version`. Rompe el vínculo de una persona a cargo (A46). Acción `portal.quitar_contacto`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "contactoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Quitado"
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -65128,6 +65704,1468 @@
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte": {
+      "get": {
+        "operationId": "portalSoporte",
+        "summary": "Si el cliente de la sesión puede usar soporte (tickets y solicitudes en Iris)",
+        "description": "Siempre 200 (con la sesión): `estado` dice si Iris está disponible (conector activo, contrato ≥ 0.9.0, `token_portal` y `capacidades.portal_argos`; se lee en cada consulta) y `capacidades` qué secciones mostrar. `sesion` dice si es `documento` o `ip` (§11.2).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disponibilidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSoporte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/categorias": {
+      "get": {
+        "operationId": "portalSoporteCategorias",
+        "summary": "Categorías que el cliente puede elegir al abrir un ticket",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Categorías",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalCategoriaSoporte"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/planes": {
+      "get": {
+        "operationId": "portalSoportePlanes",
+        "summary": "Planes activos para «plan de interés» en una solicitud",
+        "description": "Requiere la sesión del portal. Nombre, velocidades y precio; Iris valida el plan al recibirlo.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPlanInteres"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/solicitudes": {
+      "get": {
+        "operationId": "portalSoporteSolicitudes",
+        "summary": "Solicitudes de servicio del cliente («Mis solicitudes»)",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. Solo `estado_cliente`; nunca vendedor, cotización ni motivos.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "description": "Uno o varios separados por coma: recibida, en_revision, cotizada, en_proceso, completada, no_procede",
+            "schema": {
+              "type": "string",
+              "pattern": "^(recibida|en_revision|cotizada|en_proceso|completada|no_procede)(,(recibida|en_revision|cotizada|en_proceso|completada|no_procede))*$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "De 1 a 100 (20 por defecto)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de solicitudes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalSolicitudServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalSoporteSolicitar",
+        "summary": "El cliente pide un servicio nuevo, un cambio de plan, un traslado u otra cosa",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. Reglas de §11.7: `servicio_id` obligatorio en `cambio_plan` y `traslado` (422 `servicio_requerido`) y no va en `alta`; `direccion` obligatoria en `alta` y `traslado`. Una abierta del mismo tipo y servicio: 409 `solicitud_abierta` con `solicitud_id`. Acción `portal.solicitar_servicio`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "alta",
+                      "cambio_plan",
+                      "traslado",
+                      "otro"
+                    ]
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Obligatorio en `cambio_plan` y `traslado`; opcional en `otro`; no va en `alta`"
+                  },
+                  "direccion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "Obligatoria en `alta` y `traslado`"
+                  },
+                  "coordenadas": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,2}(\\.\\d+)?,\\s?-?\\d{1,3}(\\.\\d+)?$",
+                    "description": "`lat,lng`"
+                  },
+                  "plan_interes_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Uno de GET /portal/soporte/planes"
+                  },
+                  "comentario": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "telefono_contacto": {
+                    "type": "string",
+                    "pattern": "^\\+?[\\d\\s()-]{8,25}$",
+                    "description": "Si falta, Iris usa el de la ficha"
+                  }
+                },
+                "required": [
+                  "tipo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Solicitud recibida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSolicitudServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/solicitudes/{solicitudId}": {
+      "get": {
+        "operationId": "portalSoporteSolicitud",
+        "summary": "Una solicitud de servicio del cliente",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "solicitudId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Solicitud",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSolicitudServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/tickets": {
+      "get": {
+        "operationId": "portalSoporteTickets",
+        "summary": "Tickets del cliente en la empresa, de cualquier origen, más recientes primero",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con sesión `ip`, la lista reducida (sin `asunto`).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "description": "Uno o varios separados por coma: nuevo, abierto, en_espera, resuelto, cerrado",
+            "schema": {
+              "type": "string",
+              "pattern": "^(nuevo|abierto|en_espera|resuelto|cerrado)(,(nuevo|abierto|en_espera|resuelto|cerrado))*$"
+            }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "De 1 a 100 (20 por defecto)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de tickets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalTicket"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalSoporteAbrirTicket",
+        "summary": "El cliente abre un ticket de soporte en Iris",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. `multipart/form-data`: los campos y hasta 3 `archivos` (JPEG, PNG, WebP, HEIC o PDF por el contenido, 10 MB cada uno; 413 `tamano_excedido`, 422 `mime_no_permitido` o `demasiados_adjuntos`). Con sesión `ip`, sin adjuntos (422 `adjuntos_no_permitidos`) y solo con el servicio de la sesión. Acción `portal.abrir_ticket` (actor cliente, canal portal). Con `contacto_id` (A46) reporta la falla de un servicio que tiene a cargo: exige sesión `documento`, `servicio_id` y el permiso `reportar` (403 `permiso_de_contacto`; 404 si no está a su cargo).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio"
+                  },
+                  "asunto": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 200
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "categoria_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Una de GET /portal/soporte/categorias"
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Un servicio del cliente en esa empresa"
+                  },
+                  "contacto_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Reportar la falla de un servicio que la persona tiene a cargo (A46): su contacto en la cuenta del dueño, con `reportar`. Exige `servicio_id`"
+                  },
+                  "archivos": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Hasta 3 fotos o PDF"
+                  }
+                },
+                "required": [
+                  "asunto",
+                  "descripcion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ticket abierto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/tickets/{ticketId}": {
+      "get": {
+        "operationId": "portalSoporteTicket",
+        "summary": "Un ticket del cliente",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. De otro cliente o que no existe: 404.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/tickets/{ticketId}/adjuntos/{adjunto}": {
+      "get": {
+        "operationId": "portalSoporteAdjunto",
+        "summary": "Descarga un adjunto de un mensaje público del ticket",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. Se sirve desde Argos con las cabeceras de §11.6: `Content-Disposition: attachment` (nombre saneado), `X-Content-Type-Options: nosniff` y `Content-Security-Policy: sandbox`; un PDF nunca se muestra embebido.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "adjunto",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,64}$"
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/tickets/{ticketId}/confirmar-solucion": {
+      "post": {
+        "operationId": "portalSoporteConfirmar",
+        "summary": "El cliente confirma que su ticket resuelto quedó bien (lo cierra)",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. Solo `resuelto` → `cerrado` (si no, 422 `transicion_invalida`). Idempotente por `argos:portal:confirmar:<ticket_id>:<version>`. Acción `portal.confirmar_solucion`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio"
+                  },
+                  "contacto_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`"
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket cerrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/tickets/{ticketId}/mensajes": {
+      "get": {
+        "operationId": "portalSoporteMensajes",
+        "summary": "Mensajes públicos del ticket, más antiguos primero",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. Nunca notas internas ni datos del personal.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "De 1 a 100 (20 por defecto)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de mensajes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalMensajeTicket"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/soporte/tickets/{ticketId}/responder": {
+      "post": {
+        "operationId": "portalSoporteResponder",
+        "summary": "El cliente responde en su ticket (reanuda o reabre)",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. Con la sesión de «Ver mi cuenta» en /corte (`ip`) responde 403 `sesion_insuficiente`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. `multipart/form-data` con `cuerpo`, `version` opcional y hasta 3 `archivos`. Cerrado: 422 `transicion_invalida`; versión vieja: 409 `conflicto_version`. Acción `portal.responder_ticket`.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio"
+                  },
+                  "cuerpo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "contacto_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`"
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "La del ticket que vio el cliente; si cambió, 409 `conflicto_version`"
+                  },
+                  "archivos": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Hasta 3 fotos o PDF"
+                  }
+                },
+                "required": [
+                  "cuerpo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket y mensaje",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalRespuestaTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -101074,7 +103112,7 @@
           },
           "idempotency_key": {
             "type": "string",
-            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<h>:<ocurrido_en>` (`<h>`: primeros 16 hex del sha256 del número E.164; el número solo va en el cuerpo)"
+            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<h>:<ocurrido_en>` (`<h>`: 16 primeros hex del HMAC-SHA256 de `consentimiento:` + número E.164 con el secreto de webhooks del conector, contrato 0.12.1; el número solo va en el cuerpo)"
           },
           "entrega": {
             "type": "string",
@@ -118640,6 +120678,49 @@
           }
         }
       },
+      "PortalACargo": {
+        "type": "object",
+        "required": [
+          "contacto_id",
+          "permisos",
+          "servicios"
+        ],
+        "properties": {
+          "contacto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "permisos": {
+            "type": "object",
+            "required": [
+              "consultar",
+              "reportar",
+              "pagar",
+              "avisos"
+            ],
+            "properties": {
+              "consultar": {
+                "type": "boolean"
+              },
+              "reportar": {
+                "type": "boolean"
+              },
+              "pagar": {
+                "type": "boolean"
+              },
+              "avisos": {
+                "type": "boolean"
+              }
+            }
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalServicioACargo"
+            }
+          }
+        }
+      },
       "PortalAdicional": {
         "type": "object",
         "required": [
@@ -118688,6 +120769,29 @@
           "bloqueado": {
             "type": "boolean",
             "description": "Bloqueado por la suspensión del servicio; vuelve solo al reactivarse"
+          }
+        }
+      },
+      "PortalAdjuntoTicket": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "mime",
+          "tamano"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "tamano": {
+            "type": "integer"
           }
         }
       },
@@ -118966,6 +121070,45 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PortalCapacidadesSoporte": {
+        "type": "object",
+        "required": [
+          "portal_argos",
+          "solicitudes_servicio",
+          "adjuntos_ticket"
+        ],
+        "properties": {
+          "portal_argos": {
+            "type": "boolean"
+          },
+          "solicitudes_servicio": {
+            "type": "boolean"
+          },
+          "adjuntos_ticket": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PortalCategoriaSoporte": {
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "nombre"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
           }
         }
       },
@@ -119293,6 +121436,105 @@
             "type": "integer",
             "minimum": 1,
             "description": "Envíala al editar (409 si cambió)"
+          }
+        }
+      },
+      "PortalContactoCliente": {
+        "type": "object",
+        "required": [
+          "contacto_id",
+          "nombre",
+          "relacion",
+          "es_titular",
+          "servicios",
+          "permisos",
+          "telefonos",
+          "vinculado",
+          "version"
+        ],
+        "properties": {
+          "contacto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "relacion": {
+            "type": "string",
+            "enum": [
+              "titular",
+              "familiar",
+              "inquilino",
+              "empleado",
+              "otro"
+            ]
+          },
+          "es_titular": {
+            "type": "boolean"
+          },
+          "servicios": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Servicios a los que aplica; null = todos"
+          },
+          "permisos": {
+            "type": "object",
+            "required": [
+              "consultar",
+              "reportar",
+              "pagar",
+              "avisos"
+            ],
+            "properties": {
+              "consultar": {
+                "type": "boolean"
+              },
+              "reportar": {
+                "type": "boolean"
+              },
+              "pagar": {
+                "type": "boolean"
+              },
+              "avisos": {
+                "type": "boolean"
+              }
+            }
+          },
+          "telefonos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "numero",
+                "whatsapp",
+                "principal"
+              ],
+              "properties": {
+                "numero": {
+                  "type": "string"
+                },
+                "whatsapp": {
+                  "type": "boolean"
+                },
+                "principal": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "vinculado": {
+            "type": "boolean",
+            "description": "También es cliente y ve estos servicios desde su cuenta (A46)"
+          },
+          "version": {
+            "type": "integer"
           }
         }
       },
@@ -119910,6 +122152,48 @@
           }
         }
       },
+      "PortalMensajeTicket": {
+        "type": "object",
+        "required": [
+          "id",
+          "autor_tipo",
+          "autor_nombre",
+          "cuerpo",
+          "adjuntos",
+          "creado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "autor_tipo": {
+            "type": "string",
+            "enum": [
+              "cliente",
+              "agente",
+              "sistema"
+            ]
+          },
+          "autor_nombre": {
+            "type": "string",
+            "description": "Nombre de pila del agente o «Soporte»"
+          },
+          "cuerpo": {
+            "type": "string"
+          },
+          "adjuntos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalAdjuntoTicket"
+            }
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PortalNotaCredito": {
         "type": "object",
         "required": [
@@ -120119,6 +122403,34 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "PortalPlanInteres": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "bajada_kbps",
+          "subida_kbps",
+          "precio"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "bajada_kbps": {
+            "type": "integer"
+          },
+          "subida_kbps": {
+            "type": "integer"
+          },
+          "precio": {
+            "$ref": "#/components/schemas/Dinero"
           }
         }
       },
@@ -120524,6 +122836,21 @@
           }
         }
       },
+      "PortalRespuestaTicket": {
+        "type": "object",
+        "required": [
+          "ticket",
+          "mensaje"
+        ],
+        "properties": {
+          "ticket": {
+            "$ref": "#/components/schemas/PortalTicket"
+          },
+          "mensaje": {
+            "$ref": "#/components/schemas/PortalMensajeTicket"
+          }
+        }
+      },
       "PortalServicio": {
         "type": "object",
         "required": [
@@ -120585,6 +122912,52 @@
           "empresa": {
             "$ref": "#/components/schemas/PortalMarcaEmpresa",
             "description": "Empresa que factura este servicio"
+          }
+        }
+      },
+      "PortalServicioACargo": {
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "nombre",
+          "estado",
+          "empresa",
+          "monto_adeudado"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "codigo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoServicio"
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa"
+          },
+          "monto_adeudado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo con el permiso `consultar`"
           }
         }
       },
@@ -120660,6 +123033,131 @@
               "null"
             ],
             "description": "Destino enmascarado (\"m***a@e***.com\", \"tu Telegram vinculado\"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente"
+          }
+        }
+      },
+      "PortalSolicitudServicio": {
+        "type": "object",
+        "required": [
+          "id",
+          "numero",
+          "tipo",
+          "servicio_id",
+          "estado_cliente",
+          "comentario",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "alta",
+              "cambio_plan",
+              "traslado",
+              "otro"
+            ]
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado_cliente": {
+            "type": "string",
+            "enum": [
+              "recibida",
+              "en_revision",
+              "cotizada",
+              "en_proceso",
+              "completada",
+              "no_procede"
+            ]
+          },
+          "comentario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PortalSoporte": {
+        "type": "object",
+        "required": [
+          "estado",
+          "detalle",
+          "capacidades",
+          "contactos",
+          "sesion",
+          "empresas"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "sin_iris",
+              "apagado",
+              "version",
+              "sin_token",
+              "sin_respuesta"
+            ],
+            "description": "`disponible`; `sin_iris`: no hay conector (el portal no muestra Soporte); los demás: Soporte con el error y «Reintentar»"
+          },
+          "detalle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto para el cliente cuando no está disponible"
+          },
+          "capacidades": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalCapacidadesSoporte"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contactos": {
+            "type": "boolean",
+            "description": "Tickets de los servicios a cargo (A46): Iris con contrato ≥ 0.12.1 (§11.10, `X-Iris-Contacto`) y sesión `documento`"
+          },
+          "sesion": {
+            "type": "string",
+            "enum": [
+              "documento",
+              "ip"
+            ],
+            "description": "`ip` («Ver mi cuenta» en /corte): solo abrir ticket sin adjuntos y ver la lista reducida"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Empresas en que puede pedir soporte (las de sus servicios)"
           }
         }
       },
@@ -121130,6 +123628,112 @@
           "vinculado": {
             "type": "boolean",
             "description": "El bot de esta empresa ya le puede escribir al cliente"
+          }
+        }
+      },
+      "PortalTicket": {
+        "type": "object",
+        "required": [
+          "id",
+          "numero",
+          "asunto",
+          "estado",
+          "categoria",
+          "servicio_id",
+          "origen",
+          "afectado_por_incidente",
+          "puede_confirmar",
+          "resuelto_en",
+          "cerrado_en",
+          "version",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "string"
+          },
+          "asunto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null en la lista de una sesión `ip`"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "nuevo",
+              "abierto",
+              "en_espera",
+              "resuelto",
+              "cerrado"
+            ]
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalCategoriaSoporte"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "portal_argos, portal, panel, correo, telegram, horus, argos, api"
+          },
+          "afectado_por_incidente": {
+            "type": "boolean",
+            "description": "Ligado a una falla general abierta"
+          },
+          "puede_confirmar": {
+            "type": "boolean",
+            "description": "Resuelto: el cliente puede confirmar o responder"
+          },
+          "resuelto_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Para responder y confirmar"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

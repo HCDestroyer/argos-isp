@@ -40,12 +40,13 @@ Revisa en la ficha del cliente que el correo esté bien escrito o que tenga Tele
 
 ## Mi cuenta
 
-Con la sesión abierta el portal tiene una barra de secciones (abajo en el teléfono): **Inicio**, **Pagar**, **Facturas**, **Puntos** (solo si la empresa activó el programa de puntos en el portal) y **Cuenta**. Se actualiza al jalar la página hacia abajo.
+Con la sesión abierta el portal tiene sus secciones en una barra abajo en el teléfono y en un menú a la izquierda en la computadora: **Inicio**, **Facturas y pagos**, **Soporte** (solo con Iris conectado), **Mis puntos** (solo si la empresa activó el programa de puntos en el portal) y **Mi cuenta**. Se actualiza al jalar la página hacia abajo. El saldo se muestra una sola vez, arriba, con «Pagar factura».
 
-- **Inicio**: resumen de sus servicios con su saldo, avisos (servicio suspendido o limitado, promesa aprobada o pendiente) y promociones.
-- **Pagar**: pagar en línea (si tiene varios servicios, elige «¿Qué servicio quieres pagar en línea?»), ver datos de depósito, sus comprobantes, «Pagos registrados» y «Promesas de pago».
-- **Facturas**: cada documento con su botón para verlo en PDF («Ver aviso de cobro (PDF)», o «Ver factura (PDF)» cuando ya está certificada en FEL, con «Descargar XML»). Abajo, sus notas de crédito y meses bonificados.
-- **Cuenta**: vincular Telegram, aceptar o dejar los avisos por WhatsApp, cambiar **Correo**, **Teléfono**, **Celular** y «¿Por dónde prefieres recibir avisos?» (Correo, Telegram o WhatsApp), «Ayuda y contacto» y «Salir».
+- **Inicio**: sus servicios, avisos (servicio suspendido o limitado, promesa aprobada o pendiente), «Está a tu cargo» si alguien lo dejó a cargo de un servicio, «Solicitar un servicio» (con Iris) y promociones.
+- **Facturas y pagos**, con dos pestañas:
+    - **Facturas**: cada documento con su botón para verlo en PDF («Ver aviso de cobro (PDF)», o «Ver factura (PDF)» cuando ya está certificada en FEL, con «Descargar XML»). Abajo, sus notas de crédito y meses bonificados.
+    - **Pagar**: pagar en línea (si tiene varios servicios, elige «¿Qué servicio quieres pagar en línea?»), ver datos de depósito, sus comprobantes, «Pagos registrados» y «Promesas de pago».
+- **Mi cuenta**: sus datos, «Mis contactos», vincular Telegram, aceptar o dejar los avisos por WhatsApp, cambiar **Correo**, **Teléfono**, **Celular** y «¿Por dónde prefieres recibir avisos?» (Correo, Telegram o WhatsApp), «Ayuda y contacto» y «Salir».
 
 ::: warning Cambiar el correo
 El correo que el cliente guarda en **Cuenta** es al que llegan sus avisos de cobro y sus próximos códigos de acceso.
@@ -63,13 +64,13 @@ Para quitarlo: «Desvincular Telegram» y confirmar.
 
 ## Ver los datos de depósito
 
-«Ver datos de depósito» muestra las cuentas de la empresa con un botón para copiar el número, y las instrucciones de pago. Se configuran en el panel en **Configuración → Contacto y pagos** y **Configuración → Cuentas bancarias**. Solo aparecen las cuentas activas en quetzales: las cuentas en dólares no se muestran al cliente.
+«Ver datos de depósito» muestra las cuentas de la empresa con un botón para copiar el número, y las instrucciones de pago. Se configuran en el panel en **Configuración → Empresa y fiscal → Contacto y pagos** y **Configuración → Facturación y cobro → Cuentas bancarias**. Solo aparecen las cuentas activas en quetzales: las cuentas en dólares no se muestran al cliente.
 
 ![Datos para depósito con las cuentas de la empresa](/capturas/portal/02-datos-deposito.png)
 
 ## Subir un comprobante
 
-Desde la página de corte («Subir comprobante») o desde **Pagar** en Mi cuenta.
+Desde la página de corte («Subir comprobante») o desde **Facturas y pagos → Pagar** en Mi cuenta.
 
 ![Formulario para subir el comprobante](/capturas/portal/05-comprobante.png)
 
@@ -81,7 +82,7 @@ Desde la página de corte («Subir comprobante») o desde **Pagar** en Mi cuenta
 
 ![Comprobante recibido, en revisión](/capturas/portal/06-comprobante-recibido.png)
 
-El comprobante queda **En revisión** y aparece en el panel en **Cobros → Comprobantes**. Cuando alguien lo aprueba, el pago se abona y, si el servicio estaba suspendido, se reactiva. Si se rechaza, el cliente ve «No pudimos aprobarlo» con el motivo en **Pagar** y puede subirlo de nuevo. Cómo se revisa: [Comprobantes](../cobros/comprobantes.md).
+El comprobante queda **En revisión** y aparece en el panel en **Comprobantes**. Cuando alguien lo aprueba, el pago se abona y, si el servicio estaba suspendido, se reactiva. Si se rechaza, el cliente ve «No pudimos aprobarlo» con el motivo en **Facturas y pagos → Pagar** y puede subirlo de nuevo. Cómo se revisa: [Comprobantes](../cobros/comprobantes.md).
 
 ::: tip «Ya deposité y sigo cortado»
 El depósito cuenta cuando se aprueba el comprobante. Si el cliente no puede subirlo, regístralo tú en caja.
@@ -110,7 +111,7 @@ Si la empresa tiene pasarela, el cliente toca «Pagar en línea» y paga con tar
 
 ## Contacto
 
-La página **Contacto** muestra los teléfonos (con botón para llamar), WhatsApp, correo, horario y dirección que configuraste en **Configuración → Contacto y pagos**. Si no hay ninguno configurado, dice «No hay datos de contacto para mostrar».
+La página **Contacto** muestra los teléfonos (con botón para llamar), WhatsApp, correo, horario y dirección que configuraste en **Configuración → Empresa y fiscal → Contacto y pagos**. Si no hay ninguno configurado, dice «No hay datos de contacto para mostrar».
 
 ## Sorteos
 
@@ -133,7 +134,7 @@ Desde la conexión (sin código de 6 dígitos) el cliente solo ve su primer nomb
 | «No pudimos consultar tu servicio» / «No pudimos cargar tu cuenta» | El sistema no respondió. Que toque «Reintentar». Si dura, avisa a soporte técnico                                                                    |
 | «Demasiadas consultas»                                             | Que espere un minuto                                                                                                                                 |
 | «No pudimos identificar tu servicio»                               | Ver [Página de corte](./pagina-de-corte.md#cliente-no-identificado)                                                                                  |
-| «No hay cuentas para depósito disponibles»                         | La empresa no tiene cuentas configuradas para depósito; el cliente no puede subir comprobante. Configúralas en **Configuración → Cuentas bancarias** |
+| «No hay cuentas para depósito disponibles»                         | La empresa no tiene cuentas configuradas para depósito; el cliente no puede subir comprobante. Configúralas en **Configuración → Facturación y cobro → Cuentas bancarias** |
 | «No necesitas una promesa de pago»                                 | No tiene facturas vencidas                                                                                                                           |
 
 ## Relacionado

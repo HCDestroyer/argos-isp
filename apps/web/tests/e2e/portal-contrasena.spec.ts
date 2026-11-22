@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, menu } from './ayudas'
+import { elegirEmpresa, entrar, menu, verDatosCliente } from './ayudas'
 
 /**
  * Contraseña del portal (pedido del PM; contrato A5), en modo fixtures, a 1280 y 390 px:
@@ -34,8 +34,7 @@ test('el admin configura la contraseña del portal por defecto de una empresa', 
 
     // Con «Todas las empresas» la API pide una empresa activa.
     await expect(page.getByText('Elige una empresa', { exact: true })).toBeVisible()
-    await page.locator('[data-prueba="selector-empresa"]:visible').first().click()
-    await page.getByRole('option', { name: /Fibra del Sur/ }).click()
+    await elegirEmpresa(page, /Fibra del Sur/)
 
     const estado = page.locator('[data-prueba="estado-contrasena-defecto"]')
     await expect(estado).toHaveAttribute('data-estado', 'sin-configurar')
@@ -69,6 +68,7 @@ test('el admin configura la contraseña del portal por defecto de una empresa', 
 test('el admin restaura la contraseña del portal de un cliente desde su ficha', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/clientes/1')
+    await verDatosCliente(page)
     const tarjeta = page.locator('[data-prueba="cliente-portal"]')
     await expect(tarjeta.locator('[data-prueba="portal-contrasena-tipo"]')).toHaveText('Contraseña propia', { timeout: 20_000 })
     await expect(tarjeta.locator('[data-prueba="portal-contrasena-detalle"]')).toContainText('Último cambio:')
@@ -96,6 +96,7 @@ test('el cajero ve cómo entra el cliente, sin restaurar ni configurar', async (
     await expect(page).toHaveURL(/\/sin-permiso/)
 
     await page.goto('/clientes/1')
+    await verDatosCliente(page)
     const tarjeta = page.locator('[data-prueba="cliente-portal"]')
     await expect(tarjeta.locator('[data-prueba="portal-contrasena-tipo"]')).toHaveText('Contraseña propia', { timeout: 20_000 })
     await expect(tarjeta.getByRole('button', { name: 'Restaurar contraseña por defecto' })).toHaveCount(0)

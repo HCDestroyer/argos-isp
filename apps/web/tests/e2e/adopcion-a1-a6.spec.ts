@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar } from './ayudas'
+import { entrar, verDatosCliente } from './ayudas'
 
 /**
  * Adopción de A1 y A6 (modo fixtures, escritorio y teléfono): campos personalizados en el alta y la
@@ -23,6 +23,7 @@ test('alta de cliente con campos personalizados; la ficha los muestra con su eti
     await adicionales.locator('[data-prueba="campo-cliente-acepta_publicidad"] button[role="switch"]').click()
     await page.getByRole('button', { name: 'Crear cliente' }).click()
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
+    await verDatosCliente(page)
     await expect(page.locator('[data-prueba="dato-campo-medio_contacto"]')).toContainText('Volante')
     await expect(page.locator('[data-prueba="dato-campo-referencia_casa"]')).toContainText('Portón verde')
     await expect(page.locator('[data-prueba="dato-campo-acepta_publicidad"]')).toContainText('Sí')

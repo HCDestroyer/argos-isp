@@ -9,7 +9,7 @@ pantallas:
 
 El catálogo de premios es lo que el cliente puede obtener con sus puntos. Un canje cambia puntos por un premio: un descuento en la factura, un mes gratis, una mejora temporal del plan o boletos para un sorteo.
 
-Menú: **Cobros → Premios** y **Cobros → Canjes**.
+Menú: **Clientes y lealtad → Premios** y **Clientes y lealtad → Canjes**.
 
 ## Quién la usa
 

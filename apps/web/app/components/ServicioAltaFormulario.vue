@@ -23,15 +23,20 @@ const props = withDefaults(defineProps<{
     clienteId?: number
     /** Dentro de un panel lateral: sin la columna de resumen. */
     compacto?: boolean
+    /** El progreso lo pinta quien lo contiene (alta de cliente en 3 pasos): sin el stepper propio; avisa con `paso`. */
+    pasosExternos?: boolean
 }>(), {
     cliente: null,
     clienteId: undefined,
     compacto: false,
+    pasosExternos: false,
 })
 
 const emit = defineEmits<{
     creado: [servicio: Servicio]
     cancelar: []
+    /** Paso actual (`conexion`, `red`, `instalacion`, `resumen`), para el progreso de quien lo contiene. */
+    paso: [id: string]
 }>()
 
 const toast = useToast()
@@ -78,7 +83,7 @@ const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 const pasos = computed<Paso[]>(() => [
     ...(clienteFijo.value ? [] : [{ id: 'cliente' as const, title: 'Cliente', icon: 'i-lucide-user', campos: ['cliente_id'] as (keyof EntradaServicio)[] }]),
-    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
+    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion', 'nombre'] },
     {
         id: 'red',
         title: conPppoe.value ? 'Red y PPPoE' : 'Red y equipo',
@@ -102,6 +107,7 @@ const alcanzado = ref(paso.value)
 const itemsStepper = computed(() => pasos.value.map((p, indice) => ({ ...p, value: indice, disabled: indice > alcanzado.value })))
 const ultimo = computed(() => pasos.value.length - 1)
 const pasoActual = computed(() => pasos.value[paso.value]?.id ?? 'resumen')
+watch(pasoActual, id => emit('paso', id), { immediate: true })
 
 function irA(id: IdPaso) {
     const indice = pasos.value.findIndex(p => p.id === id)
@@ -494,6 +500,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
         @submit="alEnviar"
     >
         <UStepper
+            v-if="!pasosExternos"
             v-model="paso"
             :items="itemsStepper"
             size="sm"
@@ -595,6 +602,20 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             variant="card"
                             class="w-full"
                             :ui="{ fieldset: compacto ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-2' }"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="nombre"
+                        label="Nombre del servicio"
+                        hint="Opcional"
+                        help="Para distinguirlo: «Casa», «Negocio». El código (S-000412) lo pone el sistema al crearlo."
+                    >
+                        <UInput
+                            v-model="estado.nombre"
+                            placeholder="Casa, Negocio…"
+                            maxlength="60"
+                            class="w-full"
                         />
                     </UFormField>
 
@@ -1416,6 +1437,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
             <UButton
                 v-else
                 label="Cancelar"
+                :icon="ICONOS.cancelar"
                 color="neutral"
                 variant="ghost"
                 :disabled="enviando"

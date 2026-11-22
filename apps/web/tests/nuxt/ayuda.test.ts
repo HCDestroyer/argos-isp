@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import AyudaBoton from '~/components/AyudaBoton.vue'
+import { esperar } from '../ayudas/esperar'
 import { UApp } from '#components'
 
 /**
@@ -80,19 +81,40 @@ describe('AyudaBoton', () => {
         useUsuarioActual().value = null
     })
 
-    it('abre en otra pestaña la ayuda de la pantalla actual', async () => {
+    it('abre un panel con el resumen del manual y el enlace al manual completo de la pantalla', async () => {
         const boton = await mountSuspended(BotonEnApp, { route: '/clientes/1' })
-        const enlace = boton.find('[data-prueba="boton-ayuda"]')
-        expect(enlace.exists()).toBe(true)
-        expect(enlace.attributes('href')).toBe('https://hcdestroyer.github.io/argos-isp/ayuda/?pantalla=%2Fclientes%2F%5Bid%5D')
-        expect(enlace.attributes('target')).toBe('_blank')
-        expect(enlace.attributes('aria-label')).toContain('Ayuda')
-        expect(enlace.attributes('title')).toBe('Ayuda de esta pantalla')
+        const disparador = boton.find('[data-prueba="boton-ayuda"]')
+        expect(disparador.exists()).toBe(true)
+        expect(disparador.attributes('aria-label')).toContain('Ayuda')
+        expect(disparador.attributes('title')).toBe('Ayuda de esta pantalla')
+        await disparador.trigger('click')
+        await esperar(() => expect(document.body.querySelector('[data-prueba="ayuda-manual"]')).not.toBeNull())
+        const enlace = document.body.querySelector('[data-prueba="ayuda-manual"]')
+        expect(enlace?.getAttribute('href')).toBe('https://hcdestroyer.github.io/argos-isp/ayuda/?pantalla=%2Fclientes%2F%5Bid%5D')
+        expect(enlace?.getAttribute('target')).toBe('_blank')
+        expect(document.body.querySelector('[data-prueba="ayuda-resumen"]')?.textContent).toContain(INDICE_AYUDA['/clientes/[id]']?.resumen.slice(0, 40))
     })
 
-    it('en el inicio manda la clave /', async () => {
-        const boton = await mountSuspended(BotonEnApp, { route: '/' })
-        expect(boton.find('[data-prueba="boton-ayuda"]').attributes('href')).toMatch(/pantalla=%2F$/)
+    it('sin resumen en el índice, el botón va directo al manual', async () => {
+        const guardado = INDICE_AYUDA['/clientes/[id]']
+        delete INDICE_AYUDA['/clientes/[id]']
+        try {
+            const boton = await mountSuspended(BotonEnApp, { route: '/clientes/1' })
+            const enlace = boton.find('[data-prueba="boton-ayuda"]')
+            expect(enlace.attributes('href')).toBe('https://hcdestroyer.github.io/argos-isp/ayuda/?pantalla=%2Fclientes%2F%5Bid%5D')
+            expect(enlace.attributes('target')).toBe('_blank')
+        }
+        finally {
+            if (guardado) {
+                INDICE_AYUDA['/clientes/[id]'] = guardado
+            }
+        }
+    })
+
+    it('cada clave del índice de ayuda es una pantalla del panel', () => {
+        const claves = ARCHIVOS.map(claveDeArchivo)
+        const sueltas = Object.keys(INDICE_AYUDA).filter(clave => !claves.includes(clave))
+        expect(sueltas).toEqual([])
     })
 
     it('no aparece en /login', async () => {

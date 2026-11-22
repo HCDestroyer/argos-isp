@@ -16,6 +16,7 @@ import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
 import { rutasVersion } from './version/rutas'
+import { rutasSistema } from './sistema/rutas'
 import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
@@ -55,6 +56,7 @@ import { rutasPlanes } from './planes/rutas'
 import { rutasNodosPortal } from './nodosPortal/rutas'
 import { rutasPortalCorte } from './portalCorte/rutas'
 import { rutasPortalContrasena } from './portalContrasena/rutas'
+import { rutasContactos } from './contactos/rutas'
 import { rutasCamposPersonalizados } from './camposPersonalizados/rutas'
 import { rutasInventario } from './inventario/rutas'
 import { rutasInventarioFaseD } from './inventario/faseD'
@@ -532,6 +534,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasCompras,
     ...rutasAnuncios,
     ...rutasVersion,
+    ...rutasSistema,
     // Antes que servicios y planes: `/servicios/:id/adicionales` y `/planes/:id/adicionales`.
     ...rutasAdicionales,
     ...rutasEmpresas,
@@ -546,6 +549,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasWhatsapp,
     ...rutasZonas,
     ...rutasPortalContrasena,
+    ...rutasContactos,
     ...rutasClientes,
     ...rutasServicios,
     ...rutasAsignaciones,

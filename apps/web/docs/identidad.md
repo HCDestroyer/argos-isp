@@ -1,7 +1,9 @@
 # Identidad visual del panel: "vidrio y luz"
 
 Decisión del PM: el panel (y el portal, A5) usan la identidad de la skill `horus-identity` con la
-marca y el nombre de **ArgosIsp**. En la interfaz nunca aparece "Horus". Los tokens son los de la
+marca y el nombre de **ArgosIsp**. Desde el rediseño del panel el color de marca de ArgosIsp es el
+**índigo eléctrico** (no el teal de Iris y Horus); los tokens, componentes y reglas de uso del
+rediseño están en [`sistema-visual.md`](./sistema-visual.md), que manda sobre lo de aquí si difieren. En la interfaz nunca aparece "Horus". Los tokens son los de la
 skill, sin variantes locales: `app/assets/css/main.css` y `app/app.config.ts` son copia de
 `horus-identity/assets/nuxt-ui/`, con lo propio del panel al final de `main.css` (bloque "ArgosIsp").
 
@@ -9,12 +11,12 @@ skill, sin variantes locales: `app/assets/css/main.css` y `app/app.config.ts` so
 
 | Pieza | Dónde | Regla |
 | --- | --- | --- |
-| Marca | `LogoArgos` (`variante="marca"`), barra lateral | Trazo blanco del logo de ArgosIsp (ojo con ondas de señal, viewBox 64) sobre recuadro teal 700 `#0f766e`, radio 7/32 (14 de 64). El recuadro no cambia en oscuro. Mínimo 16 px. |
+| Marca | `LogoArgos` (`variante="marca"`), barra lateral | Trazo blanco del logo de ArgosIsp (ojo con ondas de señal, viewBox 64) sobre recuadro con el degradado de marca índigo → cian (`#4f46e5` → `#06b6d4`), radio 7/32 (14 de 64). El recuadro no cambia en oscuro. Mínimo 16 px. |
 | En línea | `LogoArgos variante="linea"`, login | Solo el trazo, en `currentColor` (aquí `text-primary`). Para tamaños grandes. |
 | Favicon | `public/favicon.svg` | La marca. |
 | Logotipo | barra lateral | "ArgosIsp" en la fuente del sistema, semibold, tracking −0,015 em. |
 
-Los tokens de la marca son `--argos-marca-fondo` (`primary-700`) y `--argos-marca-trazo` (blanco).
+Los tokens de la marca son `--argos-marca-1` (`#4f46e5`), `--argos-marca-2` (`#06b6d4`), `--argos-degradado` y `--argos-marca-trazo` (blanco).
 
 ## Materiales
 
@@ -31,20 +33,12 @@ Los tokens de la marca son `--argos-marca-fondo` (`primary-700`) y `--argos-marc
   `:ui="{ root: 'rounded-none bg-transparent ring-0 dark:shadow-none' }"` (tabla alternativa de las gráficas).
 - Con `prefers-reduced-transparency` todo el vidrio y las tarjetas pasan a sólido y no hay aura.
 
-## Menú (decisión del PM: resumido)
+## Menú
 
-- Seis grupos plegables en `GRUPOS_PANEL` (`utils/navegacion.ts`): Operación (clientes, servicios,
-  migración de router), Cobros (cobrar, facturas, pagos, comprobantes, promesas, notas de crédito),
-  Contabilidad (caja, libro con sus cierres, egresos), Red (routers, planes), Reportes y bitácora,
-  y Configuración (usuarios, plantillas, cuentas bancarias, empresa, plantilla del aviso).
-- Un grupo sin ninguna sección permitida no aparece; el de la página actual se abre solo
-  (`grupoDeRuta`). Cada enlace pide el mismo permiso que su página (`pnpm verificar:permisos`).
-- Barra compacta (solo iconos con tooltip y `aria-label`; cada grupo abre sus secciones en un
-  popover). Se compacta con el botón de la barra superior y se recuerda por usuario en
-  `localStorage` (`argos_menu_compacto:<id>`, con try/catch: sin almacenamiento arranca expandida).
-- En el teléfono el menú vive en un `USlideover` (vidrio fuerte) y no ocupa espacio.
-- Buscador de secciones (`UDashboardSearch`, un `UCommandPalette` en modal) con Ctrl/Cmd+K o el
-  botón "Buscar": las mismas secciones permitidas, por grupo, con su descripción.
+Ver [`sistema-visual.md`](./sistema-visual.md#menu-lateral): bloques por frecuencia de uso (Día a
+día, Gestión, Administración, Sistema), grupos plegables con subgrupos cuando pasan de 7 secciones,
+barra compacta recordada por usuario, buscador Ctrl/Cmd+K y, en el teléfono, el menú en un
+`USlideover`.
 
 ## Luz
 

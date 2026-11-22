@@ -51,7 +51,11 @@ export async function crearServicio(opciones: OpcionesServicio = {}) {
     const sufijo = unico('portal')
     const [router] = await db
         .table('network.routers')
-        .insert({ nombre: `router-${sufijo}`, host: 'lab', nas_ip: `192.0.2.${100 + contador}` })
+        .insert({
+            nombre: `router-${sufijo}`,
+            host: 'lab',
+            nas_ip: `198.18.${Math.floor(contador / 250)}.${(contador % 250) + 1}`,
+        })
         .returning('id')
     const [plan] = await db
         .table('network.planes')

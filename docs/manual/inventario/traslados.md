@@ -10,7 +10,7 @@ pantallas:
 
 Una orden de traslado envía productos y equipos de una bodega a otra, o al vehículo de un técnico. Lo enviado queda **en tránsito** hasta que quien recibe lo confirma, con firma digital, con firma en papel o, si la empresa lo permite, con una aceptación simple. Lo que no llega vuelve a la bodega que lo envió.
 
-Menú: **Inventario → Traslados**.
+Menú: **Inventario → Movimientos → Traslados**.
 
 ## Quién la usa
 
@@ -75,7 +75,7 @@ Botón «Recibir» en el detalle, o «Recibir y firmar» en [Mi bodega](./bodega
 2. **¿Cómo se recibe?**
     - «Firma digital»: quien recibe firma en la pantalla con el dedo, un lápiz o el ratón. «Borrar firma» la limpia.
     - «Firma en papel»: solo para usuarios con alcance global (un encargado). Imprime la orden, que la firme quien recibe y luego adjunta la foto o el escaneo.
-    - «Aceptación simple»: sin firma. Solo aparece si en [Configuración → Inventario](./configuracion.md) la firma no es obligatoria.
+    - «Aceptación simple»: sin firma. Solo aparece si en [Configuración → Red y portal → Inventario](./configuracion.md) la firma no es obligatoria.
 3. Agrega **Observaciones** si hace falta («una caja llegó golpeada»).
 4. Pulsa «Recibir y firmar» (o «Recibir»).
 

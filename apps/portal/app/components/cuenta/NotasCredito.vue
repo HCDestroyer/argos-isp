@@ -23,84 +23,72 @@ onMounted(recargar)
         @reintentar="recargar"
         @cargar-mas="cargarMas"
     >
-        <UCard
-            v-for="nota in items"
-            :key="nota.id"
-            data-testid="nota-credito"
-            :ui="{ body: 'p-4 sm:p-4' }"
-        >
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="font-medium text-highlighted break-words">
-                        {{ nombreNotaCredito(nota) }}
-                    </p>
-                    <p class="text-xs text-muted break-words">
-                        {{ formatearFecha(nota.fecha) }} · a la factura {{ nota.factura_numero }}
-                    </p>
-                </div>
-                <UBadge
-                    :label="ESTADOS_NOTA_CREDITO[nota.estado].etiqueta"
-                    :color="ESTADOS_NOTA_CREDITO[nota.estado].color"
-                    :icon="ESTADOS_NOTA_CREDITO[nota.estado].icono"
-                    variant="subtle"
-                    class="shrink-0"
-                />
-            </div>
-
-            <div class="mt-3 flex items-end justify-between gap-3">
-                <p class="min-w-0 text-xs text-muted">
+        <PortalLista :columnas="{ concepto: 'Nota de crédito', monto: 'Monto', estado: 'Estado' }">
+            <PortalFila
+                v-for="nota in items"
+                :key="nota.id"
+                :titulo="nombreNotaCredito(nota)"
+                :subtitulo="`${formatearFecha(nota.fecha)} · a la factura ${nota.factura_numero}`"
+                icono="i-lucide-receipt-text"
+                :tono="tonoDeColor(ESTADOS_NOTA_CREDITO[nota.estado].color)"
+                :estado="ESTADOS_NOTA_CREDITO[nota.estado]"
+                data-testid="nota-credito"
+            >
+                <template #acciones>
+                    <UButton
+                        data-testid="descargar-pdf"
+                        label="Ver nota de crédito (PDF)"
+                        icon="i-lucide-file-down"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :to="urlPdf(nota.id)"
+                        target="_blank"
+                        external
+                        class="ax-pista"
+                        data-pista="Ver PDF"
+                        :ui="{ label: 'sr-only' }"
+                    />
+                    <UButton
+                        v-if="nota.dte?.xml_disponible"
+                        data-testid="descargar-xml"
+                        label="Descargar XML"
+                        icon="i-lucide-file-code"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :to="urlXml(nota.id)"
+                        external
+                        download
+                        class="ax-pista"
+                        data-pista="Descargar XML"
+                        :ui="{ label: 'sr-only' }"
+                    />
+                </template>
+                <p class="text-xs text-muted">
                     {{ nota.motivo }}
+                    <span
+                        class="ms-1 font-semibold whitespace-nowrap tabular-nums"
+                        :class="nota.estado === 'anulada' ? 'text-muted line-through' : 'text-highlighted'"
+                    >−{{ formatearQuetzales(nota.monto) }}</span>
                 </p>
                 <p
-                    class="shrink-0 font-semibold tabular-nums"
-                    :class="nota.estado === 'anulada' ? 'text-muted line-through' : 'text-highlighted'"
+                    v-if="nota.estado === 'anulada'"
+                    class="text-xs text-muted"
                 >
-                    −{{ formatearQuetzales(nota.monto) }}
+                    La SAT no aceptó esta nota: el monto volvió al saldo de la factura.
                 </p>
-            </div>
-
-            <p
-                v-if="nota.estado === 'anulada'"
-                class="mt-2 text-xs text-muted"
-            >
-                La SAT no aceptó esta nota: el monto volvió al saldo de la factura.
-            </p>
-
-            <div
-                v-if="nota.dte"
-                class="mt-3 rounded-md bg-elevated/60 px-3 py-2 text-xs text-muted"
-                data-testid="dte"
-            >
-                <p class="break-all">
-                    Autorización <span class="font-mono text-default">{{ nota.dte.autorizacion }}</span>
+                <p
+                    v-if="nota.dte"
+                    class="text-xs break-all text-muted"
+                    data-testid="dte"
+                >
+                    Autorización <span
+                        class="font-mono text-default"
+                        data-cursor="copy"
+                    >{{ nota.dte.autorizacion }}</span>
                 </p>
-            </div>
-
-            <div class="mt-3 flex flex-wrap gap-2">
-                <UButton
-                    data-testid="descargar-pdf"
-                    label="Ver nota de crédito (PDF)"
-                    icon="i-lucide-file-down"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    :to="urlPdf(nota.id)"
-                    target="_blank"
-                    external
-                />
-                <UButton
-                    v-if="nota.dte?.xml_disponible"
-                    data-testid="descargar-xml"
-                    label="Descargar XML"
-                    icon="i-lucide-file-code"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    :to="urlXml(nota.id)"
-                    external
-                    download
-                />
-            </div>
-        </UCard>
+            </PortalFila>
+        </PortalLista>
     </CuentaEstadoLista>
 </template>

@@ -174,6 +174,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ReglaConciliacionModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/reglas.vue'] },
     'TrasladoModal.vue': { permisos: ['bancos.trasladar'], desde: ['pages/bancos/transito.vue'] },
     'ClientePuntos.vue': { permisos: ['lealtad.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ClientePagos.vue': { permisos: ['pagos.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ClientePromesas.vue': { permisos: ['promesas.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ClienteContactos.vue': { permisos: ['contactos.buscar', 'clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ContactoAgregarSlideover.vue': { permisos: ['contactos.gestionar'], desde: ['components/ClienteContactos.vue'] },
     'ProgramaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
     // Anuncios del portal (A5, `contratos/anuncios.md`).
     'AnuncioFormulario.vue': { permisos: ['anuncios.administrar'], desde: ['pages/anuncios/index.vue', 'pages/anuncios/[id].vue'] },
@@ -327,7 +331,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // `routers.ver` de la página; el modal se monta solo con `routers.cambiar_tipo_conexion`.
     'RouterTipoConexion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
     'CambiarTipoConexionModal.vue': { permisos: ['routers.cambiar_tipo_conexion', 'routers.ver'], desde: ['components/RouterTipoConexion.vue'], exentos: { 'components/RouterTipoConexion.vue': ['routers.ver'] } },
-    'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
+    // Desde el rediseño, «Nuevo cliente» abre su página (`/clientes/nuevo`): el panel lateral queda para editar desde la ficha.
+    'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {

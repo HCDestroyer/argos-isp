@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, menu } from './ayudas'
+import { entrar } from './ayudas'
 
 /**
  * Versión instalada y "Qué cambió" en modo fixtures (versión 1.4.2), en escritorio y teléfono: el
@@ -7,8 +7,7 @@ import { entrar, menu } from './ayudas'
  */
 test('qué cambió desde el menú de usuario', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    const contenedor = await menu(page)
-    await contenedor.getByRole('button', { name: 'Menú de usuario' }).click()
+    await page.locator('[data-prueba="menu-usuario"]').click()
     await page.getByRole('menuitem', { name: /Qué cambió/ }).click()
     const modal = page.getByRole('dialog', { name: 'Qué cambió en la versión 1.4.2' })
     await expect(modal.locator('[data-prueba="version-cambios"]')).toContainText('programa de lealtad')

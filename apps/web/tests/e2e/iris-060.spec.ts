@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar } from './ayudas'
+import { entrar, verDatosCliente } from './ayudas'
 
 /**
  * Contrato Iris 0.6.0 en el panel (§6, §7, §9.2), en modo fixtures, a 1280 y 390 px: la cola de caja
@@ -124,6 +124,7 @@ test('promesas: tipo, canal, comprobante y la cancelada con su motivo', async ({
 test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interruptor', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await abrir(page, '/clientes/8')
+    await verDatosCliente(page)
     const tarjeta = page.locator('[data-prueba="cliente-whatsapp"]')
     await expect(tarjeta.locator('[data-prueba="whatsapp-baja-iris"]')).toBeVisible()
     await expect(tarjeta.locator('[data-prueba="whatsapp-contacto"]')).toHaveText('Baja dada en Iris')
@@ -132,6 +133,7 @@ test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interrupt
 
     // Marcar la casilla al editar otro cliente.
     await abrir(page, '/clientes/1')
+    await verDatosCliente(page)
     await expect(tarjeta.locator('[data-prueba="whatsapp-contacto"]')).toHaveText('Sin permiso registrado')
     await page.getByRole('button', { name: 'Editar', exact: true }).first().click()
     const casilla = page.getByRole('checkbox', { name: 'Acepta avisos por WhatsApp' })
