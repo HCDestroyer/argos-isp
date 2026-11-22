@@ -22,6 +22,8 @@ export interface DatosPlan {
     dual_stack?: 'ambos' | 'v4' | 'v6'
     tamano_prefijo_delegado?: 64 | 56 | 48
     tipo?: TipoPlan
+    /** plan empresarial que trae una IP pública (decisión del PM 30) */
+    incluye_ip_publica?: boolean
     global?: boolean
     activo?: boolean
 }

@@ -76,6 +76,8 @@ export const PERMISOS_IRIS_CONTRATO = [
     'clientes.registrar_identidad',
     'servicios.completar_datos',
     'servicios.cambiar_titular',
+    // falla general de red (contrato 0.13.0): servicios afectados por páginas
+    'incidentes_red.leer',
     // equipos del cliente y bienvenida (contrato 0.9.0 §12, A32, A33, A35 y A37)
     'servicios.aprovisionar',
     'servicios.ver_equipo',

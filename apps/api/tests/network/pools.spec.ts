@@ -747,7 +747,11 @@ test.group('Pools · IPv6', () => {
             422,
         )
         assert.equal(rechazo.body().type, 'urn:argosisp:problema:pool_con_servicios')
-        assert.include(rechazo.body().errors[0].message, servicio.prefijo_delegado_v6)
+        const delServicio = (rechazo.body().errors as Array<{ message: string }>).find((e) =>
+            e.message.startsWith(`Servicio ${servicio.id} `),
+        )
+        assert.include(delServicio?.message, servicio.prefijo_delegado_v6)
+        assert.include(delServicio?.message, servicio.prefijo_enlace_v6)
 
         const migrada = await estado(
             client
@@ -756,7 +760,7 @@ test.group('Pools · IPv6', () => {
                 .json({ version: bloque.version, router_id: destino.routerId, mover_servicios: true }),
             200,
         )
-        const s = migrada.body().servicios[0]
+        const s = migrada.body().servicios.find((x: { servicio_id: number }) => x.servicio_id === servicio.id)
         assert.equal(s.despues.prefijo_delegado_v6, servicio.prefijo_delegado_v6)
         assert.equal(s.despues.prefijo_enlace_v6, servicio.prefijo_enlace_v6)
         assert.isTrue(s.despues.ipv4.startsWith(`${destino.base}.`))

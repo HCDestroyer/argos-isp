@@ -74,6 +74,10 @@ export default class EliminarServicio extends DomainAction<EntradaEliminarServic
         await t.trx.from('core.servicios_adicionales_bloqueos').where('servicio_id', id).delete()
         await t.trx.from('core.servicios_adicionales').where('servicio_id', id).delete()
         await t.trx.from('core.servicios_planes_temporales').where('servicio_id', id).delete()
+        // decisiones del PM 17, 18 y 19: retiro, promociones asignadas (sin tramos aplicados) y códigos
+        await t.trx.from('core.servicios_retiros').where('servicio_id', id).delete()
+        await t.trx.from('core.promociones_velocidad_servicios').where('servicio_id', id).delete()
+        await t.trx.from('core.codigos_identificacion').where('servicio_id', id).delete()
         await t.trx.from('core.servicios_excepciones').where('servicio_id', id).delete()
         await t.trx.from('network.ipv4_asignaciones').where('servicio_id', id).delete()
         await t.trx.from('network.ipv6_asignaciones').where('servicio_id', id).delete()
