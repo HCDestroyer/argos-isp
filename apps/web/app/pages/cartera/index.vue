@@ -621,6 +621,7 @@ onMounted(() => {
                 >
                     <span class="flex items-center gap-2">
                         <UButton
+                            v-if="puede('gestiones_cobro.registrar')"
                             title="Llega con la API de gestiones de cobro"
                             label="Registrar gestión"
                             icon="i-lucide-phone"
