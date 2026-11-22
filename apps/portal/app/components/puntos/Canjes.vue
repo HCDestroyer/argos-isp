@@ -18,31 +18,18 @@ defineExpose({ recargar })
         @reintentar="recargar"
         @cargar-mas="cargarMas"
     >
-        <UCard
-            v-for="canje in items"
-            :key="canje.id"
-            :ui="{ body: 'p-4 sm:p-4' }"
-            data-testid="canje"
-        >
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="font-medium text-highlighted">
-                        {{ canje.premio_nombre }}
-                    </p>
-                    <p class="text-xs text-muted">
-                        {{ formatearFecha(canje.created_at) }} · {{ puntosEnTexto(canje.puntos) }}<template v-if="canje.descuento">
-                            · {{ formatearQuetzales(canje.descuento) }} de descuento
-                        </template>
-                    </p>
-                </div>
-                <UBadge
-                    :label="ESTADOS_CANJE[canje.estado].etiqueta"
-                    :color="ESTADOS_CANJE[canje.estado].color"
-                    :icon="ESTADOS_CANJE[canje.estado].icono"
-                    variant="subtle"
-                    class="shrink-0"
-                />
-            </div>
-        </UCard>
+        <PortalLista :columnas="{ concepto: 'Premio', monto: 'Puntos', estado: 'Estado' }">
+            <PortalFila
+                v-for="canje in items"
+                :key="canje.id"
+                :titulo="canje.premio_nombre"
+                :subtitulo="`${formatearFecha(canje.created_at)}${canje.descuento ? ` · ${formatearQuetzales(canje.descuento)} de descuento` : ''}`"
+                icono="i-lucide-gift"
+                :tono="tonoDeColor(ESTADOS_CANJE[canje.estado].color)"
+                :monto="puntosEnTexto(canje.puntos)"
+                :estado="ESTADOS_CANJE[canje.estado]"
+                data-testid="canje"
+            />
+        </PortalLista>
     </CuentaEstadoLista>
 </template>

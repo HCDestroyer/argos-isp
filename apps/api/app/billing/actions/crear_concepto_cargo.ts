@@ -3,6 +3,7 @@ import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import {
+    ConceptoDeSistema,
     exigirCuentaIngreso,
     verConceptoCargo,
     type ConceptoCargoVista,
@@ -13,7 +14,8 @@ import {
  * `conceptos_cargo.crear` (`POST /conceptos-cargo`, permiso `facturas.configurar_conceptos`): agrega
  * un concepto al catálogo de cargos únicos de una empresa (la indicada o la activa), con su cuenta de
  * ingreso (imputable, de ingreso) y su tratamiento de IVA. 409 `concepto_cargo_duplicado` si el
- * nombre ya existe en esa empresa. Queda en `audit.cambios`.
+ * nombre ya existe en esa empresa; 422 `concepto_de_sistema` si trae `codigo_sistema` (solo lo pone la
+ * siembra). Queda en `audit.cambios`.
  */
 
 export interface EntradaConceptoCargo {
@@ -23,6 +25,8 @@ export interface EntradaConceptoCargo {
     cuenta_codigo: string
     gravable?: boolean
     activo?: boolean
+    /** Solo lectura: un valor distinto de null responde `422 concepto_de_sistema`. */
+    codigo_sistema?: string | null
 }
 
 export default class CrearConceptoCargo extends DomainAction<EntradaConceptoCargo, ConceptoCargoVista> {
@@ -38,6 +42,12 @@ export default class CrearConceptoCargo extends DomainAction<EntradaConceptoCarg
         }
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
+        if (input.codigo_sistema !== undefined && input.codigo_sistema !== null) {
+            throw new ConceptoDeSistema(
+                'codigo_sistema lo fija el sistema: un concepto nuevo no puede llevarlo',
+                'codigo_sistema',
+            )
+        }
         const nombre = input.nombre.trim()
         await exigirCuentaIngreso(t.trx, input.cuenta_codigo, empresaId)
         const repetido = await t.trx

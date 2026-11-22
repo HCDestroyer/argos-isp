@@ -58,12 +58,13 @@ const cerrado = computed(() => ticket.value?.estado === 'cerrado')
 
 const respuesta = reactive<Partial<DatosRespuesta>>({ cuerpo: '' })
 const archivos = ref<File[]>([])
+const preparandoAdjuntos = ref(false)
 const enviando = ref(false)
 const errorRespuesta = ref<string | null>(null)
 let clave = claveIdempotencia()
 
 async function responder(evento: FormSubmitEvent<DatosRespuesta>) {
-    if (!ticket.value || errorAdjuntos(archivos.value)) {
+    if (!ticket.value || preparandoAdjuntos.value || errorAdjuntos(archivos.value)) {
         return
     }
     enviando.value = true
@@ -287,7 +288,10 @@ async function confirmar() {
                             data-testid="ticket-respuesta"
                         />
                     </UFormField>
-                    <SoporteAdjuntos v-model="archivos" />
+                    <SoporteAdjuntos
+                        v-model="archivos"
+                        v-model:preparando="preparandoAdjuntos"
+                    />
                     <UButton
                         type="submit"
                         label="Enviar"
@@ -295,6 +299,7 @@ async function confirmar() {
                         size="lg"
                         block
                         :loading="enviando"
+                        :disabled="preparandoAdjuntos"
                         data-testid="ticket-responder"
                     />
                 </UForm>

@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { envioDeClaveAviso } from '#notify/canales/whatsapp'
 import { aplicarAcuseIris } from '#notify/acuses_iris'
 import SincronizarCuadrilla from '#inventario/actions/sincronizar_cuadrilla'
+import SincronizarVinculoTecnico from '#inventario/actions/sincronizar_vinculo_tecnico'
 import { aplicarEstadoProspecto } from '#integraciones/iris/prospectos'
 
 /** Eventos de Iris → Argos (contrato Iris 0.6.0 §6.6). */
@@ -12,9 +13,19 @@ export const EVENTOS_DE_IRIS = [
     // contrato 0.11.0 §3.9 (A47): membresía de la bodega de cuadrilla
     'cuadrilla.creada',
     'cuadrilla.actualizada',
+    // contrato 0.14.0 §6.6 (R-10): vínculo de cada técnico con su usuario de Argos (solo inventario)
+    'tecnico.argos_vinculado',
+    'tecnico.argos_desvinculado',
     // 0.10.0 (A44, §3.6 y §6.6): solo de prospectos registrados desde Argos
     'prospecto.estado_cambiado',
+    // 0.9.0 (A30 y A31, §6.6 y §11): tickets y solicitudes del cliente; notify avisa al cliente
+    'ticket.estado_cambiado',
+    'ticket.respondido',
+    'solicitud_servicio.estado_cambiado',
 ] as const
+
+/** Eventos de soporte de 0.9.0 (§6.6): se reemiten al bus como `soporte.*` para notify. */
+const EVENTOS_SOPORTE = ['ticket.estado_cambiado', 'ticket.respondido', 'solicitud_servicio.estado_cambiado']
 
 const CANALES_CONTACTO = ['whatsapp', 'telegram', 'correo'] as const
 const ORIGENES_BAJA = ['cliente', 'agente'] as const
@@ -158,6 +169,17 @@ export default class RecibirWebhookIris extends DomainAction<
                 estado: r.aplicado ? 'procesado' : 'ignorado',
                 resultado: r.resultado,
             }
+        } else if (
+            input.evento === 'tecnico.argos_vinculado' ||
+            input.evento === 'tecnico.argos_desvinculado'
+        ) {
+            const r = await this.vinculo(t, input.evento === 'tecnico.argos_vinculado', input.payload)
+            enlace = { empresa_id: r.empresaId }
+            salida = {
+                duplicado: false,
+                estado: r.aplicado ? 'procesado' : 'ignorado',
+                resultado: r.resultado,
+            }
         } else if (input.evento === 'prospecto.estado_cambiado') {
             const prospectoId =
                 texto(input.payload.prospecto_id) ?? entero(input.payload.prospecto_id)?.toString() ?? null
@@ -194,6 +216,14 @@ export default class RecibirWebhookIris extends DomainAction<
                           : 'sin_cambio',
                 }
             }
+        } else if (EVENTOS_SOPORTE.includes(input.evento)) {
+            const r = await this.soporte(t, input)
+            enlace = { empresa_id: r.empresaId, cliente_id: r.clienteId }
+            salida = {
+                duplicado: false,
+                estado: r.procesado ? 'procesado' : 'ignorado',
+                resultado: r.resultado,
+            }
         } else {
             salida = { duplicado: false, estado: 'ignorado', resultado: 'evento_desconocido' }
         }
@@ -209,6 +239,133 @@ export default class RecibirWebhookIris extends DomainAction<
                 envio_id: enlace.envio_id ?? null,
             })
         return salida
+    }
+
+    /**
+     * `ticket.estado_cambiado`, `ticket.respondido` y `solicitud_servicio.estado_cambiado` (0.9.0 §6.6):
+     * el portal relee de Iris al abrir cada pantalla, así que aquí solo se valida el cliente y se
+     * emite el evento `soporte.*` para que notify avise al cliente. Sin cuerpos de mensajes ni motivos.
+     */
+    private async soporte(
+        t: Transaccion,
+        input: EntradaRecibirWebhookIris,
+    ): Promise<{
+        procesado: boolean
+        resultado: string
+        clienteId: number | null
+        empresaId: number | null
+    }> {
+        const p = input.payload
+        const clienteId = entero(p.cliente_id)
+        const id = (clave: string) => texto(p[clave]) ?? entero(p[clave])?.toString() ?? null
+        const a = texto(p.a)
+        const invalido = { procesado: false, resultado: 'payload_invalido', clienteId: null, empresaId: null }
+        if (!clienteId) return invalido
+        const cliente = await t.trx.from('core.clientes').where('id', clienteId).select('id').first()
+        if (!cliente) {
+            return { procesado: false, resultado: 'cliente_no_encontrado', clienteId: null, empresaId: null }
+        }
+        let empresaId = entero(p.empresa_id)
+        if (empresaId && !(await t.trx.from('core.empresas').where('id', empresaId).select('id').first())) {
+            empresaId = null
+        }
+        t.fijarEntidad('cliente', clienteId)
+        t.fijarEmpresa(empresaId)
+        const base = {
+            numero: texto(p.numero),
+            empresa_id: empresaId,
+            cliente_id: clienteId,
+            webhook_id: input.webhook_id,
+        }
+        if (input.evento === 'ticket.estado_cambiado') {
+            const ticketId = id('ticket_id')
+            if (!ticketId || !a) return invalido
+            await t.emit('soporte.ticket_estado_cambiado', {
+                ...base,
+                ticket_id: ticketId,
+                servicio_id: entero(p.servicio_id),
+                origen: texto(p.origen),
+                de: texto(p.de),
+                a,
+                puede_confirmar: a === 'resuelto' && p.puede_confirmar !== false,
+            })
+            return { procesado: true, resultado: 'aviso_emitido', clienteId, empresaId }
+        }
+        if (input.evento === 'ticket.respondido') {
+            const ticketId = id('ticket_id')
+            const autor = unoDe(p.autor_tipo, ['agente', 'sistema'] as const)
+            if (!ticketId || !autor) return invalido
+            await t.emit('soporte.ticket_respondido', {
+                ...base,
+                ticket_id: ticketId,
+                mensaje_id: id('mensaje_id'),
+                autor_tipo: autor,
+                masivo: p.masivo === true,
+                aviso_por_correo: p.aviso_por_correo === true,
+            })
+            return { procesado: true, resultado: 'aviso_emitido', clienteId, empresaId }
+        }
+        const solicitudId = id('solicitud_id')
+        if (!solicitudId || !a) return invalido
+        await t.emit('soporte.solicitud_estado_cambiado', {
+            ...base,
+            solicitud_id: solicitudId,
+            tipo: texto(p.tipo),
+            servicio_id: entero(p.servicio_id),
+            de: texto(p.de),
+            a,
+        })
+        return { procesado: true, resultado: 'aviso_emitido', clienteId, empresaId }
+    }
+
+    /**
+     * `tecnico.argos_vinculado` / `tecnico.argos_desvinculado` (0.14.0 §6.6): los aplica el inventario
+     * (`inventario.sincronizar_vinculo_tecnico`), solo con `version` mayor. Resultado `vinculo_aplicado`,
+     * `vinculo_rechazado` o el motivo por el que se ignoró.
+     */
+    private async vinculo(
+        t: Transaccion,
+        vinculado: boolean,
+        p: Record<string, unknown>,
+    ): Promise<{ aplicado: boolean; resultado: string; empresaId: number | null }> {
+        const empresaId = entero(p.empresa_id)
+        const version = entero(p.version)
+        const usuarioId = texto(p.usuario_id) ?? entero(p.usuario_id)?.toString() ?? null
+        const idExterno = texto(p.id_externo) ?? entero(p.id_externo)?.toString() ?? null
+        if (
+            !empresaId ||
+            !version ||
+            !usuarioId ||
+            !/^[A-Za-z0-9_-]{1,64}$/.test(usuarioId) ||
+            (vinculado && !idExterno)
+        ) {
+            return { aplicado: false, resultado: 'payload_invalido', empresaId: null }
+        }
+        const r = await new SincronizarVinculoTecnico().execute(
+            {
+                empresa_id: empresaId,
+                usuario_id: usuarioId,
+                tecnico_id: texto(p.tecnico_id) ?? entero(p.tecnico_id)?.toString() ?? null,
+                id_externo: idExterno,
+                version,
+                activo: vinculado,
+                motivo: texto(p.motivo),
+                origen: 'webhook',
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        return {
+            aplicado: r.aplicado,
+            resultado: !r.aplicado
+                ? (r.ignorado ?? 'ignorado')
+                : r.estado === 'rechazado'
+                  ? 'vinculo_rechazado'
+                  : r.estado === 'desvinculado'
+                    ? 'vinculo_quitado'
+                    : 'vinculo_aplicado',
+            empresaId: r.aplicado ? empresaId : null,
+        }
     }
 
     /** `cuadrilla.*` (0.11.0 §3.9): la aplica el inventario (`inventario.sincronizar_cuadrilla`). */

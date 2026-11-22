@@ -32,6 +32,7 @@ const CAMPOS_EDITABLES = [
     'mora_tipo',
     'mora_valor',
     'mora_recurrente',
+    'rechazar_monto_distinto',
     'hora_corte',
     'certificar_al',
 ] as const
@@ -66,6 +67,7 @@ export default class EditarPlantilla extends DomainAction<EntradaEditarPlantilla
             mora_tipo: antes.mora_tipo,
             mora_valor: antes.mora_valor,
             mora_recurrente: antes.mora_recurrente,
+            rechazar_monto_distinto: antes.rechazar_monto_distinto,
             hora_corte: antes.hora_corte,
             certificar_al: antes.certificar_al,
             ...(definidos as Partial<CamposPlantilla>),

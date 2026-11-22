@@ -91,7 +91,7 @@ export default class RegistrarReconexionTemporal extends DomainAction<
     EntradaReconexionTemporal,
     ResultadoReconexionTemporal
 > {
-    readonly nombre = 'comprobantes.reconexion_temporal'
+    readonly nombre: string = 'comprobantes.reconexion_temporal'
 
     protected async handle(
         input: EntradaReconexionTemporal,

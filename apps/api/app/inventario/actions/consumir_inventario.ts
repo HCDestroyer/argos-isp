@@ -38,6 +38,8 @@ export interface EntradaConsumo extends LineaConsumo {
     recibido_en_iris?: string | null
     /** `X-Iris-Actor` (lo pone la ruta desde la cabecera) */
     iris_actor?: string | null
+    /** `Idempotency-Key` de la petición (la pone la ruta; queda en el kardex, T-12) */
+    idempotency_key?: string | null
     /** técnico de Argos de la orden de Iris (su bodega es la de salida si no hay bodega_id) */
     tecnico?: TecnicoExterno | null
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */

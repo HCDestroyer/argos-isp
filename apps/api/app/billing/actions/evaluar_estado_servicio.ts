@@ -22,7 +22,9 @@ import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
  *  2. Promesa de pago activa → `activo` (la promesa no corta).
  *  3. Facturas de servicio vencidas ≥ `facturas_para_cortar` → `suspendido`. Una factura emitida
  *     con el servicio pendiente de instalación no cuenta antes de su vencimiento efectivo
- *     (`venceEfectivoSql`: día de instalado_en + gracia): instalar nunca limita el mismo día.
+ *     (`venceEfectivoSql`: día de instalado_en + gracia): instalar nunca limita el mismo día. Una
+ *     factura de un mes pasado emitida a mano con `corte_desde` (decisión del PM 21: los días de
+ *     gracia antes del corte los escribió quien emitió) no cuenta antes de ese día.
  *  4. Vencidas ≥ `facturas_para_limitar` (> 0) → `limitado`, solo si el plan tiene velocidad
  *     limitada > 0 en bajada y subida; si no, sigue `activo`.
  *  5. Si no → `activo`.
@@ -109,6 +111,8 @@ export default class EvaluarEstadoServicio extends DomainAction<
             .where('f.tipo', 'servicio')
             .where('f.estado', 'vencida')
             .whereRaw(`NOT (${efectivo} > f.vence_en AND ${efectivo} >= ?)`, [hoy])
+            // decisión del PM 21: la gracia antes del corte que escribió quien emitió un mes pasado
+            .where((q) => q.whereNull('f.corte_desde').orWhere('f.corte_desde', '<=', hoy))
             .count('* as vencidas')
             .first()) as { vencidas: string | number }
         const totalVencidas = Number(vencidas)

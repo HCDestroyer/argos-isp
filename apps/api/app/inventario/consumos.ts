@@ -34,6 +34,7 @@ import {
     momentoDeLaOperacion,
 } from '#inventario/cuadrillas'
 import { fijarActorTecnico } from '#inventario/actor_tecnico'
+import { exigirVinculoIris } from '#inventario/vinculos_iris'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 
 /**
@@ -72,6 +73,8 @@ export interface DatosConsumo {
     recibido_en_iris?: string | null
     /** `X-Iris-Actor` (de la cabecera, nunca del cuerpo) */
     iris_actor?: string | null
+    /** `Idempotency-Key` de la petición (la pone la ruta; queda en el kardex, T-12) */
+    idempotency_key?: string | null
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
 }
@@ -138,6 +141,8 @@ async function bodegasDelConsumo(
         throw error('bodega_id', 'Indica la bodega (o el técnico de la orden)', 'required')
     }
     const usuarioId = await resolverTecnico(t, datos.tecnico)
+    // 0.14.0 (§3.9, R-10): vínculo del actor de Iris, antes de mirar bodegas y existencias
+    await exigirVinculoIris(t, { usuarioId, empresaId, iris_actor: datos.iris_actor })
     const momento = momentoDeLaOperacion(datos)
     const acceso = await accesoDelTecnico(t.trx, usuarioId, empresaId, momento.instante)
     let candidatas: number[]
@@ -161,6 +166,7 @@ async function bodegasDelConsumo(
             (idIrisDelActor(datos.iris_actor) ? `usuario:${idIrisDelActor(datos.iris_actor)}` : null),
         usuarioId,
         ocurridoEn: momento.ocurridoEn,
+        idempotencyKey: datos.idempotency_key ?? null,
     })
     // una sola bodega posible (sin cuadrilla): como siempre, con 409 `existencia_insuficiente`
     return { fija: datos.bodega_id ?? (candidatas.length === 1 ? candidatas[0]! : null), candidatas }
