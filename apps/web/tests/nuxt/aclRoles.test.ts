@@ -141,7 +141,8 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/bancos/extractos/1', espera: 'COMISION MANEJO DE CUENTA' },
         { ruta: '/bancos/reglas', espera: 'Comisiones del banco' },
         { ruta: '/bancos/conciliacion', espera: 'Saldo del extracto' },
-        { ruta: '/cartera', espera: 'Estimación de incobrables' },
+        // ContaCartera ya no tiene la tarjeta «Estimación de incobrables»; se espera a un cliente de los fixtures.
+        { ruta: '/cartera', espera: 'Distribuidora El Quetzal' },
         { ruta: '/pagos/7001', espera: 'Pasarela en línea' },
         // Lealtad, fase 1.
         { ruta: '/lealtad', espera: 'Puntos Argos' },
