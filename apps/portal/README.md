@@ -227,7 +227,7 @@ Qué se hizo:
 - **zod solo con los formularios**: `~/lib/zod` (con `jitless`, antes un plugin global) y los esquemas en
   `utils/promesaEsquema.ts` y `utils/comprobanteEsquema.ts`; `utils/promesa.ts` y `utils/comprobante.ts`
   (que `/corte` usa) ya no importan zod.
-- **Modales de `/corte` diferidos** (`LazyPromesaSolicitar`, `LazyComprobanteSubir`, `LazyCorteDatosDeposito`,
+- **Modales de `/corte` diferidos** (`LazyPromesaSolicitar`, `LazyCorteDatosDeposito`,
   montados al abrirse la primera vez) y **carrusel de promociones diferido** (`LazyPromoCarrusel`: embla solo
   con dos o más promociones).
 - **CSS solo de los componentes usados** (`ui.experimental.componentDetection`): 197 KB → 105 KB (27 → 16 KB gzip).
@@ -409,14 +409,14 @@ Contrato: `.claude/integration/contratos/multiempresa.md` § Marca.
 | --- | --- |
 | Encabezado: en `/cuenta` la empresa principal del cliente (`de=cliente`); en `/corte` y el resto, la que decide la API (la del servicio de la IP, luego la principal de la sesión, luego la configurada). Logo de `logo_url` o, sin él, el ojo de ArgosIsp | `app/layouts/default.vue`, `app/components/portal/MarcaEmpresa.vue` |
 | Una empresa: sin secciones de marca. Varias: una sección por empresa con su logo (o sus iniciales), nombre y NIT | `app/components/cuenta/InicioEmpresa.vue` |
-| Accesos de cada sección (pagar, comprobante, depósito, soporte) con los datos de SU empresa (`useEmpresa({ empresaId })`), nunca mezclados; el modal de depósito y el de comprobante reciben `empresa-id` | `app/pages/cuenta.vue`, `app/components/corte/DatosDeposito.vue`, `app/components/comprobante/Subir.vue`, `app/components/pago/EnLinea.vue` |
+| Accesos de cada sección (pagar, comprobante, depósito, soporte) con los datos de SU empresa (`useEmpresa({ empresaId })`), nunca mezclados; el modal de depósito y el de comprobante reciben `empresa-id` | `app/pages/cuenta.vue`, `app/components/corte/DatosDeposito.vue`, `app/components/comprobante/Formulario.vue`, `app/components/pago/EnLinea.vue` |
 | Sección Pagar: cada servicio dice de qué empresa es; depósito y pago en línea de la empresa del servicio elegido | `app/pages/cuenta.vue` |
 | `/contacto?empresa=<id>`: contacto de esa empresa (el soporte sin teléfono de una sección) | `app/pages/contacto.vue` |
 | Título y manifiesto con la empresa principal del cliente | `app/pages/cuenta.vue`, `server/routes/manifest.webmanifest.get.ts` |
 | Fixtures: `MARCA_FIXTURE`, `MARCA_SUR_FIXTURE`, `EMPRESA_SUR_FIXTURE`, `CUENTA_DOS_EMPRESAS_FIXTURE` (`?cuenta=dos_empresas` en desarrollo) | `fixtures/` |
 | `/cuenta`: saldo y facturas pendientes de cada empresa (`PortalCuenta.empresas`, el estado de cuenta de A3); una empresa con deuda y sin servicios también tiene su sección | `agruparPorEmpresa(servicios, principal, secciones)`, `resumenFacturas` en `app/utils/empresas.ts` |
 | Telegram por empresa: con servicios en varias, una tarjeta por empresa (`CuentaTelegram` con `empresa`) que vincula el bot de esa empresa (`empresa_id`); el acceso "Vincular Telegram" de cada grupo lleva a su tarjeta (`#telegram-<id>`) | `app/components/cuenta/Telegram.vue`, `app/composables/useTelegram.ts` |
-| Comprobante a la cuenta de otra empresa (422 `cuenta_de_otra_empresa`): aviso arriba y campo marcado. Pago en línea de varias empresas (422 `pago_de_varias_empresas`): "Cada empresa se paga por separado" | `app/components/comprobante/Subir.vue`, `app/components/pago/EnLinea.vue` |
+| Comprobante a la cuenta de otra empresa (422 `cuenta_de_otra_empresa`): aviso arriba y campo marcado. Pago en línea de varias empresas (422 `pago_de_varias_empresas`): "Cada empresa se paga por separado" | `app/components/comprobante/Formulario.vue`, `app/components/pago/EnLinea.vue` |
 | Pruebas | `tests/nuxt/multiempresa.test.ts`, `tests/nuxt/telegram.test.ts`; axe en `tests/e2e/accesibilidad.spec.ts` |
 
 `useEmpresa` guarda una consulta por empresa (`portal:empresa:<id>`, `portal:empresa:cliente` y
