@@ -425,3 +425,31 @@ tickets y solicitudes (`#notify/soporte`), `capacidades` en el canje y el estado
 Argos no tiene SmartOLT ni ACS). 0.10.0 a 0.12.0 ya estaban en main. No se anuncia 0.12.1: la clave
 del consentimiento por número usa sha256 y 0.12.1 pide HMAC con el secreto del receptor, y el portal no
 manda `X-Iris-Contacto` en §11 (B28).
+
+## Lectura de una factura de origen Iris (contrato 0.14.3 §3, A6)
+
+`GET /facturas/origen-iris` (`start/routes/facturas_iris.ts`, `facturas_origen.ts`,
+`actions/leer_factura_origen_iris.ts`), permiso `facturas.leer_origen_iris`: solo el token de Iris
+(`PERMISOS_IRIS_0143`, migración `1795329374595_create_permisos_iris_0143_s_table` para el rol
+`integracion_iris` y los tokens vigentes) y `admin`. Iris valida con ella el número que da un supervisor
+al conciliar un «cobro por confirmar».
+
+- `empresa_id` y `origen_id` obligatorios, más `numero` (número interno de Argos = id de la factura,
+  el «Factura #n» del panel; aceptado por Iris en la 0.14.3 final) o `serie` + `numero_dte` (DTE certificado, anulación pendiente o anulado),
+  excluyentes: `422 validacion` si faltan o se mezclan.
+- Responde `{ factura_id, numero, empresa_id, servicio_id, cliente_id, origen_tipo, origen_id, estado,
+  lineas[{ concepto_id, precio_unitario, cantidad }], total, saldo, moneda, emitida_en, dte }`, sin
+  pagos, NIT, nombre ni dirección; montos como texto de `decimal.js`. `saldo` es el de `factura.*` de
+  A36 (`extrasIrisFactura`: total − cubierto, `0.00` en una anulada), sin el detalle de los pagos. Una
+  anulada responde 200 con `estado: anulada`, nunca 404. Las líneas `descuento` no salen.
+  `concepto_id` sale de `billing.facturas_lineas.concepto_cargo_id` (migración
+  `1795329379100_create_facturas_lineas_concepto_cargos_table`, lo guarda `EmitirCargoUnico` y lo copia
+  la sustitución); en cargos anteriores es `null` y Iris no concilia con ellos.
+- `404 factura_no_encontrada` único: no existe, no es `iris_orden`, otro `origen_id`, otra empresa o
+  empresa fuera del token.
+- Con el token de Iris: `X-Iris-Actor: usuario:<id>` obligatoria (`400 cabecera_iris_requerida`);
+  `asistente_ia` o `sistema` → `403 actor_no_permitido`; `X-Iris-Conversacion` y `X-Iris-Contacto` se
+  ignoran. 60 lecturas por minuto por token (`FACTURAS_ORIGEN_IRIS_LIMITE`, `#core/limite_ventana`):
+  `429 demasiadas_peticiones` con `Retry-After`.
+- Auditada siempre (también el `404`) con canal `api`, `iris_actor` y solo los parámetros como
+  entrada. No emite eventos.

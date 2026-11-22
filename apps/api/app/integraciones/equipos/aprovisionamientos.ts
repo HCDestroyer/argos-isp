@@ -30,7 +30,8 @@ export interface FilaAprovisionamiento {
     empresa_id: number
     servicio_id: number
     cliente_id: number
-    origen_tipo: 'iris_orden' | null
+    /** `argos_panel` si lo inició el panel de Argos (0.14.3) */
+    origen_tipo: 'iris_orden' | 'argos_panel' | null
     origen_id: string | null
     idempotency_key: string | null
     estado: 'en_proceso' | 'listo' | 'fallido'
@@ -44,6 +45,8 @@ export interface FilaAprovisionamiento {
     wifi_ssid_cifrado: string | null
     wifi_clave_cifrada: string | null
     tecnico_id_externo: string | null
+    /** 0.14.3: bodega de la que sale el comodato (validada al aceptar); null = reglas anteriores */
+    bodega_id: number | null
     iris_actor: string | null
     senal: { rx_dbm: number | null; tx_dbm: number | null } | null
     smartolt_external_id: string | null
@@ -93,7 +96,13 @@ export async function leerAprovisionamiento(
         empresa_id: Number(fila.empresa_id),
         servicio_id: Number(fila.servicio_id),
         cliente_id: Number(fila.cliente_id),
+        bodega_id: fila.bodega_id === null || fila.bodega_id === undefined ? null : Number(fila.bodega_id),
     }
+}
+
+/** Quién lo inició (0.14.3): `argos` si lo pidió el panel de Argos, `iris` si el token de Iris. */
+export function iniciadoPor(origenTipo: string | null): 'argos' | 'iris' {
+    return origenTipo === 'argos_panel' ? 'argos' : 'iris'
 }
 
 /** `GET /aprovisionamientos/:id` (§12.2). Nunca la clave ni el SSID del Wi-Fi inicial. */
@@ -103,6 +112,7 @@ export interface VistaAprovisionamiento {
     empresa_id: number
     origen_tipo: string | null
     origen_id: string | null
+    iniciado_por: 'argos' | 'iris'
     estado: 'en_proceso' | 'listo' | 'fallido'
     pasos: Paso[]
     causa: CausaAprovisionamiento | null
@@ -132,6 +142,7 @@ export async function vistaAprovisionamiento(
         empresa_id: fila.empresa_id,
         origen_tipo: fila.origen_tipo,
         origen_id: fila.origen_id,
+        iniciado_por: iniciadoPor(fila.origen_tipo),
         estado: fila.estado,
         pasos: fila.pasos,
         causa: fila.causa,
@@ -141,6 +152,36 @@ export async function vistaAprovisionamiento(
         equipo: fila.equipo,
         senal: fila.senal,
         creado_en: new Date(fila.created_at).toISOString(),
+        actualizado_en: new Date(fila.updated_at).toISOString(),
+    }
+}
+
+/**
+ * Lo que ve un conector de un aprovisionamiento que no inició él (0.14.3 §12.2, ajeno): solo esto, sin
+ * `equipo`, `pasos`, `detalle`, `senal` ni `reintentable`, y `origen_id` siempre null.
+ */
+export interface VistaAprovisionamientoAjeno {
+    aprovisionamiento_id: number
+    servicio_id: number
+    empresa_id: number
+    origen_tipo: string | null
+    origen_id: null
+    iniciado_por: 'argos' | 'iris'
+    estado: 'en_proceso' | 'listo' | 'fallido'
+    causa: CausaAprovisionamiento | null
+    actualizado_en: string
+}
+
+export function vistaAprovisionamientoAjeno(fila: FilaAprovisionamiento): VistaAprovisionamientoAjeno {
+    return {
+        aprovisionamiento_id: fila.id,
+        servicio_id: fila.servicio_id,
+        empresa_id: fila.empresa_id,
+        origen_tipo: fila.origen_tipo,
+        origen_id: null,
+        iniciado_por: iniciadoPor(fila.origen_tipo),
+        estado: fila.estado,
+        causa: fila.causa,
         actualizado_en: new Date(fila.updated_at).toISOString(),
     }
 }

@@ -844,6 +844,18 @@ export const cargoUnicoValidator = vine.compile(
     }),
 )
 
+/**
+ * `codigo_sistema` de un concepto de cargo: solo lectura. Se acepta en la entrada para responder
+ * `422 concepto_de_sistema` si alguien intenta ponerlo, cambiarlo o quitarlo (en vez de ignorarlo en
+ * silencio); el mismo valor que ya tiene el concepto pasa.
+ */
+function codigoSistemaConcepto() {
+    return vine.string().trim().maxLength(40).nullable().optional().meta({
+        description:
+            'Solo lectura: lo fija el sistema (instalacion). Distinto del actual → 422 concepto_de_sistema',
+    })
+}
+
 export const crearConceptoCargoValidator = vine.compile(
     vine.object({
         empresa_id: idEntidad().nullable().optional().meta({
@@ -859,6 +871,7 @@ export const crearConceptoCargoValidator = vine.compile(
         }),
         gravable: vine.boolean().optional().meta({ description: 'Lleva IVA (por defecto sí)' }),
         activo: vine.boolean().optional(),
+        codigo_sistema: codigoSistemaConcepto(),
     }),
 )
 
@@ -869,7 +882,11 @@ export const editarConceptoCargoValidator = vine.compile(
         tipo: vine.enum(['producto', 'otro'] as const).optional(),
         cuenta_codigo: vine.string().trim().maxLength(20).optional(),
         gravable: vine.boolean().optional(),
-        activo: vine.boolean().optional(),
+        activo: vine.boolean().optional().meta({
+            description:
+                'false desactiva el concepto; el de sistema no se desactiva (422 concepto_de_sistema)',
+        }),
+        codigo_sistema: codigoSistemaConcepto(),
     }),
 )
 

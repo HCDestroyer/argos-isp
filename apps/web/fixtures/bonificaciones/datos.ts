@@ -14,11 +14,11 @@ type Asiento = Schema<'Asiento'>
 const creado = '2026-09-01T15:00:00.000Z'
 
 export const conceptosCargo: Schema<'ConceptoCargo'>[] = [
-    { id: 1, empresa_id: 1, nombre: 'Instalación', tipo: 'otro', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, version: 1, created_at: creado, updated_at: creado },
-    { id: 2, empresa_id: 1, nombre: 'Router Wi-Fi', tipo: 'producto', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, version: 1, created_at: creado, updated_at: creado },
-    { id: 3, empresa_id: 1, nombre: 'Visita técnica', tipo: 'otro', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, version: 1, created_at: creado, updated_at: creado },
-    { id: 4, empresa_id: 1, nombre: 'Cable UTP (por metro)', tipo: 'producto', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: false, version: 2, created_at: creado, updated_at: '2026-10-01T15:00:00.000Z' },
-    { id: 5, empresa_id: 2, nombre: 'Instalación Sur', tipo: 'otro', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, version: 1, created_at: creado, updated_at: creado },
+    { id: 1, empresa_id: 1, nombre: 'Instalación', tipo: 'otro', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, codigo_sistema: 'instalacion', version: 1, created_at: creado, updated_at: creado },
+    { id: 2, empresa_id: 1, nombre: 'Router Wi-Fi', tipo: 'producto', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, codigo_sistema: null, version: 1, created_at: creado, updated_at: creado },
+    { id: 3, empresa_id: 1, nombre: 'Visita técnica', tipo: 'otro', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, codigo_sistema: null, version: 1, created_at: creado, updated_at: creado },
+    { id: 4, empresa_id: 1, nombre: 'Cable UTP (por metro)', tipo: 'producto', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: false, codigo_sistema: null, version: 2, created_at: creado, updated_at: '2026-10-01T15:00:00.000Z' },
+    { id: 5, empresa_id: 2, nombre: 'Instalación Sur', tipo: 'otro', cuenta_codigo: '4.1.03', cuenta_nombre: 'Otros ingresos', gravable: true, activo: true, codigo_sistema: 'instalacion', version: 1, created_at: creado, updated_at: creado },
 ]
 
 export const motivosSinCosto: Schema<'MotivoSinCosto'>[] = [

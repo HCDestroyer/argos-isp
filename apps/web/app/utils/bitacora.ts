@@ -239,6 +239,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'facturas.confirmar_emision': 'Factura emitida al certificarse',
     'facturas.sustituir': 'Factura sustituida',
     'facturas.emitir_cargo_unico': 'Cargo único emitido',
+    'facturas.leer_origen_iris': 'Factura de una orden leída por Iris',
     'facturas.emitir_periodos': 'Facturas de periodos emitidas a mano',
     'conceptos_cargo.crear': 'Concepto de cargo creado',
     'conceptos_cargo.editar': 'Concepto de cargo editado',

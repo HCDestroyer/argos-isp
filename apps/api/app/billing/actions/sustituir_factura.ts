@@ -200,6 +200,7 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
                 'total',
                 'linea_id',
                 'cuenta_codigo',
+                'concepto_cargo_id',
                 'servicio_adicional_id',
                 t.trx.raw(`to_char(adicional_periodo, 'YYYY-MM-DD') as adicional_periodo`),
                 'producto_id',

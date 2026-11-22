@@ -1004,13 +1004,15 @@ function numero(v: unknown): number | null {
 
 /**
  * `instalacion.aprovisionada` / `instalacion.fallida` (0.9.0 §2.3 y §12.2): lista cerrada de campos.
- * Nunca la clave Wi-Fi, el SSID ni credenciales.
+ * Nunca la clave Wi-Fi, el SSID ni credenciales. Desde 0.14.3, nada si lo inició el panel de Argos.
  */
 function payloadInstalacion(evento: string, p: Payload): WebhookIris | null {
     const id = entero(p.aprovisionamiento_id)
     const servicioId = entero(p.servicio_id)
     const empresaId = entero(p.empresa_id)
     if (!id || !servicioId || !empresaId) return null
+    // 0.14.3 §12.2: nunca `instalacion.*` de un aprovisionamiento que no inició Iris (el panel de Argos)
+    if (p.origen_tipo === 'argos_panel') return null
     const base = {
         aprovisionamiento_id: id,
         servicio_id: servicioId,
