@@ -11,6 +11,8 @@ export interface EntradaCrearAdicional {
     nombre: string
     descripcion?: string | null
     precio_sugerido?: string | null
+    /** `ip_publica` (decisión del PM 30); por defecto `general` */
+    tipo?: 'general' | 'ip_publica'
 }
 
 /** 409 `adicional_duplicado` si el código ya existe en la empresa (también entre los inactivos). */
@@ -50,6 +52,7 @@ export default class CrearAdicional extends DomainAction<EntradaCrearAdicional, 
                 nombre: input.nombre,
                 descripcion: input.descripcion ?? null,
                 precio_sugerido: input.precio_sugerido ?? null,
+                tipo: input.tipo ?? 'general',
             })
             .returning('id')) as Array<{ id: number }>
         const id = Number(fila!.id)

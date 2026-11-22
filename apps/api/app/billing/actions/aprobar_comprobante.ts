@@ -1,7 +1,8 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, NoEncontrado } from '#shared/errores'
+import { Conflicto, NoEncontrado, Problema } from '#shared/errores'
+import { CERO, aTexto, dec } from '#ledger/dinero'
 import { bloquearCliente } from '#billing/cobros'
 import {
     payloadComprobante,
@@ -39,6 +40,12 @@ import { actorIrisDeLaDecision, exigirComprobanteParaIris } from '#billing/iris'
  *   comprobante `origen: 'iris'`: Iris confirma al cliente y notify no avisa por su cuenta.
  * - `verificado_iris_actor` (contrato Iris 0.7.1): el `X-Iris-Actor` de quien aprobó desde Iris;
  *   null desde el panel. `iris_actor` sigue siendo el de quien lo registró.
+ * - **Menos dinero** (decisión del PM 14): el pago se aplica como abono a las facturas más viejas y
+ *   la respuesta trae `cobertura` (`deuda` de esas facturas antes del pago, `aplicado` y `falta`).
+ *   Después, como siempre, `RegistrarPago` llama `evaluarEstadoServicio`. Si la plantilla de algún
+ *   servicio de esas facturas tiene `rechazar_monto_distinto`, un monto distinto de la deuda responde
+ *   422 `monto_distinto` (con lo que falta o sobra) y no registra nada: caja lo rechaza con la causa
+ *   `monto_distinto`.
  */
 
 export interface EntradaAprobarComprobante {
@@ -47,8 +54,19 @@ export interface EntradaAprobarComprobante {
     nota?: string | null
 }
 
+export interface CoberturaComprobante {
+    /** saldo de las facturas a las que se aplica, antes del pago */
+    deuda: string
+    /** lo que el pago cubrió de esas facturas */
+    aplicado: string
+    /** lo que esas facturas siguen debiendo (0.00 si el comprobante las cubrió) */
+    falta: string
+}
+
 export interface ResultadoAprobarComprobante extends ComprobanteVista {
     pago: ResultadoRegistrarPago
+    /** decisión del PM 14: cuánto cubrió y cuánto falta */
+    cobertura: CoberturaComprobante
 }
 
 interface FilaComprobante {
@@ -125,6 +143,8 @@ export default class AprobarComprobante extends DomainAction<
                 : comprobante.servicio_id
                   ? await this.pendientesDelServicio(t, comprobante.servicio_id, comprobante.empresa_id)
                   : undefined
+        const deuda = await this.saldoDe(t, facturas ?? [])
+        await this.exigirMontoSiLaPlantillaLoPide(t, comprobante, facturas ?? [], deuda)
         const nota = [`Comprobante ${comprobante.id}`, input.nota?.trim() || comprobante.nota]
             .filter(Boolean)
             .join(' · ')
@@ -181,7 +201,65 @@ export default class AprobarComprobante extends DomainAction<
             t.fijarEmpresa(comprobante.empresa_id)
         }
         await t.emit('comprobante.aprobado', await payloadComprobante(t.trx, comprobante.id))
-        return { ...(await verComprobante(comprobante.id, t.trx)), pago }
+        const falta = await this.saldoDe(t, facturas ?? [])
+        const cobertura = { deuda: aTexto(deuda), aplicado: aTexto(deuda.minus(falta)), falta: aTexto(falta) }
+        if (falta.gt(0)) t.anotarAuditoria({ cobertura })
+        return { ...(await verComprobante(comprobante.id, t.trx)), pago, cobertura }
+    }
+
+    /** Saldo (total − pagado) de las facturas pendientes de la lista. */
+    private async saldoDe(t: Transaccion, ids: number[]) {
+        if (ids.length === 0) return CERO
+        const fila = (await t.trx
+            .from('billing.facturas')
+            .whereIn('id', ids)
+            .whereIn('estado', ['emitida', 'parcial', 'vencida'])
+            .select(t.trx.raw('coalesce(sum(total - pagado), 0)::text as saldo'))
+            .first()) as { saldo: string }
+        return dec(fila.saldo)
+    }
+
+    /**
+     * Decisión del PM 14: con `rechazar_monto_distinto` en la plantilla de algún servicio de las
+     * facturas (o del comprobante), el monto debe ser exactamente lo que se debe.
+     */
+    private async exigirMontoSiLaPlantillaLoPide(
+        t: Transaccion,
+        comprobante: FilaComprobante,
+        facturas: number[],
+        deuda: ReturnType<typeof dec>,
+    ) {
+        const servicios = new Set<number>()
+        if (comprobante.servicio_id) servicios.add(Number(comprobante.servicio_id))
+        if (facturas.length > 0) {
+            const filas = (await t.trx
+                .from('billing.facturas')
+                .whereIn('id', facturas)
+                .whereNotNull('servicio_id')
+                .distinct('servicio_id')) as Array<{ servicio_id: number }>
+            for (const f of filas) servicios.add(Number(f.servicio_id))
+        }
+        if (servicios.size === 0) return
+        const estricta = await t.trx
+            .from('core.servicios as s')
+            .join('billing.plantillas_facturacion as p', 'p.id', 's.plantilla_facturacion_id')
+            .whereIn('s.id', [...servicios])
+            .where('p.rechazar_monto_distinto', true)
+            .select('s.id')
+            .first()
+        if (!estricta) return
+        const monto = dec(comprobante.monto)
+        if (monto.equals(deuda)) return
+        const diferencia = monto.lt(deuda)
+            ? `faltan Q${aTexto(deuda.minus(monto))}`
+            : `sobran Q${aTexto(monto.minus(deuda))}`
+        throw new Problema(
+            422,
+            'monto_distinto',
+            'Monto distinto',
+            `El comprobante es de Q${aTexto(monto)} y las facturas suman Q${aTexto(deuda)} (${diferencia}); la plantilla pide rechazarlo`,
+            [{ field: 'monto', message: diferencia, rule: 'monto_distinto' }],
+        )
     }
 
     /** Facturas con saldo del servicio, de la más antigua a la más nueva. */

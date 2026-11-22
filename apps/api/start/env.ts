@@ -60,11 +60,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     SESIONES_COLGADAS_INTERVALOS: Env.schema.number.optional(),
     SESIONES_COLGADAS_CADA_MS: Env.schema.number.optional(),
     /**
-     * Caídas repetidas de un servicio (A2, pedido A6 de Iris): `servicio.caidas_repetidas` cuando un
-     * servicio acumula `CAIDAS_REPETIDAS_SESIONES` (5) sesiones terminadas en
-     * `CAIDAS_REPETIDAS_VENTANA_MIN` (120) minutos, a lo sumo una vez por ventana. No cuentan las
-     * causas de `CAIDAS_REPETIDAS_CAUSAS_IGNORADAS` (lista separada por comas; por defecto las que
-     * provoca Argos o el router entero). `CAIDAS_REPETIDAS_SESIONES=0` lo apaga.
+     * Caídas repetidas de un servicio (A2, pedido A6 de Iris): el umbral y la ventana son ajustes de
+     * operación por empresa (`caidas.umbral`, `caidas.ventana_min`, `caidas.activo`; 3 en 60 min de
+     * fábrica, decisión del PM 31). Aquí solo las causas que no cuentan,
+     * `CAIDAS_REPETIDAS_CAUSAS_IGNORADAS` (lista separada por comas; por defecto las que provoca Argos o
+     * el router entero). `CAIDAS_REPETIDAS_SESIONES` y `CAIDAS_REPETIDAS_VENTANA_MIN` ya no se usan.
      */
     CAIDAS_REPETIDAS_SESIONES: Env.schema.number.optional(),
     CAIDAS_REPETIDAS_VENTANA_MIN: Env.schema.number.optional(),

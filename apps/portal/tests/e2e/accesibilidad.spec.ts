@@ -40,9 +40,21 @@ async function entrar(page: Page, cuenta: string | null): Promise<void> {
     await page.getByTestId('cuenta').waitFor()
 }
 
-/** Va a una sección de `/cuenta` por la barra (inferior en el teléfono, superior en escritorio). */
+/**
+ * Va a una sección de `/cuenta` por la barra (inferior en el teléfono, menú lateral en escritorio).
+ * «Pagar» es una pestaña de «Facturas y pagos».
+ */
+const NAV: Record<string, string> = { Facturas: 'nav-facturas', Cuenta: 'nav-cuenta', Puntos: 'nav-puntos', Inicio: 'nav-inicio' }
 async function seccion(page: Page, etiqueta: string, testId: string): Promise<void> {
-    await page.getByRole('link', { name: etiqueta, exact: true }).first().click()
+    if (etiqueta === 'Pagar') {
+        if (!(await page.getByTestId('pestanas-facturas').isVisible())) {
+            await page.getByTestId('nav-facturas').filter({ visible: true }).first().click()
+        }
+        await page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
+    }
+    else {
+        await page.getByTestId(NAV[etiqueta]!).filter({ visible: true }).first().click()
+    }
     await page.getByTestId(testId).waitFor()
 }
 
@@ -69,6 +81,19 @@ for (const tema of ['light', 'dark'] as const) {
             await page.goto('/contacto')
             await page.getByRole('heading', { level: 1 }).first().waitFor()
             await revisar(page, 'contacto')
+        })
+
+        test('otros presets del admin (esmeralda, naranja) sin violaciones de axe', async ({ page }) => {
+            // `?tema=` en fixtures: la apariencia pública con ese preset (los que usan el tono 700).
+            for (const preset of ['esmeralda', 'naranja'] as const) {
+                await page.goto(`/corte?tema=${preset}`)
+                await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+                await expect(page.locator('html')).toHaveAttribute('data-tema', preset)
+                await revisar(page, `corte (${preset})`)
+                await page.goto(`/entrar?tema=${preset}`)
+                await page.getByRole('heading', { level: 1 }).first().waitFor()
+                await revisar(page, `entrar (${preset})`)
+            }
         })
 
         test('políticas públicas (privacidad, términos, eliminar datos) sin violaciones de axe ni desborde', async ({ page }) => {
@@ -99,11 +124,17 @@ for (const tema of ['light', 'dark'] as const) {
             await page.goto('/corte?anuncios=3')
             await page.getByTestId('promo-carrusel').waitFor()
             await revisar(page, 'corte con carrusel')
-            // la promo va debajo de pagar y de pedir promesa
-            const pagar = await page.getByTestId('pagar-en-linea').boundingBox()
+            // la promo va después de pagar y de pedir promesa (en el teléfono «Pagar» queda fija
+            // abajo, así que se compara el orden del documento, no la altura)
+            const despues = (antes: string) => page.evaluate(([a, b]) => {
+                const nodoA = document.querySelector(`[data-testid="${a}"]`)!
+                const nodoB = document.querySelector(`[data-testid="${b}"]`)!
+                return Boolean(nodoA.compareDocumentPosition(nodoB) & Node.DOCUMENT_POSITION_FOLLOWING)
+            }, [antes, 'promociones-pagina_corte'])
+            expect(await despues('pagar-en-linea')).toBe(true)
+            expect(await despues('solicitar-promesa')).toBe(true)
             const promesa = await page.getByTestId('solicitar-promesa').boundingBox()
             const promo = await page.getByTestId('promociones-pagina_corte').boundingBox()
-            expect(promo!.y).toBeGreaterThan(pagar!.y)
             expect(promo!.y).toBeGreaterThan(promesa!.y)
             // sin desbordar a lo ancho (390 px incluidos)
             const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -157,6 +188,21 @@ for (const tema of ['light', 'dark'] as const) {
                 await revisar(page, `cuenta (${nombre}): pagar`)
                 await seccion(page, 'Facturas', 'seccion-facturas')
                 await revisar(page, `cuenta (${nombre}): facturas`)
+                // Detalle de una factura en el drawer (sin salir de la lista).
+                await page.getByTestId('factura').first().click()
+                await page.getByTestId('detalle').waitFor()
+                await revisar(page, `cuenta (${nombre}): detalle de factura`)
+                await page.keyboard.press('Escape')
+                await page.getByTestId('detalle').waitFor({ state: 'detached' })
+                // Subir comprobante: página propia; «Volver» regresa a «Pagar».
+                await seccion(page, 'Pagar', 'seccion-pagar')
+                await page.getByTestId('cuenta-subir-comprobante').click()
+                await page.getByTestId('comprobante-formulario').waitFor()
+                await revisar(page, `cuenta (${nombre}): subir comprobante`)
+                const anchoComprobante = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+                expect(anchoComprobante).toBeLessThanOrEqual(0)
+                await page.getByTestId('comprobante-volver').click()
+                await page.getByTestId('seccion-pagar').waitFor()
                 await seccion(page, 'Cuenta', 'seccion-cuenta')
                 if (cuenta) {
                     await expect(page.locator('[data-testid^="telegram-empresa-"]')).toHaveCount(2)

@@ -846,6 +846,30 @@
       "w": 2300,
       "x": 3040,
       "y": 1760
+    },
+    "PortalFacturas.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1400,
+      "h": 980,
+      "page": "portal",
+      "title": "Portal · Facturas y pagos (pestañas) y corte con la acción fija abajo"
+    },
+    "PortalSoporte.dc.html": {
+      "x": 0,
+      "y": 1100,
+      "w": 1400,
+      "h": 980,
+      "page": "portal",
+      "title": "Portal · Soporte: tickets, reportar un problema y conversación"
+    },
+    "PortalContactos.dc.html": {
+      "x": 0,
+      "y": 2200,
+      "w": 1400,
+      "h": 980,
+      "page": "portal",
+      "title": "Portal · Mis contactos, un contacto y «Está a tu cargo»"
     }
   },
   "createdOnFiles": {
@@ -938,6 +962,14 @@
       "w": 240,
       "x": 0,
       "y": -300
+    },
+    "tituloPortal": {
+      "x": 0,
+      "y": -300,
+      "text": "Portal del cliente: pantallas nuevas",
+      "kind": "title1",
+      "maxW": 1400,
+      "page": "portal"
     }
   },
   "order": [
@@ -1030,7 +1062,10 @@
     "OperBitacora.dc.html",
     "OperLealtad.dc.html",
     "OperSorteo.dc.html",
-    "SistemaCrons.dc.html"
+    "SistemaCrons.dc.html",
+    "PortalFacturas.dc.html",
+    "PortalSoporte.dc.html",
+    "PortalContactos.dc.html"
   ],
   "pages": [
     {
@@ -1060,6 +1095,10 @@
     {
       "id": "operacion",
       "name": "Operación: servicios, facturas, comprobantes y más"
+    },
+    {
+      "id": "portal",
+      "name": "Portal del cliente"
     }
   ],
   "title": "Rediseño ArgosIsp"

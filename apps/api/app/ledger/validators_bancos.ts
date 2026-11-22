@@ -314,8 +314,9 @@ export const castigarCarteraValidator = vine.compile(
     vine.object({
         facturas: vine.array(idEntidad()).minLength(1).maxLength(500),
         motivo: vine.string().trim().maxLength(500),
-        evidencia: vine.string().trim().maxLength(4000).meta({
-            description: 'Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT',
+        evidencia: vine.string().trim().maxLength(4000).optional().meta({
+            description:
+                'Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT. Vacía: el resumen de las gestiones de cobro registradas del cliente (422 castigo_sin_evidencia si no tiene)',
         }),
     }),
 )

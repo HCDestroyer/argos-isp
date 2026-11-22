@@ -55,6 +55,10 @@ const EVENTOS: Record<string, { origen: Origen; nivel: Nivel }> = {
     'aaa.recuperado': { origen: 'radius', nivel: 'info' },
     'libro.integridad_rota': { origen: 'contabilidad', nivel: 'error' },
     'libro.proceso_bloqueado': { origen: 'contabilidad', nivel: 'advertencia' },
+    // contrato Iris 0.14.0 (A3): avisos al admin del inventario con Iris
+    'inventario.verificacion_sin_acceso': { origen: 'api', nivel: 'error' },
+    'inventario.alerta_tecnico': { origen: 'api', nivel: 'advertencia' },
+    'iris.contrato_regresivo': { origen: 'api', nivel: 'advertencia' },
 }
 
 /*
@@ -302,6 +306,36 @@ function describirEvento(
                 ]
                     .filter(Boolean)
                     .join(' · '),
+                entidad: null,
+            }
+        case 'inventario.verificacion_sin_acceso':
+            return {
+                titulo: 'Iris rechazó la verificación de un intento de recuperación (401/403): revisa el token del conector',
+                detalle: p.status !== undefined && p.status !== null ? `HTTP ${comoTexto(p.status)}` : null,
+                entidad: p.verificacion_id
+                    ? { tipo: 'verificacion_iris', id: String(p.verificacion_id) }
+                    : null,
+            }
+        case 'inventario.alerta_tecnico':
+            return {
+                titulo:
+                    p.motivo === 'sin_orden'
+                        ? 'Un técnico vinculado registró material fuera de una orden de Iris'
+                        : 'Un técnico vinculado superó el volumen diario de movimientos',
+                detalle: [
+                    comoTexto(p.actor_tecnico),
+                    p.movimientos !== undefined
+                        ? `${comoTexto(p.movimientos)} movimientos el ${comoTexto(p.dia)}`
+                        : null,
+                ]
+                    .filter(Boolean)
+                    .join(' · '),
+                entidad: p.usuario_id ? { tipo: 'usuario', id: String(p.usuario_id) } : null,
+            }
+        case 'iris.contrato_regresivo':
+            return {
+                titulo: 'Iris informó un contrato menor que el aceptado (rechazado)',
+                detalle: `Aceptado ${comoTexto(p.aceptado) ?? '?'} · informado ${comoTexto(p.informado) ?? '?'}`,
                 entidad: null,
             }
         default:

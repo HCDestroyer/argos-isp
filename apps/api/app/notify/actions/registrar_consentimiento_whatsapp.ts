@@ -1,9 +1,15 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { NoEncontrado, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { enmascararTelefono } from '#notify/contactos'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { usuarioDelActor } from '#shared/contexto'
-import { claveConsentimiento, verConsentimiento, type VistaConsentimiento } from '#notify/consentimientos'
+import {
+    claveConsentimiento,
+    huellaTelefono,
+    verConsentimiento,
+    type VistaConsentimiento,
+} from '#notify/consentimientos'
+import { configIris } from '#integraciones/iris/configuracion'
 
 export interface EntradaConsentimiento {
     cliente_id: number
@@ -64,7 +70,22 @@ export default class RegistrarConsentimientoWhatsapp extends DomainAction<
                 { field: 'telefono', message: 'Número en formato E.164', rule: 'e164' },
             ])
         }
-        const clave = claveConsentimiento(empresaId, input.cliente_id, 'whatsapp', ocurrido, telefono)
+        let huella: string | null = null
+        if (telefono) {
+            // 0.12.1: HMAC con el secreto del receptor de webhooks de Iris; sin él no hay clave posible
+            const config = await configIris(t.trx)
+            const secreto = config.webhookSalidaSecreto
+            if (!secreto) {
+                throw new Problema(
+                    409,
+                    'iris_sin_receptor',
+                    'Conector con Iris sin receptor',
+                    'El permiso de WhatsApp de un número de contacto necesita el conector con Iris conectado (secreto de webhooks)',
+                )
+            }
+            huella = huellaTelefono(telefono, secreto)
+        }
+        const clave = claveConsentimiento(empresaId, input.cliente_id, 'whatsapp', ocurrido, huella)
         const insertadas = (await t.trx.rawQuery(
             `INSERT INTO notify.consentimientos_iris
                 (empresa_id, cliente_id, canal, estado, origen, ocurrido_en, idempotency_key, registrado_por, request_id, telefono)

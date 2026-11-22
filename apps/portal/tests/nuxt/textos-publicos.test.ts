@@ -173,7 +173,7 @@ describe('textos públicos del portal', () => {
 /** Formularios del portal: todo dato obligatorio se marca con `required`. */
 const OBLIGATORIOS: Record<string, string[]> = {
     'components/promesa/Solicitar.vue': ['vence_el'],
-    'components/comprobante/Subir.vue': ['metodo', 'cuenta_bancaria_id', 'banco_origen_id', 'monto', 'fecha_deposito', 'referencia', 'archivo'],
+    'components/comprobante/Formulario.vue': ['metodo', 'cuenta_bancaria_id', 'banco_origen_id', 'monto', 'fecha_deposito', 'referencia', 'archivo'],
     'pages/entrar.vue': ['identificador', 'codigo'],
     'components/cuenta/Contacto.vue': ['canal_preferido'],
     'components/puntos/ConfirmarCanje.vue': ['servicio_id'],
@@ -205,9 +205,9 @@ describe('campos obligatorios', () => {
     it('donde no es obvio, el campo dice por qué se pide', () => {
         const conAyuda: [string, string][] = [
             ['components/promesa/Solicitar.vue', 'vence_el'],
-            ['components/comprobante/Subir.vue', 'cuenta_bancaria_id'],
-            ['components/comprobante/Subir.vue', 'banco_origen_id'],
-            ['components/comprobante/Subir.vue', 'referencia'],
+            ['components/comprobante/Formulario.vue', 'cuenta_bancaria_id'],
+            ['components/comprobante/Formulario.vue', 'banco_origen_id'],
+            ['components/comprobante/Formulario.vue', 'referencia'],
             ['pages/entrar.vue', 'identificador'],
             ['pages/entrar.vue', 'codigo'],
         ]

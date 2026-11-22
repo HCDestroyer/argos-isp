@@ -58,9 +58,9 @@ const negativo = computed(() => props.puntos.saldo < 0)
         data-testid="puntos-saldo"
     >
         <div class="flex items-center gap-4">
-            <div class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <div class="ax-pastilla size-14">
                 <UIcon
-                    name="i-lucide-sparkles"
+                    name="i-lucide-gem"
                     class="size-7"
                 />
             </div>

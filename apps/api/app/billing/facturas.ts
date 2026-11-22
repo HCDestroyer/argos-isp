@@ -54,6 +54,11 @@ export interface LineaCalculada {
     servicio_adicional_id?: number | null
     /** periodo que cobra la línea del adicional (el de la factura o su primer periodo prorrateado) */
     adicional_periodo?: string | null
+    /**
+     * Concepto de cargo (`billing.conceptos_cargo`) de la línea de un cargo único (contrato Iris 0.14.3
+     * §3, `GET /facturas/origen-iris`); null o ausente en las demás.
+     */
+    concepto_cargo_id?: number | null
     /** inventario (fase C): la línea de un cargo único que vende del inventario */
     producto_id?: number | null
     bodega_id?: number | null
@@ -184,6 +189,9 @@ export interface FacturaFila {
     clave_unica: string
     emitida_en: Date
     vence_en: string
+    /** decisión del PM 21: gracia antes del corte de un mes pasado emitido a mano */
+    dias_gracia_corte: number | null
+    corte_desde: string | null
     vencida_en: Date | null
     estado: EstadoFactura
     subtotal: string
@@ -240,6 +248,8 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('clave_unica'),
         c('emitida_en'),
         cliente.raw(`to_char(${alias}.vence_en, 'YYYY-MM-DD') as vence_en`),
+        c('dias_gracia_corte'),
+        cliente.raw(`to_char(${alias}.corte_desde, 'YYYY-MM-DD') as corte_desde`),
         c('vencida_en'),
         c('estado'),
         c('subtotal'),
