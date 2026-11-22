@@ -540,6 +540,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
             empresa_id: e.B,
             traslado_firma_obligatoria: true,
             recuperacion_tecnicos_minimos: 2,
+            iris_movimientos_diarios_alerta: 40,
             version: 0,
         })
         await estado(
@@ -562,6 +563,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
             empresa_id: e.B,
             traslado_firma_obligatoria: false,
             recuperacion_tecnicos_minimos: 2,
+            iris_movimientos_diarios_alerta: 40,
             version: 1,
         })
         await estado(

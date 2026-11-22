@@ -1,0 +1,95 @@
+# GenieACS en su propio servidor (decisión del PM: crecimiento horizontal). Guía paso a paso: README.md.
+#
+#   Equipos de los clientes ──HTTP 7547──▶ genieacs (cwmp)       ← único puerto abierto a internet
+#   Equipos (firmware)      ──HTTP 7567──▶ genieacs (fs)         ← solo si se publica firmware
+#   Argos                   ──HTTPS 7557 + usuario y clave + IP permitida──▶ caddy ──▶ genieacs (nbi)
+#   Administrador           ──HTTPS 3443 + usuario y clave + IP permitida──▶ caddy ──▶ genieacs (ui)
+#
+# El NBI no tiene autenticación propia: nunca se publica directo. genieacs lo escucha solo en
+# 127.0.0.1 del servidor (puerto 17557, y la UI en 13000) y Caddy, en la red del servidor
+# (`network_mode: host`, así ve la IP real de quien llama), es la única entrada.
+#
+# Uso: cp .env.example .env  →  editar  →  docker compose up -d --build
+
+name: argos-genieacs
+
+services:
+  mongo:
+    image: mongo:7.0.14
+    restart: unless-stopped
+    # sin puertos publicados: solo genieacs y el respaldo la alcanzan por la red interna
+    volumes:
+      - mongo-datos:/data/db
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  genieacs:
+    build: .
+    image: argosisp/genieacs:1.2.16
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongo/genieacs
+      # dentro del contenedor escuchan en todas sus interfaces; afuera solo se publica lo de abajo
+      GENIEACS_NBI_INTERFACE: 0.0.0.0
+      GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET:?Falta GENIEACS_UI_JWT_SECRET en .env}
+      GENIEACS_FS_URL_PREFIX: http://${ACS_DOMINIO:?Falta ACS_DOMINIO en .env}:7567/
+    ports:
+      # CWMP: los equipos de los clientes (TR-069). Abierto a internet.
+      - "${CWMP_INTERFAZ:-0.0.0.0}:7547:7547"
+      # FS: descarga de firmware por los equipos. Cerrado por defecto; FS_INTERFAZ=0.0.0.0 para abrirlo.
+      - "${FS_INTERFAZ:-127.0.0.1}:7567:7567"
+      # NBI y UI: SOLO en la interfaz local del servidor; los publica Caddy con HTTPS y autenticación
+      - "127.0.0.1:17557:7557"
+      - "127.0.0.1:13000:3000"
+
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - genieacs
+    environment:
+      ACS_DOMINIO: ${ACS_DOMINIO}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      TLS_MODO: ${TLS_MODO:-auto}
+      NBI_USUARIO: ${NBI_USUARIO:?Falta NBI_USUARIO en .env}
+      NBI_CLAVE_HASH: ${NBI_CLAVE_HASH:?Falta NBI_CLAVE_HASH en .env (caddy hash-password)}
+      NBI_IPS_PERMITIDAS: ${NBI_IPS_PERMITIDAS:-0.0.0.0/0 ::/0}
+      UI_USUARIO: ${UI_USUARIO:?Falta UI_USUARIO en .env}
+      UI_CLAVE_HASH: ${UI_CLAVE_HASH:?Falta UI_CLAVE_HASH en .env (caddy hash-password)}
+      UI_IPS_PERMITIDAS: ${UI_IPS_PERMITIDAS:-127.0.0.1/32 ::1/128}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/tls:/etc/caddy/tls:ro
+      # TLS_MODO=archivos: fullchain.pem y privkey.pem en CERTS_DIR
+      - ${CERTS_DIR:-./certs}:/certs:ro
+      - caddy-datos:/data
+      - caddy-config:/config
+
+  # Respaldo diario de MongoDB (mongodump comprimido) con retención. Ver README: copiarlo fuera.
+  respaldo:
+    image: mongo:7.0.14
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://mongo/genieacs
+      RESPALDO_HORA_UTC: ${RESPALDO_HORA_UTC:-08}
+      RESPALDO_DIAS: ${RESPALDO_DIAS:-14}
+    volumes:
+      - ./respaldo/respaldar.sh:/usr/local/bin/respaldar.sh:ro
+      - ./respaldo/restaurar.sh:/usr/local/bin/restaurar.sh:ro
+      - ${RESPALDO_DIR:-./respaldos}:/respaldos
+    entrypoint: [/bin/bash, /usr/local/bin/respaldar.sh]
+
+volumes:
+  mongo-datos:
+  caddy-datos:
+  caddy-config:

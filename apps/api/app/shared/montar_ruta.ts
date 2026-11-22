@@ -37,7 +37,12 @@ export function montarRuta(ruta: Ruta) {
     }
     if (seguridad === 'interno') cadena.push(middleware.interno())
     if (ruta.idempotente) {
-        cadena.push(middleware.idempotencia({ actorIris: idempotenciaPorActorIris(ruta) }))
+        cadena.push(
+            middleware.idempotencia({
+                actorIris: idempotenciaPorActorIris(ruta),
+                releerRepeticion: ruta.releerRepeticion,
+            }),
+        )
     }
 
     const montada = router[ruta.metodo](PREFIJO_API + ruta.ruta, (ctx) => despachar(ruta, ctx))

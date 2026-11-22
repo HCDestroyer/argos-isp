@@ -38,6 +38,7 @@ import {
     momentoDeLaOperacion,
 } from '#inventario/cuadrillas'
 import { fijarActorTecnico } from '#inventario/actor_tecnico'
+import { exigirVinculoIris } from '#inventario/vinculos_iris'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 
@@ -66,6 +67,8 @@ export interface EntradaDevolverComodato {
     tecnico?: TecnicoExterno | null
     /** `X-Iris-Actor` (de la cabecera) y la ventana de Iris 0.12.0 */
     iris_actor?: string | null
+    /** `Idempotency-Key` de la petición (la pone la ruta; queda en el kardex, T-12) */
+    idempotency_key?: string | null
     recibido_en_iris?: string | null
     condicion?: Condicion | null
     en_reparacion?: boolean | null
@@ -246,6 +249,7 @@ async function bodegaDeDevolucion(
     empresaId: number,
 ): Promise<number> {
     const usuarioId = await resolverTecnico(t, input.tecnico!)
+    await exigirVinculoIris(t, { usuarioId, empresaId, iris_actor: input.iris_actor })
     const momento = momentoDeLaOperacion(input)
     const acceso = await accesoDelTecnico(t.trx, usuarioId, empresaId, momento.instante)
     let bodegaId: number
@@ -264,6 +268,7 @@ async function bodegaDeDevolucion(
         actor: actor ?? (idIris ? `usuario:${idIris}` : null),
         usuarioId,
         ocurridoEn: momento.ocurridoEn,
+        idempotencyKey: input.idempotency_key ?? null,
     })
     return bodegaId
 }

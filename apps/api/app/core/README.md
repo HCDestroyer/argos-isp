@@ -290,3 +290,38 @@ Streaming, IPTV y similares asignados a un servicio: `incluido` (en el plan), `c
 - **Concurrencia**: `exigirUserPppLibre` toma un advisory lock por usuario y `generarUserPpp` uno por raíz (`<nombre>.<cliente_id>`): dos altas o renombres a la vez nunca terminan en el 23505 genérico.
 - **Caché AAA**: el SET condicionado (`SCRIPT_SET` en `aaa.ts`) no deja que una lápida o una lectura atrasada del dueño anterior pise la clave de un usuario que ya es de otro servicio; un registro vivo de otro servicio se resuelve con el dueño en Postgres. El consumidor `aaa-cache` deja la lápida en los usuarios anteriores del servicio que ya no son de nadie (`lapidarUsuariosAnteriores`), por si el gancho del renombre o del paso a otro tipo no llegó a Redis.
 - Pruebas: `tests/core/reuso_ip_usuario.spec.ts` (concurrencia real con `Promise.all`).
+
+## Decisiones del PM sobre servicios y red (21 nov 2026; rama `agente/a1-operacion-pm`)
+
+Rutas en `start/routes/operacion_pm.ts`; validadores en `validators_operacion.ts` y esquemas en `esquemas_operacion.ts`.
+
+### Ajustes de operación (`ajustes_operacion.ts`, `core.ajustes_operacion`)
+
+Valores con su valor de fábrica, globales o por empresa (solo las claves `porEmpresa`). `GET /ajustes-operacion?empresa_id=` (`ajustes_operacion.ver`) y `PUT /ajustes-operacion` (`ajustes_operacion.editar`; `null` borra; 422 por clave). Emite `operacion.config_cambiada { empresa_id, claves[] }`. Claves: `retiro.orden_iris` (true), `codigo_corte.vigencia_min` (15, 5–60, empresa), `auth.recuperar_contrasena` (true), `ip_historial.retencion_dias` (730), `caidas.activo`/`caidas.umbral`/`caidas.ventana_min` (true, 3, 60; empresa) y `falla_general.activo`/`modo`/`umbral`/`minimo_servicios`/`ventana_min` (true, porcentaje, 30, 5, 5).
+
+### Promociones de velocidad (decisión 18; `promociones_velocidad.ts`)
+
+- `core.promociones_velocidad` (multiplicador o plan destino; `dias` o `franja` en hora de Guatemala con `dias_semana`; `precio` opcional), `core.promociones_velocidad_servicios` (asignaciones) y `core.promociones_velocidad_tramos` (cada intervalo con la velocidad subida; clave única `promocion + servicio + inicio`, un tramo abierto por servicio).
+- Acciones: `promociones_velocidad.crear`, `.asignar`, `.quitar`, `.cancelar` y, del sistema, `.abrir_tramo` y `.cerrar_tramo` (cron `promociones_velocidad` cada minuto con lock en `jobs.ts`).
+- Routers con velocidad por servicio (`radius_rate_limit`, `perfil_ppp`, `cola_simple`): la velocidad efectiva (`velocidadConPromocion`) se aplica en `aaa:user:*`, en el estado deseado de RouterOS (cola simple) y en el CoA (`sesion.velocidad_solicitada`, nunca Disconnect); con `perfil_ppp`, `aaa` manda además `Mikrotik-Rate-Limit` durante la promoción. No cambia `plan_id`.
+- Routers con velocidad por plan (`pcq_plan`, `arbol_pcq`; decisión del PM 34): cada tramo **cambia el plan** del servicio al plan destino al abrir y lo devuelve al cerrar (`cambia_plan`, `plan_original_id`, `plan_destino_id` en el tramo), con la mecánica del plan temporal: `servicio.config_cambiada` (`campos: ['plan']`, `motivo: 'promocion_velocidad'`, `promocion_id`, `tramo_id`), diff del servicio, historial de asignaciones y `aaa:user:*`, sin cortar la sesión. Con franja, cada franja cambia y devuelve el plan (mismo cron con lock, clave única del tramo). El plan destino debe estar activo, disponible en el router y ser compatible (mismo `dual_stack` y prefijo delegado). Si alguien cambia el plan durante el tramo, al cerrar no se toca; al retirar se devuelve sin evento.
+- Precio: no cambia salvo `precio` (lo factura A3). En PCQ/árbol el plan que se factura durante el tramo es `sqlPlanFacturablePromocion` (el original).
+- 422: `promocion_requiere_plan_destino` (multiplicador en un router PCQ o árbol), `promocion_plan_incompatible`, `promocion_con_plan_temporal` (los dos cambiarían `plan_id`), `promocion_estrategia_incompatible` (PPPoE sin RADIUS: cambiar el perfil del secret corta la sesión), `promocion_supera_capacidad`, `promocion_solapada`, `servicio_de_otra_empresa`, `promocion_cerrada`.
+- Eventos: `servicio.promocion_velocidad_iniciada` / `_terminada` (`servicio_id, empresa_id, promocion_id, tramo_id, inicio, fin, cambia_precio, cambia_plan`; terminada además `motivo`: `fin`, `quitada`, `cancelada`, `retiro`), `servicio.config_cambiada` con `motivo: 'promocion_velocidad'` (PCQ/árbol) y `promocion_velocidad.cambiada` (`promocion_id, empresa_id, accion, servicios[]`). RouterOS consume los dos primeros.
+
+### Retiro (decisión 17; `retiros.ts`)
+
+`POST /servicios/:id/retirar` acepta `equipo_entregado`. De fábrica (`retiro.orden_iris`) `servicio.estado_cambiado` (a `retirado`) lleva `recuperar_equipo: true` y los equipos quedan «por recuperar» (inventario de A3) e Iris recibe la orden de retiro; con la casilla o el ajuste apagado, `recuperar_equipo: false`. La decisión queda en `core.servicios_retiros`; interfaz pública `recuperarEquipoAlRetirar(servicio_id)`.
+
+### Código para identificarse en el portal (decisión 19; `codigos_identificacion.ts`)
+
+`POST /servicios/:id/codigo-identificacion` (`servicios.generar_codigo_identificacion`): 6 dígitos de un solo uso, vigencia `codigo_corte.vigencia_min`, solo su HMAC en `core.codigos_identificacion`; anula el anterior. Evento `servicio.codigo_identificacion_emitido { servicio_id, empresa_id, expira_en }` sin el código. El portal lo canjea con la acción `servicios.canjear_codigo_identificacion` (A5).
+
+### Recuperar la contraseña y botones del login (decisión 22; `auth/recuperacion.ts`)
+
+`GET /auth/opciones` (público: `recuperar_contrasena`, `iris`, `horus` conectados), `POST /auth/recuperar-contrasena` (202 siempre igual; límite por IP y por correo; correo con enlace de un solo uso al confirmar) y `POST /auth/restablecer-contrasena` (token por hash SHA-256, 30 min, cierra todas las sesiones). Eventos `usuario.recuperacion_solicitada { usuario_id }` y `usuario.contrasena_restablecida { usuario_id, sesiones_cerradas }`. El ajuste `auth.recuperar_contrasena` lo apaga (404 `recuperacion_apagada`).
+
+### IP pública (decisión 30; `ip_publica.ts`)
+
+Redes `network.redes_ipv4.publica` (la asignación automática ya no toma de ellas), planes `incluye_ip_publica` y adicionales `tipo = 'ip_publica'`: al agregar el adicional el servicio cambia su IPv4 por una pública (`servicios_adicionales.ip_publica`); al quitarlo vuelve a una privada; al retirar se libera con todo. Emite `servicio.config_cambiada` (`ips`) y `asignacion.cambiada`. 422 `ip_publica_existente`, `sin_ip_publica`.
+

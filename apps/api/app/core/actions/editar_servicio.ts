@@ -13,6 +13,7 @@ import {
     generarUserPpp,
     modoIpv6PorRadius,
     reconciliarAsignaciones,
+    requiereIpPublica,
     validarModoIpv6,
     validarTipoConexion,
 } from '#core/asignaciones_servicio'
@@ -368,6 +369,15 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                                 delegacion: servidor.ipv6_pool_delegacion_id,
                             }
                           : undefined,
+                      // decisión del PM 30: al salir de un plan que incluía IP pública (sin el adicional)
+                      // la IP vuelve a la red y el servicio toma una privada
+                      ipPublica:
+                          planId !== antes.plan_id &&
+                          !ipv4 &&
+                          (await requiereIpPublica(t.trx, id, antes.plan_id)) &&
+                          !(await requiereIpPublica(t.trx, id, planId))
+                              ? false
+                              : undefined,
                   })
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)

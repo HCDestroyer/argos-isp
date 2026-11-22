@@ -1,5 +1,6 @@
 import type { BadgeProps } from '@nuxt/ui'
 import type { Schema } from '@argosisp/contracts'
+import { ACEPTA_FOTOS, esTipoSubible } from '~/utils/fotos'
 
 /**
  * Soporte en el portal (tickets y solicitudes de Iris, contrato Iris 0.9.0 §11). Textos y colores de
@@ -107,10 +108,13 @@ export function tamanoArchivo(bytes: number): string {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-/** Hasta 3 adjuntos de 10 MB, fotos o PDF (§11.6). El tipo real lo revisa la API por el contenido. */
+/**
+ * Hasta 3 adjuntos de 10 MB: JPEG, PNG o PDF (§11.6, 0.14.2). Otra foto (HEIC, WebP…) se convierte a
+ * JPEG antes con `prepararArchivo` (`utils/fotos`). El tipo real lo revisa Iris por el contenido.
+ */
 export const ADJUNTOS_MAXIMO = 3
 export const ADJUNTO_TAMANO_MAXIMO = 10 * 1024 * 1024
-export const ADJUNTO_ACEPTA = 'image/jpeg,image/png,image/webp,image/heic,application/pdf'
+export const ADJUNTO_ACEPTA = ACEPTA_FOTOS
 
 /** Errores de los archivos elegidos antes de enviarlos (null si están bien). */
 export function errorAdjuntos(archivos: readonly File[]): string | null {
@@ -120,6 +124,10 @@ export function errorAdjuntos(archivos: readonly File[]): string | null {
     const grande = archivos.find(a => a.size > ADJUNTO_TAMANO_MAXIMO)
     if (grande) {
         return `${grande.name} pesa más de 10 MB`
+    }
+    const otro = archivos.find(a => !esTipoSubible(a))
+    if (otro) {
+        return `${otro.name} no es una foto JPG o PNG ni un PDF`
     }
     return null
 }

@@ -712,16 +712,26 @@ export const CredencialesPpp = definirEsquema(
 
 export const Adicional = definirEsquema(
     'Adicional',
-    objeto({
-        id,
-        empresa_id: { ...id, description: 'Empresa (NIT) del catálogo' },
-        codigo: { ...texto, description: 'Único en la empresa, en mayúsculas' },
-        nombre: texto,
-        descripcion: nulable(texto),
-        precio_sugerido: { ...nulable(Dinero), description: 'Sugerencia para asignarlo cobrado' },
-        activo: { ...booleano, description: 'Desactivado: no se asigna ni lo traen los planes' },
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            empresa_id: { ...id, description: 'Empresa (NIT) del catálogo' },
+            codigo: { ...texto, description: 'Único en la empresa, en mayúsculas' },
+            nombre: texto,
+            descripcion: nulable(texto),
+            precio_sugerido: { ...nulable(Dinero), description: 'Sugerencia para asignarlo cobrado' },
+            tipo: {
+                ...enumerado(['general', 'ip_publica']),
+                description:
+                    'ip_publica (decisión del PM 30): al asignarlo el servicio recibe una IP de una red pública del ' +
+                    'router y la devuelve al quitarlo o retirar el servicio',
+            },
+            activo: { ...booleano, description: 'Desactivado: no se asigna ni lo traen los planes' },
+            ...auditable,
+        },
+        // la API siempre lo envía; opcional hasta que las fixtures del panel lo traigan
+        ['tipo'],
+    ),
 )
 
 export const MotivoCortesia = definirEsquema(
@@ -738,46 +748,55 @@ export const MotivoCortesia = definirEsquema(
 
 export const AdicionalServicio = definirEsquema(
     'AdicionalServicio',
-    objeto({
-        id: { ...id, description: 'Id de la asignación (`asignacionId` en las rutas)' },
-        empresa_id: id,
-        servicio_id: id,
-        adicional_id: id,
-        adicional_codigo: texto,
-        adicional_nombre: texto,
-        modalidad: enumerado(['incluido', 'cortesia', 'cobrado']),
-        identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
-        tiene_credencial: {
-            ...booleano,
-            description: 'Si hay credencial guardada; se lee con GET …/credencial (queda auditado)',
+    objeto(
+        {
+            id: { ...id, description: 'Id de la asignación (`asignacionId` en las rutas)' },
+            empresa_id: id,
+            servicio_id: id,
+            adicional_id: id,
+            adicional_codigo: texto,
+            adicional_nombre: texto,
+            modalidad: enumerado(['incluido', 'cortesia', 'cobrado']),
+            identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
+            tiene_credencial: {
+                ...booleano,
+                description: 'Si hay credencial guardada; se lee con GET …/credencial (queda auditado)',
+            },
+            precio: { ...nulable(Dinero), description: 'Solo con cobrado' },
+            motivo_id: { ...nulable(id), description: 'Motivo de cortesía (solo con cortesia)' },
+            motivo_nombre: nulable(texto),
+            motivo_detalle: nulable(texto),
+            plan_id: {
+                ...nulable(id),
+                description: 'Plan que lo trajo (solo incluido asignado por el plan)',
+            },
+            estado: enumerado(['activo', 'baja']),
+            bloqueo: {
+                ...enumerado(['vigente', 'bloqueado']),
+                description:
+                    'bloqueado mientras el servicio está suspendido (lo pone el estado del servicio)',
+            },
+            bloqueado_en: nulable(instante),
+            primer_periodo: {
+                ...nulable(enumerado(['prorrateado', 'sin_costo'])),
+                description: 'Solo con cobrado: cómo se cobra el periodo en curso (lo factura A3)',
+            },
+            cobrado_desde: { ...nulable(instante), description: 'Solo con cobrado: desde cuándo se cobra' },
+            alta_en: instante,
+            baja_en: nulable(instante),
+            motivo_baja: {
+                ...nulable(texto),
+                description: 'Texto de la baja, o retiro, cambio_plan, cambio_empresa',
+            },
+            ip_publica: {
+                ...nulable(texto),
+                description:
+                    'Solo con un adicional de tipo ip_publica: la IP pública que se le asignó al servicio',
+            },
+            ...auditable,
         },
-        precio: { ...nulable(Dinero), description: 'Solo con cobrado' },
-        motivo_id: { ...nulable(id), description: 'Motivo de cortesía (solo con cortesia)' },
-        motivo_nombre: nulable(texto),
-        motivo_detalle: nulable(texto),
-        plan_id: {
-            ...nulable(id),
-            description: 'Plan que lo trajo (solo incluido asignado por el plan)',
-        },
-        estado: enumerado(['activo', 'baja']),
-        bloqueo: {
-            ...enumerado(['vigente', 'bloqueado']),
-            description: 'bloqueado mientras el servicio está suspendido (lo pone el estado del servicio)',
-        },
-        bloqueado_en: nulable(instante),
-        primer_periodo: {
-            ...nulable(enumerado(['prorrateado', 'sin_costo'])),
-            description: 'Solo con cobrado: cómo se cobra el periodo en curso (lo factura A3)',
-        },
-        cobrado_desde: { ...nulable(instante), description: 'Solo con cobrado: desde cuándo se cobra' },
-        alta_en: instante,
-        baja_en: nulable(instante),
-        motivo_baja: {
-            ...nulable(texto),
-            description: 'Texto de la baja, o retiro, cambio_plan, cambio_empresa',
-        },
-        ...auditable,
-    }),
+        ['ip_publica'],
+    ),
 )
 
 export const BloqueoAdicional = definirEsquema(

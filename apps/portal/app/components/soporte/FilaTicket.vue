@@ -16,7 +16,7 @@ const estado = computed(() => ESTADOS_TICKET[props.ticket.estado])
     <ULink
         :to="props.to"
         :disabled="!props.to"
-        class="flex min-h-14 items-center gap-3 py-3"
+        class="@container flex min-h-14 w-full items-center gap-3 py-3 text-start"
         :class="props.to ? 'rounded-lg hover:bg-elevated/60' : ''"
         data-testid="ticket"
     >
@@ -42,12 +42,20 @@ const estado = computed(() => ESTADOS_TICKET[props.ticket.estado])
                 {{ props.ticket.numero }} · {{ haceCuanto(props.ticket.actualizado_en) }}
                 <template v-if="props.ticket.afectado_por_incidente"> · Falla en tu zona</template>
             </span>
+            <!-- En una columna angosta (el lateral del inicio) el estado va debajo, sin cortar el asunto. -->
+            <UBadge
+                :label="estado.etiqueta"
+                :color="estado.color"
+                variant="subtle"
+                class="mt-1 self-start @sm:hidden"
+                aria-hidden="true"
+            />
         </span>
         <UBadge
             :label="estado.etiqueta"
             :color="estado.color"
             variant="subtle"
-            class="shrink-0"
+            class="hidden shrink-0 @sm:inline-flex"
         />
         <UIcon
             v-if="props.to"

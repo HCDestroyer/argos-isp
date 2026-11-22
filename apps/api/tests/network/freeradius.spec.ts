@@ -232,8 +232,11 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
         })
         const n = ipSiguiente++
         const ipv4 = `${base}.${n}`
-        const enlace = `2001:db8:fa${(n % 256).toString(16)}:1::/64`
-        const delegado = `2001:db8:fb${(n % 256).toString(16)}:100::/56`
+        // 3fff::/20 (documentación, RFC 9637): fuera de `2001:db8+::/40` de `bloqueV6Unico()`, para que
+        // estas asignaciones nunca caigan dentro del bloque de otra prueba (pools.spec «migrar bloque»).
+        const hh = (n % 256).toString(16).padStart(2, '0')
+        const enlace = `3fff:a${hh}:1::/64`
+        const delegado = `3fff:b${hh}:100::/56`
         await db
             .table('network.ipv4_asignaciones')
             .insert({ servicio_id: servicioId, red_id: redId, ip: `${ipv4}/32` })
