@@ -14770,8 +14770,13 @@ export interface components {
             cuenta_nombre: string | null;
             /** @description Lleva IVA (incluido en el precio) */
             gravable: boolean;
-            /** @description Uno inactivo no se usa en cargos nuevos */
+            /** @description Uno inactivo no se usa en cargos nuevos (el de sistema no se desactiva) */
             activo: boolean;
+            /**
+             * @description Código fijo de un concepto que el sistema reconoce (instalacion = el sembrado de instalación de la empresa, uno por empresa); null en los demás. No se cambia, no se quita ni se asigna a otro concepto
+             * @enum {string|null}
+             */
+            codigo_sistema: "instalacion" | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -33804,6 +33809,8 @@ export interface operations {
                     /** @description Lleva IVA (por defecto sí) */
                     gravable?: boolean;
                     activo?: boolean;
+                    /** @description Solo lectura: lo fija el sistema (instalacion). Distinto del actual → 422 concepto_de_sistema */
+                    codigo_sistema?: string | null;
                 };
             };
         };
@@ -33914,7 +33921,10 @@ export interface operations {
                     tipo?: "producto" | "otro";
                     cuenta_codigo?: string;
                     gravable?: boolean;
+                    /** @description false desactiva el concepto; el de sistema no se desactiva (422 concepto_de_sistema) */
                     activo?: boolean;
+                    /** @description Solo lectura: lo fija el sistema (instalacion). Distinto del actual → 422 concepto_de_sistema */
+                    codigo_sistema?: string | null;
                 };
             };
         };

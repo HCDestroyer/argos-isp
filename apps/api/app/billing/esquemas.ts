@@ -367,7 +367,15 @@ export const ConceptoCargo = definirEsquema(
         cuenta_codigo: { ...texto, description: 'Cuenta de ingreso del plan de cuentas' },
         cuenta_nombre: nulable(texto),
         gravable: { ...booleano, description: 'Lleva IVA (incluido en el precio)' },
-        activo: { ...booleano, description: 'Uno inactivo no se usa en cargos nuevos' },
+        activo: {
+            ...booleano,
+            description: 'Uno inactivo no se usa en cargos nuevos (el de sistema no se desactiva)',
+        },
+        codigo_sistema: {
+            ...nulable(enumerado(['instalacion'])),
+            description:
+                'Código fijo de un concepto que el sistema reconoce (instalacion = el sembrado de instalación de la empresa, uno por empresa); null en los demás. No se cambia, no se quita ni se asigna a otro concepto',
+        },
         ...auditable,
     }),
 )
