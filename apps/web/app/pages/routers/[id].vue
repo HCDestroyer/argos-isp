@@ -365,6 +365,13 @@ async function alProbar() {
                                     data-prueba="router-pppoe-sin-radius"
                                 >{{ PPPOE_EN_ROUTER_SIN_RADIUS }}</span>
                             </p>
+                            <p
+                                v-if="corteTunel?.motivo"
+                                class="text-xs text-muted"
+                                data-prueba="router-corte-tunel-motivo"
+                            >
+                                Por qué el corte no va por el túnel: {{ corteTunel.motivo }}
+                            </p>
                         </div>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
