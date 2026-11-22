@@ -38,6 +38,26 @@ const SOLO_SESION = [
     // documento y contraseña: la sesión y el cambio de contraseña
     'portalSesion',
     'portalCambiarContrasena',
+    // contrato Iris 0.9.0 §11 (A30, A31): soporte y solicitudes en Iris
+    'portalSoporte',
+    'portalSoporteCategorias',
+    'portalSoporteTickets',
+    'portalSoporteTicket',
+    'portalSoporteMensajes',
+    'portalSoporteAdjunto',
+    'portalSoporteAbrirTicket',
+    'portalSoporteResponder',
+    'portalSoporteConfirmar',
+    'portalSoporteSolicitudes',
+    'portalSoporteSolicitud',
+    'portalSoporteSolicitar',
+    'portalSoportePlanes',
+    // contrato Iris 0.10.x §3.5 y §3.8 (A42, A46): mis contactos y servicios a cargo
+    'portalContactos',
+    'portalAgregarContacto',
+    'portalCambiarContacto',
+    'portalQuitarContacto',
+    'portalACargo',
 ]
 
 type Operacion = {
