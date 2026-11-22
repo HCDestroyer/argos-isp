@@ -1,0 +1,36 @@
+# Proxy de GenieACS: HTTPS, autenticación básica y lista de IP permitidas delante del NBI y la UI.
+# Las variables {$…} vienen de docker-compose.yml (.env). El certificado: TLS_MODO=auto (Let's Encrypt,
+# necesita el DNS apuntando aquí y el puerto 80 abierto) o TLS_MODO=archivos (los de CERTS_DIR).
+{
+	admin off
+}
+
+# NBI de GenieACS (lo usa Argos): https://<ACS_DOMINIO>:7557
+{$ACS_DOMINIO}:7557 {
+	import tls/{$TLS_MODO}.caddy
+	@ip_no_permitida not remote_ip {$NBI_IPS_PERMITIDAS}
+	route {
+		respond @ip_no_permitida "IP no permitida" 403
+		basic_auth {
+			{$NBI_USUARIO} {$NBI_CLAVE_HASH}
+		}
+		reverse_proxy 127.0.0.1:17557
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Interfaz web de GenieACS (administradores): https://<ACS_DOMINIO>:3443
+{$ACS_DOMINIO}:3443 {
+	import tls/{$TLS_MODO}.caddy
+	@ip_no_permitida not remote_ip {$UI_IPS_PERMITIDAS}
+	route {
+		respond @ip_no_permitida "IP no permitida" 403
+		basic_auth {
+			{$UI_USUARIO} {$UI_CLAVE_HASH}
+		}
+		reverse_proxy 127.0.0.1:13000
+	}
+}

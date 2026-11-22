@@ -28,6 +28,8 @@ import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { exigirContactoIris } from '#billing/contacto_iris'
+import cobranza from '#start/routes/cobranza'
+import { ComprobanteAprobado } from '#billing/esquemas_cobro'
 
 import { dimensionesDeBonificacion, listarBonificaciones, verBonificacion } from '#billing/bonificaciones'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
@@ -92,7 +94,6 @@ import RegistrarComprobante, {
 import RegistrarReconexionTemporal from '#billing/actions/registrar_reconexion_temporal'
 import { canalPromesaIris, exigirEmpresaActuacion, exigirIdempotenciaIris } from '#billing/iris'
 import { readFile } from 'node:fs/promises'
-import type { Reporte } from '#billing/reportes/definicion'
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
@@ -103,7 +104,8 @@ import {
     listarConciliaciones,
     verCobroPasarela,
 } from '#billing/pasarelas/cobros'
-import { TIPOS_CONTENIDO, exportar } from '#billing/reportes/exportar'
+import { DESCRIPCION_EXPORTACION, responderReporte } from '#billing/reportes/http'
+import panelFinanciero from '#start/routes/panel_financiero'
 import { resumenDashboard } from '#billing/reportes/resumenes'
 import {
     altasBajas,
@@ -1070,8 +1072,8 @@ const comprobantes: Ruta[] = [
         antes: exigirIdempotenciaIris,
         descripcion:
             DESCRIPCION_IRIS_070 +
-            'Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.',
-        respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: Comprobante },
+            'Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Con menos dinero (decisión del PM 14) se abona a las facturas más viejas y `cobertura` dice cuánto falta; si la plantilla del servicio tiene rechazar_monto_distinto, un monto distinto de lo que se debe responde 422 monto_distinto (rechazarlo con esa causa). Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.',
+        respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: ComprobanteAprobado },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             const dimensiones = await dimensionesDeComprobante(id)
@@ -1165,20 +1167,6 @@ async function canalPromesa(ctx: HttpContext, pedido?: CanalPromesa): Promise<Ca
 | Reportes y dashboard
 |--------------------------------------------------------------------------
 */
-
-/** JSON, o descarga CSV/XLSX con nombre `<reporte>-<fecha>.<ext>`. */
-function responderReporte(ctx: HttpContext, reporte: Reporte, formato?: 'json' | 'csv' | 'xlsx') {
-    if (!formato || formato === 'json') return Promise.resolve(reporte)
-    const nombre = `${reporte.reporte}-${new Date().toISOString().slice(0, 10)}.${formato}`
-    ctx.response.header('Content-Type', TIPOS_CONTENIDO[formato])
-    ctx.response.header('Content-Disposition', `attachment; filename="${nombre}"`)
-    ctx.response.header('Cache-Control', 'private, no-store')
-    ctx.response.send(exportar(reporte, formato))
-    return Promise.resolve(undefined)
-}
-
-const DESCRIPCION_EXPORTACION =
-    ' Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.'
 
 const reportes: Ruta[] = [
     definirRuta({
@@ -1599,7 +1587,8 @@ const bancos: Ruta[] = [
         permiso: null,
         cabecerasIris: 'opcional',
         respuesta: { status: 200, descripcion: 'Bancos activos', esquema: lista(Banco) },
-        handler: () => listarBancos(),
+        // decisión del PM 23: sin los que la empresa activa ocultó
+        handler: (ctx) => listarBancos(undefined, true, ctx.empresa?.activa ?? null),
     }),
     definirRuta({
         metodo: 'get',
@@ -1792,6 +1781,7 @@ const estadoCuenta: Ruta[] = [
 
 export default [
     ...reportes,
+    ...panelFinanciero,
     ...pasarelaRutas,
     ...plantillas,
     ...facturas,
@@ -1802,4 +1792,5 @@ export default [
     ...bancos,
     ...catalogosCargo,
     ...estadoCuenta,
+    ...cobranza,
 ]

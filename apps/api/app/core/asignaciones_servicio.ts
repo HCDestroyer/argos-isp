@@ -181,9 +181,23 @@ export async function reconciliarAsignaciones(
         prefijoEstatico?: string | null
         /** pools IPv6 del servidor PPPoE del servicio, preferidos al reservar (`contratos/red-acceso.md` §3) */
         poolsV6?: { enlace: number | null; delegacion: number | null }
+        /**
+         * IP pública (decisión del PM 30) en la asignación automática: `false` la devuelve a la red (vuelve a
+         * una privada). Ausente: `true` si el plan la incluye o el servicio tiene el adicional «IP pública»
+         * vigente; si no, conserva la que tenga.
+         */
+        ipPublica?: boolean
     },
 ): Promise<Asignaciones> {
     const { servicioId, routerId, plan, modo } = entrada
+    const publica =
+        entrada.ipPublica ?? ((await requiereIpPublica(trx, servicioId, plan.id)) ? true : undefined)
+    const redesPrivadas = () =>
+        trx
+            .from('network.redes_ipv4')
+            .where('router_id', routerId)
+            .where('publica', publica === true)
+            .first()
 
     const sinPppoe = (entrada.tipoConexion ?? 'pppoe') !== 'pppoe'
     if (plan.dual_stack === 'v6') {
@@ -201,15 +215,16 @@ export async function reconciliarAsignaciones(
             routerId,
             ip: entrada.ipv4,
             redId: entrada.redIpv4Id,
+            publica,
         })
     } else if (entrada.sinIpv4 && !entrada.ipv4 && !entrada.redIpv4Id) {
         await liberarIpv4(trx, servicioId)
     } else if (entrada.ipv4 || entrada.redIpv4Id) {
         await asignarIpv4(trx, { servicioId, routerId, ip: entrada.ipv4, redId: entrada.redIpv4Id })
     } else {
-        const tieneRedes = await trx.from('network.redes_ipv4').where('router_id', routerId).first()
-        if (tieneRedes) {
-            await asignarIpv4(trx, { servicioId, routerId })
+        const tieneRedes = await redesPrivadas()
+        if (tieneRedes || publica === true) {
+            await asignarIpv4(trx, { servicioId, routerId, publica })
         } else if (plan.pool_ipv4) {
             // sin redes registradas: el router asigna desde su pool (Framed-Pool)
             await liberarIpv4(trx, servicioId)
@@ -271,6 +286,25 @@ export async function reconciliarAsignaciones(
             break
     }
     return asignacionesVigentes(trx, servicioId)
+}
+
+/**
+ * ¿El servicio debe tener IP pública? (decisión del PM 30): su plan la incluye
+ * (`network.planes.incluye_ip_publica`) o tiene el adicional «IP pública» vigente.
+ */
+export async function requiereIpPublica(
+    trx: TransactionClientContract,
+    servicioId: number,
+    planId: number,
+): Promise<boolean> {
+    const { rows } = (await trx.rawQuery(
+        `SELECT (SELECT incluye_ip_publica FROM network.planes WHERE id = ?)
+             OR EXISTS (SELECT 1 FROM core.servicios_adicionales sa
+                          JOIN core.adicionales a ON a.id = sa.adicional_id
+                         WHERE sa.servicio_id = ? AND sa.estado = 'activo' AND a.tipo = 'ip_publica') AS requiere`,
+        [planId, servicioId],
+    )) as { rows: Array<{ requiere: boolean | null }> }
+    return Boolean(rows[0]?.requiere)
 }
 
 /** Libera todo (retiro). */

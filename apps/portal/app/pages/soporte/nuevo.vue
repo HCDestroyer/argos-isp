@@ -271,16 +271,19 @@ const volver = computed(() => contactoId.value ? '/cuenta' : '/cuenta?seccion=so
                         v-model:preparando="preparandoAdjuntos"
                     />
 
-                    <UButton
-                        type="submit"
-                        label="Enviar reporte"
-                        icon="i-lucide-send"
-                        size="xl"
-                        block
-                        :loading="enviando"
-                        :disabled="preparandoAdjuntos || Boolean(contactoId && (!servicioACargo || soporte.disponibilidad.value?.contactos === false))"
-                        data-testid="ticket-enviar"
-                    />
+                    <!-- Acción principal, fija abajo en el teléfono. -->
+                    <PortalBarraAccion>
+                        <UButton
+                            type="submit"
+                            label="Enviar reporte"
+                            icon="i-lucide-send"
+                            size="xl"
+                            block
+                            :loading="enviando"
+                            :disabled="preparandoAdjuntos || Boolean(contactoId && (!servicioACargo || soporte.disponibilidad.value?.contactos === false))"
+                            data-testid="ticket-enviar"
+                        />
+                    </PortalBarraAccion>
                 </UForm>
             </div>
         </UCard>

@@ -213,7 +213,8 @@ contra el servidor de producción (`node .output/server/index.mjs`), sumando cad
 | | Archivos | Sin comprimir | gzip | brotli |
 | --- | --- | --- | --- | --- |
 | Antes (v1.19.0) | 36 | 1 231 KB | 360 KB | 310 KB |
-| Ahora | 37 | 735 KB | 234 KB | 205 KB |
+| v1.22.2 | 37 | 735 KB | 234 KB | 205 KB |
+| Rediseño índigo (sistema visual `--ax-*`, tema del admin, escritorio) | 39 | 770 KB | 240 KB (+2,7 %) | 210 KB |
 
 Qué se hizo:
 
@@ -287,23 +288,101 @@ cupo, historial o deuda se ofrece "Contactar a la oficina".
 - Revisión automática con Playwright (tamaño de toque, nombre accesible, contraste de texto y foco con
   Tab) en `/corte`, `/entrar`, el paso del código y los modales de promesa, depósito y comprobante.
 
-## Identidad visual "vidrio y luz"
+## Sistema visual (índigo eléctrico)
 
-La misma del panel (skill horus-identity, decisión del PM): un solo color de marca (teal), vidrio en la
-capa funcional sobre un aura de color, tarjetas casi sólidas para el contenido y luz solo en la acción
-primaria (una por vista, solo en oscuro). Nunca colores crudos de Tailwind: tokens semánticos.
+Rediseño pedido por el PM: interfaz amigable, coherente y con iconos. Marca **índigo eléctrico** (primario
+`#4F46E5` en claro, `#818CF8` en oscuro) con el degradado índigo → cian como acento; fondo gris muy claro
+(`#F7F8FC`) o azul noche (`#0B0F1A`); tarjetas «isla» blancas de radio 14 px con borde de 1 px y sombra
+suave, banner de 18 px y menú lateral de 22 px. Diseño aprobado: `.claude/diseno/` (tableros `Portal`,
+`NuevoPortal`, `PortalFacturas`, `PortalSoporte` y `PortalContactos`). El saldo va una sola vez por
+pantalla, en el banner. En el teléfono la acción principal de cada pantalla (pagar en `/corte`, enviar
+o guardar en los formularios) queda fija abajo (`PortalBarraAccion`).
+Se construye sobre Nuxt UI: tokens propios `--ax-*` (los mismos nombres que el panel), el `ui` de
+`app.config.ts` y componentes compartidos. Nunca colores crudos de Tailwind en los componentes.
 
 | Pieza | Dónde |
 | --- | --- |
-| Tokens por modo (AA), materiales (`chrome-material`, `surface-card`, `--hf-glass-strong`), aura, halos y las tres preferencias del sistema | `app/assets/css/main.css` |
-| Colores semánticos, halo del botón primario, `UCard`/`UPageCard` = tarjeta, `UModal`/`USelect`/`UPopover` = vidrio fuerte | `app/app.config.ts` |
-| Aura (primer hijo del layout) y barra superior de vidrio; en `/corte`, aura liviana `app-aura-lite` (degradado radial, sin `filter: blur` ni deriva) | `app/layouts/default.vue` |
-| Marca de ArgosIsp: cuadro teal 700, radio 7/32, trazo blanco (`marca`) o solo trazos en `currentColor` (`linea`, tamaños grandes) | `app/components/LogoArgos.vue` |
-| Favicon (misma figura; también con Host ajeno para el portal cautivo) | `public/favicon.svg` |
-| Estados con icono Lucide + texto + color (servicio, factura, pago, promesa, comprobante, pago en línea) | `app/utils/estadoServicio.ts`, `cuenta.ts`, `comprobante.ts`, `pago.ts` |
+| Tokens `--ax-*` por modo (fondo, tarjeta, borde, radios, sombras, marca, degradados, cabecera de tabla), AA y las preferencias del sistema | `app/assets/css/main.css` |
+| Nuxt UI tematizado: botón primario en pastilla, badges en pastilla, pestañas tipo segmento, campos, tarjetas, tabla, modal (hoja inferior < 640 px), drawer, menú, toast, alerta, esqueleto | `app/app.config.ts` |
+| Pastilla de icono tintada por tono (`PortalPastilla`, `.ax-pastilla[data-tono]`) | `components/portal/Pastilla.vue` |
+| Lista que en escritorio es tabla (`PortalLista` + `PortalFila`, grilla `.ax-grilla`): icono, título, subtítulo gris, monto en negrita, estado con icono, acciones; cabecera en mayúsculas pequeñas solo desde 768 px | `components/portal/Lista.vue`, `Fila.vue` |
+| Drawer de detalle (factura, pago, comprobante) sin salir de la lista; desde abajo en el teléfono | `components/portal/Detalle.vue` |
+| Indicador del tablero (`PortalKpi`) y banner de bienvenida con degradado (`CuentaResumen`) | `components/portal/Kpi.vue`, `components/cuenta/Resumen.vue` |
+| Título de modal con pastilla de icono según el tipo | `components/portal/TituloModal.vue` |
+| Ayudas `?` con texto del manual (promesa, vencimiento, puntos, comprobante), cursor `help` | `components/portal/Ayuda.vue`, `utils/ayudas.ts` |
+| Login dividido (panel con degradado y frase en escritorio; logo y formulario en el teléfono) | `components/portal/Acceso.vue` |
+| Pista de los botones de solo icono, solo CSS (`.ax-pista` + `data-pista`) | `app/assets/css/main.css` |
+| Marca de ArgosIsp: cuadro con el degradado índigo-600 → cyan-700, radio 7/32, trazo blanco | `components/LogoArgos.vue`, `public/favicon.svg`, `public/iconos/` |
 
-Sin `backdrop-filter` (Android viejo) el vidrio pasa a sólido. El tema no agrega peticiones: el logo va
-en línea y no hay fuentes externas. El PDF del aviso de cobro no lleva logo (ver `.claude/integration/a5.md`).
+**Texto sobre el degradado.** El acento (`--ax-gradiente`, índigo → cian) nunca lleva texto encima. Donde
+hay texto blanco (banner de `/cuenta`, inicio público, panel del login) se usa `--ax-gradiente-texto`,
+que termina en cyan-700: el blanco pasa 4,5:1 en todo el recorrido. La acción sobre el banner es una
+pastilla blanca con texto índigo-700.
+
+**Iconos.** Todo botón, opción de menú, pestaña y estado lleva icono Lucide + texto, y la misma acción
+usa siempre el mismo icono, coloreado por intención: pagar = `credit-card`, subir comprobante =
+`upload`, prometer pago = `calendar-check`, factura = `receipt`, puntos = `gem`, cuenta = `user-round`,
+depósito = `landmark`, soporte = `headset`. Los botones de solo icono llevan `aria-label` y pista.
+
+**Cursores.** `pointer` en todo lo que se toca, `not-allowed` en lo deshabilitado, `progress` en un botón
+que procesa, `text` en los campos. Con `data-cursor`: `help` (ayudas `?`), `copy` (número de cuenta,
+referencia, autorización), `zoom-in` (foto del comprobante), `grab` (zona de soltar el archivo).
+
+**Movimiento.** Discreto y siempre apagado con `prefers-reduced-motion`: entrada de la página (0,22 s),
+cambio de sección, tarjetas que suben 1 px al pasar el puntero, botones que se hunden al tocarlos, el
+punto «En vivo» que late y la hoja inferior que sube.
+
+### Modal, drawer o página propia
+
+Criterio del PM: una ventana solo para confirmar o pedir de 1 a 4 datos; lo demás es acción directa,
+drawer o página. Nunca un modal sobre otro; en el teléfono los modales son hoja inferior.
+
+| Superficie | Cuándo | En el portal |
+| --- | --- | --- |
+| Acción directa | No hay nada que preguntar | Actualizar, descargar PDF o XML, copiar número de cuenta, salir |
+| Modal (hoja inferior en 390 px) | Confirmar o pedir 1–4 datos | Prometer pago (una fecha), confirmar canje, datos de depósito (consulta corta), foto ampliada del comprobante |
+| Drawer | Ver el detalle de algo de una lista sin perder la lista | Factura (montos, DTE, XML), pago, comprobante |
+| Página propia (con URL) | Formularios largos, archivos, acceso, todo lo que se comparte o se vuelve a abrir | `/entrar`, `/cambiar-contrasena`, `/comprobante` (subir comprobante con vista previa y arrastrar y soltar), pagar en línea (sección `?seccion=pagar` y la pasarela), estado de cuenta y facturas (`/cuenta?seccion=…`) |
+
+`/comprobante` recibe `servicio`, `empresa` y `volver` (`/corte` o `/cuenta?seccion=pagar`); al volver a
+`/corte`, el comprobante enviado queda en `useComprobanteEnviado` y la página muestra «Recibimos tu
+comprobante» y vigila la reactivación como antes.
+
+### Peso de `/corte`
+
+El sistema visual no agrega fuentes ni imágenes a `/corte` (pila de fuentes del sistema; Inter no se
+carga): 233,5 → 239,9 KB gzip (+2,7 %), por el CSS de los tokens, el tema del admin (solo variables
+CSS) y dos chunks chicos (pastilla de icono y tonos). Ver la tabla de «Peso de la página de corte».
+
+### Escritorio
+
+Desde 1024 px `/cuenta` es un tablero de escritorio de hasta 1200 px con el mismo menú «isla» del
+panel a la izquierda (`PortalNavegacion` lateral: 76 px compacto, de fábrica, o 244 px expandido,
+logo de 36 px y el botón ‹ › de 28 px sobre el borde derecho; se recuerda en el navegador con
+`useMenuCompacto`; sin barra superior ni barra inferior). Es una réplica del del panel con los mismos
+tokens y medidas: conviene extraer los dos a un paquete compartido en `packages/`; el banner arriba y rejillas
+por sección: inicio con servicios, accesos y «Solicitar un servicio» (2/3) y «Está a tu cargo», «Mis
+facturas» y «Mis pagos» al lado (1/3); «Facturas y pagos», una tarjeta con las pestañas segmentadas
+Facturas (con las notas de crédito al lado) y Pagar (pagar y promesas a la izquierda, comprobantes y
+pagos a la derecha); «Cuenta» con los datos de contacto a un lado y avisos y sesión al otro; `/comprobante` con los
+pasos al lado del formulario. Las listas se acomodan al ancho de su columna (consulta de contenedor):
+tabla en una columna ancha, filas compactas en una angosta. Ningún texto dice para qué pantalla está
+pensado el portal. Pruebas: `tests/e2e/desborde.spec.ts` (390, 1280 y 1440 px).
+
+### Tema del admin (apariencia)
+
+`plugins/apariencia.ts` lee `GET /api/v1/apariencia/publica` (A6, `contratos/apariencia.md`) en el
+servidor, con tope de 1,5 s, y aplica el tema (`indigo` de fábrica, `azul`, `violeta`, `esmeralda`,
+`naranja`, `rosa`, `pizarra`): `paleta.color` como paleta primaria de Nuxt UI y `paleta.claro|oscuro`
+como `--ax-primario-claro|oscuro` en `<html>` (con `data-tema`). Todos los colores de marca (`--ax-*`, degradados, logo) salen de esas variables: en
+`/corte` no se agrega ningún archivo. Si la paleta no llega o no es la del tema, el tono
+del catálogo (700 en esmeralda, naranja y rosa; 600 el resto). El eslogan y el fondo del panel del login
+(`/entrar`) salen de ahí si existen; el fondo (`/api/v1/apariencia/archivos/…`) lo sirve el portal en
+su mismo origen (`server/api/v1/apariencia/archivos/[nombre].get.ts`), lo único que admite la CSP. El
+logo sigue siendo el de Empresas.
+`modo_predeterminado` se aplica solo si el visitante no eligió claro u oscuro. Si la API falla: índigo.
+Fixtures: `?tema=<preset>` en la URL. Pruebas: `tests/nuxt/apariencia.test.ts`,
+`tests/servidor/portal.test.ts` («apariencia del admin») y axe con esmeralda y naranja.
 
 ## Inicio del cliente (dashboard móvil) y PWA
 
@@ -316,7 +395,7 @@ en línea y no hay fuentes externas. El PDF del aviso de cobro no lleva logo (ve
 | Accesos rápidos: solo lo que la API aceptaría ahora (tabla en el archivo) | `app/utils/accesos.ts`, `app/components/portal/AccesosRapidos.vue` |
 | Servicios agrupados por la empresa que los factura (`servicio.empresa`), la principal primero | `app/utils/empresas.ts`, `app/components/cuenta/InicioEmpresa.vue` |
 | ¿Hay sesión? Estado compartido + pista `argos:portal:sesion` en `localStorage` (solo `1`): `/corte` pregunta por la cuenta solo si hubo sesión en el dispositivo | `app/composables/useSesionPortal.ts` |
-| Manifiesto PWA (`standalone`, teal, nombre de la empresa principal del cliente con `?empresa=<id>` desde `/cuenta`, o el configurado), íconos de la marca; sin service worker | `server/routes/manifest.webmanifest.get.ts`, `server/utils/manifiesto.ts`, `public/iconos/` |
+| Manifiesto PWA (`standalone`, índigo `#4f46e5`, nombre de la empresa principal del cliente con `?empresa=<id>` desde `/cuenta`, o el configurado), íconos de la marca; sin service worker | `server/routes/manifest.webmanifest.get.ts`, `server/utils/manifiesto.ts`, `public/iconos/` |
 
 Los íconos PNG salen de la marca (`LogoArgos`): cuadro redondeado para `any` y fondo a sangre con el
 ojo en la zona segura para `maskable` y `apple-touch-icon`. El manifiesto y `/iconos/` se sirven
@@ -420,7 +499,7 @@ recuerda en la pestaña (`sessionStorage`) para que siga después de entrar con 
 
 `utils/fotos.ts` (`prepararArchivo`) prepara cada archivo antes de subirlo, en los adjuntos de tickets
 (`components/soporte/Adjuntos.vue`, van a Iris, contrato 0.14.2 §11.6) y en el comprobante de pago
-(`components/comprobante/Subir.vue`, va a A3):
+(`components/comprobante/Formulario.vue`, en la página `/comprobante`, va a A3):
 
 - JPEG, PNG y PDF pasan sin tocar; un JPEG o PNG que pasa del tope del endpoint (10 MB tickets, 5 MB
   comprobantes) se reescala a JPEG.
