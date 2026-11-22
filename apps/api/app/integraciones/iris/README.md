@@ -252,6 +252,22 @@ el nuevo. Reglas:
 - **`GET /clientes?telefono=`** (A20): filtro exacto con `coincide_en[]`; con el `atk_` de Iris exige
   las cabeceras. Ver `app/core/README.md`.
 
+## Actor `sistema` y capacidades (contrato 0.14.2, §7.1 y §4.3; parte de A6)
+
+- **`X-Iris-Actor: sistema`**: formato `^(asistente_ia|sistema|usuario:[A-Za-z0-9_-]{1,64})$`. Solo vale
+  en la lista cerrada `RUTAS_ACTOR_SISTEMA` (`atencion.ts`): `GET /clientes/:id/contactos`,
+  `GET /cuentas-bancarias` y `GET /bancos`, que declaran `actorSistemaIris: true` en `definirRuta`
+  (`montarRuta` falla al arrancar si lo declara otra ruta). `despachar` y el middleware
+  `actuarComoVinculado` llaman `exigirActorSistemaIris`: en otra lectura `403 actor_no_permitido`, en
+  una escritura `422 actor_no_permitido`; con `X-Iris-Conversacion` o `X-Iris-Contacto`,
+  `400 cabecera_iris_requerida`. Se audita como el token del conector, canal `sistema`,
+  `iris_actor = sistema` y sin conversación.
+- **Capacidades de Iris**: el portal (`#portal/soporte/iris_portal`) las lee de
+  `GET <iris>/api/v1/integraciones/argosisp/capacidades` (`{ contrato_iris, capacidades }`) con el token
+  del panel cuando el conector informa contrato ≥ 0.14.2; antes, de `…/estado`. `403` y `404` son
+  error visible (`sin_respuesta`), nunca capacidades supuestas.
+- `CONTRATO_IRIS` sigue en `0.8.1`: se sube cuando estén todas las piezas hasta la 0.14.2.
+
 ## Aprobar y rechazar desde la conversación (contrato 0.7.0 §7.7, A23)
 
 `CONTRATO_IRIS = '0.7.0'`. Una persona que atiende la conversación en Iris aprueba o rechaza una
