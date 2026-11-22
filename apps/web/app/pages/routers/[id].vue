@@ -588,7 +588,7 @@ async function alProbar() {
                     </div>
 
                     <RouterBitacoraComandos
-                        v-else-if="pestana === 'bitacora'"
+                        v-else-if="pestana === 'bitacora' && puede('red.ver')"
                         :router-id="nas.id"
                     />
                 </section>

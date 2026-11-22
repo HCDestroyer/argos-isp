@@ -78,6 +78,12 @@ const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
 async function cargar() {
+    // Las redes salen del direccionamiento de cada router (`routers.ver`); la página pide `redes.ver`.
+    if (!puede('routers.ver')) {
+        cargando.value = false
+        problema.value = problemaSinPermiso('routers.ver')
+        return
+    }
     cargando.value = true
     problema.value = null
     const resultado = await leerTodas(cursor => useRouters().listar({ activo: true, limit: 200 }, cursor))

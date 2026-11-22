@@ -354,7 +354,8 @@ const pestanas = computed<TabsItem[]>(() => [
     { label: 'Resumen', value: 'resumen', icon: 'i-lucide-house' },
     { label: 'Red y equipo', value: 'red', icon: 'i-lucide-network' },
     ...(puede('facturas.ver') ? [{ label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt' }] : []),
-    ...(puede('clientes.ver') ? [{ label: 'Contactos', value: 'contactos', icon: 'i-lucide-users' }] : []),
+    // Los contactos se leen con `contactos.buscar` (y el cliente con `clientes.ver`).
+    ...(puede('clientes.ver') && puede('contactos.buscar') ? [{ label: 'Contactos', value: 'contactos', icon: 'i-lucide-users' }] : []),
     ...(puede('bitacora.ver') ? [{ label: 'Bitácora', value: 'bitacora', icon: 'i-lucide-history' }] : []),
     { label: 'Portal de corte', value: 'corte', icon: 'i-lucide-octagon-pause' },
 ])
@@ -1085,7 +1086,7 @@ onMounted(cargar)
                             icono="i-lucide-users"
                         >
                             <template
-                                v-if="puede('clientes.ver')"
+                                v-if="puede('clientes.ver') && puede('contactos.buscar')"
                                 #accion
                             >
                                 <UButton
@@ -1473,7 +1474,7 @@ onMounted(cargar)
 
                 <!-- Contactos. -->
                 <ClienteContactos
-                    v-else-if="pestana === 'contactos'"
+                    v-else-if="pestana === 'contactos' && puede('clientes.ver') && puede('contactos.buscar')"
                     :cliente-id="servicio.cliente_id"
                     :servicios="serviciosCliente"
                 />

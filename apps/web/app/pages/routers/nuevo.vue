@@ -24,7 +24,7 @@ definePageMeta({ permiso: 'routers.crear' })
 
 useHead({ title: 'Conectar router · ArgosIsp' })
 
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 const { conSelector: variasEmpresas, empresas } = useEmpresaActiva()
 
@@ -92,6 +92,11 @@ const matriz = shallowRef<MatrizControlVelocidad | null>(null)
 const problemaMatriz = ref<Problem | null>(null)
 
 async function cargarMatriz() {
+    // La página pide `routers.crear`; leer la matriz y el router creado pide además `routers.ver`.
+    if (!puede('routers.ver')) {
+        problemaMatriz.value = problemaSinPermiso('routers.ver')
+        return
+    }
     const resultado = await useControlVelocidad().matriz()
     matriz.value = resultado.ok ? resultado.data : null
     problemaMatriz.value = resultado.ok ? null : resultado.problema
@@ -362,6 +367,10 @@ async function leerConexion() {
     if (!creado.value) {
         return
     }
+    if (!puede('routers.ver')) {
+        problemaConexion.value = problemaSinPermiso('routers.ver')
+        return
+    }
     const resultado = await useRouters().conexion(creado.value.id)
     conexion.value = resultado.ok ? resultado.data : null
     problemaConexion.value = resultado.ok ? null : resultado.problema
@@ -452,6 +461,10 @@ const corteCodigoListo = ref(false)
 
 async function pasarACodigo() {
     if (!creado.value) {
+        return
+    }
+    if (!puede('routers.ver')) {
+        problemaCodigo.value = problemaSinPermiso('routers.ver')
         return
     }
     pasandoCodigo.value = true
@@ -701,7 +714,7 @@ function cerrar() {
                         variant="subtle"
                         icon="i-lucide-copy"
                         title="Ese MikroTik ya está registrado"
-                        :actions="[{ label: 'Ver routers', to: '/routers', color: 'warning', variant: 'outline' }]"
+                        :actions="enlace('/routers') ? [{ label: 'Ver routers', to: '/routers', color: 'warning', variant: 'outline' }] : []"
                         data-prueba="router-duplicado"
                     >
                         <template #description>

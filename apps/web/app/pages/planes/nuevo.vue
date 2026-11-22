@@ -8,10 +8,11 @@ definePageMeta({ permiso: 'planes.crear' })
 useHead({ title: 'Nuevo plan · ArgosIsp' })
 
 const toast = useToast()
+const { destinoPermitido } = usePermisos()
 
 function alGuardar(plan: Plan) {
     toast.add({ title: `${plan.nombre} creado`, description: resumenVelocidadPlan(plan), icon: 'i-lucide-circle-check', color: 'success' })
-    void navigateTo(`/planes/${plan.id}`)
+    void navigateTo(destinoPermitido(`/planes/${plan.id}`))
 }
 </script>
 
@@ -24,7 +25,7 @@ function alGuardar(plan: Plan) {
     >
         <PlanFormulario
             @guardado="alGuardar"
-            @cancelar="navigateTo('/planes')"
+            @cancelar="navigateTo(destinoPermitido('/planes'))"
         />
     </PanelPagina>
 </template>

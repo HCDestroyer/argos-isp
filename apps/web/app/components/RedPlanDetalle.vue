@@ -18,7 +18,7 @@ const emit = defineEmits<{
     sincronizar: []
 }>()
 
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 
 const vista = shallowRef<VistaPreviaVelocidad | null>(null)
 const problema = ref<Problem | null>(null)
@@ -161,7 +161,7 @@ const garantizado = computed(() => {
             />
             <UButton
                 v-else
-                :to="`/planes/${plan.id}`"
+                :to="enlace(`/planes/${plan.id}`)"
                 label="Abrir"
                 color="neutral"
                 variant="outline"

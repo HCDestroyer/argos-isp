@@ -9,6 +9,7 @@ definePageMeta({ permiso: 'planes.editar' })
 
 const route = useRoute()
 const toast = useToast()
+const { puede, destinoPermitido } = usePermisos()
 
 const planId = computed(() => Number(route.params.id))
 const plan = shallowRef<Plan | null>(null)
@@ -18,6 +19,12 @@ const problema = ref<Problem | null>(null)
 useHead(() => ({ title: `Editar ${plan.value?.nombre ?? 'plan'} · ArgosIsp` }))
 
 async function cargar() {
+    // La página pide `planes.editar`; leer el plan pide además `planes.ver`.
+    if (!puede('planes.ver')) {
+        cargando.value = false
+        problema.value = problemaSinPermiso('planes.ver')
+        return
+    }
     cargando.value = true
     problema.value = null
     const resultado = await usePlanes().ver(planId.value)
@@ -30,7 +37,7 @@ onMounted(cargar)
 
 function alGuardar(actualizado: Plan) {
     toast.add({ title: `${actualizado.nombre} actualizado`, description: resumenVelocidadPlan(actualizado), icon: 'i-lucide-circle-check', color: 'success' })
-    void navigateTo(`/planes/${actualizado.id}`)
+    void navigateTo(destinoPermitido(`/planes/${actualizado.id}`))
 }
 </script>
 
@@ -54,7 +61,7 @@ function alGuardar(actualizado: Plan) {
             v-else-if="plan"
             :plan="plan"
             @guardado="alGuardar"
-            @cancelar="navigateTo(`/planes/${plan.id}`)"
+            @cancelar="navigateTo(destinoPermitido(`/planes/${plan.id}`))"
         />
     </PanelPagina>
 </template>
