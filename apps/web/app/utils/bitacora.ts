@@ -457,6 +457,7 @@ const CANALES: Record<string, string> = {
     webhook: 'Webhook',
     interno: 'Interno',
     consola: 'Consola',
+    sistema: 'Iris (sin persona)',
 }
 
 const ICONOS_ACCION: Record<string, string> = {
@@ -512,7 +513,7 @@ export const ACCIONES_CONOCIDAS: { accion: string, etiqueta: string }[] = Object
     .sort((a, b) => a.accion.localeCompare(b.accion))
 
 /** Canales del filtro (`canal` del contrato) con su etiqueta. */
-export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker', 'webhook', 'interno', 'consola'] as const
+export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker', 'webhook', 'interno', 'consola', 'sistema'] as const
 
 /** Tipos de entidad que registran las acciones (`t.fijarEntidad`) y dónde se ven en el panel. */
 export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: number) => string }> = {
