@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 import type { FormSubmitEvent, RadioGroupItem, SelectItem, StepperItem } from '@nuxt/ui'
+import type { ModoIpAlta } from '~/components/ServicioIpAlta.vue'
 
 /**
  * Alta de un servicio (`POST /servicios`, `servicios.crear`) en pocos pasos y con valores por
- * defecto: un solo router o un solo plan quedan elegidos, la IPv4 es automática (la API toma la
- * siguiente IP libre de las redes del router), la IPv6 sigue al plan, las credenciales PPP se
+ * defecto: un solo router o un solo plan quedan elegidos (el router con buscador y sugeridos,
+ * `ServicioRouterSelector`), la IPv4 es automática salvo que se elija la red o se escriba
+ * (`ServicioIpAlta`, debajo del router y el plan), la IPv6 sigue al plan («Avanzado: IPv6»), las credenciales PPP se
  * generan y la plantilla es la primera. El último paso es un resumen con «Cambiar» por grupo.
  *
  * Router sin RADIUS (`modo_seguridad = 'api'`, `utils/modoSeguridad.ts`, `contratos/pppoe-local.md`):
@@ -37,6 +39,8 @@ const emit = defineEmits<{
     cancelar: []
     /** Paso actual (`conexion`, `red`, `instalacion`, `resumen`), para el progreso de quien lo contiene. */
     paso: [id: string]
+    /** Lo elegido hasta ahora, para la línea de resumen de quien lo contiene (router, plan, precio e IP). */
+    resumen: [resumen: ResumenAltaServicio]
 }>()
 
 const toast = useToast()
@@ -83,13 +87,13 @@ const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 const pasos = computed<Paso[]>(() => [
     ...(clienteFijo.value ? [] : [{ id: 'cliente' as const, title: 'Cliente', icon: 'i-lucide-user', campos: ['cliente_id'] as (keyof EntradaServicio)[] }]),
-    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion', 'nombre'] },
+    { id: 'conexion', title: 'Conexión', description: 'Router, plan e IP', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion', 'nombre', 'asignacion', 'red_id', 'ipv4', 'ipv6_modo', 'ipv6_duid', 'prefijo_delegado_v6'] },
     {
         id: 'red',
-        title: conPppoe.value ? 'Red y PPPoE' : 'Red y equipo',
-        description: 'IP, IPv6 y acceso',
-        icon: 'i-lucide-network',
-        campos: ['servidor_pppoe_id', 'asignacion', 'red_id', 'ipv4', 'ipv6_modo', 'ipv6_duid', 'prefijo_delegado_v6', ...(conPppoe.value ? ['user_ppp', 'pass_ppp'] as const : ['mac', 'amarre_ip_mac'] as const)],
+        title: conPppoe.value ? 'Acceso PPPoE' : 'Equipo',
+        description: conPppoe.value ? 'Servidor y credenciales' : 'MAC y amarre',
+        icon: 'i-lucide-key-round',
+        campos: ['servidor_pppoe_id', ...(conPppoe.value ? ['user_ppp', 'pass_ppp'] as const : ['mac', 'amarre_ip_mac'] as const)],
     },
     {
         id: 'instalacion',
@@ -192,6 +196,13 @@ const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
             ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
         }
     }
+    // Escribir IP: la red sale de la IP; si no cae en ninguna red del router, se dice cuáles hay.
+    if (modoIp.value === 'fija' && PATRON_IPV4.test(datos.ipv4) && redes.value.length && datos.red_id === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['ipv4'], message: `No es de ninguna red de ${router.value?.nombre ?? 'el router'}: ${redes.value.map(r => r.cidr).join(', ')}` })
+    }
+    if (modoIp.value === 'red' && datos.red_id === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['red_id'], message: redes.value.length ? 'Elige una red con IP libres' : 'El router no tiene redes IPv4: deja la IP en «Automática»' })
+    }
     const elegido = planes.value.find(p => p.id === datos.plan_id)
     if (datos.tipo_conexion !== 'pppoe' && elegido?.dual_stack === 'v6') {
         ctx.addIssue({ code: 'custom', path: ['plan_id'], message: `El plan es solo IPv6 y ${TIPOS_CONEXION[datos.tipo_conexion].etiqueta} necesita IPv4: elige otro plan` })
@@ -208,12 +219,6 @@ watch([() => estado.router_id, () => router.value?.tipo_conexion], () => {
     estado.tipo_conexion = router.value?.tipo_conexion ?? 'pppoe'
 }, { immediate: true })
 
-const itemsRouter = computed<RadioGroupItem[]>(() => routers.value.map(r => ({
-    label: r.nombre,
-    value: r.id,
-    description: `${r.host} · ${CONTROLES_VELOCIDAD[r.control_velocidad ?? (r.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')].etiqueta.toLowerCase()}${esSinRadius(r) ? ` · sin RADIUS${tieneCredencialesApi(r) ? '' : ' (sin credenciales de la API)'}` : ''}`,
-})))
-
 function textoPila(p: Plan): string {
     return p.dual_stack === 'ambos' ? 'IPv4 + IPv6' : p.dual_stack === 'v4' ? 'solo IPv4' : 'solo IPv6'
 }
@@ -224,23 +229,10 @@ const itemsPlan = computed<RadioGroupItem[]>(() => planesActivos.value.map(p => 
     description: `${formatearVelocidad(p.bajada_kbps)} ↓ / ${formatearVelocidad(p.subida_kbps)} ↑ · ${textoPila(p)}${p.global ? '' : ' · plan de este router'}`,
 })))
 
-const itemsAsignacion: RadioGroupItem[] = [
-    { label: 'Automática', value: 'automatica', description: 'Se asigna la siguiente IP libre de las redes del router al crear el servicio.' },
-    { label: 'IP fija', value: 'fija', description: 'Para IP pública o reglas por IP: la escribes tú.' },
-]
-
-/** Asignación automática: red opcional (`red_ipv4_id`); "cualquiera" = la API elige. */
-const CUALQUIER_RED = 'cualquiera'
-const itemsRedAutomatica = computed<SelectItem[]>(() => [
-    { label: 'Cualquier red del router', value: CUALQUIER_RED },
-    ...redes.value.map(r => ({ label: etiquetaRedIpv4(r), value: String(r.id) })),
-])
-const redAutomatica = computed({
-    get: () => (estado.red_id === undefined ? CUALQUIER_RED : String(estado.red_id)),
-    set: (valor: string) => {
-        estado.red_id = valor === CUALQUIER_RED ? undefined : Number(valor)
-    },
-})
+/** IP del servicio (`ServicioIpAlta`): automática (de fábrica), de una red elegida o escrita a mano. */
+const modoIp = ref<ModoIpAlta>('automatica')
+/** «Avanzado: IPv6» plegado: de fábrica la IPv6 sigue al plan. */
+const avanzadoIpv6 = ref(false)
 
 const ETIQUETAS_IPV6: Record<ModoIpv6, string> = {
     radius_servicio: 'Automática por servicio',
@@ -274,7 +266,22 @@ const conExcepciones = ref(false)
 
 const precioEfectivo = computed(() => estado.costo_override?.trim() || plan.value?.precio || null)
 
-const textoIpv4 = computed(() => (estado.asignacion === 'fija' ? (estado.ipv4 || '—') : (red.value ? `Automática de ${red.value.cidr}` : 'Automática (siguiente IP libre)')))
+const textoIpv4 = computed(() => {
+    if (modoIp.value === 'fija') {
+        return estado.ipv4 || '—'
+    }
+    if (modoIp.value === 'red' && red.value) {
+        return `Siguiente libre de ${red.value.nombre ? `${red.value.nombre} (${red.value.cidr})` : red.value.cidr}`
+    }
+    return estado.estado_inicial === 'pendiente_instalacion' && conPppoe.value ? 'Automática, al activar' : 'Automática (siguiente libre)'
+})
+
+watch(() => ({
+    router: router.value?.nombre ?? null,
+    plan: plan.value?.nombre ?? null,
+    precio: precioEfectivo.value,
+    ip: textoIpv4.value,
+}), valor => emit('resumen', valor), { immediate: true })
 
 const textoIpv6 = computed(() => {
     if (estado.ipv6_modo === 'radius_servicio' && plan.value) {
@@ -381,7 +388,7 @@ onMounted(async () => {
     const [resultadoRouters, resultadoPlantillas, resultadoZonas] = await Promise.all([
         routersApi.listar({ activo: true }),
         puede('plantillas.ver') ? usePlantillas().listar() : null,
-        variasEmpresas.value && puede('zonas.ver') ? useZonas().listar() : null,
+        puede('zonas.ver') ? useZonas().listar() : null,
         clienteInicial && !props.cliente ? cargarCliente(clienteInicial) : null,
     ])
     cargandoRouters.value = false
@@ -575,7 +582,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     <UFormField
                         name="router_id"
                         label="Router"
-                        help="El router donde se conecta el cliente: define los planes, las redes y los pools disponibles."
+                        help="El router donde se conecta el cliente: define los planes, las redes y el tipo de conexión. Un router sin IP libres no se puede elegir."
                         required
                     >
                         <div
@@ -589,19 +596,18 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             />
                         </div>
                         <UEmpty
-                            v-else-if="!itemsRouter.length && !problemaCatalogo"
+                            v-else-if="!routers.length && !problemaCatalogo"
                             icon="i-lucide-router"
                             title="No hay routers activos"
                             description="Registra un router en Red → Routers para poder dar de alta servicios."
                             variant="naked"
                         />
-                        <URadioGroup
+                        <ServicioRouterSelector
                             v-else
                             v-model="estado.router_id"
-                            :items="itemsRouter"
-                            variant="card"
-                            class="w-full"
-                            :ui="{ fieldset: compacto ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-2' }"
+                            :routers="routers"
+                            :zonas="zonas"
+                            :zona-cliente-id="cliente?.zona_id ?? null"
                         />
                     </UFormField>
 
@@ -687,6 +693,126 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         </div>
                     </UFormField>
 
+                    <ServicioIpAlta
+                        v-if="router"
+                        v-model:modo="modoIp"
+                        v-model:asignacion="estado.asignacion"
+                        v-model:red-id="estado.red_id"
+                        v-model:ipv4="estado.ipv4"
+                        :redes="redes"
+                        :router="router"
+                        :tipo-conexion="estado.tipo_conexion"
+                        :cargando="cargandoRouter"
+                    >
+                        <UCollapsible
+                            v-model:open="avanzadoIpv6"
+                            :unmount-on-hide="false"
+                            class="flex flex-col gap-3"
+                        >
+                            <UButton
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                icon="i-lucide-chevron-right"
+                                class="self-start px-0"
+                                :ui="{ leadingIcon: avanzadoIpv6 ? 'rotate-90 transition-transform motion-reduce:transition-none' : 'transition-transform motion-reduce:transition-none' }"
+                                data-prueba="avanzado-ipv6"
+                            >
+                                Avanzado: IPv6
+                                <span class="font-normal text-muted">· {{ textoIpv6 }}</span>
+                            </UButton>
+                            <template #content>
+                                <section
+                                    class="flex flex-col gap-4"
+                                    data-prueba="alta-ipv6"
+                                >
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <p class="text-xs text-muted">
+                                            De fábrica la IPv6 sigue al plan.
+                                        </p>
+                                        <UButton
+                                            v-if="!soloIpv4"
+                                            :label="cambiarIpv6 ? 'Usar lo recomendado' : 'Cambiar'"
+                                            :icon="cambiarIpv6 ? 'i-lucide-undo-2' : 'i-lucide-pencil'"
+                                            color="neutral"
+                                            variant="ghost"
+                                            size="xs"
+                                            data-prueba="cambiar-ipv6"
+                                            @click="cambiarIpv6 = !cambiarIpv6; if (!cambiarIpv6) estado.ipv6_modo = conPppoe ? 'radius_servicio' : 'ninguno'"
+                                        />
+                                    </div>
+                                    <p
+                                        v-if="soloIpv4"
+                                        class="text-sm text-muted"
+                                    >
+                                        {{ plan?.nombre ?? 'El plan' }} es solo IPv4: el servicio no recibe IPv6.
+                                    </p>
+                                    <template v-else-if="!cambiarIpv6">
+                                        <p class="text-sm">
+                                            <span class="font-medium text-highlighted">{{ ETIQUETAS_IPV6[estado.ipv6_modo] }}.</span>
+                                            <span
+                                                v-if="estado.ipv6_modo === 'radius_servicio'"
+                                                class="text-muted"
+                                            > Al conectarse recibe un /64 para el enlace con el router y un /{{ plan?.tamano_prefijo_delegado ?? 56 }} para su red, tomados de los pools IPv6 de {{ router?.nombre ?? 'el router' }}.</span>
+                                            <span
+                                                v-else-if="estado.ipv6_modo === 'ninguno'"
+                                                class="text-muted"
+                                            > Sin PPPoE la IPv6 automática no está disponible; usa «Cambiar» para un prefijo fijo.</span>
+                                        </p>
+                                        <UAlert
+                                            v-if="estado.ipv6_modo === 'radius_servicio' && !bloques.length && puede('ipv6.ver') && estado.router_id"
+                                            color="warning"
+                                            variant="subtle"
+                                            icon="i-lucide-triangle-alert"
+                                            title="El router no tiene bloques IPv6"
+                                            description="El servicio funcionará solo con IPv4 hasta que registres un bloque y sus pools en Red → Routers."
+                                        />
+                                    </template>
+                                    <template v-else>
+                                        <UFormField
+                                            name="ipv6_modo"
+                                            label="Modo IPv6"
+                                        >
+                                            <URadioGroup
+                                                v-model="estado.ipv6_modo"
+                                                :items="itemsIpv6"
+                                                variant="card"
+                                                class="w-full"
+                                                :ui="{ fieldset: 'grid gap-2' }"
+                                            />
+                                        </UFormField>
+                                        <UFormField
+                                            v-if="estado.ipv6_modo === 'duid'"
+                                            name="ipv6_duid"
+                                            label="DUID del equipo"
+                                            help="Identifica al router del cliente en DHCPv6; está en la configuración del equipo."
+                                            required
+                                        >
+                                            <UInput
+                                                v-model="estado.ipv6_duid"
+                                                placeholder="00:03:00:01:4c:5e:0c:12:34:56"
+                                                class="w-full font-mono"
+                                            />
+                                        </UFormField>
+                                        <UFormField
+                                            v-if="estado.ipv6_modo === 'estatico'"
+                                            name="prefijo_delegado_v6"
+                                            label="Prefijo delegado"
+                                            help="El prefijo que usará la red del cliente."
+                                            required
+                                        >
+                                            <UInput
+                                                v-model="estado.prefijo_delegado_v6"
+                                                placeholder="2001:db8:1000:100::/56"
+                                                class="w-full font-mono"
+                                            />
+                                        </UFormField>
+                                    </template>
+                                </section>
+                            </template>
+                        </UCollapsible>
+                    </ServicioIpAlta>
+
                     <UFormField
                         v-if="variasEmpresas"
                         name="empresa_id"
@@ -749,164 +875,6 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             <span v-else>Gateway (local-address): sale de la red del servidor al elegirlo.</span>
                         </p>
                     </section>
-
-                    <section class="flex flex-col gap-4">
-                        <h3 class="text-sm font-semibold text-highlighted">
-                            IPv4
-                        </h3>
-                        <UAlert
-                            v-if="!conPppoe"
-                            color="neutral"
-                            variant="subtle"
-                            icon="i-lucide-info"
-                            :title="`${TIPOS_CONEXION[estado.tipo_conexion].etiqueta}: la IPv4 es obligatoria`"
-                            description="Automática de una red del router o fija. Si el router no tiene redes IPv4, regístralas primero en Red → Routers."
-                        />
-                        <UFormField
-                            name="asignacion"
-                            label="Asignación"
-                        >
-                            <URadioGroup
-                                v-model="estado.asignacion"
-                                :items="itemsAsignacion"
-                                variant="card"
-                                class="w-full"
-                                :ui="{ fieldset: compacto ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-2' }"
-                            />
-                        </UFormField>
-
-                        <ServicioIpv4Fija
-                            v-if="estado.asignacion === 'fija'"
-                            v-model:red-id="estado.red_id"
-                            v-model:ipv4="estado.ipv4"
-                            :redes="redes"
-                        />
-
-                        <div
-                            v-else
-                            class="flex flex-col gap-2"
-                        >
-                            <UFormField
-                                v-if="redes.length > 1"
-                                name="red_id"
-                                label="Red"
-                                hint="Opcional"
-                                help="Sin elegir, se toma la siguiente IP libre de cualquier red del router."
-                                class="sm:max-w-sm"
-                            >
-                                <USelect
-                                    v-model="redAutomatica"
-                                    :items="itemsRedAutomatica"
-                                    class="w-full"
-                                    aria-label="Red de la que asignar la IP"
-                                />
-                            </UFormField>
-                            <div class="flex flex-wrap items-center gap-2 text-sm text-muted">
-                                <span>Redes de {{ router?.nombre ?? 'el router' }}:</span>
-                                <UBadge
-                                    v-for="r in redes"
-                                    :key="r.id"
-                                    :label="etiquetaRedIpv4(r)"
-                                    color="neutral"
-                                    variant="outline"
-                                    class="font-mono"
-                                />
-                                <span v-if="!redes.length">{{ puede('redes.ver') ? 'el router no tiene redes IPv4 registradas.' : 'no tienes permiso para verlas.' }}</span>
-                            </div>
-                        </div>
-                    </section>
-
-                    <USeparator />
-
-                    <section
-                        class="flex flex-col gap-4"
-                        data-prueba="alta-ipv6"
-                    >
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <h3 class="text-sm font-semibold text-highlighted">
-                                IPv6
-                            </h3>
-                            <UButton
-                                v-if="!soloIpv4"
-                                :label="cambiarIpv6 ? 'Usar lo recomendado' : 'Cambiar'"
-                                :icon="cambiarIpv6 ? 'i-lucide-undo-2' : 'i-lucide-pencil'"
-                                color="neutral"
-                                variant="ghost"
-                                size="xs"
-                                data-prueba="cambiar-ipv6"
-                                @click="cambiarIpv6 = !cambiarIpv6; if (!cambiarIpv6) estado.ipv6_modo = conPppoe ? 'radius_servicio' : 'ninguno'"
-                            />
-                        </div>
-                        <p
-                            v-if="soloIpv4"
-                            class="text-sm text-muted"
-                        >
-                            {{ plan?.nombre ?? 'El plan' }} es solo IPv4: el servicio no recibe IPv6.
-                        </p>
-                        <template v-else-if="!cambiarIpv6">
-                            <p class="text-sm">
-                                <span class="font-medium text-highlighted">{{ ETIQUETAS_IPV6[estado.ipv6_modo] }}.</span>
-                                <span
-                                    v-if="estado.ipv6_modo === 'radius_servicio'"
-                                    class="text-muted"
-                                > Al conectarse recibe un /64 para el enlace con el router y un /{{ plan?.tamano_prefijo_delegado ?? 56 }} para su red, tomados de los pools IPv6 de {{ router?.nombre ?? 'el router' }}.</span>
-                                <span
-                                    v-else-if="estado.ipv6_modo === 'ninguno'"
-                                    class="text-muted"
-                                > Sin PPPoE la IPv6 automática no está disponible; usa «Cambiar» para un prefijo fijo.</span>
-                            </p>
-                            <UAlert
-                                v-if="estado.ipv6_modo === 'radius_servicio' && !bloques.length && puede('ipv6.ver') && estado.router_id"
-                                color="warning"
-                                variant="subtle"
-                                icon="i-lucide-triangle-alert"
-                                title="El router no tiene bloques IPv6"
-                                description="El servicio funcionará solo con IPv4 hasta que registres un bloque y sus pools en Red → Routers."
-                            />
-                        </template>
-                        <template v-else>
-                            <UFormField
-                                name="ipv6_modo"
-                                label="Modo IPv6"
-                            >
-                                <URadioGroup
-                                    v-model="estado.ipv6_modo"
-                                    :items="itemsIpv6"
-                                    variant="card"
-                                    class="w-full"
-                                    :ui="{ fieldset: 'grid gap-2' }"
-                                />
-                            </UFormField>
-                            <UFormField
-                                v-if="estado.ipv6_modo === 'duid'"
-                                name="ipv6_duid"
-                                label="DUID del equipo"
-                                help="Identifica al router del cliente en DHCPv6; está en la configuración del equipo."
-                                required
-                            >
-                                <UInput
-                                    v-model="estado.ipv6_duid"
-                                    placeholder="00:03:00:01:4c:5e:0c:12:34:56"
-                                    class="w-full font-mono"
-                                />
-                            </UFormField>
-                            <UFormField
-                                v-if="estado.ipv6_modo === 'estatico'"
-                                name="prefijo_delegado_v6"
-                                label="Prefijo delegado"
-                                help="El prefijo que usará la red del cliente."
-                                required
-                            >
-                                <UInput
-                                    v-model="estado.prefijo_delegado_v6"
-                                    placeholder="2001:db8:1000:100::/56"
-                                    class="w-full font-mono"
-                                />
-                            </UFormField>
-                        </template>
-                    </section>
-
-                    <USeparator />
 
                     <section
                         v-if="conPppoe"
@@ -1283,6 +1251,16 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 :valor="TIPOS_CONEXION[estado.tipo_conexion].etiqueta"
                             />
                             <DatoFicha
+                                etiqueta="IPv4"
+                                :valor="textoIpv4"
+                                :mono="modoIp === 'fija'"
+                                data-prueba="resumen-ipv4"
+                            />
+                            <DatoFicha
+                                etiqueta="IPv6"
+                                :valor="textoIpv6"
+                            />
+                            <DatoFicha
                                 v-if="variasEmpresas"
                                 etiqueta="Empresa que factura"
                                 :valor="empresaServicio === null ? 'La sugerida por el sistema' : nombreEmpresa(empresaServicio)"
@@ -1296,15 +1274,6 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 v-if="conPppoe && servidores.length"
                                 etiqueta="Servidor PPPoE"
                                 :valor="servidorElegido ? `${servidorElegido.nombre}${gatewayServicio ? ` · gateway ${gatewayServicio}` : ''}` : 'Lo elige Argos por la red'"
-                            />
-                            <DatoFicha
-                                etiqueta="IPv4"
-                                :valor="textoIpv4"
-                                mono
-                            />
-                            <DatoFicha
-                                etiqueta="IPv6"
-                                :valor="textoIpv6"
                             />
                             <template v-if="conPppoe">
                                 <DatoFicha
