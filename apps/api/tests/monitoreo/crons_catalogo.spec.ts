@@ -36,6 +36,7 @@ const AGENDAN: Record<string, string> = {
     'app/monitoreo/cron_almacenamiento.ts': 'notify-cron: almacenamiento',
     'commands/iris_worker.ts': 'iris.pendientes e iris.conciliar_avisos',
     'commands/horus_worker.ts': 'horus.pendientes',
+    'app/integraciones/equipos/cola.ts': 'equipos.pendientes (equipos:worker)',
 }
 
 async function archivosTs(dir: string): Promise<string[]> {
