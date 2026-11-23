@@ -26,7 +26,7 @@ conect=T('''<div style="display:{{v.con}};flex:1;min-height:0;flex-direction:col
 </div>''',c=CS)
 CC='minmax(0,1.1fr) minmax(0,1fr) 120px minmax(0,1.6fr) 230px'
 caid=T('''<div style="display:{{v.cai}};flex:1;min-height:0;flex-direction:column">
- <div class="av2 nf" style="margin:12px 18px 0"><i:info:16><div>Un cliente aparece aquí cuando se reconecta <b>5 veces o más en 30 minutos</b>. Suele ser fibra dañada, equipo fallando o energía. Argos avisa a Iris para que soporte lo atienda.</div></div>
+ <div class="av2 nf" style="margin:12px 18px 0"><i:info:16><div>Un cliente aparece aquí cuando se cae <b>3 veces o más en 60 minutos</b> (se cambia en Configuración › Red y portal). Suele ser fibra dañada, equipo fallando o energía. Argos avisa a Iris para que soporte lo atienda; si es una falla general, va al ticket general.</div></div>
  <div class="lh" style="grid-template-columns:<<c>>;margin-top:12px"><span>Cliente</span><span>Router</span><span>Caídas</span><span>Por qué se cayó</span><span>Soporte</span></div>
  <div class="sc" style="flex:1"><<rows>></div>
 </div>''',c=CC,rows=''.join(T('<div class="lr" style="grid-template-columns:<<c>>"><div><b class="el" style="display:block;font-size:14px"><<a>></b><div class="m2 mono" style="font-size:12px"><<u>></div></div><span class="el m2" style="color:#334155"><<r>></span><div><b class="num" style="font-size:16px;color:#B91C1C"><<n>></b> <span class="m2"><<t>></span></div><span class="el"><<w>></span><span><span class="b <<k>>"><<s>></span></span></div>',c=CC,a=a,u=u,r=r,n=n,t=t,w=w,s=s_,k=k) for a,u,r,n,t,w,s_,k in caidas))
@@ -62,8 +62,10 @@ inner=T('''<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
  <div><h1 class="h1">Conectados ahora</h1><div class="sub">Quién está navegando, desde cuándo y por cuál router</div></div>
  <span style="flex:1"></span>
  <span class="b ok" style="padding:8px 14px;font-size:13px"><i:shield:15>RADIUS funcionando · 2 nodos</span>
+ <button class="btn o"><i:alerta:15>Fallas generales</button>
  <button class="ib f" title="Ayuda (manual)" style="width:40px;height:40px;border-radius:999px;cursor:help"><i:ayuda:18></button>
 </div>
+<div class="av2 er" style="flex:0 0 auto;padding:10px 16px"><i:alerta:18><div style="flex:1"><b>Falla general en MK Sur · Escuintla</b> desde las 05:12 · 395 de 410 servicios sin conexión · Iris abrió un ticket general y no se abren tickets por servicio mientras dure.</div><button class="btn o" style="padding:7px 14px">Ver la falla</button></div>
 <div style="display:flex;gap:12px;flex:0 0 auto"><<k1>><<k2>><<k3>><<k4>></div>
 <div style="display:flex;gap:12px;flex:1;min-height:0">
 <section class="isla" style="flex:1;min-width:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
