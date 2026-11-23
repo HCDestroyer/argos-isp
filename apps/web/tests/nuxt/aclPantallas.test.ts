@@ -149,7 +149,7 @@ function rutasDePaginas(): Map<string, string | string[]> {
  * ficha del plan solo edita: siempre le pasa el plan, así que nunca crea).
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exentos?: Record<string, string[]> }> = {
-    // LibroCierres solo se abre desde /libro (página con `libro.ver`): ya lo comprobó quien la abrió.
+    // LibroCierres solo se abre desde /libro/cierres (página con `libro.ver`): ya lo comprobó quien la abrió.
     // La ficha de la declaración (fase 7 PR B) la muestra con `tipo="impuestos"` solo con `libro.ver`.
     'CierreChecklist.vue': { permisos: ['libro.ver'], desde: ['components/LibroCierres.vue', 'pages/declaraciones/[id].vue'], exentos: { 'components/LibroCierres.vue': ['libro.ver'] } },
     'ProcesosDetenidos.vue': { permisos: ['facturas.ver'], desde: ['pages/libro/bloqueos.vue'] },
@@ -202,10 +202,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'CuentaBancariaFormulario.vue': { permisos: ['cuentas_bancarias.editar'], desde: ['pages/configuracion/cuentas-bancarias.vue'] },
     'EgresoRegistrarModal.vue': { permisos: ['egresos.registrar'], desde: ['pages/egresos/index.vue'] },
     'EmpresaLogoModal.vue': { permisos: ['empresas.cambiar_logo'], desde: ['pages/configuracion/empresas.vue'] },
-    'LibroCierres.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
-    'LibroEstadoFinanciero.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LibroCierres.vue': { permisos: ['libro.ver'], desde: ['pages/libro/cierres.vue'] },
+    'LibroEstadoFinanciero.vue': { permisos: ['libro.ver'], desde: ['pages/reportes/balance.vue', 'pages/reportes/resultados.vue'] },
     'LibroDiarios.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
-    'LibroIntegridad.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LibroIntegridad.vue': { permisos: ['libro.ver'], desde: ['pages/libro/integridad.vue'] },
     'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id]/index.vue'] },
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
     // Formulario en página (rediseño): «Nuevo plan» solo crea y «Editar» solo edita.

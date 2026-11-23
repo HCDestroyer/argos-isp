@@ -134,7 +134,7 @@ describe('tablero fiscal', () => {
     })
 
     it('pantalla: bloque en error con «Reintentar» y sin cifras, no aplica atenuado, alertas y vencidas en rojo', async () => {
-        const pagina = await mountSuspended(PaginaTablero)
+        const pagina = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=detalle' })
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-empresa="1"]')).not.toBeNull())
 
@@ -176,7 +176,7 @@ describe('tablero fiscal', () => {
     it('Fibra del Sur: alertas de FEL y de límite superado, sin cambiar el régimen', async () => {
         useEmpresaActiva().elegir(2)
         bd.datosDeclaraciones.push({ empresa_id: 2, periodo: '2026-10', renglones: [{ seccion: 'ventas', origen: 'dte', documento: 'FPEQ S-399', fecha: '2026-10-12', tipo: 'FPEQ', nit: 'CF', base: '470000.00', iva: '0.00', total: '470000.00', estado: 'certificado' }] })
-        const pagina = await mountSuspended(PaginaTablero)
+        const pagina = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=detalle' })
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-empresa="2"]')).not.toBeNull())
         expect(raiz.querySelector('[data-alerta="fel"]')?.textContent).toContain('FEL es obligatoria para su régimen')
@@ -189,7 +189,7 @@ describe('tablero fiscal', () => {
 
     it('«Todas»: una sección por empresa y sin totales; si la API falla, error con «Reintentar» y nada más', async () => {
         useEmpresaActiva().elegir('todas')
-        const pagina = await mountSuspended(PaginaTablero)
+        const pagina = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=detalle' })
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelectorAll('[data-empresa]').length).toBe(2))
         expect(raiz.textContent).toContain('sin totales consolidados')
@@ -197,7 +197,7 @@ describe('tablero fiscal', () => {
         expect(raiz.querySelector('[data-empresa="2"] h2')?.textContent).toContain('Fibra del Sur')
 
         simularFalla('GET /api/v1/fiscal/tablero', 500)
-        const fallida = await mountSuspended(PaginaTablero)
+        const fallida = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=detalle' })
         const otra = fallida.element as HTMLElement
         await esperar(() => expect(otra.querySelector('[data-prueba="tablero-problema"]')).not.toBeNull())
         expect(otra.querySelector('[data-bloque]')).toBeNull()
@@ -217,7 +217,7 @@ describe('tablero fiscal', () => {
         expect(inc?.tope).toBe(new Decimal(inc?.base ?? '0').times('0.03').toDecimalPlaces(2).toFixed(2))
         expect(inc?.disponible).toBe(Decimal.max(new Decimal(inc?.tope ?? '0').minus(inc?.estimacion ?? '0'), 0).toFixed(2))
 
-        const pagina = await mountSuspended(PaginaTablero)
+        const pagina = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=detalle' })
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-bloque="compras_sin_nit"] [data-compra="90"]')).not.toBeNull())
         expect(bloqueDe(raiz, 'compras_sin_nit').querySelector('[data-prueba="compra-enlace"]')?.getAttribute('href')).toBe('/compras/90')
@@ -228,7 +228,7 @@ describe('tablero fiscal', () => {
 
         // Un parámetro sin valor deja su bloque en error, sin cifras, y el resto sigue.
         bd.fiscal.valores.push({ id: 9002, pais: 'GT', empresa_id: 1, clave: 'depreciacion', valor: null, vigente_desde: '2026-01-01', origen: 'usuario', motivo: 'Por confirmar', creado_por: 1, created_at: '2026-10-01T00:00:00.000Z', nivel: 'empresa' })
-        const sinTopes = await mountSuspended(PaginaTablero)
+        const sinTopes = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=detalle' })
         const otra = sinTopes.element as HTMLElement
         await esperar(() => expect(otra.querySelector('[data-bloque="depreciacion"]')?.getAttribute('data-estado')).toBe('error'))
         expect(bloqueDe(otra, 'depreciacion').textContent).not.toMatch(/Q\s?\d/)

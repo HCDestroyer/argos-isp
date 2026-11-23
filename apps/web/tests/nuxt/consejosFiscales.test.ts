@@ -100,7 +100,7 @@ describe('consejos fiscales', () => {
     })
 
     it('tablero: solo los que aplican; ocultar para la empresa, verlos y mostrar', async () => {
-        const pagina = await mountSuspended(PaginaTablero)
+        const pagina = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=consejos' })
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-consejos="1"]')).not.toBeNull())
         const seccion = dentro(raiz, '[data-consejos="1"]')
@@ -130,7 +130,7 @@ describe('consejos fiscales', () => {
     it('sin datos: solo con el interruptor, con el error de su bloque y sin texto; lectura no oculta', async () => {
         sinIsoTasa()
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'fiscal.configurar') }
-        const pagina = await mountSuspended(PaginaTablero)
+        const pagina = await mountSuspended(PaginaTablero, { route: '/fiscal/tablero?tab=consejos' })
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-consejos="1"]')).not.toBeNull())
         expect(raiz.querySelector('[data-consejos="1"] [data-consejo="regimen_simulado"]')).toBeNull()

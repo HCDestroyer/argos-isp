@@ -878,6 +878,17 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ancla: 'detalle-de-una-factura',
         temas: [],
     },
+    '/finanzas': {
+        titulo: 'Panel financiero',
+        resumen: 'El resumen del dinero de la empresa en una pantalla: lo cobrado contra lo facturado, lo vencido por antigüedad, el efectivo en cajas y bancos, los impuestos por pagar y los avisos del libro. Las cifras se actualizan con cada cobro.',
+        pagina: 'contabilidad/panel-financiero',
+        ancla: null,
+        temas: [
+            'Qué ves',
+            'En el teléfono',
+            'Relacionado',
+        ],
+    },
     '/fiscal/calendario': {
         titulo: 'Calendario fiscal',
         resumen: 'Los vencimientos de las declaraciones de cada empresa según su régimen y sus banderas: IVA, pequeño contribuyente, ISR, ISO y retenciones. Las vencidas sin presentar se ven en rojo y las presentadas en verde.',
@@ -1194,7 +1205,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/libro': {
         titulo: 'Libro',
-        resumen: 'El libro contable de la empresa: cada factura, pago, egreso, compra o cierre de caja deja aquí su asiento de doble partida. Desde esta pantalla consultas el diario y el mayor, ves el balance y el estado de resultados, cierras los meses y el ejercicio, y compruebas que nadie alteró el libro.',
+        resumen: 'El libro contable de la empresa: cada factura, pago, egreso, compra o cierre de caja deja aquí su asiento de doble partida. En Libro contable consultas el diario, el mayor, el auxiliar de cada cliente y el plan de cuentas; en Periodos y cierres cierras los meses y el ejercicio; el balance y el estado de resultados están en Reportes → Contabilidad.',
         pagina: 'contabilidad/libro',
         ancla: null,
         temas: [
@@ -1217,6 +1228,24 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Preguntas frecuentes y errores',
             'Relacionado',
         ],
+    },
+    '/libro/cierres': {
+        titulo: 'Periodos y cierres',
+        resumen: 'Los doce meses del año con su estado, el cierre de cada mes con su lista de verificación, el cierre del ejercicio y los bloqueos del libro, en una sola pantalla. Cada empresa cierra por separado: con «Todas las empresas» te pide elegir una.',
+        pagina: 'contabilidad/cierres',
+        ancla: null,
+        temas: [
+            'Qué ves',
+            'Acciones',
+            'Relacionado',
+        ],
+    },
+    '/libro/integridad': {
+        titulo: 'Libro · Verificar la integridad del libro',
+        resumen: 'Si ves «Ruptura en el sello …», no cierres ni bloquees periodos. Pulsa «Ver asiento #…» para ver cuál es y avisa al administrador del sistema.',
+        pagina: 'contabilidad/libro',
+        ancla: 'verificar-la-integridad-del-libro',
+        temas: [],
     },
     '/libros': {
         titulo: 'Libros legales',
@@ -1518,6 +1547,22 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ancla: 'como-se-usa-un-reporte',
         temas: [],
     },
+    '/reportes/balance': {
+        titulo: 'Reportes del panel',
+        resumen: 'Los reportes de cartera, ingresos, cobranza, cajas, IVA, promesas, altas y bajas, egresos, bonificaciones y cuentas por pagar. Cada uno se filtra, muestra sus totales y se descarga en CSV o Excel con los mismos filtros.',
+        pagina: 'reportes/catalogo',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Cómo se usa un reporte',
+            'Cartera vencida',
+            'Facturado vs cobrado',
+            'Ingresos',
+            'Cobranza diaria',
+            'Cierres de caja',
+            'IVA',
+        ],
+    },
     '/reportes/lealtad': {
         titulo: 'Reporte de lealtad',
         resumen: 'Cuántos puntos se emitieron, canjearon y vencieron en un rango de fechas, y si el pasivo de los puntos cuadra con el libro contable.',
@@ -1527,6 +1572,22 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Quién la usa',
             'Qué ves',
             'Relacionado',
+        ],
+    },
+    '/reportes/resultados': {
+        titulo: 'Reportes del panel',
+        resumen: 'Los reportes de cartera, ingresos, cobranza, cajas, IVA, promesas, altas y bajas, egresos, bonificaciones y cuentas por pagar. Cada uno se filtra, muestra sus totales y se descarga en CSV o Excel con los mismos filtros.',
+        pagina: 'reportes/catalogo',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Cómo se usa un reporte',
+            'Cartera vencida',
+            'Facturado vs cobrado',
+            'Ingresos',
+            'Cobranza diaria',
+            'Cierres de caja',
+            'IVA',
         ],
     },
     '/restablecer-contrasena': {

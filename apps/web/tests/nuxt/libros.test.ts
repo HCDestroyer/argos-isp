@@ -72,10 +72,10 @@ describe('libros legales con folio', () => {
 
         const sinBloqueo = { type: 'urn:argosisp:problema:periodo_sin_bloqueo', title: 'Periodo sin bloqueo', status: 422, errors: [{ field: 'hasta', message: 'El mes 2026-08 está abierto', rule: 'mes_abierto' }, { field: 'hasta', message: 'El libro no tiene bloqueo global ni duro', rule: 'sin_bloqueo' }] }
         expect(problemaLibroLegible(sinBloqueo).title).toBe('El periodo todavía no se puede emitir')
-        expect(pasosProblemaLibro(sinBloqueo).map(p => [p.texto.split(':')[0], p.accion?.ruta])).toEqual([['El mes 2026-08 está abierto', '/libro?tab=cierres'], ['El libro no tiene bloqueo global ni duro', '/libro/bloqueos']])
+        expect(pasosProblemaLibro(sinBloqueo).map(p => [p.texto.split(':')[0], p.accion?.ruta])).toEqual([['El mes 2026-08 está abierto', '/libro/cierres'], ['El libro no tiene bloqueo global ni duro', '/libro/bloqueos']])
         const agotados = pasosProblemaLibro({ type: 'urn:argosisp:problema:folios_agotados', title: 'Folios agotados', status: 422, errors: [{ field: 'libro', message: 'Necesita 6 folios; disponibles 2', rule: 'folios_agotados' }] })
         expect([agotados[0]?.texto.startsWith('Necesita 6 folios; disponibles 2.'), agotados[0]?.accion?.permiso]).toEqual([true, 'libros.habilitar'])
-        expect(pasosProblemaLibro({ type: 'urn:argosisp:problema:integridad_rota', title: 'Integridad', status: 409 })[0]?.accion?.ruta).toBe('/libro?tab=integridad')
+        expect(pasosProblemaLibro({ type: 'urn:argosisp:problema:integridad_rota', title: 'Integridad', status: 409 })[0]?.accion?.ruta).toBe('/libro/integridad')
         expect(pasosProblemaLibro({ type: 'urn:argosisp:problema:archivo_alterado', title: 'Archivo', status: 409 })[0]?.texto).toContain('SHA-256')
         expect(pasosProblemaLibro({ type: 'about:blank', title: 'Otro', status: 500 })).toEqual([])
         const emision = bd.librosEmisiones.find(e => e.id === 3)!

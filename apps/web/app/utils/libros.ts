@@ -209,9 +209,9 @@ export interface PasoLibro {
     accion?: { etiqueta: string, ruta: string, permiso: string }
 }
 
-const CERRAR_MES = { etiqueta: 'Ir a cierres', ruta: '/libro?tab=cierres', permiso: 'libro.cerrar_periodo' }
+const CERRAR_MES = { etiqueta: 'Ir a cierres', ruta: '/libro/cierres', permiso: 'libro.cerrar_periodo' }
 const BLOQUEAR = { etiqueta: 'Ir a bloqueos', ruta: '/libro/bloqueos', permiso: 'libro.bloquear' }
-const INTEGRIDAD = { etiqueta: 'Ver integridad', ruta: '/libro?tab=integridad', permiso: 'libro.ver' }
+const INTEGRIDAD = { etiqueta: 'Ver integridad', ruta: '/libro/integridad', permiso: 'libro.ver' }
 
 const TITULOS: Record<string, string> = {
     periodo_sin_bloqueo: 'El periodo todavía no se puede emitir',

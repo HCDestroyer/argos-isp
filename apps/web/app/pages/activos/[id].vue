@@ -55,106 +55,110 @@ onMounted(cargar)
             />
         </template>
 
-        <div class="flex flex-col gap-6">
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
-            <template v-else-if="activo">
-                <UAlert
-                    v-if="activo.baja"
-                    color="neutral"
-                    variant="subtle"
-                    icon="i-lucide-archive"
-                    :title="`Dado de baja el ${formatearFecha(activo.baja.fecha)} · ${TIPOS_BAJA[activo.baja.tipo]}`"
-                    :description="`${activo.baja.motivo}. Valor en libros a la baja: ${formatearQuetzales(activo.baja.valor_libros)}${activo.baja.tipo === 'venta' ? ` · precio ${formatearQuetzales(activo.baja.precio_venta)}` : ''}.`"
-                    data-prueba="activo-baja"
-                />
-                <UCard :ui="{ body: 'p-4 sm:p-4' }">
-                    <div class="flex flex-col gap-4">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h2 class="text-base font-semibold text-highlighted">
-                                {{ activo.descripcion }}
-                            </h2>
-                            <UBadge
-                                :label="ESTADOS_ACTIVO[activo.estado].etiqueta"
-                                :color="ESTADOS_ACTIVO[activo.estado].color"
-                                :icon="ESTADOS_ACTIVO[activo.estado].icono"
-                                variant="subtle"
-                            />
-                        </div>
-                        <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                            <DatoFicha
-                                etiqueta="Clase"
-                                :valor="etiquetaClaseActivo(activo.clase)"
-                            />
-                            <DatoFicha
-                                etiqueta="Serie"
-                                :valor="activo.serie"
-                            />
-                            <DatoFicha
-                                etiqueta="Ubicación"
-                                :valor="activo.ubicacion"
-                            />
-                            <DatoFicha
-                                etiqueta="Alta"
-                                :valor="formatearFecha(activo.fecha_alta)"
-                            />
-                            <DatoFicha etiqueta="Costo">
-                                <span class="tabular-nums">{{ formatearQuetzales(activo.costo) }}</span>
-                            </DatoFicha>
-                            <DatoFicha etiqueta="Valor residual">
-                                <span class="tabular-nums">{{ formatearQuetzales(activo.valor_residual) }}</span>
-                            </DatoFicha>
-                            <DatoFicha
-                                etiqueta="Tasa anual"
-                                :valor="`${activo.tasa_anual} %`"
-                            />
-                            <DatoFicha etiqueta="Cuota mensual">
-                                <span class="tabular-nums">{{ formatearQuetzales(activo.cuota_mensual) }}</span>
-                            </DatoFicha>
-                            <DatoFicha etiqueta="Depreciación acumulada">
-                                <span class="tabular-nums">{{ formatearQuetzales(activo.depreciacion_acumulada) }}</span>
-                            </DatoFicha>
-                            <DatoFicha etiqueta="Valor en libros">
-                                <span
-                                    class="font-semibold tabular-nums"
-                                    data-prueba="valor-libros"
-                                >{{ formatearQuetzales(activo.valor_libros) }}</span>
-                            </DatoFicha>
-                            <DatoFicha
-                                etiqueta="Cuotas"
-                                :valor="activo.cuotas ? `${activo.cuotas} (la última de ${activo.ultima_cuota?.slice(0, 7)})` : `Ninguna; la primera es de ${activo.inicio_depreciacion.slice(0, 7)}`"
-                            />
-                            <DatoFicha
-                                v-if="!new Decimal(activo.depreciacion_inicial).isZero()"
-                                etiqueta="Depreciación al alta"
-                            >
-                                <span class="tabular-nums">{{ formatearQuetzales(activo.depreciacion_inicial) }}</span>
-                            </DatoFicha>
-                            <DatoFicha
-                                etiqueta="Cuentas"
-                                :valor="`${activo.cuenta_activo_codigo} · ${activo.cuenta_depreciacion_codigo}`"
-                                mono
-                            />
-                            <DatoFicha
-                                v-if="activo.compra_id"
-                                etiqueta="Comprado con"
-                            >
-                                <ULink
-                                    :to="puede('compras.ver') ? `/compras/${activo.compra_id}` : undefined"
-                                    class="text-highlighted underline"
-                                >
-                                    Compra #{{ activo.compra_id }}
-                                </ULink>
-                            </DatoFicha>
-                        </dl>
-                    </div>
-                </UCard>
-            </template>
-        </div>
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-6 p-4 sm:p-5">
+                    <ProblemaAlerta
+                        v-if="problema"
+                        :problema="problema"
+                        :reintentar="cargar"
+                        :reintentando="cargando"
+                    />
+                    <template v-else-if="activo">
+                        <UAlert
+                            v-if="activo.baja"
+                            color="neutral"
+                            variant="subtle"
+                            icon="i-lucide-archive"
+                            :title="`Dado de baja el ${formatearFecha(activo.baja.fecha)} · ${TIPOS_BAJA[activo.baja.tipo]}`"
+                            :description="`${activo.baja.motivo}. Valor en libros a la baja: ${formatearQuetzales(activo.baja.valor_libros)}${activo.baja.tipo === 'venta' ? ` · precio ${formatearQuetzales(activo.baja.precio_venta)}` : ''}.`"
+                            data-prueba="activo-baja"
+                        />
+                        <UCard :ui="{ body: 'p-4 sm:p-4' }">
+                            <div class="flex flex-col gap-4">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h2 class="text-base font-semibold text-highlighted">
+                                        {{ activo.descripcion }}
+                                    </h2>
+                                    <UBadge
+                                        :label="ESTADOS_ACTIVO[activo.estado].etiqueta"
+                                        :color="ESTADOS_ACTIVO[activo.estado].color"
+                                        :icon="ESTADOS_ACTIVO[activo.estado].icono"
+                                        variant="subtle"
+                                    />
+                                </div>
+                                <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                    <DatoFicha
+                                        etiqueta="Clase"
+                                        :valor="etiquetaClaseActivo(activo.clase)"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Serie"
+                                        :valor="activo.serie"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Ubicación"
+                                        :valor="activo.ubicacion"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Alta"
+                                        :valor="formatearFecha(activo.fecha_alta)"
+                                    />
+                                    <DatoFicha etiqueta="Costo">
+                                        <span class="tabular-nums">{{ formatearQuetzales(activo.costo) }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha etiqueta="Valor residual">
+                                        <span class="tabular-nums">{{ formatearQuetzales(activo.valor_residual) }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha
+                                        etiqueta="Tasa anual"
+                                        :valor="`${activo.tasa_anual} %`"
+                                    />
+                                    <DatoFicha etiqueta="Cuota mensual">
+                                        <span class="tabular-nums">{{ formatearQuetzales(activo.cuota_mensual) }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha etiqueta="Depreciación acumulada">
+                                        <span class="tabular-nums">{{ formatearQuetzales(activo.depreciacion_acumulada) }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha etiqueta="Valor en libros">
+                                        <span
+                                            class="font-semibold tabular-nums"
+                                            data-prueba="valor-libros"
+                                        >{{ formatearQuetzales(activo.valor_libros) }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha
+                                        etiqueta="Cuotas"
+                                        :valor="activo.cuotas ? `${activo.cuotas} (la última de ${activo.ultima_cuota?.slice(0, 7)})` : `Ninguna; la primera es de ${activo.inicio_depreciacion.slice(0, 7)}`"
+                                    />
+                                    <DatoFicha
+                                        v-if="!new Decimal(activo.depreciacion_inicial).isZero()"
+                                        etiqueta="Depreciación al alta"
+                                    >
+                                        <span class="tabular-nums">{{ formatearQuetzales(activo.depreciacion_inicial) }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha
+                                        etiqueta="Cuentas"
+                                        :valor="`${activo.cuenta_activo_codigo} · ${activo.cuenta_depreciacion_codigo}`"
+                                        mono
+                                    />
+                                    <DatoFicha
+                                        v-if="activo.compra_id"
+                                        etiqueta="Comprado con"
+                                    >
+                                        <ULink
+                                            :to="puede('compras.ver') ? `/compras/${activo.compra_id}` : undefined"
+                                            class="text-highlighted underline"
+                                        >
+                                            Compra #{{ activo.compra_id }}
+                                        </ULink>
+                                    </DatoFicha>
+                                </dl>
+                            </div>
+                        </UCard>
+                    </template>
+                </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <BajaActivoModal
             v-if="activo"

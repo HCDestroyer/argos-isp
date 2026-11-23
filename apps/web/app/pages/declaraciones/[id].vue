@@ -360,6 +360,7 @@ function verChecklist() {
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
                 <div class="flex min-w-0 flex-col gap-4">
                     <UPageCard
+                        class="surface-card rounded-[1.375rem]"
                         title="Totales"
                         variant="outline"
                         data-prueba="declaracion-totales"
@@ -487,6 +488,7 @@ function verChecklist() {
 
                 <div class="flex min-w-0 flex-col gap-4">
                     <UPageCard
+                        class="surface-card rounded-[1.375rem]"
                         title="Datos"
                         variant="outline"
                     >
@@ -532,6 +534,7 @@ function verChecklist() {
                     </UPageCard>
 
                     <UPageCard
+                        class="surface-card rounded-[1.375rem]"
                         title="Pago"
                         variant="outline"
                         data-prueba="declaracion-pago"
@@ -612,6 +615,7 @@ function verChecklist() {
 
                     <UPageCard
                         v-if="esIvaOPc(declaracion.impuesto) || declaracion.detalle.libros.length"
+                        class="surface-card rounded-[1.375rem]"
                         title="Libros emitidos del periodo"
                         variant="outline"
                         data-prueba="declaracion-libros"
@@ -655,6 +659,7 @@ function verChecklist() {
                     </UPageCard>
 
                     <UPageCard
+                        class="surface-card rounded-[1.375rem]"
                         title="Versiones del periodo"
                         variant="outline"
                         data-prueba="declaracion-versiones"

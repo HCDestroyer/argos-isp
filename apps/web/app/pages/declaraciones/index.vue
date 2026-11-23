@@ -116,160 +116,167 @@ onMounted(() => {
         titulo="Declaraciones"
         icono="i-lucide-file-spreadsheet"
     >
-        <div class="flex flex-col gap-4">
-            <UAlert
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-info"
-                description="Borradores de IVA, pequeño contribuyente, ISR, ISO y retenciones calculados desde los documentos y el libro del periodo. Revisar registra la liquidación (y, en IVA, pequeño contribuyente y retenciones, bloquea los impuestos del mes). ArgosIsp no presenta nada a la SAT: solo registra la presentación y el pago."
-                :actions="[{ label: 'Calendario fiscal', icon: 'i-lucide-calendar-check', color: 'neutral', variant: 'outline', to: '/fiscal/calendario' }, { label: 'Ajustes fiscales', icon: 'i-lucide-sliders-horizontal', color: 'neutral', variant: 'outline', to: '/declaraciones/ajustes' }]"
-            />
-
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div class="grid gap-2 sm:grid-cols-3 lg:flex lg:items-center">
-                    <USelectMenu
-                        v-model="impuestos"
-                        :items="itemsImpuesto"
-                        value-key="value"
-                        multiple
-                        icon="i-lucide-landmark"
-                        placeholder="Todos los impuestos"
-                        aria-label="Filtrar por impuesto"
-                        class="w-full lg:w-56"
-                        data-prueba="filtro-impuestos"
-                    />
-                    <USelectMenu
-                        v-model="estados"
-                        :items="itemsEstado"
-                        value-key="value"
-                        multiple
-                        icon="i-lucide-activity"
-                        placeholder="Todos los estados"
-                        aria-label="Filtrar por estado"
-                        class="w-full lg:w-48"
-                        data-prueba="filtro-estados"
-                    />
-                    <UInput
-                        v-model.lazy="periodo"
-                        placeholder="AAAA-MM, AAAA-Tn o AAAA"
-                        aria-label="Periodo de la declaración (AAAA-MM, AAAA-Tn o AAAA)"
-                        class="w-full lg:w-52"
-                        data-prueba="filtro-periodo"
-                    />
-                    <UButton
-                        v-if="hayFiltros"
-                        label="Quitar filtros"
-                        icon="i-lucide-x"
+        <ContaCuerpo>
+            <ContaIsla llenar>
+                <div class="flex flex-col gap-4 p-3 sm:p-4">
+                    <UAlert
                         color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        class="justify-self-start"
-                        @click="limpiarFiltros"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        description="Borradores de IVA, pequeño contribuyente, ISR, ISO y retenciones calculados desde los documentos y el libro del periodo. Revisar registra la liquidación (y, en IVA, pequeño contribuyente y retenciones, bloquea los impuestos del mes). ArgosIsp no presenta nada a la SAT: solo registra la presentación y el pago."
+                        :actions="[{ label: 'Calendario fiscal', icon: 'i-lucide-calendar-check', color: 'neutral', variant: 'outline', to: '/fiscal/calendario' }, { label: 'Ajustes fiscales', icon: 'i-lucide-sliders-horizontal', color: 'neutral', variant: 'outline', to: '/declaraciones/ajustes' }]"
                     />
-                </div>
-                <UButton
-                    v-if="puede('declaraciones.calcular')"
-                    label="Calcular declaración"
-                    icon="i-lucide-calculator"
-                    :disabled="empresa === null"
-                    class="self-start"
-                    data-prueba="abrir-calcular"
-                    @click="abrirCalcular()"
-                />
-            </div>
-            <p
-                v-if="puede('declaraciones.calcular') && empresa === null"
-                class="text-sm text-muted"
-                data-prueba="declaraciones-sin-empresa"
-            >
-                Con «Todas» se ven las de todas las empresas; para calcular una, elija la empresa en el selector de arriba.
-            </p>
 
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
-            <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    data-prueba="tabla-declaraciones"
-                >
-                    <template #periodo_desde-cell="{ row }">
-                        <div
-                            class="flex min-w-0 flex-col"
-                            :data-declaracion="row.original.id"
-                            :data-estado="row.original.estado"
-                        >
-                            <ULink
-                                :to="`/declaraciones/${row.original.id}`"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                                :class="{ 'line-through decoration-1': row.original.estado === 'sustituida' }"
-                            >
-                                {{ etiquetaImpuestoDeclaracion(row.original.impuesto) }} · {{ etiquetaPeriodoDeclaracion(row.original) }}
-                            </ULink>
-                            <span class="text-xs text-muted">
-                                Versión {{ row.original.version }}<template v-if="row.original.sustitutiva"> · sustitutiva</template> · {{ row.original.formulario ?? 'formulario por confirmar con contador' }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
-                            </span>
-                            <UBadge
-                                :label="ESTADOS_DECLARACION[row.original.estado].etiqueta"
-                                :icon="ESTADOS_DECLARACION[row.original.estado].icono"
-                                :color="ESTADOS_DECLARACION[row.original.estado].color"
-                                variant="subtle"
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="grid gap-2 sm:grid-cols-3 lg:flex lg:items-center">
+                            <USelectMenu
+                                v-model="impuestos"
+                                :items="itemsImpuesto"
+                                value-key="value"
+                                multiple
+                                icon="i-lucide-landmark"
+                                placeholder="Todos los impuestos"
+                                aria-label="Filtrar por impuesto"
+                                class="w-full lg:w-56"
+                                data-prueba="filtro-impuestos"
+                            />
+                            <USelectMenu
+                                v-model="estados"
+                                :items="itemsEstado"
+                                value-key="value"
+                                multiple
+                                icon="i-lucide-activity"
+                                placeholder="Todos los estados"
+                                aria-label="Filtrar por estado"
+                                class="w-full lg:w-48"
+                                data-prueba="filtro-estados"
+                            />
+                            <UInput
+                                v-model.lazy="periodo"
+                                placeholder="AAAA-MM, AAAA-Tn o AAAA"
+                                aria-label="Periodo de la declaración (AAAA-MM, AAAA-Tn o AAAA)"
+                                class="w-full lg:w-52"
+                                data-prueba="filtro-periodo"
+                            />
+                            <UButton
+                                v-if="hayFiltros"
+                                label="Quitar filtros"
+                                icon="i-lucide-x"
+                                color="neutral"
+                                variant="ghost"
                                 size="sm"
-                                class="mt-1 self-start sm:hidden"
+                                class="justify-self-start"
+                                @click="limpiarFiltros"
                             />
                         </div>
-                    </template>
-                    <template #estado-cell="{ row }">
-                        <div class="flex flex-wrap gap-1">
-                            <UBadge
-                                :label="ESTADOS_DECLARACION[row.original.estado].etiqueta"
-                                :icon="ESTADOS_DECLARACION[row.original.estado].icono"
-                                :color="ESTADOS_DECLARACION[row.original.estado].color"
-                                variant="subtle"
-                            />
-                            <UBadge
-                                v-if="row.original.pago"
-                                label="Pagada"
-                                icon="i-lucide-banknote"
-                                color="success"
-                                variant="outline"
-                            />
-                        </div>
-                    </template>
-                    <template #determinado-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ determinado(row.original) === null ? '—' : formatearQuetzales(determinado(row.original)) }}</span>
-                    </template>
-                    <template #a_pagar-cell="{ row }">
-                        <div class="flex flex-col items-end">
-                            <span class="text-sm font-medium tabular-nums text-highlighted">{{ totalDe(row.original, 'a_pagar') === null ? '—' : formatearQuetzales(totalDe(row.original, 'a_pagar')) }}</span>
-                            <span class="text-xs text-muted">vence {{ formatearFecha(row.original.vence_en) }}</span>
-                        </div>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-file-spreadsheet"
-                            title="Sin declaraciones"
-                            :description="hayFiltros ? 'Ninguna con los filtros elegidos.' : 'Calcule el borrador de un mes desde aquí o desde el calendario fiscal.'"
-                            variant="naked"
+                        <UButton
+                            v-if="puede('declaraciones.calcular')"
+                            label="Calcular declaración"
+                            icon="i-lucide-calculator"
+                            :disabled="empresa === null"
+                            class="self-start"
+                            data-prueba="abrir-calcular"
+                            @click="abrirCalcular()"
+                        />
+                    </div>
+                    <p
+                        v-if="puede('declaraciones.calcular') && empresa === null"
+                        class="text-sm text-muted"
+                        data-prueba="declaraciones-sin-empresa"
+                    >
+                        Con «Todas» se ven las de todas las empresas; para calcular una, elija la empresa en el selector de arriba.
+                    </p>
+
+                    <ProblemaAlerta
+                        v-if="lista.problema.value"
+                        :problema="lista.problema.value"
+                        :reintentar="lista.recargar"
+                        :reintentando="lista.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="lista.filas.value"
+                            :columns="columnas"
+                            :loading="lista.cargando.value"
+                            data-prueba="tabla-declaraciones"
+                        >
+                            <template #periodo_desde-cell="{ row }">
+                                <div
+                                    class="flex min-w-0 flex-col"
+                                    :data-declaracion="row.original.id"
+                                    :data-estado="row.original.estado"
+                                >
+                                    <ULink
+                                        :to="`/declaraciones/${row.original.id}`"
+                                        class="text-sm font-medium text-highlighted hover:text-primary"
+                                        :class="{ 'line-through decoration-1': row.original.estado === 'sustituida' }"
+                                    >
+                                        {{ etiquetaImpuestoDeclaracion(row.original.impuesto) }} · {{ etiquetaPeriodoDeclaracion(row.original) }}
+                                    </ULink>
+                                    <span class="text-xs text-muted">
+                                        Versión {{ row.original.version }}<template v-if="row.original.sustitutiva"> · sustitutiva</template> · {{ row.original.formulario ?? 'formulario por confirmar con contador' }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
+                                    </span>
+                                    <UBadge
+                                        :label="ESTADOS_DECLARACION[row.original.estado].etiqueta"
+                                        :icon="ESTADOS_DECLARACION[row.original.estado].icono"
+                                        :color="ESTADOS_DECLARACION[row.original.estado].color"
+                                        variant="subtle"
+                                        size="sm"
+                                        class="mt-1 self-start sm:hidden"
+                                    />
+                                </div>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <div class="flex flex-wrap gap-1">
+                                    <UBadge
+                                        :label="ESTADOS_DECLARACION[row.original.estado].etiqueta"
+                                        :icon="ESTADOS_DECLARACION[row.original.estado].icono"
+                                        :color="ESTADOS_DECLARACION[row.original.estado].color"
+                                        variant="subtle"
+                                    />
+                                    <UBadge
+                                        v-if="row.original.pago"
+                                        label="Pagada"
+                                        icon="i-lucide-banknote"
+                                        color="success"
+                                        variant="outline"
+                                    />
+                                </div>
+                            </template>
+                            <template #determinado-cell="{ row }">
+                                <span class="text-sm tabular-nums">{{ determinado(row.original) === null ? '—' : formatearQuetzales(determinado(row.original)) }}</span>
+                            </template>
+                            <template #a_pagar-cell="{ row }">
+                                <div class="flex flex-col items-end">
+                                    <span class="text-sm font-medium tabular-nums text-highlighted">{{ totalDe(row.original, 'a_pagar') === null ? '—' : formatearQuetzales(totalDe(row.original, 'a_pagar')) }}</span>
+                                    <span class="text-xs text-muted">vence {{ formatearFecha(row.original.vence_en) }}</span>
+                                </div>
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-file-spreadsheet"
+                                    title="Sin declaraciones"
+                                    :description="hayFiltros ? 'Ninguna con los filtros elegidos.' : 'Calcule el borrador de un mes desde aquí o desde el calendario fiscal.'"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="lista.pagina.value"
+                            :hay-anterior="lista.hayAnterior.value"
+                            :hay-siguiente="lista.haySiguiente.value"
+                            :cargando="lista.cargando.value"
+                            :filas="lista.filas.value.length"
+                            @anterior="lista.anterior"
+                            @siguiente="lista.siguiente"
                         />
                     </template>
-                </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
-            </template>
-        </div>
+                </div>
+                <template #pie>
+                    Argos calcula borradores desde los libros; la presentación la haces tú en la Agencia Virtual.
+                </template>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <CalcularDeclaracionModal
             v-if="puede('declaraciones.calcular') && empresa !== null"

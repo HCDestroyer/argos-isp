@@ -4,6 +4,7 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
 import type { LocationQuery } from 'vue-router'
 import Decimal from 'decimal.js'
 import { h } from 'vue'
+import type { TotalesCartera } from '~/utils/finanzas'
 
 definePageMeta({ permiso: 'reportes.ver' })
 
@@ -305,6 +306,56 @@ const rangoAplicado = computed(() => {
 
 const hayFiltros = computed(() => cuantosFiltros.value > 0)
 
+/** Encabezado: qué es y el rango que usó la API. */
+const descripcion = computed(() => [presentacion.value?.descripcion, rangoAplicado.value ?? presentacion.value?.rangoPorDefecto].filter(Boolean).join(' · ') || undefined)
+
+/* Cartera vencida: antigüedad por grupo y los datos de resumen (tablero ContaReporteVisor). */
+type FilaCarteraVencida = RespuestaReporte<'cartera-vencida'>['filas'][number]
+
+const carteraGrupos = computed(() => {
+    if (clave.value !== 'cartera-vencida' || !reporte.value) {
+        return []
+    }
+    const filasCartera = reporte.value.filas as unknown as FilaCarteraVencida[]
+    const maximo = filasCartera.reduce((m, f) => Decimal.max(m, f.total), new Decimal(0))
+    return [...filasCartera]
+        .sort((a, b) => new Decimal(b.vencido).comparedTo(a.vencido))
+        .map(f => ({
+            nombre: f.grupo || 'Sin grupo',
+            vencido: f.vencido,
+            tramos: tramosCartera(f),
+            escala: maximo.isZero() ? 0 : new Decimal(f.total).div(maximo).times(100).toNumber(),
+        }))
+})
+
+const totalesCarteraVencida = computed(() => (clave.value === 'cartera-vencida' && reporte.value ? reporte.value.totales as unknown as TotalesCartera : null))
+
+const hallazgoCartera = computed(() => {
+    const total = carteraGrupos.value.reduce((suma, g) => suma.plus(g.vencido), new Decimal(0))
+    const dos = carteraGrupos.value.slice(0, 2)
+    if (total.isZero() || dos.length < 2) {
+        return 'Lo vencido por grupo'
+    }
+    const parte = dos.reduce((suma, g) => suma.plus(g.vencido), new Decimal(0)).div(total).times(100).round()
+    return `${dos[0]!.nombre} y ${dos[1]!.nombre} concentran el ${parte.toString()} % de lo vencido`
+})
+
+const resumenCartera = computed(() => {
+    const t = totalesCarteraVencida.value
+    if (!t?.vencido || !t.total) {
+        return []
+    }
+    const vencido = new Decimal(t.vencido)
+    // sin alguno de los dos tramos no hay suma: «—», nunca un 0 inventado
+    const mas60 = t.dias_61_90 !== null && t.dias_mas_90 !== null ? new Decimal(t.dias_61_90).plus(t.dias_mas_90) : null
+    const parte = new Decimal(t.total).isZero() ? null : vencido.div(t.total).times(100).round()
+    return [
+        { etiqueta: 'Total vencido', valor: formatearQuetzales(vencido), detalle: parte === null ? '' : `${parte.toString()} % de lo pendiente` },
+        { etiqueta: 'Más de 60 días', valor: formatearQuetzales(mas60), detalle: 'candidato a gestión de cobro o castigo' },
+        { etiqueta: 'Pendiente total', valor: formatearQuetzales(t.total), detalle: `${t.facturas ?? '—'} facturas` },
+    ]
+})
+
 function limpiar() {
     Object.assign(filtros, filtrosDeQuery({}))
     clienteElegido.value = null
@@ -335,15 +386,55 @@ onMounted(async () => {
         id="reporte"
         :titulo="presentacion?.titulo ?? 'Reporte'"
         :icono="presentacion?.icono ?? 'i-lucide-file-chart-column'"
+        :descripcion="descripcion"
     >
-        <template #acciones>
+        <template
+            v-if="clave && presentacion"
+            #acciones
+        >
             <UButton
-                to="/reportes"
-                label="Reportes"
-                icon="i-lucide-arrow-left"
+                title="Llega con la API de envíos programados"
+                label="Programar envío"
+                icon="i-lucide-send"
                 color="neutral"
                 variant="ghost"
-                class="hidden sm:inline-flex"
+                class="boton-flotante boton-pastilla hidden sm:inline-flex"
+                disabled
+                data-prueba="programar-envio"
+            />
+            <UButton
+                title="Llega con la API de reportes en PDF"
+                label="PDF"
+                icon="i-lucide-file-text"
+                color="neutral"
+                variant="ghost"
+                class="boton-flotante boton-pastilla"
+                disabled
+                data-prueba="descargar-pdf"
+            />
+            <UDropdownMenu
+                :items="[[{ label: 'Descargar en CSV', icon: 'i-lucide-file-text', onSelect: () => descargar('csv') }]]"
+                :content="{ align: 'end' }"
+            >
+                <UButton
+                    icon="i-lucide-ellipsis"
+                    color="neutral"
+                    variant="ghost"
+                    class="boton-flotante boton-circulo"
+                    aria-label="Más formatos"
+                    :disabled="!reporte || descargando !== null"
+                    data-prueba="descargar-csv"
+                />
+            </UDropdownMenu>
+            <UButton
+                label="Excel"
+                icon="i-lucide-sheet"
+                size="lg"
+                class="glow-brand rounded-full px-5"
+                :loading="descargando === 'xlsx'"
+                :disabled="!reporte || descargando !== null"
+                data-prueba="descargar-xlsx"
+                @click="descargar('xlsx')"
             />
         </template>
 
@@ -355,329 +446,350 @@ onMounted(async () => {
             variant="naked"
         />
 
-        <div
-            v-else
-            class="flex flex-col gap-4"
-        >
-            <p class="text-sm text-muted">
-                {{ presentacion.descripcion }}
-            </p>
-
-            <UButton
-                :label="cuantosFiltros ? `Filtros (${cuantosFiltros})` : 'Filtros'"
-                icon="i-lucide-sliders-horizontal"
-                :trailing-icon="verFiltros ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-                color="neutral"
-                variant="outline"
-                class="self-start sm:hidden"
-                :aria-expanded="verFiltros"
-                aria-controls="filtros-reporte"
-                @click="verFiltros = !verFiltros"
-            />
-
-            <div
-                id="filtros-reporte"
-                class="gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4"
-                :class="verFiltros ? 'grid' : 'hidden'"
-            >
-                <template v-if="usa('rango')">
-                    <UFormField
-                        label="Desde"
-                        size="sm"
+        <ContaCuerpo v-else>
+            <ContaIsla llenar>
+                <template #cabecera>
+                    <UButton
+                        :label="cuantosFiltros ? `Filtros (${cuantosFiltros})` : 'Filtros'"
+                        icon="i-lucide-sliders-horizontal"
+                        :trailing-icon="verFiltros ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                        color="neutral"
+                        variant="outline"
+                        class="rounded-full sm:hidden"
+                        :aria-expanded="verFiltros"
+                        aria-controls="filtros-reporte"
+                        @click="verFiltros = !verFiltros"
+                    />
+                    <div
+                        id="filtros-reporte"
+                        class="flex-wrap items-end gap-2 sm:flex [&>*]:min-w-40 [&>*]:flex-1 xl:[&>*]:max-w-56 xl:[&>*]:flex-none"
+                        :class="verFiltros ? 'mt-3 flex flex-col sm:mt-0' : 'hidden'"
+                        data-prueba="filtros-reporte"
                     >
-                        <UInput
-                            v-model="filtros.desde"
-                            type="date"
-                            :max="filtros.hasta || undefined"
-                            class="w-full"
-                            data-prueba="filtro-desde"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Hasta"
-                        size="sm"
-                    >
-                        <UInput
-                            v-model="filtros.hasta"
-                            type="date"
-                            :min="filtros.desde || undefined"
-                            class="w-full"
-                            data-prueba="filtro-hasta"
-                        />
-                    </UFormField>
+                        <template v-if="usa('rango')">
+                            <UFormField
+                                label="Desde"
+                                size="sm"
+                            >
+                                <UInput
+                                    v-model="filtros.desde"
+                                    type="date"
+                                    :max="filtros.hasta || undefined"
+                                    class="w-full"
+                                    data-prueba="filtro-desde"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Hasta"
+                                size="sm"
+                            >
+                                <UInput
+                                    v-model="filtros.hasta"
+                                    type="date"
+                                    :min="filtros.desde || undefined"
+                                    class="w-full"
+                                    data-prueba="filtro-hasta"
+                                />
+                            </UFormField>
+                        </template>
+                        <UFormField
+                            v-if="usa('corte')"
+                            label="Antigüedad al"
+                            size="sm"
+                        >
+                            <UInput
+                                v-model="filtros.corte"
+                                type="date"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('agrupar_cartera')"
+                            label="Agrupar"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="agruparCartera"
+                                :items="items(AGRUPAR_CARTERA, 'Por cliente (por defecto)')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('origen')"
+                            label="Origen"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="origen"
+                                :items="items(ORIGENES_REPORTE, 'Todos (sistema e importados)')"
+                                class="w-full"
+                                data-prueba="filtro-origen"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('origen_bonificacion')"
+                            label="Origen"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="origenBonificacion"
+                                :items="items(ETIQUETAS_ORIGEN_BONIFICACION, 'Todos los orígenes')"
+                                class="w-full"
+                                data-prueba="filtro-origen-bonificacion"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="conMotivos"
+                            label="Motivo"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="motivo"
+                                :items="itemsMotivo"
+                                class="w-full"
+                                data-prueba="filtro-motivo"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('agrupar_ingresos')"
+                            label="Agrupar"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="agruparIngresos"
+                                :items="items(AGRUPAR_INGRESOS, 'Por mes (por defecto)')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('tipo')"
+                            label="Facturas"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="tipo"
+                                :items="items(TIPOS_FACTURA_REPORTE, 'Servicio y mora')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('metodo_pago')"
+                            label="Método de pago"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="metodoPago"
+                                :items="items(ETIQUETAS_METODO, 'Todos los métodos')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('categoria')"
+                            label="Categoría"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="categoria"
+                                :items="items(CATEGORIAS_EGRESO, 'Todas las categorías')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('metodo_egreso')"
+                            label="Pagado con"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="metodoEgreso"
+                                :items="items(METODOS_EGRESO, 'Cualquier origen')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="usa('canal')"
+                            label="Canal"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="canal"
+                                :items="items(CANALES_PROMESA, 'Todos los canales')"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="conZonas"
+                            label="Zona"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="zona"
+                                :items="itemsZona"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="conRouters"
+                            label="Router"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="routerSel"
+                                :items="itemsRouter"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="conPlanes"
+                            label="Plan"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="plan"
+                                :items="itemsPlan"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="conCajas"
+                            label="Caja"
+                            size="sm"
+                        >
+                            <USelect
+                                v-model="caja"
+                                :items="itemsCaja"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="conCliente"
+                            label="Cliente"
+                            size="sm"
+                            class="sm:col-span-2"
+                        >
+                            <ClienteSelector
+                                v-model="clienteId"
+                                :seleccionado="clienteElegido"
+                                placeholder="Todos los clientes"
+                                class="w-full"
+                                @elegido="clienteElegido = $event"
+                            />
+                        </UFormField>
+                    </div>
                 </template>
-                <UFormField
-                    v-if="usa('corte')"
-                    label="Antigüedad al"
-                    size="sm"
-                >
-                    <UInput
-                        v-model="filtros.corte"
-                        type="date"
-                        class="w-full"
+                <template #herramientas>
+                    <UButton
+                        v-if="hayFiltros"
+                        label="Limpiar"
+                        icon="i-lucide-rotate-ccw"
+                        color="primary"
+                        variant="ghost"
+                        size="sm"
+                        @click="limpiar"
                     />
-                </UFormField>
-                <UFormField
-                    v-if="usa('agrupar_cartera')"
-                    label="Agrupar"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="agruparCartera"
-                        :items="items(AGRUPAR_CARTERA, 'Por cliente (por defecto)')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('origen')"
-                    label="Origen"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="origen"
-                        :items="items(ORIGENES_REPORTE, 'Todos (sistema e importados)')"
-                        class="w-full"
-                        data-prueba="filtro-origen"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('origen_bonificacion')"
-                    label="Origen"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="origenBonificacion"
-                        :items="items(ETIQUETAS_ORIGEN_BONIFICACION, 'Todos los orígenes')"
-                        class="w-full"
-                        data-prueba="filtro-origen-bonificacion"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="conMotivos"
-                    label="Motivo"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="motivo"
-                        :items="itemsMotivo"
-                        class="w-full"
-                        data-prueba="filtro-motivo"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('agrupar_ingresos')"
-                    label="Agrupar"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="agruparIngresos"
-                        :items="items(AGRUPAR_INGRESOS, 'Por mes (por defecto)')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('tipo')"
-                    label="Facturas"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="tipo"
-                        :items="items(TIPOS_FACTURA_REPORTE, 'Servicio y mora')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('metodo_pago')"
-                    label="Método de pago"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="metodoPago"
-                        :items="items(ETIQUETAS_METODO, 'Todos los métodos')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('categoria')"
-                    label="Categoría"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="categoria"
-                        :items="items(CATEGORIAS_EGRESO, 'Todas las categorías')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('metodo_egreso')"
-                    label="Pagado con"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="metodoEgreso"
-                        :items="items(METODOS_EGRESO, 'Cualquier origen')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="usa('canal')"
-                    label="Canal"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="canal"
-                        :items="items(CANALES_PROMESA, 'Todos los canales')"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="conZonas"
-                    label="Zona"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="zona"
-                        :items="itemsZona"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="conRouters"
-                    label="Router"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="routerSel"
-                        :items="itemsRouter"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="conPlanes"
-                    label="Plan"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="plan"
-                        :items="itemsPlan"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="conCajas"
-                    label="Caja"
-                    size="sm"
-                >
-                    <USelect
-                        v-model="caja"
-                        :items="itemsCaja"
-                        class="w-full"
-                    />
-                </UFormField>
-                <UFormField
-                    v-if="conCliente"
-                    label="Cliente"
-                    size="sm"
-                    class="sm:col-span-2"
-                >
-                    <ClienteSelector
-                        v-model="clienteId"
-                        :seleccionado="clienteElegido"
-                        placeholder="Todos los clientes"
-                        class="w-full"
-                        @elegido="clienteElegido = $event"
-                    />
-                </UFormField>
-            </div>
+                </template>
 
-            <div class="flex flex-wrap items-center gap-2">
-                <p class="text-xs text-muted">
-                    <template v-if="rangoAplicado">
-                        {{ rangoAplicado }}
-                    </template>
-                    <template v-else-if="presentacion.rangoPorDefecto">
-                        {{ presentacion.rangoPorDefecto }}
-                    </template>
-                    <template v-if="reporte">
-                        · generado {{ formatearFechaHora(reporte.generado_en) }}
-                    </template>
-                </p>
-                <UButton
-                    v-if="hayFiltros"
-                    label="Limpiar filtros"
-                    icon="i-lucide-filter-x"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    @click="limpiar"
-                />
-                <div class="flex gap-2 sm:ml-auto">
-                    <UButton
-                        label="CSV"
-                        icon="i-lucide-file-text"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                        :loading="descargando === 'csv'"
-                        :disabled="!reporte || descargando !== null"
-                        data-prueba="descargar-csv"
-                        @click="descargar('csv')"
+                <div class="flex flex-col gap-4 p-3 sm:p-4">
+                    <UAlert
+                        v-if="presentacion.nota"
+                        color="info"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        :title="presentacion.nota.titulo"
+                        :description="presentacion.nota.descripcion"
+                        data-prueba="nota-reporte"
                     />
-                    <UButton
-                        label="Excel"
-                        icon="i-lucide-file-spreadsheet"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                        :loading="descargando === 'xlsx'"
-                        :disabled="!reporte || descargando !== null"
-                        data-prueba="descargar-xlsx"
-                        @click="descargar('xlsx')"
+                    <ProblemaAlerta
+                        v-if="problema"
+                        :problema="problema"
+                        :reintentar="cargar"
+                        :reintentando="cargando"
+                        data-prueba="reporte-error"
                     />
+                    <USkeleton
+                        v-else-if="!reporte"
+                        class="h-64 w-full"
+                    />
+                    <template v-else>
+                        <!-- Cartera: la antigüedad por grupo a la vista, con el resumen al lado (tablero ContaReporteVisor). -->
+                        <div
+                            v-if="clave === 'cartera-vencida' && carteraGrupos.length"
+                            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]"
+                            data-prueba="grafica-cartera"
+                        >
+                            <div class="flex min-w-0 flex-col gap-2">
+                                <h2 class="text-base font-semibold text-highlighted">
+                                    {{ hallazgoCartera }}
+                                </h2>
+                                <p class="text-xs text-muted">
+                                    Saldo por cobrar por {{ tituloGrupo.toLowerCase() }}, del más vencido al menos · el número a la derecha es lo vencido
+                                </p>
+                                <ul class="mt-1 flex flex-col gap-2">
+                                    <li
+                                        v-for="grupo in carteraGrupos.slice(0, 8)"
+                                        :key="grupo.nombre"
+                                        class="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_6.5rem] items-center gap-3 text-sm"
+                                    >
+                                        <span class="truncate font-medium text-highlighted">{{ grupo.nombre }}</span>
+                                        <ContaAntiguedad
+                                            :tramos="grupo.tramos"
+                                            :etiqueta="grupo.nombre"
+                                            modo="solo"
+                                            :escala="grupo.escala"
+                                        />
+                                        <span class="text-right font-semibold tabular-nums">{{ formatearQuetzales(grupo.vencido) }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="flex flex-col gap-3">
+                                <div
+                                    v-for="dato in resumenCartera"
+                                    :key="dato.etiqueta"
+                                    class="rounded-2xl bg-(--ax-panel) p-4"
+                                >
+                                    <p class="text-xs text-muted">
+                                        {{ dato.etiqueta }}
+                                    </p>
+                                    <p class="text-xl font-bold text-highlighted tabular-nums">
+                                        {{ dato.valor }}
+                                    </p>
+                                    <p class="text-xs text-muted">
+                                        {{ dato.detalle }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <UTable
+                            :data="filas"
+                            :columns="columnasTabla"
+                            :loading="cargando"
+                            sticky
+                            class="rounded-xl border border-(--ax-borde)"
+                            :ui="{ td: 'py-2 text-sm', th: 'py-2 text-xs', tfoot: 'bg-elevated/50' }"
+                            data-prueba="tabla-reporte"
+                            tabindex="0"
+                            :aria-label="presentacion?.titulo ?? 'Reporte'"
+                        >
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-file-x"
+                                    :title="hayFiltros ? 'Sin datos para estos filtros' : 'Sin datos en el periodo'"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                    </template>
                 </div>
-            </div>
 
-            <UAlert
-                v-if="presentacion.nota"
-                color="info"
-                variant="subtle"
-                icon="i-lucide-info"
-                :title="presentacion.nota.titulo"
-                :description="presentacion.nota.descripcion"
-                data-prueba="nota-reporte"
-            />
-
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-                data-prueba="reporte-error"
-            />
-            <USkeleton
-                v-else-if="!reporte"
-                class="h-64 w-full"
-            />
-            <UTable
-                v-else
-                :data="filas"
-                :columns="columnasTabla"
-                :loading="cargando"
-                sticky
-                class="max-h-[70vh]"
-                :ui="{ td: 'py-2 text-sm', th: 'py-2 text-xs', tfoot: 'bg-elevated/50' }"
-                data-prueba="tabla-reporte"
-                tabindex="0"
-                :aria-label="presentacion?.titulo ?? 'Reporte'"
-            >
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-file-x"
-                        :title="hayFiltros ? 'Sin datos para estos filtros' : 'Sin datos en el periodo'"
-                        variant="naked"
-                    />
+                <template #pie>
+                    Montos en quetzales. El archivo lleva los mismos filtros que ves aquí.
                 </template>
-            </UTable>
-        </div>
+                <template
+                    v-if="reporte"
+                    #pie-derecha
+                >
+                    Generado {{ formatearFechaHora(reporte.generado_en) }}
+                </template>
+            </ContaIsla>
+        </ContaCuerpo>
     </PanelPagina>
 </template>

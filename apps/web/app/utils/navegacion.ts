@@ -4,7 +4,7 @@
  *
  * Orden por frecuencia de uso en el día a día de un ISP (decisión del PM, rediseño del panel):
  * primero lo de mostrador (cobrar, caja, clientes, servicios), luego la gestión (facturación, red,
- * inventario, lealtad), la administración (finanzas, contabilidad, reportes) y al final la
+ * inventario, lealtad), la administración (finanzas y reportes) y al final la
  * configuración. Cada grupo pertenece a un `bloque` (encabezado en versalitas, no clicable).
  */
 export interface SeccionPanel {
@@ -76,7 +76,6 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-hand-coins', ruta: '/pagos', permiso: 'pagos.ver' },
             { id: 'notas-credito', etiqueta: 'Notas de crédito', descripcion: 'Rebajas sobre el saldo de una factura, con su asiento.', icono: 'i-lucide-file-minus', ruta: '/notas-credito', permiso: 'facturas.ver' },
             { id: 'bonificaciones', etiqueta: 'Bonificaciones', descripcion: 'Periodos regalados y cargos sin costo, con su motivo: ya no son facturas.', icono: 'i-lucide-hand-heart', ruta: '/bonificaciones', permiso: 'facturas.ver' },
-            { id: 'dte', etiqueta: 'Cola de DTE', descripcion: 'Certificación FEL: pendientes, rechazados, en contingencia y anulaciones.', icono: 'i-lucide-badge-check', ruta: '/dte', permiso: 'fel.ver' },
             { id: 'pasarela', etiqueta: 'Conciliación de la pasarela', descripcion: 'Cobros en línea de cada día contra el reporte del proveedor, con sus diferencias.', icono: 'i-lucide-scale', ruta: '/cobros/pasarela', permiso: 'pagos.ver' },
         ],
     },
@@ -160,16 +159,48 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         ],
     },
     {
+        // Decisión 1 del PM (rediseño de Finanzas): Panel, Libro, Cierres, Impuestos, Compras, Cartera
+        // y Bancos en un solo grupo; Reportes va aparte. Cajas entra aquí cuando exista su pantalla.
         id: 'finanzas',
         etiqueta: 'Finanzas',
         icono: 'i-lucide-landmark',
         bloque: 'Administración',
         corta: 'Finanzas',
         secciones: [
-            { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
-            { id: 'cartera', etiqueta: 'Cartera', descripcion: 'Estimación de incobrables y castigo de facturas con su gestión de cobro.', icono: 'i-lucide-shield-alert', ruta: '/cartera', permiso: 'reportes.ver' },
+            { id: 'panel-financiero', etiqueta: 'Panel financiero', descripcion: 'Cobrado contra facturado, cartera vencida, efectivo, impuestos por pagar y avisos del libro, por empresa.', icono: 'i-lucide-layout-dashboard', ruta: '/finanzas', permiso: 'reportes.ver' },
+            { id: 'libro', etiqueta: 'Libro contable', descripcion: 'Diario, mayor, auxiliar de cada cliente y plan de cuentas; un asiento nunca se edita.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'cierres-libro', etiqueta: 'Periodos y cierres', descripcion: 'Cierre de cada mes con sus verificaciones, cierre del ejercicio, bloqueos y reabrir un mes.', icono: 'i-lucide-calendar-check-2', ruta: '/libro/cierres', permiso: 'libro.ver' },
+            { id: 'bloqueos-libro', etiqueta: 'Bloqueos del libro', descripcion: 'Bloqueos por tipo, bloqueo duro, excepciones y procesos detenidos por un bloqueo.', icono: 'i-lucide-lock', ruta: '/libro/bloqueos', permiso: 'libro.ver' },
+            { id: 'cartera', etiqueta: 'Cartera', descripcion: 'Lo que deben los clientes por antigüedad, gestiones de cobro, castigos y la estimación de incobrables.', icono: 'i-lucide-shield-alert', ruta: '/cartera', permiso: 'reportes.ver' },
         ],
         subgrupos: [
+            {
+                id: 'impuestos',
+                etiqueta: 'Impuestos',
+                icono: 'i-lucide-landmark',
+                secciones: [
+                    { id: 'tablero-fiscal', etiqueta: 'Resumen fiscal', descripcion: 'IVA, ISR e ISO estimados, límite del pequeño contribuyente, vencimientos, declaraciones y consejos.', icono: 'i-lucide-layout-dashboard', ruta: '/fiscal/tablero', permiso: 'fiscal.ver' },
+                    { id: 'calendario-fiscal', etiqueta: 'Calendario fiscal', descripcion: 'Vencimientos de IVA, ISR, ISO y retenciones por mes o en lista, con las vencidas en rojo.', icono: 'i-lucide-calendar-check', ruta: '/fiscal/calendario', permiso: 'declaraciones.ver' },
+                    { id: 'declaraciones', etiqueta: 'Declaraciones', descripcion: 'IVA y pequeño contribuyente: borrador desde los libros, revisión con liquidación, presentación y pago.', icono: 'i-lucide-file-spreadsheet', ruta: '/declaraciones', permiso: 'declaraciones.ver' },
+                    { id: 'dte', etiqueta: 'Facturación electrónica', descripcion: 'Documentos FEL: en cola, rechazados, en contingencia, por anular y certificados.', icono: 'i-lucide-badge-check', ruta: '/dte', permiso: 'fel.ver' },
+                    { id: 'libros-legales', etiqueta: 'Libros legales', descripcion: 'Diario, Mayor, Ventas y Compras con folio: vista previa, emisión, historial y habilitaciones.', icono: 'i-lucide-book-marked', ruta: '/libros', permiso: 'libros.ver' },
+                    { id: 'comparador-regimenes', etiqueta: 'Comparador de regímenes', descripcion: 'Cuánto ISR pagarías en el régimen opcional y sobre utilidades con los datos del libro.', icono: 'i-lucide-scale', ruta: '/fiscal/comparador', permiso: 'fiscal.ver' },
+                ],
+            },
+            {
+                id: 'compras',
+                etiqueta: 'Compras',
+                icono: 'i-lucide-shopping-cart',
+                secciones: [
+                    { id: 'compras', etiqueta: 'Compras y gastos', descripcion: 'Facturas de proveedores con crédito fiscal, retenciones, condición y saldo; también desde un egreso.', icono: 'i-lucide-shopping-cart', ruta: '/compras', permiso: 'compras.ver' },
+                    { id: 'proveedores', etiqueta: 'Proveedores', descripcion: 'Proveedores con su estado de cuenta, lo que se les debe y su antigüedad.', icono: 'i-lucide-truck', ruta: '/proveedores', permiso: 'proveedores.ver' },
+                    { id: 'pagos-proveedores', etiqueta: 'Pagos a proveedores', descripcion: 'Pagos aplicados a sus compras, por caja, banco o cuenta; anular devuelve el saldo.', icono: 'i-lucide-banknote', ruta: '/pagos-proveedores', permiso: 'compras.ver' },
+                    { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
+                    { id: 'constancias', etiqueta: 'Constancias de retención', descripcion: 'Retenciones recibidas de clientes y emitidas a proveedores.', icono: 'i-lucide-file-check-2', ruta: '/constancias', permiso: 'compras.ver' },
+                    { id: 'activos', etiqueta: 'Activos fijos', descripcion: 'Alta, depreciación mensual y baja por venta o retiro.', icono: 'i-lucide-boxes', ruta: '/activos', permiso: 'activos.ver' },
+                    { id: 'diferimientos', etiqueta: 'Diferidos', descripcion: 'Gastos pagados por anticipado e ingresos diferidos con sus cuotas.', icono: 'i-lucide-calendar-range', ruta: '/diferimientos', permiso: 'libro.ver' },
+                ],
+            },
             {
                 id: 'bancos',
                 etiqueta: 'Bancos',
@@ -180,35 +211,6 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                     { id: 'conciliacion', etiqueta: 'Conciliación bancaria', descripcion: 'Extractos del banco, conciliación con el libro y reglas.', icono: 'i-lucide-file-spreadsheet', ruta: '/bancos/extractos', permiso: 'bancos.ver' },
                 ],
             },
-            {
-                id: 'compras',
-                etiqueta: 'Compras',
-                icono: 'i-lucide-shopping-cart',
-                secciones: [
-                    { id: 'proveedores', etiqueta: 'Proveedores', descripcion: 'Proveedores con su estado de cuenta, lo que se les debe y su antigüedad.', icono: 'i-lucide-truck', ruta: '/proveedores', permiso: 'proveedores.ver' },
-                    { id: 'compras', etiqueta: 'Compras', descripcion: 'Facturas de proveedores con crédito fiscal, retenciones, condición y saldo; también desde un egreso.', icono: 'i-lucide-shopping-cart', ruta: '/compras', permiso: 'compras.ver' },
-                    { id: 'pagos-proveedores', etiqueta: 'Pagos a proveedores', descripcion: 'Pagos aplicados a sus compras, por caja, banco o cuenta; anular devuelve el saldo.', icono: 'i-lucide-banknote', ruta: '/pagos-proveedores', permiso: 'compras.ver' },
-                    { id: 'constancias', etiqueta: 'Constancias de retención', descripcion: 'Retenciones recibidas de clientes y emitidas a proveedores.', icono: 'i-lucide-file-check-2', ruta: '/constancias', permiso: 'compras.ver' },
-                    { id: 'activos', etiqueta: 'Activos fijos', descripcion: 'Alta, depreciación mensual y baja por venta o retiro.', icono: 'i-lucide-boxes', ruta: '/activos', permiso: 'activos.ver' },
-                    { id: 'diferimientos', etiqueta: 'Diferidos', descripcion: 'Gastos pagados por anticipado e ingresos diferidos con sus cuotas.', icono: 'i-lucide-calendar-range', ruta: '/diferimientos', permiso: 'libro.ver' },
-                ],
-            },
-        ],
-    },
-    {
-        id: 'contabilidad',
-        etiqueta: 'Contabilidad y fiscal',
-        icono: 'i-lucide-calculator',
-        bloque: 'Administración',
-        corta: 'Contable',
-        secciones: [
-            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor, cierre mensual e integridad de la cadena.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
-            { id: 'bloqueos-libro', etiqueta: 'Bloqueos del libro', descripcion: 'Bloqueos por tipo, bloqueo duro, excepciones y procesos detenidos por un bloqueo.', icono: 'i-lucide-lock', ruta: '/libro/bloqueos', permiso: 'libro.ver' },
-            { id: 'libros-legales', etiqueta: 'Libros legales', descripcion: 'Diario, Mayor, Ventas y Compras con folio: vista previa, emisión, historial y habilitaciones.', icono: 'i-lucide-book-marked', ruta: '/libros', permiso: 'libros.ver' },
-            { id: 'tablero-fiscal', etiqueta: 'Tablero fiscal', descripcion: 'Facturado, IVA, ISR e ISO estimados, límite del pequeño contribuyente, vencimientos, libros y FEL, con sus alertas.', icono: 'i-lucide-layout-dashboard', ruta: '/fiscal/tablero', permiso: 'fiscal.ver' },
-            { id: 'calendario-fiscal', etiqueta: 'Calendario fiscal', descripcion: 'Vencimientos de IVA, ISR, ISO y retenciones por mes o en lista, con las vencidas en rojo.', icono: 'i-lucide-calendar-check', ruta: '/fiscal/calendario', permiso: 'declaraciones.ver' },
-            { id: 'declaraciones', etiqueta: 'Declaraciones', descripcion: 'IVA y pequeño contribuyente: borrador desde los libros, revisión con liquidación, presentación y pago.', icono: 'i-lucide-file-spreadsheet', ruta: '/declaraciones', permiso: 'declaraciones.ver' },
-            { id: 'comparador-regimenes', etiqueta: 'Comparador de regímenes', descripcion: 'Simulación del ISR en el régimen opcional y sobre utilidades con los datos del libro, m, m* y proyección.', icono: 'i-lucide-scale', ruta: '/fiscal/comparador', permiso: 'fiscal.ver' },
         ],
     },
     {
@@ -218,7 +220,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         bloque: 'Administración',
         corta: 'Reportes',
         secciones: [
-            { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cartera vencida, ingresos, IVA, cobranza, cierres de caja y más, en CSV o Excel.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
+            { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cobranza, ingresos, caja, contabilidad y fiscal: cada uno se filtra y se descarga en Excel o PDF.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
             { id: 'bitacora', etiqueta: 'Bitácora', descripcion: 'Acciones por actor y canal, e historial de cambios.', icono: 'i-lucide-scroll-text', ruta: '/bitacora', permiso: 'bitacora.ver' },
         ],
     },

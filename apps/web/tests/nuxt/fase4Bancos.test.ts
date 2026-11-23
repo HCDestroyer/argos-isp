@@ -360,10 +360,12 @@ describe('fase 4 · cobros y bancos', () => {
             const leida = await useFacturas().ver(factura.id)
             expect(leida.ok && leida.data).toMatchObject({ estado: 'castigada', pagado: factura.pagado })
 
-            const vista = await mountSuspended(PaginaCartera, { route: '/cartera' })
+            const vista = await mountSuspended(PaginaCartera, { route: '/cartera?tab=castigos' })
             await esperar(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Cliente cerró operaciones'))
             await esperar(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Castigada'))
-            expect(vista.find('[data-prueba="tabla-provisiones"]').text()).toContain('2025')
+            vista.unmount()
+            const estimacion = await mountSuspended(PaginaCartera, { route: '/cartera?tab=estimacion' })
+            await esperar(() => expect(estimacion.find('[data-prueba="tabla-provisiones"]').text()).toContain('2025'))
         })
 
         it('provisión fuera de orden: un corte anterior a la última estimación es 422', async () => {

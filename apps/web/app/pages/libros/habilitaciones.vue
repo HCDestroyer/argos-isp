@@ -64,130 +64,138 @@ onMounted(() => {
         titulo="Habilitaciones de folios"
         icono="i-lucide-book-plus"
     >
-        <div class="flex flex-col gap-6">
-            <LibrosNavegacion />
-
-            <UAlert
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-info"
-                description="Los rangos de cada libro son correlativos: el primero empieza donde diga la autorización (SAT-7121 y Registro Mercantil) y cada uno nuevo en el folio siguiente al último habilitado. Las emisiones toman sus folios de aquí."
-            />
-
-            <section
-                class="flex flex-col gap-3"
-                aria-label="Habilitaciones"
-            >
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <USelect
-                        v-model="libro"
-                        :items="itemsLibro"
-                        aria-label="Libro"
-                        class="w-48"
-                        data-prueba="habilitaciones-libro"
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <template #cabecera>
+                    <LibrosNavegacion />
+                </template>
+                <div class="flex flex-col gap-6 p-3 sm:p-4">
+                    <UAlert
+                        color="neutral"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        description="Los rangos de cada libro son correlativos: el primero empieza donde diga la autorización (SAT-7121 y Registro Mercantil) y cada uno nuevo en el folio siguiente al último habilitado. Las emisiones toman sus folios de aquí."
                     />
-                    <UButton
-                        v-if="puede('libros.habilitar')"
-                        label="Registrar habilitación"
-                        icon="i-lucide-book-plus"
-                        size="sm"
-                        :disabled="empresa === null"
-                        data-prueba="abrir-habilitacion"
-                        @click="registrando = true"
-                    />
-                </div>
-                <p
-                    v-if="puede('libros.habilitar') && empresa === null"
-                    class="text-sm text-muted"
-                    data-prueba="habilitaciones-sin-empresa"
-                >
-                    Con «Todas» se ven las de todas las empresas; para registrar una, elija la empresa en el selector de arriba.
-                </p>
 
-                <ProblemaAlerta
-                    v-if="lista.problema.value"
-                    :problema="lista.problema.value"
-                    :reintentar="lista.recargar"
-                    :reintentando="lista.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="lista.filas.value"
-                        :columns="columnas"
-                        :loading="lista.cargando.value"
-                        data-prueba="tabla-habilitaciones"
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-label="Habilitaciones"
                     >
-                        <template #libro-cell="{ row }">
-                            <div class="flex min-w-0 flex-col">
-                                <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
-                                    <UIcon
-                                        :name="LIBROS[row.original.libro].icono"
-                                        class="size-4 shrink-0"
-                                    />
-                                    {{ LIBROS[row.original.libro].legal }}
-                                </span>
-                                <span class="text-xs text-muted md:hidden">{{ row.original.autorizacion }} · {{ formatearFecha(row.original.fecha) }}</span>
-                                <span
-                                    v-if="consolidado"
-                                    class="text-xs text-muted"
-                                >{{ nombreEmpresa(row.original.empresa_id) }}</span>
-                            </div>
-                        </template>
-                        <template #folio_desde-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span
-                                    class="text-sm tabular-nums"
-                                    data-prueba="habilitacion-rango"
-                                >{{ row.original.folio_desde }}–{{ row.original.folio_hasta }}</span>
-                                <span
-                                    class="text-xs text-muted tabular-nums"
-                                    data-prueba="habilitacion-disponibles"
-                                >{{ row.original.disponibles }} disponibles</span>
-                            </div>
-                        </template>
-                        <template #usados-cell="{ row }">
-                            <div class="flex w-32 flex-col gap-1">
-                                <UProgress
-                                    :model-value="row.original.usados"
-                                    :max="row.original.folio_hasta - row.original.folio_desde + 1"
-                                    size="sm"
-                                    :color="row.original.disponibles === 0 ? 'error' : row.original.disponibles <= 10 ? 'warning' : 'primary'"
-                                    :aria-label="`${row.original.usados} folios usados`"
-                                />
-                                <span class="text-xs text-muted tabular-nums">{{ row.original.usados }} usados</span>
-                            </div>
-                        </template>
-                        <template #fecha-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm">{{ row.original.autorizacion }}</span>
-                                <span class="text-xs text-muted">{{ formatearFecha(row.original.fecha) }}{{ row.original.nota ? ` · ${row.original.nota}` : '' }}</span>
-                                <span
-                                    class="text-xs text-muted"
-                                    data-prueba="habilitacion-registrado-por"
-                                >Registró: {{ row.original.registrado_por_nombre ?? '—' }}</span>
-                            </div>
-                        </template>
-                        <template #empty>
-                            <UEmpty
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <USelect
+                                v-model="libro"
+                                :items="itemsLibro"
+                                aria-label="Libro"
+                                class="w-48"
+                                data-prueba="habilitaciones-libro"
+                            />
+                            <UButton
+                                v-if="puede('libros.habilitar')"
+                                label="Registrar habilitación"
                                 icon="i-lucide-book-plus"
-                                title="Sin habilitaciones"
-                                description="Sin folios habilitados, un libro no se emite."
-                                variant="naked"
+                                size="sm"
+                                :disabled="empresa === null"
+                                data-prueba="abrir-habilitacion"
+                                @click="registrando = true"
+                            />
+                        </div>
+                        <p
+                            v-if="puede('libros.habilitar') && empresa === null"
+                            class="text-sm text-muted"
+                            data-prueba="habilitaciones-sin-empresa"
+                        >
+                            Con «Todas» se ven las de todas las empresas; para registrar una, elija la empresa en el selector de arriba.
+                        </p>
+
+                        <ProblemaAlerta
+                            v-if="lista.problema.value"
+                            :problema="lista.problema.value"
+                            :reintentar="lista.recargar"
+                            :reintentando="lista.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="lista.filas.value"
+                                :columns="columnas"
+                                :loading="lista.cargando.value"
+                                data-prueba="tabla-habilitaciones"
+                            >
+                                <template #libro-cell="{ row }">
+                                    <div class="flex min-w-0 flex-col">
+                                        <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
+                                            <UIcon
+                                                :name="LIBROS[row.original.libro].icono"
+                                                class="size-4 shrink-0"
+                                            />
+                                            {{ LIBROS[row.original.libro].legal }}
+                                        </span>
+                                        <span class="text-xs text-muted md:hidden">{{ row.original.autorizacion }} · {{ formatearFecha(row.original.fecha) }}</span>
+                                        <span
+                                            v-if="consolidado"
+                                            class="text-xs text-muted"
+                                        >{{ nombreEmpresa(row.original.empresa_id) }}</span>
+                                    </div>
+                                </template>
+                                <template #folio_desde-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span
+                                            class="text-sm tabular-nums"
+                                            data-prueba="habilitacion-rango"
+                                        >{{ row.original.folio_desde }}–{{ row.original.folio_hasta }}</span>
+                                        <span
+                                            class="text-xs text-muted tabular-nums"
+                                            data-prueba="habilitacion-disponibles"
+                                        >{{ row.original.disponibles }} disponibles</span>
+                                    </div>
+                                </template>
+                                <template #usados-cell="{ row }">
+                                    <div class="flex w-32 flex-col gap-1">
+                                        <UProgress
+                                            :model-value="row.original.usados"
+                                            :max="row.original.folio_hasta - row.original.folio_desde + 1"
+                                            size="sm"
+                                            :color="row.original.disponibles === 0 ? 'error' : row.original.disponibles <= 10 ? 'warning' : 'primary'"
+                                            :aria-label="`${row.original.usados} folios usados`"
+                                        />
+                                        <span class="text-xs text-muted tabular-nums">{{ row.original.usados }} usados</span>
+                                    </div>
+                                </template>
+                                <template #fecha-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm">{{ row.original.autorizacion }}</span>
+                                        <span class="text-xs text-muted">{{ formatearFecha(row.original.fecha) }}{{ row.original.nota ? ` · ${row.original.nota}` : '' }}</span>
+                                        <span
+                                            class="text-xs text-muted"
+                                            data-prueba="habilitacion-registrado-por"
+                                        >Registró: {{ row.original.registrado_por_nombre ?? '—' }}</span>
+                                    </div>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-book-plus"
+                                        title="Sin habilitaciones"
+                                        description="Sin folios habilitados, un libro no se emite."
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="lista.pagina.value"
+                                :hay-anterior="lista.hayAnterior.value"
+                                :hay-siguiente="lista.haySiguiente.value"
+                                :cargando="lista.cargando.value"
+                                :filas="lista.filas.value.length"
+                                @anterior="lista.anterior"
+                                @siguiente="lista.siguiente"
                             />
                         </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="lista.pagina.value"
-                        :hay-anterior="lista.hayAnterior.value"
-                        :hay-siguiente="lista.haySiguiente.value"
-                        :cargando="lista.cargando.value"
-                        :filas="lista.filas.value.length"
-                        @anterior="lista.anterior"
-                        @siguiente="lista.siguiente"
-                    />
+                    </section>
+                </div>
+                <template #pie>
+                    Los folios los habilita el Registro Mercantil o la SAT; aquí se registran para numerar cada libro.
                 </template>
-            </section>
-        </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <HabilitacionLibroModal
             v-if="puede('libros.habilitar') && empresa !== null"

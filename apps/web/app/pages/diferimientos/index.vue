@@ -59,89 +59,104 @@ onMounted(() => void lista.recargar())
 <template>
     <PanelPagina
         id="diferimientos"
-        titulo="Diferidos"
+        titulo="Compras y gastos"
+        descripcion="Gastos pagados por anticipado e ingresos cobrados por adelantado, repartidos en cuotas por mes."
         icono="i-lucide-calendar-range"
     >
         <template #acciones>
-            <UButton
-                v-if="puede('libro.registrar_asiento')"
-                label="Amortizar pendiente"
-                icon="i-lucide-calendar-check"
-                color="neutral"
-                variant="outline"
-                :loading="amortizando"
-                data-prueba="amortizar-pendiente"
-                @click="amortizar"
-            />
+            <ContaComprasAcciones />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <USelect
-                v-model="origen"
-                :items="itemsOrigen"
-                aria-label="Origen"
-                class="w-full sm:max-w-xs"
-            />
+        <ContaCuerpo>
+            <ContaIsla llenar>
+                <template #cabecera>
+                    <ContaComprasPestanas />
+                </template>
+                <template #herramientas>
+                    <UButton
+                        v-if="puede('libro.registrar_asiento')"
+                        class="rounded-full"
+                        label="Amortizar pendiente"
+                        icon="i-lucide-calendar-check"
+                        color="neutral"
+                        variant="outline"
+                        :loading="amortizando"
+                        data-prueba="amortizar-pendiente"
+                        @click="amortizar"
+                    />
+                </template>
+                <div class="flex flex-col gap-4 p-3 sm:p-4">
+                    <USelect
+                        v-model="origen"
+                        :items="itemsOrigen"
+                        aria-label="Origen"
+                        class="w-full sm:max-w-xs"
+                    />
 
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
-            <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    data-prueba="tabla-diferimientos"
-                >
-                    <template #descripcion-cell="{ row }">
-                        <div
-                            class="flex min-w-0 flex-col"
-                            :data-diferimiento="row.original.id"
+                    <ProblemaAlerta
+                        v-if="lista.problema.value"
+                        :problema="lista.problema.value"
+                        :reintentar="lista.recargar"
+                        :reintentando="lista.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="lista.filas.value"
+                            :columns="columnas"
+                            :loading="lista.cargando.value"
+                            data-prueba="tabla-diferimientos"
                         >
-                            <ULink
-                                :to="`/diferimientos/${row.original.id}`"
-                                class="text-sm font-medium text-highlighted hover:underline"
-                            >
-                                #{{ row.original.id }} · {{ row.original.descripcion }}
-                            </ULink>
-                            <span class="text-xs text-muted">{{ row.original.origen === 'compra' ? 'Gasto anticipado' : 'Ingreso diferido' }} · {{ row.original.meses }} meses desde {{ row.original.inicio.slice(0, 7) }} · {{ row.original.cuotas.length }} cuotas</span>
-                        </div>
-                    </template>
-                    <template #total-cell="{ row }">
-                        <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
-                    </template>
-                    <template #pendiente-cell="{ row }">
-                        <span class="font-medium tabular-nums">{{ formatearQuetzales(row.original.pendiente) }}</span>
-                    </template>
-                    <template #estado-cell="{ row }">
-                        <UBadge
-                            :label="ESTADOS_DIFERIMIENTO[row.original.estado].etiqueta"
-                            :color="ESTADOS_DIFERIMIENTO[row.original.estado].color"
-                            variant="subtle"
-                            size="sm"
+                            <template #descripcion-cell="{ row }">
+                                <div
+                                    class="flex min-w-0 flex-col"
+                                    :data-diferimiento="row.original.id"
+                                >
+                                    <ULink
+                                        :to="`/diferimientos/${row.original.id}`"
+                                        class="text-sm font-medium text-highlighted hover:underline"
+                                    >
+                                        #{{ row.original.id }} · {{ row.original.descripcion }}
+                                    </ULink>
+                                    <span class="text-xs text-muted">{{ row.original.origen === 'compra' ? 'Gasto anticipado' : 'Ingreso diferido' }} · {{ row.original.meses }} meses desde {{ row.original.inicio.slice(0, 7) }} · {{ row.original.cuotas.length }} cuotas</span>
+                                </div>
+                            </template>
+                            <template #total-cell="{ row }">
+                                <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
+                            </template>
+                            <template #pendiente-cell="{ row }">
+                                <span class="font-medium tabular-nums">{{ formatearQuetzales(row.original.pendiente) }}</span>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <UBadge
+                                    :label="ESTADOS_DIFERIMIENTO[row.original.estado].etiqueta"
+                                    :color="ESTADOS_DIFERIMIENTO[row.original.estado].color"
+                                    variant="subtle"
+                                    size="sm"
+                                />
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-calendar-range"
+                                    title="Sin diferidos"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="lista.pagina.value"
+                            :hay-anterior="lista.hayAnterior.value"
+                            :hay-siguiente="lista.haySiguiente.value"
+                            :cargando="lista.cargando.value"
+                            :filas="lista.filas.value.length"
+                            @anterior="lista.anterior"
+                            @siguiente="lista.siguiente"
                         />
                     </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-calendar-range"
-                            title="Sin diferidos"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
-            </template>
-        </div>
+                </div>
+                <template #pie>
+                    Cada cuota pasa sola al gasto o al ingreso al terminar su mes.
+                </template>
+            </ContaIsla>
+        </ContaCuerpo>
     </PanelPagina>
 </template>

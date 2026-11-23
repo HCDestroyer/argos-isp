@@ -8,7 +8,7 @@ pantallas:
 
 Un bloqueo impide registrar asientos con fecha hasta un día. Sirve para proteger lo que ya revisaste o declaraste: nadie puede meter una factura, compra o ajuste en un periodo ya trabajado. Aquí ves los bloqueos de cada empresa, su historial, las excepciones y los procesos que quedaron detenidos por un bloqueo.
 
-Está en **Contabilidad y fiscal → Bloqueos del libro**, o con el botón «Libro» de vuelta al libro.
+Está en **Finanzas → Bloqueos del libro**; su resumen se ve también en **Periodos y cierres**, o con el botón «Libro» de vuelta al libro.
 
 ## Quién la usa
 

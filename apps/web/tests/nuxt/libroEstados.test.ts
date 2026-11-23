@@ -4,7 +4,8 @@ import Decimal from 'decimal.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
-import PaginaLibro from '~/pages/libro/index.vue'
+import PaginaBalance from '~/pages/reportes/balance.vue'
+import PaginaResultados from '~/pages/reportes/resultados.vue'
 import { esperar } from '../ayudas/esperar'
 
 /**
@@ -49,16 +50,16 @@ describe('libro · balance y estado de resultados por empresa', () => {
         expect(balance.ok && balance.data.empresas[0]?.totales).toEqual(balance.ok && balance.data.total.totales)
     })
 
-    it('en pantalla: pestaña Balance con el total del grupo y una sección por empresa', async () => {
-        const vista = await mountSuspended(PaginaLibro, { route: '/libro?tab=balance' })
+    it('en pantalla: Balance general (en Reportes) con el total del grupo y una sección por empresa', async () => {
+        const vista = await mountSuspended(PaginaBalance, { route: '/reportes/balance' })
         await esperar(() => expect(vista.find('[data-prueba="total-grupo"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="libro-balance"] section[data-empresa="1"]').text()).toContain('ArgosNet')
         expect(vista.find('[data-prueba="libro-balance"] section[data-empresa="2"]').text()).toContain('Fibra del Sur')
         expect(vista.findAll('[data-prueba="cuadra"]').every(b => b.text() === 'Cuadra')).toBe(true)
     })
 
-    it('en pantalla: pestaña Resultados muestra ingresos, gastos y resultado por empresa', async () => {
-        const vista = await mountSuspended(PaginaLibro, { route: '/libro?tab=resultados' })
+    it('en pantalla: Estado de resultados (en Reportes) muestra ingresos, gastos y resultado por empresa', async () => {
+        const vista = await mountSuspended(PaginaResultados, { route: '/reportes/resultados' })
         await esperar(() => expect(vista.find('[data-prueba="libro-resultados"]').exists()).toBe(true))
         await esperar(() => expect(vista.find('[data-prueba="libro-resultados"]').text()).toMatch(/Estado de resultados|sin movimientos/))
         expect(vista.find('[data-prueba="cuadra"]').exists()).toBe(false)
