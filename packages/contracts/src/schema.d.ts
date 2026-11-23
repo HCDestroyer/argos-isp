@@ -14076,7 +14076,7 @@ export interface components {
             empresa_id: number;
             /** @description Días de suspensión para contar una baja (60 de fábrica) */
             dias_baja: number;
-            /** @description Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica) */
+            /** @description Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica). Apagado silencia los umbrales menores a 100 % (panel y fiscal.limite_pc); el 100 % (límite superado) se avisa siempre */
             aviso_pc_activo: boolean;
             /** @description Umbrales vigentes hoy (% del límite anual): el parámetro fiscal pc_alertas de la empresa (80, 95 y 100 de fábrica). null sin localización fiscal instalada */
             aviso_pc_umbrales: string[] | null;
@@ -14124,6 +14124,7 @@ export interface components {
                     nivel: "aviso" | "critico";
                     titulo: string;
                     detalle: string;
+                    /** @description Datos de la alerta. En limite_pequeno_contribuyente: los del bloque pequeno_contribuyente del tablero fiscal más aviso_apagado (true si la empresa apagó el aviso y la alerta llega por haber alcanzado el 100 %) */
                     datos: {
                         [key: string]: unknown;
                     };
@@ -14134,7 +14135,7 @@ export interface components {
                     tipo: "integridad_libro" | "cierres_pendientes" | "contingencia_fel" | "fel_desactivada" | "vencimientos_fiscales" | "limite_pequeno_contribuyente";
                     error: components["schemas"]["Problem"];
                 }[];
-                /** @description Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no se revisan, ni alerta ni error */
+                /** @description Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Los umbrales menores (80, 95…) no llegan */
                 apagadas: ("integridad_libro" | "cierres_pendientes" | "contingencia_fel" | "fel_desactivada" | "vencimientos_fiscales" | "limite_pequeno_contribuyente")[];
             }[];
         };
@@ -60855,7 +60856,7 @@ export interface operations {
                 "application/json": {
                     /** @description Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica). Ausente = sin cambio */
                     dias_baja?: number;
-                    /** @description Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Ausente = sin cambio */
+                    /** @description Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Apagado silencia los umbrales menores a 100 % (panel y fiscal.limite_pc); el 100 % (límite superado) se avisa siempre. Ausente = sin cambio */
                     aviso_pc_activo?: boolean;
                     /** @description Umbrales del aviso (80 y 95 % de fábrica, más 100 %). Se guardan como valor nuevo del parámetro fiscal pc_alertas de la empresa, vigente desde hoy: exige además fiscal.editar_parametros si cambian (403). Ausente = sin cambio */
                     aviso_pc_umbrales?: string[];

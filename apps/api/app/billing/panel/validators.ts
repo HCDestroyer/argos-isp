@@ -46,7 +46,7 @@ export const ajustesPanelValidator = vine.compile(
         }),
         aviso_pc_activo: vine.boolean().optional().meta({
             description:
-                'Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Ausente = sin cambio',
+                'Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Apagado silencia los umbrales menores a 100 % (panel y fiscal.limite_pc); el 100 % (límite superado) se avisa siempre. Ausente = sin cambio',
         }),
         aviso_pc_umbrales: vine
             .array(

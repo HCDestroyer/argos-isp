@@ -269,7 +269,10 @@ export interface EmpresaAlertas {
     alertas: Alerta[]
     /** revisiones que no se pudieron hacer (su alerta no se sabe: nunca se da por buena) */
     errores: Array<{ tipo: TipoAlerta; error: ReturnType<Problema['toJSON']> }>
-    /** avisos que la empresa apagó en sus ajustes (no se revisan: ni alerta ni error) */
+    /**
+     * avisos que la empresa apagó en sus ajustes: no dan alerta ni error, salvo
+     * `limite_pequeno_contribuyente` al 100 % (decisión 12), que llega igual en `alertas`
+     */
     apagadas: TipoAlerta[]
 }
 
@@ -399,12 +402,13 @@ export async function alertasPanel(opciones: {
             ['fel_desactivada', 'vencimientos_fiscales', 'limite_pequeno_contribuyente'],
             async () => {
                 const propios = revisados.filter((t) => !fila.apagadas.includes(t))
+                // decisión 12: con el aviso apagado el límite se revisa igual, solo para el 100 %
+                const pcApagado = fila.apagadas.includes('limite_pequeno_contribuyente')
+                const revisarPc = revisados.includes('limite_pequeno_contribuyente')
                 const nombres = [
                     ...(propios.includes('fel_desactivada') ? (['fel'] as const) : []),
                     ...(propios.includes('vencimientos_fiscales') ? (['vencimientos'] as const) : []),
-                    ...(propios.includes('limite_pequeno_contribuyente')
-                        ? (['pequeno_contribuyente'] as const)
-                        : []),
+                    ...(revisarPc ? (['pequeno_contribuyente'] as const) : []),
                 ]
                 const bloques = await bloquesDelTablero(e.id, nombres, db.connection(), hoy)
                 const conError = (tipo: TipoAlerta, b: Bloque | undefined) => {
@@ -442,8 +446,17 @@ export async function alertasPanel(opciones: {
                         })
                     }
                 }
-                const pc = conError('limite_pequeno_contribuyente', bloques.pequeno_contribuyente)
-                if (pc && (pc.umbral_alcanzado !== null || pc.supera_limite === true)) {
+                // apagado: un error del bloque no se reporta (la empresa silenció el aviso); el cron
+                // fiscal emite igual `fiscal.limite_pc` al 100 %
+                const pc = pcApagado
+                    ? bloques.pequeno_contribuyente?.estado === 'ok'
+                        ? (bloques.pequeno_contribuyente.datos as Record<string, unknown>)
+                        : null
+                    : conError('limite_pequeno_contribuyente', bloques.pequeno_contribuyente)
+                const llegoAlLimite = pc
+                    ? pc.supera_limite === true || dec(String(pc.acumulado)).gte(dec(String(pc.limite)))
+                    : false
+                if (pc && (llegoAlLimite || (!pcApagado && pc.umbral_alcanzado !== null))) {
                     const supera = pc.supera_limite === true
                     const umbrales = (pc.umbrales as string[]) ?? []
                     // el primer umbral (80 % de fábrica) avisa; los siguientes (95 %, 100 %) son críticos
@@ -451,14 +464,14 @@ export async function alertasPanel(opciones: {
                     const alcanzado = dec(String(pc.umbral_alcanzado ?? '0'))
                     fila.alertas.push({
                         tipo: 'limite_pequeno_contribuyente',
-                        nivel: supera || alcanzado.gt(menor) ? 'critico' : 'aviso',
+                        nivel: llegoAlLimite || alcanzado.gt(menor) ? 'critico' : 'aviso',
                         titulo: supera
                             ? 'Superó el límite anual del pequeño contribuyente'
                             : `Lleva el ${String(pc.porcentaje)} % del límite anual del pequeño contribuyente`,
                         detalle: supera
                             ? String(pc.mensaje ?? '')
                             : `Facturado en ${String(pc.anio)}: Q${String(pc.acumulado)} de Q${String(pc.limite)}. Quedan Q${String(pc.disponible)}.`,
-                        datos: pc,
+                        datos: { ...pc, aviso_apagado: pcApagado },
                     })
                 }
             },

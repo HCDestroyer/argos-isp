@@ -62107,7 +62107,7 @@
                     "description": "Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica). Ausente = sin cambio"
                   },
                   "aviso_pc_activo": {
-                    "description": "Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Ausente = sin cambio",
+                    "description": "Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Apagado silencia los umbrales menores a 100 % (panel y fiscal.limite_pc); el 100 % (límite superado) se avisa siempre. Ausente = sin cambio",
                     "type": "boolean"
                   },
                   "aviso_pc_umbrales": {
@@ -102904,7 +102904,7 @@
           },
           "aviso_pc_activo": {
             "type": "boolean",
-            "description": "Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica)"
+            "description": "Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica). Apagado silencia los umbrales menores a 100 % (panel y fiscal.limite_pc); el 100 % (límite superado) se avisa siempre"
           },
           "aviso_pc_umbrales": {
             "type": [
@@ -103079,7 +103079,8 @@
                       },
                       "datos": {
                         "type": "object",
-                        "additionalProperties": true
+                        "additionalProperties": true,
+                        "description": "Datos de la alerta. En limite_pequeno_contribuyente: los del bloque pequeno_contribuyente del tablero fiscal más aviso_apagado (true si la empresa apagó el aviso y la alerta llega por haber alcanzado el 100 %)"
                       }
                     }
                   }
@@ -103124,7 +103125,7 @@
                       "limite_pequeno_contribuyente"
                     ]
                   },
-                  "description": "Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no se revisan, ni alerta ni error"
+                  "description": "Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Los umbrales menores (80, 95…) no llegan"
                 }
               }
             }
