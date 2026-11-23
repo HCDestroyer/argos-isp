@@ -70,12 +70,12 @@ v6=T('''<div style="display:{{v.v6}};flex:1;min-height:0;gap:0">
   <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1fr);gap:10px;font-size:13px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9"><span class="mono" style="font-size:12px">2803:d100:80::/45</span><span class="b cy" style="justify-self:start">Enlace · /64</span><span><span class="bar"><i style="width:1%;background:#06B6D4"></i></span><span class="m2 num">301 de 524,288</span></span></div>
   <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1fr);gap:10px;font-size:13px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9"><span class="mono" style="font-size:12px">2803:d100:88::/45</span><span class="b nf" style="justify-self:start">Casa · /56</span><span><span class="bar"><i style="width:15%"></i></span><span class="m2 num">301 de 2,048</span></span></div></div>''')
 fj=[('190.56.12.66','Ferretería El Clavo','Pyme 100','MK Centro','ok','Conectado','12 ene 2025'),('190.56.12.67','Colegio Belén','Dedicado 200','MK Centro','ok','Conectado','3 feb 2025'),('190.56.12.70','Hotel Posada del Sol','Pyme 200','MK Centro','ok','Conectado','20 jun 2025'),('190.56.12.72','Clínica Santa Ana','Pyme 100','MK Centro','er','Suspendido','8 ago 2025'),('190.56.12.75','Municipalidad · cámaras','Dedicado 500','MK Centro','ok','Conectado','1 sep 2026'),('172.16.40.120','Finca La Esperanza','Radio 10','MK Torre San Juan','ok','En línea','14 oct 2026')]
-CF='150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px'
+CF='150px minmax(0,1.3fr) 120px 170px minmax(0,1fr) 110px 110px 30px'
 fijas=T('''<div style="display:{{v.fijas}};flex:1;min-height:0;flex-direction:column">
  <div style="display:flex;gap:10px;align-items:center;padding:10px 18px"><span class="fc on">Públicas <span class="c">19</span></span><span class="fc">Privadas fijas <span class="c">86</span></span><span style="flex:1"></span><span class="m2">9 públicas libres en 190.56.12.64/27</span></div>
- <div class="lh" style="grid-template-columns:<<c>>"><span>IP</span><span>Cliente</span><span>Plan</span><span>Router</span><span>Estado</span><span>Desde</span><span></span></div>
+ <div class="lh" style="grid-template-columns:<<c>>"><span>IP</span><span>Cliente</span><span>Plan</span><span>Por qué la tiene</span><span>Router</span><span>Estado</span><span>Desde</span><span></span></div>
  <div class="sc" style="flex:1"><<rows>></div>
-</div>''',c=CF,rows=''.join(T('<div class="lr" style="grid-template-columns:<<c>>"><span class="copy" style="justify-self:start"><<ip>></span><b class="el"><<cl>></b><span><<pl>></span><span class="m2 el"><<rt>></span><span><span class="b <<k>>"><<e>></span></span><span class="m2"><<d>></span><span style="color:#94A3B8"><i:der:15></span></div>',c=CF,ip=ip,cl=cl,pl=pl,rt=rt,k=k,e=e,d=d) for ip,cl,pl,rt,k,e,d in fj))
+</div>''',c=CF,rows=''.join(T('<div class="lr" style="grid-template-columns:<<c>>"><span class="copy" style="justify-self:start"><<ip>></span><b class="el"><<cl>></b><span><<pl>></span><span><<og>></span><span class="m2 el"><<rt>></span><span><span class="b <<k>>"><<e>></span></span><span class="m2"><<d>></span><span style="color:#94A3B8"><i:der:15></span></div>',c=CF,ip=ip,cl=cl,pl=pl,rt=rt,k=k,e=e,d=d,og=('<span class="b cy" style="font-size:11px">Incluida en el plan</span>' if pl.startswith('Dedicado') else ('<span class="b ne" style="font-size:11px">Privada fija</span>' if ip.startswith('172.') else '<span class="b nf" style="font-size:11px">Adicional · Q 75.00</span>'))) for ip,cl,pl,rt,k,e,d in fj))
 kp=lambda cls,ico,l,v,sub: T('<div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:12px;flex:1;min-width:0"><span class="ico <<cls>>" style="width:34px;height:34px;border-radius:10px"><i:<<ico>>:17></span><div style="min-width:0"><div class="m2"><<l>></div><b style="font-size:17px" class="num"><<v>></b> <span class="m2"><<sub>></span></div></div>',cls=cls,ico=ico,l=l,v=v,sub=sub)
 inner=T('''<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
  <div><h1 class="h1">Direcciones IP</h1><div class="sub">Todas las redes de todos los routers en un solo lugar</div></div>
@@ -85,7 +85,7 @@ inner=T('''<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
 <section class="isla" style="border-radius:20px;padding:14px 18px;flex:0 0 auto;display:flex;flex-direction:column;gap:10px">
  <div style="display:flex;gap:10px;align-items:center">
   <div class="busca" style="flex:1;height:48px;font-size:15px;border:2px solid #4F46E5;box-shadow:0 0 0 4px rgba(79,70,229,.12);color:#0F172A;cursor:text" onClick="{{buscar}}"><i:bus:18:#4F46E5><span style="color:{{qCol}}" class="mono">{{qTxt}}</span></div>
-  <span class="selp" style="height:48px;padding:0 16px"><i:cal:15>Hoy<i:ab:14></span><span class="nuevo">por fecha: nuevo</span>
+  <span class="selp" style="height:48px;padding:0 16px" onClick="{{porFecha}}"><i:cal:15>{{fechaTxt}}<i:ab:14></span><span class="nuevo">por fecha: nuevo</span>
   <button class="btn p" style="height:48px;padding:0 24px" onClick="{{buscar}}">¿De quién es?</button>
  </div>
  <div style="display:{{vRes}};align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#F0FDF4;border:1px solid #BBF7D0">
@@ -94,6 +94,18 @@ inner=T('''<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
   <span class="b ok"><span class="dot" style="background:currentColor"></span>En línea</span>
   <button class="btn o" style="padding:8px 14px">Ver historial de esta IP</button><button class="btn p" style="padding:8px 16px">Abrir cliente</button>
  </div>
+ <div style="display:{{vHist}};flex-direction:column;gap:8px">
+  <div style="display:flex;align-items:center;gap:8px" class="m2"><i:hist:14><b style="color:#0F172A">190.56.12.70 el 15 jun 2025 a las 21:40</b> · 2 resultados<span style="flex:1"></span><span class="b ne" style="font-size:11px"><i:ojo:11>Consulta registrada en la bitácora</span></div>
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#F8FAFC;border:1px solid #E6E8F0">
+   <span class="av" style="background:#E0E7FF;color:#3730A3">HP</span>
+   <div style="flex:1;min-width:0"><div style="font-size:15px"><b>Hotel Posada del Sol</b> <span class="m2">· CLI-00211 · S-000188 · Pyme 200</span></div><div class="m2">Sesión PPPoE <span class="mono" style="font-size:12px">hotel.posada</span> en MK Centro · del 14 jun 08:02 al 16 jun 11:47 · terminó: el equipo se reinició</div></div>
+   <span class="b nf"><i:wifi:12>Por su sesión</span><button class="btn o" style="padding:8px 14px">Abrir servicio</button></div>
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#F8FAFC;border:1px solid #E6E8F0">
+   <span class="av" style="background:#E0E7FF;color:#3730A3">HP</span>
+   <div style="flex:1;min-width:0"><div style="font-size:15px"><b>Hotel Posada del Sol</b> <span class="m2">· S-000188</span></div><div class="m2">Asignación vigente esa noche: IP fija del 3 ene al 19 jun 2025 (después la volvió a recibir el 20 jun)</div></div>
+   <span class="b ne"><i:net:12>Por su asignación</span></div>
+ </div>
+ <div style="display:{{vRet}};align-items:flex-start;gap:10px" class="av2 wa"><i:alerta:16><div style="flex:1"><b>Esa fecha es de hace más de 730 días.</b> Argos busca hasta 2 años atrás en sus sesiones; lo más viejo lo guarda Horus.</div><button class="btn o" style="padding:7px 14px">Buscar en Horus</button></div>
  <div style="display:{{vTip}};font-size:12px;color:#64748B;gap:6px;align-items:center"><i:info:14>Escribe una IPv4, una IPv6 o un prefijo. Sirve para reclamos y requerimientos: te dice el cliente, su servicio y desde cuándo. <button class="lnk" style="font-size:12px" onClick="{{buscar}}">Probar con 10.20.4.18</button></div>
 </section>
 <div style="display:flex;gap:12px;flex:0 0 auto"><<k1>><<k2>><<k3>><<k4>></div>
@@ -123,8 +135,11 @@ for (let i = 0; i < 256; i++) {
 const tabs = [['v4', 'IPv4', 7], ['v6', 'IPv6', 2], ['fijas', 'IPs fijas y públicas', 105]].map(([id, nom, n]) => ({ id, nom, n, cls: id === tab ? 'on' : '', ir: () => this.setState({ tab: id }) }));
 return { tabs, celdas, s: sel, v: { v4: tab === 'v4' ? 'flex' : 'none', v6: tab === 'v6' ? 'flex' : 'none', fijas: tab === 'fijas' ? 'flex' : 'none' },
   redes: rs.map((r) => ({ ...r, cls: r.id === sel.id ? 'on' : '', vp: r.pub ? 'inline-flex' : 'none', ver: () => this.setState({ sel: r.id }) })),
-  buscar: () => this.setState({ q: !st.q }), vRes: st.q ? 'flex' : 'none', vTip: st.q ? 'none' : 'flex',
-  qTxt: st.q ? '10.20.4.18' : 'Escribe una IP…', qCol: st.q ? '#0F172A' : '#94A3B8' };
+  buscar: () => this.setState({ q: !st.q, qf: '' }), vRes: (st.q && !st.qf) ? 'flex' : 'none', vTip: (st.q || st.qf) ? 'none' : 'flex',
+  qTxt: st.qf ? '190.56.12.70' : (st.q ? '10.20.4.18' : 'Escribe una IP…'), qCol: (st.q || st.qf) ? '#0F172A' : '#94A3B8',
+  fechaTxt: st.qf === 'hist' ? '15 jun 2025 · 21:40' : (st.qf === 'ret' ? '3 feb 2024 · 10:00' : 'Ahora'),
+  porFecha: () => this.setState({ qf: st.qf === 'hist' ? 'ret' : (st.qf === 'ret' ? '' : 'hist'), q: false }),
+  vHist: st.qf === 'hist' ? 'flex' : 'none', vRet: st.qf === 'ret' ? 'flex' : 'none' };
 }
 }''' % JS(redes)
 build('RedIps.dc.html','Red · Direcciones IP',shell('red',['Red','Direcciones IP'],inner),logic,1000,CSSI)

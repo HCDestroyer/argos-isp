@@ -37,6 +37,36 @@ side=T('''<aside class="side" style="width:440px;top:64px;border-top:1px solid #
  </div>
  <div style="padding:12px 18px;border-top:1px solid #EEF0F5;display:flex;align-items:center;gap:10px"><span class="m2" style="flex:1">Un asiento nunca se edita. Para corregirlo se hace su espejo, con motivo.</span><button class="btn o" style="color:#B91C1C;border-color:#FECACA"><i:girar:15>Revertir</button></div>
 </aside>''',movh=movh)
+# --- Por aprobar: borradores de asiento manual (decisión del PM 10)
+BOR=[('20 nov','Reclasificar depósito sin identificar a cliente Comercial El Roble','Karla Sic','1,290.00','wa','reloj','Pendiente',1),
+('19 nov','Ajuste de redondeo en caja 2 · octubre','Luis Ajcip','0.35','wa','reloj','Pendiente',0),
+('18 nov','Provisión de cuentas incobrables · octubre','Ana Castillo (tú)','4,800.00','wa','reloj','Pendiente · lo creaste tú',0),
+('15 nov','Corrección de cuenta en compra C-000471','Karla Sic','620.00','ok','check','Aprobado · VAR-2026-000115',0),
+('12 nov','Traslado entre bancos sin boleta','Luis Ajcip','10,000.00','er','cerrar','Rechazado · «falta la boleta»',0)]
+brows=''.join(T('''<div class="lr <<on>>" style="grid-template-columns:62px minmax(0,1fr) 170px 110px 230px"><span class="m2"><<f>></span><span class="el"><<d>></span><span class="el m2" style="color:#334155"><<q>></span><b class="num r"><<m>></b><span><span class="b <<k>>"><i:<<i>>:12><<e>></span></span></div>''',on='on' if on else '',f=f,d=d,q=q,m=m,k=k,i=i,e=e) for f,d,q,m,k,i,e,on in BOR)
+aprob=T('''<div class="av2 nf" style="margin:0 18px 10px;padding:8px 12px;flex:0 0 auto"><i:info:16><div>Esta empresa pide que <b>otra persona</b> apruebe cada asiento de ajuste. Un borrador no toca el libro hasta que se aprueba; quien lo creó no puede aprobarlo, pero sí retirarlo.</div></div>
+<div style="flex:1;min-height:0;display:flex;border-top:1px solid #EEF0F5">
+ <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+  <div class="lh" style="grid-template-columns:62px minmax(0,1fr) 170px 110px 230px;border-top:0"><span>Fecha</span><span>Descripción</span><span>Lo creó</span><span style="text-align:right">Total</span><span>Estado</span></div>
+  <div class="sc" style="flex:1"><<rows>></div>
+ </div>
+ <aside style="width:420px;flex:0 0 auto;border-left:1px solid #EEF0F5;display:flex;flex-direction:column;min-height:0">
+  <div style="padding:14px 18px;border-bottom:1px solid #EEF0F5"><div style="display:flex;gap:8px;align-items:center"><b style="font-size:15px;flex:1">Borrador del 20 nov</b><span class="b wa"><i:reloj:12>Pendiente</span></div><div class="m2" style="margin-top:3px">Reclasificar depósito sin identificar a cliente Comercial El Roble · Karla Sic, hoy 09:12</div></div>
+  <div class="sc" style="flex:1;padding:12px 18px;display:flex;flex-direction:column;gap:12px">
+   <div style="border:1px solid #EEF0F5;border-radius:12px;overflow:hidden"><table class="tb"><tr><th>Cuenta</th><th class="r">Debe</th><th class="r">Haber</th></tr><tr><td><span class="mono" style="font-size:12px;color:#64748B">2.1.09</span><div>Depósitos sin identificar</div></td><td class="r">1,290.00</td><td class="r"></td></tr><tr><td><span class="mono" style="font-size:12px;color:#64748B">1.1.03</span><div>Clientes · Comercial El Roble</div></td><td class="r"></td><td class="r">1,290.00</td></tr><tr class="tot"><td>Cuadra <i:check:13:#16A34A></td><td class="r">1,290.00</td><td class="r">1,290.00</td></tr></table></div>
+   <div class="kv"><span>Fecha del asiento</span><span>20 nov · noviembre abierto</span></div>
+   <div class="m2" style="line-height:1.45">Al aprobarlo se registra con su fecha. Si el mes ya se cerró o una cuenta cambió, verás el error y el borrador seguirá pendiente.</div>
+  </div>
+  <div style="padding:12px 18px;border-top:1px solid #EEF0F5;display:flex;gap:8px"><button class="btn o" style="color:#B91C1C;border-color:#FECACA" onClick="{{rech}}"><i:cerrar:15>Rechazar</button><span style="flex:1"></span><button class="btn p"><i:check:15>Aprobar y registrar</button></div>
+ </aside>
+</div>''',rows=brows)
+mrech=T('''<div style="display:{{dr}};position:absolute;inset:0;background:rgba(15,23,42,.35);z-index:8;align-items:center;justify-content:center">
+ <div class="isla" style="width:460px;border-radius:22px;padding:22px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:10px"><span class="ico er" style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center"><i:cerrar:18></span><b style="font-size:16px;flex:1">Rechazar el borrador</b><button class="ib" onClick="{{cerrarR}}"><i:cerrar:16></button></div>
+  <div style="font-size:14px;color:#475569;line-height:1.5">No toca el libro. Karla Sic verá el motivo y puede crear otro corregido.</div>
+  <div><div class="lb">Motivo<span class="req">*</span></div><div class="in ph">Ej.: falta la boleta del depósito</div></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn g" onClick="{{cerrarR}}">Cancelar</button><button class="btn p" style="background:#B91C1C;box-shadow:none" onClick="{{cerrarR}}">Rechazar</button></div>
+ </div></div>''')
 inner=T('''<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
  <div><h1 class="h1">Libro contable</h1><div class="sub">Redes del Valle, S.A. · noviembre abierto · octubre por cerrar</div></div>
  <span style="flex:1"></span><<emp>><<per>><<ay>>
@@ -54,14 +84,15 @@ inner=T('''<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
  <div style="flex:1;min-height:0;display:{{d1}};flex-direction:column;margin-right:{{mr}}"><<diario>></div>
  <div style="flex:1;min-height:0;display:{{d2}};flex-direction:column"><<mayor>></div>
  <div style="flex:1;min-height:0;display:{{d3}};flex-direction:column"><<aux>></div>
- <<side>>
-</section>''',emp=emp('Redes del Valle, S.A.'),per=per(),ay=AYUDA('cómo leer el libro y corregir un asiento'),diario=diario,mayor=mayor,aux=aux,side=side)
+ <div style="flex:1;min-height:0;display:{{d4}};flex-direction:column"><<aprob>></div>
+ <<side>><<mrech>>
+</section>''',emp=emp('Redes del Valle, S.A.'),per=per(),ay=AYUDA('cómo leer el libro y corregir un asiento'),diario=diario,mayor=mayor,aux=aux,side=side,aprob=aprob,mrech=mrech)
 logic='''class Component extends DCLogic {
 renderVals() {
 const st = this.state || {}; const t = st.t || 'diario';
-const tabs = [['diario', 'Diario', 'lista'], ['mayor', 'Mayor', 'libro'], ['aux', 'Auxiliar de cliente', 'user'], ['cuentas', 'Plan de cuentas', 'net']].map(([id, nom, ico]) => ({ id, nom, ico, cls: id === t ? 'on' : '', ir: () => this.setState({ t: id, cerrado: true }) }));
+const tabs = [['diario', 'Diario', 'lista'], ['mayor', 'Mayor', 'libro'], ['aux', 'Auxiliar de cliente', 'user'], ['cuentas', 'Plan de cuentas', 'net'], ['apr', 'Por aprobar (3)', 'check']].map(([id, nom, ico]) => ({ id, nom, ico, cls: id === t ? 'on' : '', ir: () => this.setState({ t: id, cerrado: true }) }));
 const s = t === 'diario' && !st.cerrado;
-return { tabs, d1: t === 'diario' ? 'flex' : 'none', d2: (t === 'mayor' || t === 'cuentas') ? 'flex' : 'none', d3: t === 'aux' ? 'flex' : 'none', dfil: t === 'diario' ? 'inline-flex' : 'none', ds: s ? 'flex' : 'none', mr: s ? '440px' : '0', cerrar: () => this.setState({ cerrado: true }) };
+return { tabs, d1: t === 'diario' ? 'flex' : 'none', d2: (t === 'mayor' || t === 'cuentas') ? 'flex' : 'none', d3: t === 'aux' ? 'flex' : 'none', d4: t === 'apr' ? 'flex' : 'none', dr: st.rech ? 'flex' : 'none', rech: () => this.setState({ rech: true }), cerrarR: () => this.setState({ rech: false }), dfil: t === 'diario' ? 'inline-flex' : 'none', ds: s ? 'flex' : 'none', mr: s ? '440px' : '0', cerrar: () => this.setState({ cerrado: true }) };
 }
 }'''
-build('ContaLibro.dc.html','Finanzas · Libro: diario, mayor, auxiliar y detalle de un asiento',shell('fin',['Finanzas','Libro contable'],inner),logic,900,CSSK+mask(['lista','libro','user','net']))
+build('ContaLibro.dc.html','Finanzas · Libro: diario, mayor, auxiliar y detalle de un asiento',shell('fin',['Finanzas','Libro contable'],inner),logic,900,CSSK+mask(['lista','libro','user','net','check']))

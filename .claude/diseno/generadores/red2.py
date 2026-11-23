@@ -223,10 +223,11 @@ inner=T('''<section class="isla" style="border-radius:20px;padding:14px 18px;dis
  <button class="btn o"><i:editar:16>Editar</button>
  <span style="position:relative"><button class="ib f" style="width:40px;height:40px;border-radius:999px" onClick="{{menu}}"><i:mas:18></button>
   <div class="isla" style="display:{{verMenu}};position:absolute;right:0;top:46px;width:250px;border-radius:14px;padding:6px;z-index:5">
-   <div class="mi"><i:term:16>Script de conexión</div><div class="mi"><i:unir:16>Unir con otro router</div><div class="mi"><i:cable:16>Migrar redes a otro router</div><div class="mi"><i:pausa:16>Desactivar</div>
+   <div class="mi"><i:term:16>Script de conexión</div><div class="mi"><i:unir:16>Unir con otro router</div><div class="mi"><i:cable:16>Migrar redes a otro router</div><div class="mi" onClick="{{verInc}}"><i:alerta:16>Abrir falla general</div><div class="mi"><i:pausa:16>Desactivar</div>
    <div class="mi" style="color:#94A3B8;cursor:not-allowed" title="Tiene 438 servicios y sesiones"><i:basura:16>Eliminar<span class="m2" style="margin-left:auto">tiene historial</span></div>
   </div></span>
 </section>
+<div class="av2 er" style="display:{{vInc}};flex:0 0 auto;padding:10px 16px"><i:alerta:18><div style="flex:1"><b>Falla general abierta en este router</b> desde las 09:40 · la abrió Ana Cruz: «se cayó el enlace del proveedor» · 438 servicios afectados · Iris tiene el ticket general.</div><button class="btn o" style="padding:7px 14px">Ver la falla</button><button class="btn o" style="padding:7px 14px"><i:check:14>Cerrar falla</button></div>
 <section class="isla" style="flex:1;min-height:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
  <div style="padding:12px 18px;border-bottom:1px solid #F1F5F9;flex:0 0 auto"><div class="segb"><sc-for list="{{tabs}}" as="t"><button class="ts {{t.cls}}" onClick="{{t.ir}}"><span class="ti ti-{{t.ico}}" style="width:16px;height:16px"></span>{{t.nom}}<span class="c {{t.cc}}" style="display:{{t.vc}}">{{t.n}}</span></button></sc-for></div></div>
  <div class="sc" style="flex:1;padding:16px 18px">
@@ -254,7 +255,7 @@ const otras = !!st.otras;
 tabs.forEach((t) => { v[t[0]] = t[0] === act ? 'flex' : 'none'; });
 return {
   colas: colasV, colaX, vOtras: otras ? 'grid' : 'none', otrasTxt: otras ? 'Ocultar las otras' : 'Ver las otras (2)', verOtras: () => this.setState({ otras: !otras }),
-  v, verMenu: st.menu ? 'block' : 'none', menu: () => this.setState({ menu: !st.menu }),
+  v, verMenu: st.menu ? 'block' : 'none', menu: () => this.setState({ menu: !st.menu }), vInc: st.inc ? 'flex' : 'none', verInc: () => this.setState({ inc: true, menu: false }),
   irRed: () => this.setState({ tab: 'red' }), irBit: () => this.setState({ tab: 'bitacora' }),
   tabs: tabs.map((t) => ({ id: t[0], nom: t[1], ico: t[2], n: t[3], vc: t[3] ? 'inline' : 'none', cc: t[0] === 'bitacora' ? 'rj' : '', cls: t[0] === act ? 'on' : '', ir: () => this.setState({ tab: t[0], menu: false }) }))
 };
