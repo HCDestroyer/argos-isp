@@ -3,6 +3,7 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, registrarAccion, usuariosPorToken } from '../comun'
 import { texto } from './comun'
+import { enviosVisibles } from './envios'
 
 /**
  * Correos externos aprobados para los reportes contables programados (A3, decisión 6): aprobar
@@ -14,8 +15,11 @@ export const rutasCorreosExternos: RutasFixture = {
         const nombre = (id: number | null) => (id === null ? null : Object.values(usuariosPorToken).find(u => u.id === id)?.nombre ?? null)
         const data: Schema<'CorreoExternoReportesListado'>[] = bd.operacionPm.correosExternos
             .filter(c => activo === null || c.activo === (activo === 'true'))
-            // Los envíos programados del fixture no guardan destinatarios externos: 0 hasta que los tengan.
-            .map(c => ({ ...c, aprobado_por_nombre: nombre(c.aprobado_por), retirado_por_nombre: nombre(c.retirado_por), envios_programados: 0, envios_activos: 0 }))
+            .map((c) => {
+                // Como `listarCorreosExternos`: solo cuentan los envíos que la petición puede ver.
+                const usos = enviosVisibles(solicitud).filter(e => e.destinatarios.some(d => d.correo_externo_id === c.id))
+                return { ...c, aprobado_por_nombre: nombre(c.aprobado_por), retirado_por_nombre: nombre(c.retirado_por), envios_programados: usos.length, envios_activos: usos.filter(e => e.activo).length }
+            })
         return { status: 200, cuerpo: { data } }
     }),
 
@@ -36,6 +40,7 @@ export const rutasCorreosExternos: RutasFixture = {
         const quien = solicitud.token ? usuariosPorToken[solicitud.token]?.id ?? null : null
         const existente = bd.operacionPm.correosExternos.find(c => c.correo === correo)
         if (existente) {
+            marcarRetiro(existente.id, false)
             Object.assign(existente, existente.activo
                 ? { nombre, version: existente.version + 1 }
                 : { nombre, activo: true, aprobado_por: quien, aprobado_en: ahora(), retirado_por: null, retirado_en: null, version: existente.version + 1 })
@@ -54,9 +59,21 @@ export const rutasCorreosExternos: RutasFixture = {
             return noEncontrado('el correo')
         }
         if (correo.activo) {
+            marcarRetiro(correo.id, true)
             Object.assign(correo, { activo: false, retirado_por: solicitud.token ? usuariosPorToken[solicitud.token]?.id ?? null : null, retirado_en: ahora(), version: correo.version + 1 })
             registrarAccion(solicitud, 'reportes.retirar_correo_externo', { tipo: 'correo_externo_reportes', id: correo.id }, {})
         }
         return { status: 200, cuerpo: correo }
     })),
+}
+
+/** Los destinatarios de los envíos muestran «Retirado de la lista» mientras el correo esté retirado. */
+function marcarRetiro(correoId: number, retirado: boolean): void {
+    for (const envio of bd.operacionPm.envios) {
+        for (const destino of envio.destinatarios) {
+            if (destino.correo_externo_id === correoId) {
+                destino.retirado = retirado
+            }
+        }
+    }
 }

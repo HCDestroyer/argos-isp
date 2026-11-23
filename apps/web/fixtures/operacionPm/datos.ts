@@ -32,8 +32,12 @@ export interface OperacionPmFixtures {
     ajustesGlobal: Record<string, ValorAjuste>
     ajustesEmpresa: Record<number, Record<string, ValorAjuste>>
     ajustesCobro: Record<number, Schema<'AjustesCobro'>>
-    panelFinanciero: Record<number, Schema<'AjustesPanelFinanciero'>>
+    /** Fila de `billing.panel_ajustes` por empresa (sin fila = valores de fábrica, `version` 1). */
+    panelFinanciero: Record<number, { dias_baja: number, aviso_pc_activo: boolean, version: number }>
     correosExternos: Schema<'CorreoExternoReportes'>[]
+    /** Envíos programados de reportes (`billing.reportes_envios` con sus destinatarios). */
+    envios: Schema<'EnvioReporte'>[]
+    corridasEnvios: Schema<'CorridaEnvioReporte'>[]
     /** Orden y versión de cada banco del catálogo (el `Banco` de `GET /bancos` no las trae). */
     bancosMeta: Record<number, { orden: number, version: number }>
     /** Bancos ocultos por empresa (decisión 23). */
@@ -111,6 +115,58 @@ export function operacionPmInicial(): OperacionPmFixtures {
         correosExternos: [
             { id: 1, correo: 'contador@despachomm.gt', nombre: 'Despacho Morales & Asociados', activo: true, aprobado_por: 1, aprobado_en: '2026-10-03T15:00:00.000Z', retirado_por: null, retirado_en: null, version: 1 },
             { id: 2, correo: 'gerencia@argosnet.gt', nombre: 'Gerencia (cuenta compartida)', activo: false, aprobado_por: 1, aprobado_en: '2026-08-12T15:00:00.000Z', retirado_por: 1, retirado_en: '2026-11-14T15:00:00.000Z', version: 2 },
+        ],
+        envios: [
+            {
+                id: 1, empresa_id: 1, nombre: 'Cartera vencida por zona', reporte: 'cartera-vencida', filtros: { agrupar: 'zona' }, formato: 'xlsx', frecuencia: 'semanal', dia: 1, hora: 7, activo: true,
+                proximo_en: '2026-11-30T13:00:00.000Z', ultimo_envio_en: '2026-11-23T13:00:00.000Z', creado_por: 1,
+                destinatarios: [
+                    { id: 1, tipo: 'usuario', usuario_id: 1, correo_externo_id: null, nombre: 'Ana Administradora', correo: 'admin@argos.test', retirado: false },
+                    { id: 2, tipo: 'correo_externo', usuario_id: null, correo_externo_id: 2, nombre: 'Gerencia (cuenta compartida)', correo: 'gerencia@argosnet.gt', retirado: true },
+                ],
+                version: 1, created_at: '2026-10-01T15:00:00.000Z', updated_at: '2026-10-01T15:00:00.000Z',
+            },
+            {
+                id: 2, empresa_id: 1, nombre: 'Cobranza diaria', reporte: 'cobranza-diaria', filtros: {}, formato: 'pdf', frecuencia: 'diaria', dia: null, hora: 19, activo: true,
+                proximo_en: '2026-11-24T01:00:00.000Z', ultimo_envio_en: '2026-11-23T01:00:00.000Z', creado_por: 1,
+                destinatarios: [{ id: 3, tipo: 'usuario', usuario_id: 1, correo_externo_id: null, nombre: 'Ana Administradora', correo: 'admin@argos.test', retirado: false }],
+                version: 1, created_at: '2026-10-01T15:00:00.000Z', updated_at: '2026-10-01T15:00:00.000Z',
+            },
+            {
+                id: 3, empresa_id: null, nombre: 'Ingresos del mes', reporte: 'ingresos', filtros: {}, formato: 'pdf', frecuencia: 'mensual', dia: 5, hora: 8, activo: true,
+                proximo_en: '2026-12-05T14:00:00.000Z', ultimo_envio_en: '2026-11-05T14:00:00.000Z', creado_por: 1,
+                destinatarios: [{ id: 4, tipo: 'correo_externo', usuario_id: null, correo_externo_id: 1, nombre: 'Despacho Morales & Asociados', correo: 'contador@despachomm.gt', retirado: false }],
+                version: 1, created_at: '2026-10-01T15:00:00.000Z', updated_at: '2026-10-01T15:00:00.000Z',
+            },
+            {
+                id: 4, empresa_id: 1, nombre: 'Bajas del mes', reporte: 'altas-bajas', filtros: {}, formato: 'csv', frecuencia: 'mensual', dia: 1, hora: 7, activo: false,
+                proximo_en: '2026-12-01T13:00:00.000Z', ultimo_envio_en: null, creado_por: 1,
+                destinatarios: [{ id: 5, tipo: 'usuario', usuario_id: 1, correo_externo_id: null, nombre: 'Ana Administradora', correo: 'admin@argos.test', retirado: false }],
+                version: 2, created_at: '2026-10-01T15:00:00.000Z', updated_at: '2026-11-02T15:00:00.000Z',
+            },
+        ],
+        corridasEnvios: [
+            {
+                id: 3, envio_id: 1, programado_para: '2026-11-16T13:00:00.000Z', enviados: 1, omitidos: 1, fallidos: 0, created_at: '2026-11-16T13:00:04.000Z',
+                resultados: [
+                    { destinatario_id: 1, tipo: 'usuario', usuario_id: 1, correo_externo_id: null, estado: 'enviado', motivo: null, detalle: null },
+                    { destinatario_id: 2, tipo: 'correo_externo', usuario_id: null, correo_externo_id: 2, estado: 'omitido', motivo: 'correo_retirado', detalle: null },
+                ],
+            },
+            {
+                id: 2, envio_id: 1, programado_para: '2026-11-09T13:00:00.000Z', enviados: 2, omitidos: 0, fallidos: 0, created_at: '2026-11-09T13:00:03.000Z',
+                resultados: [
+                    { destinatario_id: 1, tipo: 'usuario', usuario_id: 1, correo_externo_id: null, estado: 'enviado', motivo: null, detalle: null },
+                    { destinatario_id: 2, tipo: 'correo_externo', usuario_id: null, correo_externo_id: 2, estado: 'enviado', motivo: null, detalle: null },
+                ],
+            },
+            {
+                id: 1, envio_id: 1, programado_para: '2026-11-02T13:00:00.000Z', enviados: 1, omitidos: 0, fallidos: 1, created_at: '2026-11-02T13:00:05.000Z',
+                resultados: [
+                    { destinatario_id: 1, tipo: 'usuario', usuario_id: 1, correo_externo_id: null, estado: 'enviado', motivo: null, detalle: null },
+                    { destinatario_id: 2, tipo: 'correo_externo', usuario_id: null, correo_externo_id: 2, estado: 'fallido', motivo: 'error_envio', detalle: 'El servidor de correo no respondió' },
+                ],
+            },
         ],
         bancosMeta: {},
         bancosOcultos: { 1: [] },

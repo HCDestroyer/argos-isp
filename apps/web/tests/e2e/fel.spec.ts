@@ -29,6 +29,10 @@ test('Configuración → FEL: credenciales sin secretos, desactivar con avisos v
     await expect(pruebas.locator('[data-prueba="credenciales-estado"]')).toHaveText('Configuradas')
     await pruebas.getByRole('button', { name: 'Probar' }).click()
     await expect(page.getByText('Credenciales válidas').first()).toBeVisible()
+    // Los avisos emergentes van abajo a la derecha, encima de «Guardar»; con el puntero encima no
+    // se cierran solos. Se aparta el puntero y se espera a que se vayan, como haría una persona.
+    await page.mouse.move(0, 0)
+    await expect(page.getByRole('region', { name: /Notifications/ }).locator('li')).toHaveCount(0, { timeout: 20_000 })
 
     await page.locator('[data-prueba="fel-modos"]').getByText('Desactivada').click()
     await page.locator('[data-prueba="fel-guardar"]').click()

@@ -83,6 +83,26 @@ function regimenDe(empresaId: number, hoy: string): string | null {
 }
 
 const texto = (d: Decimal) => d.toDecimalPlaces(2).toFixed(2)
+
+/**
+ * Lo fiscal del aviso de pequeño contribuyente para `GET /panel-financiero/ajustes` (como
+ * `umbralesVigentes` de `configurar_panel_financiero`): `pc_alertas` vigente hoy (dos decimales),
+ * desde cuándo, de qué nivel y si el régimen vigente es pequeño contribuyente. Sin localización
+ * instalada, umbrales `null`.
+ */
+export function avisoPcFiscal(empresaId: number, hoy: string): { umbrales: string[] | null, desde: string | null, nivel: Schema<'AjustesPanelFinanciero'>['aviso_pc_umbrales_nivel'], aplica: boolean } {
+    if (!(bd.fiscal.instalaciones[empresaId] ?? []).length) {
+        return { umbrales: null, desde: null, nivel: null, aplica: false }
+    }
+    const fila = resolverValor(empresaId, 'pc_alertas', hoy)
+    const lista = fila ? fila.valor : PAQUETE.pc_alertas
+    return {
+        umbrales: (Array.isArray(lista) ? lista : []).map(u => texto(new Decimal(String(u)))),
+        desde: fila?.vigente_desde ?? null,
+        nivel: fila?.nivel ?? 'paquete',
+        aplica: regimenDe(empresaId, hoy) === 'pequeno_contribuyente',
+    }
+}
 const mesDe = (fecha: string) => `${fecha.slice(0, 7)}-01`
 
 function trimestreDe(fecha: string): string {

@@ -335,7 +335,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Pendientes del backend (23 nov): cada ventana solo se abre con el permiso de su acción.
     'IntentoDecidirModal.vue': { permisos: ['inventario.decidir_intento_recuperacion'], desde: ['pages/inventario/por-recuperar/[id].vue'] },
     'BancoOrigenModal.vue': { permisos: ['bancos_origen.crear', 'bancos_origen.editar'], desde: ['pages/configuracion/bancos-origen.vue'] },
-    'CorreoExternoModal.vue': { permisos: ['reportes.aprobar_correo_externo'], desde: ['pages/configuracion/reportes.vue'] },
+    'CorreoExternoModal.vue': { permisos: ['reportes.aprobar_correo_externo'], desde: ['pages/reportes/envios.vue'] },
     // SmartOLT y GenieACS: la página de integraciones se abre con cualquiera de sus permisos y monta la tarjeta con `equipos.ver`.
     'ConfiguracionEquipos.vue': { permisos: ['equipos.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },

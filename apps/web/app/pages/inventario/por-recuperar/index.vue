@@ -190,16 +190,6 @@ function cobroDecidido(titulo: string) {
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <UButton
-                                    label="Crear orden de retiro (Iris)"
-                                    icon="i-lucide-clipboard-plus"
-                                    color="neutral"
-                                    variant="outline"
-                                    size="sm"
-                                    class="rounded-full"
-                                    disabled
-                                    title="Argos crea la orden de retiro en Iris al retirar el servicio; crearla a mano aún no está en la API"
-                                />
-                                <UButton
                                     v-if="puede('inventario.devolver_comodato')"
                                     label="Recibido"
                                     icon="i-lucide-package-check"

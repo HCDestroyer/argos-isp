@@ -13,7 +13,9 @@ useHead({ title: 'Panel financiero · ArgosIsp' })
  * - la antigüedad de lo vencido (`GET /reportes/cartera-vencida`);
  * - impuestos por pagar y el límite del pequeño contribuyente (`GET /fiscal/tablero`);
  * - efectivo en cajas y bancos (cuentas 1.1.01 y 1.1.02 del balance, `GET /libro/balance`);
- * - integridad de la cadena y el último mes cerrado (`GET /libro/integridad`, `/libro/periodos`).
+ * - integridad de la cadena y el último mes cerrado (`GET /libro/integridad`, `/libro/periodos`);
+ * - los avisos que cada empresa apagó (`apagadas` de `GET /panel-financiero/alertas`, decisión 12):
+ *   con el del pequeño contribuyente apagado, su aviso no sale aunque el tablero llegue al umbral.
  * Lo que la API del panel financiero aún no da (ingreso recurrente con IVA, bajas a 60 días, ingreso
  * por servicio, efectivo por semana y la comparación por empresa) se dice sin cifra inventada; lo
  * construye A3 en `agente/a3-reportes-pm` (`.claude/integration/a4.md`).
@@ -39,6 +41,8 @@ const efectivo = shallowRef<{ total: string, bancos: number, cajas: number } | n
 const problemaEfectivo = ref<Problem | null>(null)
 const integridad = shallowRef<Schema<'IntegridadLibro'>[] | null>(null)
 const cierres = shallowRef<Schema<'CierrePeriodo'>[] | null>(null)
+/** Empresas que apagaron el aviso de pequeño contribuyente en Configuración › Reportes. */
+const pcApagado = shallowRef<ReadonlySet<number>>(new Set())
 
 const hoy = hoyGuatemala()
 
@@ -104,7 +108,20 @@ async function cargarLibro() {
     cierres.value = rCierres.ok ? rCierres.data.data : null
 }
 
+/**
+ * Solo para respetar lo apagado: si no se pudo leer, el aviso se muestra (un aviso de más nunca
+ * esconde un límite real).
+ */
+async function cargarApagadas() {
+    if (!puede('panel_financiero.ver') || !verFiscal.value) {
+        return
+    }
+    const r = await usePanelFinancieroAjustes().alertas()
+    pcApagado.value = new Set(r.ok ? r.data.empresas.filter(e => e.apagadas.includes('limite_pequeno_contribuyente')).map(e => e.empresa_id) : [])
+}
+
 function cargar() {
+    void cargarApagadas()
     void cargarResumen()
     void cargarCartera()
     void cargarTablero()
@@ -184,10 +201,10 @@ const totalImpuestos = computed(() => (impuestos.value.some(o => o.a_pagar)
     ? impuestos.value.reduce((suma, o) => suma.plus(o.a_pagar ?? 0), new Decimal(0)).toFixed(2)
     : null))
 
-/** Decisión 12 del PM: el aviso aparece al 80 % y al 95 % del límite (umbrales del parámetro). */
+/** Decisión 12 del PM: el aviso aparece al 80 % y al 95 % del límite (umbrales del parámetro), salvo que la empresa lo apagó. */
 const pequenos = computed(() => (tablero.value?.empresas ?? []).flatMap((e) => {
     const datos = e.bloques.pequeno_contribuyente.datos
-    if (!datos || (!datos.umbral_alcanzado && !datos.supera_limite)) {
+    if (!datos || (!datos.umbral_alcanzado && !datos.supera_limite) || pcApagado.value.has(e.empresa_id)) {
         return []
     }
     return [{

@@ -40,3 +40,28 @@ export const esquemaPanelFinanciero = z.object({
 })
 
 export type DatosFormPanelFinanciero = z.output<typeof esquemaPanelFinanciero>
+
+/**
+ * Espejo de `aviso_pc_umbrales` y `motivo` de `PUT /panel-financiero/ajustes` (A3, decisión 12): de
+ * 1 a 5 porcentajes del límite anual, mayores que 0 y hasta 100, con dos decimales y sin repetir; el
+ * motivo, opcional, de 3 a 500 caracteres.
+ */
+export const esquemaUmbralesPc = z.object({
+    umbrales: z.array(z.number('Escribe el porcentaje').gt(0, 'Mayor que 0 %').max(100, 'Hasta 100 %').multipleOf(0.01, 'Hasta dos decimales'))
+        .min(1, 'Deja al menos un umbral')
+        .max(5, 'Hasta 5 umbrales')
+        .refine(lista => new Set(lista.map(u => u.toFixed(2))).size === lista.length, 'Hay un umbral repetido'),
+    motivo: z.string().trim().max(500, 'Máximo 500 caracteres').refine(m => m === '' || m.length >= 3, 'Escribe al menos 3 caracteres'),
+})
+
+export type DatosFormUmbralesPc = z.output<typeof esquemaUmbralesPc>
+
+/** Umbrales como los guarda la API: dos decimales, sin repetir y de menor a mayor (`"80.00"`). */
+export function normalizarUmbralesPc(umbrales: readonly number[]): string[] {
+    return [...new Set(umbrales.map(u => u.toFixed(2)))].sort((a, b) => Number(a) - Number(b))
+}
+
+/** «80 %», «92.5 %»: un umbral de `pc_alertas` para leer. */
+export function etiquetaUmbralPc(umbral: string): string {
+    return `${Number(umbral).toLocaleString('es-GT', { maximumFractionDigits: 2 })} %`
+}
