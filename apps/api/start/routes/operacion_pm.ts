@@ -24,7 +24,12 @@ import {
 } from '#core/auth/recuperacion'
 import { verAjustesOperacion } from '#core/ajustes_operacion'
 import { listarAsignacionesPromocion, listarPromociones, verPromocion } from '#core/promociones_velocidad'
-import { listarIncidentes, paginaServiciosIncidente, verIncidente } from '#network/incidentes_red'
+import {
+    listarIncidentes,
+    paginaAfectadosIncidente,
+    paginaServiciosIncidente,
+    verIncidente,
+} from '#network/incidentes_red'
 import { listarCaidasRepetidas } from '#network/consultas/caidas'
 import CrearPromocionVelocidad from '#core/actions/crear_promocion_velocidad'
 import AsignarPromocionVelocidad from '#core/actions/asignar_promocion_velocidad'
@@ -46,9 +51,11 @@ import {
     IncidenteRed,
     OpcionesLogin,
     PaginaIdsServicio,
+    PaginaPromocionesVelocidad,
     PromocionServicio,
     PromocionVelocidad,
     RecuperacionAceptada,
+    ServicioAfectadoIncidente,
 } from '#core/esquemas_operacion'
 import * as v from '#core/validators_operacion'
 
@@ -68,13 +75,24 @@ const promociones: Ruta[] = [
         ruta: '/promociones-velocidad',
         operacion: 'promocionesVelocidadListar',
         resumen: 'Promociones de velocidad (decisión del PM 18)',
+        descripcion:
+            'Por cursor (`id` descendente). `vigencia` filtra por pestaña: `vigente` (inicio ≤ ahora < fin), ' +
+            '`programada` (inicio > ahora), `terminada` (fin ≤ ahora), las tres solo activas, o `cancelada`; ' +
+            '`inicio` y `fin` son instantes y se comparan en UTC. Cada fila trae `vigencia`, `tramo_actual` y ' +
+            '`proximo_tramo` (la franja diaria en hora de Guatemala). `conteos` trae las cuatro pestañas con los ' +
+            'mismos filtros de empresa y `q`, sin `estado` ni `vigencia`.',
         etiqueta: 'promociones',
         permiso: 'promociones_velocidad.ver',
         query: v.listarPromocionesValidator,
-        respuesta: { status: 200, descripcion: 'Página de promociones', esquema: pagina(PromocionVelocidad) },
+        respuesta: { status: 200, descripcion: 'Página de promociones', esquema: PaginaPromocionesVelocidad },
         handler: (ctx, { query }) =>
             listarPromociones(
-                { empresas: empresasDeLaLista(ctx.empresa, query.empresas), estado: query.estado },
+                {
+                    empresas: empresasDeLaLista(ctx.empresa, query.empresas),
+                    estado: query.estado,
+                    vigencia: query.vigencia,
+                    q: query.q,
+                },
                 query,
             ),
     }),
@@ -472,6 +490,32 @@ const incidentes: Ruta[] = [
                 empresas: empresasIncidente(ctx, query.empresa_id),
                 cursor: query.cursor,
                 limit: query.limit ?? 1000,
+            }),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/incidentes-red/:incidenteId/afectados',
+        operacion: 'incidentesRedAfectados',
+        resumen: 'Servicios afectados por el incidente, con cliente, plan y conexión (tablero)',
+        descripcion:
+            'Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está ' +
+            'conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la ' +
+            'empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). ' +
+            '404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).',
+        etiqueta: 'red',
+        permiso: 'incidentes_red.leer',
+        query: v.afectadosIncidenteValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de afectados',
+            esquema: pagina(ServicioAfectadoIncidente),
+        },
+        handler: (ctx, { params, query }) =>
+            paginaAfectadosIncidente(Number(params.incidenteId), {
+                empresas: empresasDeLaLista(ctx.empresa, query.empresas),
+                alcance: ctx.alcance,
+                cursor: query.cursor,
+                limit: query.limit,
             }),
     }),
     definirRuta({

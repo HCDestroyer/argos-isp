@@ -365,6 +365,118 @@ test.group('Falla general y caídas repetidas (decisión 31)', (group) => {
         )
     })
 
+    test('afectados con datos para el tablero: código, cliente, plan, conexión; cursor y alcance del usuario', async ({
+        client,
+        assert,
+    }) => {
+        const admin = await usuarioConRoles(['admin'])
+        const { routerId } = await crearEscenarioRouter()
+        const otro = await crearEscenarioRouter()
+        const plan = await crearPlanFila()
+        const servicios = []
+        for (let i = 0; i < 3; i++) servicios.push(await crearServicio(client, admin.token, routerId, plan))
+        const ahora = Date.now()
+        // el primero volvió, el segundo sigue caído y el tercero nunca tuvo sesión
+        await sesion(servicios[0]!, routerId, {
+            inicio: new Date(ahora - 90 * MINUTO),
+            fin: new Date(ahora - 30 * MINUTO),
+            causa_fin: 'NAS-Reboot',
+        })
+        const volvio = new Date(ahora - 5 * MINUTO)
+        await sesion(servicios[0]!, routerId, { inicio: volvio })
+        const cayo = new Date(ahora - 20 * MINUTO)
+        await sesion(servicios[1]!, routerId, {
+            inicio: new Date(ahora - 90 * MINUTO),
+            fin: cayo,
+            causa_fin: 'Lost-Carrier',
+        })
+        const abierto = await estado(
+            client
+                .post('/api/v1/incidentes-red')
+                .bearerToken(admin.token)
+                .json({ alcance: 'router', alcance_id: routerId, motivo: 'corte de fibra' }),
+            201,
+        )
+        const id = abierto.body().id
+        const url = `/api/v1/incidentes-red/${id}/afectados`
+
+        const p1 = await estado(client.get(url).qs({ limit: 2 }).bearerToken(admin.token), 200)
+        assert.lengthOf(p1.body().data, 2)
+        assert.isString(p1.body().nextCursor)
+        const p2 = await estado(
+            client.get(url).qs({ limit: 2, cursor: p1.body().nextCursor }).bearerToken(admin.token),
+            200,
+        )
+        assert.isNull(p2.body().nextCursor)
+        const filas = [...p1.body().data, ...p2.body().data]
+        assert.deepEqual(
+            filas.map((f: any) => f.servicio_id),
+            servicios.map((s) => s.id),
+        )
+        const cliente = (await db
+            .from('core.clientes')
+            .where('id', servicios[0]!.cliente_id)
+            .select('nombre')
+            .first()) as { nombre: string }
+        const nombrePlan = (await db.from('network.planes').where('id', plan).select('nombre').first()) as {
+            nombre: string
+        }
+        const [a, b, c] = filas
+        assert.match(a.codigo, /^S-\d+$/)
+        assert.equal(a.codigo, servicios[0]!.codigo)
+        assert.equal(a.cliente_id, servicios[0]!.cliente_id)
+        assert.equal(a.cliente_nombre, cliente.nombre)
+        assert.equal(a.plan_id, plan)
+        assert.equal(a.plan_nombre, nombrePlan.nombre)
+        assert.equal(a.router_id, routerId)
+        assert.equal(a.empresa_id, servicios[0]!.empresa_id)
+        assert.isString(a.empresa_nombre)
+        assert.equal(a.estado, 'activo')
+        assert.isTrue(a.conectado)
+        assert.equal(a.conectado_desde, volvio.toISOString())
+        assert.isNull(a.desconectado_desde)
+        assert.isFalse(b.conectado)
+        assert.isNull(b.conectado_desde)
+        assert.equal(b.desconectado_desde, cayo.toISOString())
+        assert.isFalse(c.conectado)
+        assert.isNull(c.desconectado_desde)
+
+        // alcance por router: el técnico de otro router ve el incidente pero ningún afectado
+        const rol = (await db.from('core.roles').where('nombre', 'tecnico').select('id').first()) as {
+            id: number
+        }
+        const ajeno = await usuarioConRoles([])
+        await db.table('core.usuarios_roles').insert({
+            usuario_id: ajeno.usuario.id,
+            role_id: rol.id,
+            alcance_tipo: 'router',
+            alcance_id: otro.routerId,
+        })
+        const vacio = await estado(client.get(url).bearerToken(ajeno.token), 200)
+        assert.deepEqual(vacio.body(), { data: [], nextCursor: null })
+        const propio = await usuarioConRoles([])
+        await db.table('core.usuarios_roles').insert({
+            usuario_id: propio.usuario.id,
+            role_id: rol.id,
+            alcance_tipo: 'router',
+            alcance_id: routerId,
+        })
+        const delPropio = await estado(client.get(url).bearerToken(propio.token), 200)
+        assert.lengthOf(delPropio.body().data, 3)
+
+        const sinPermiso = await usuarioConRoles(['contabilidad'])
+        await estado(client.get(url).bearerToken(sinPermiso.token), 403)
+        await estado(client.get('/api/v1/incidentes-red/99999999/afectados').bearerToken(admin.token), 404)
+        await estado(client.get(url).qs({ limit: 201 }).bearerToken(admin.token), 422)
+        await estado(
+            client
+                .post(`/api/v1/incidentes-red/${id}/cerrar`)
+                .bearerToken(admin.token)
+                .json({ motivo: 'listo' }),
+            200,
+        )
+    })
+
     test('caídas repetidas: 3 en 60 min de fábrica, alerta visible; sin aviso dentro de un incidente', async ({
         client,
         assert,

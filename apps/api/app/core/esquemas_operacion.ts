@@ -13,6 +13,7 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import { EstadoServicio } from '#core/esquemas'
 
 /** Decisión del PM 18. */
 export const PromocionVelocidad = definirEsquema(
@@ -37,11 +38,36 @@ export const PromocionVelocidad = definirEsquema(
         },
         precio: { ...nulable(Dinero), description: 'Precio mensual mientras dure; null = no cambia' },
         estado: enumerado(['activa', 'cancelada']),
+        vigencia: {
+            ...enumerado(['vigente', 'programada', 'terminada', 'cancelada']),
+            description: 'Pestaña del tablero, con `inicio` y `fin` comparados con ahora (UTC)',
+        },
+        tramo_actual: {
+            ...nulable(objeto({ inicio: instante, fin: instante })),
+            description: 'Tramo en curso según el horario (hora de Guatemala); null fuera de horario',
+        },
+        proximo_tramo: {
+            ...nulable(objeto({ inicio: instante, fin: instante })),
+            description: 'Siguiente tramo que empieza después de ahora; null si no hay otro',
+        },
         motivo_cancelacion: nulable(texto),
         cancelada_en: nulable(instante),
         creado_por: nulable(id),
         servicios: { ...entero, description: 'Servicios con la promoción asignada' },
         ...auditable,
+    }),
+)
+
+export const PaginaPromocionesVelocidad = definirEsquema(
+    'PaginaPromocionesVelocidad',
+    objeto({
+        data: lista(PromocionVelocidad),
+        nextCursor: nulable(texto),
+        conteos: {
+            ...objeto({ vigente: entero, programada: entero, terminada: entero, cancelada: entero }),
+            description:
+                'Promociones por pestaña con los mismos filtros de empresa y `q` (sin `estado` ni `vigencia`)',
+        },
     }),
 )
 
@@ -176,6 +202,33 @@ export const IncidenteRed = definirEsquema(
 export const PaginaIdsServicio = definirEsquema(
     'PaginaIdsServicio',
     objeto({ data: lista(id), nextCursor: nulable(texto) }),
+)
+
+export const ServicioAfectadoIncidente = definirEsquema(
+    'ServicioAfectadoIncidente',
+    objeto({
+        servicio_id: id,
+        codigo: { ...texto, description: 'S-000412' },
+        nombre: nulable(texto),
+        estado: EstadoServicio,
+        empresa_id: id,
+        empresa_nombre: texto,
+        cliente_id: id,
+        cliente_nombre: texto,
+        plan_id: nulable(id),
+        plan_nombre: nulable(texto),
+        router_id: nulable(id),
+        conectado: { ...booleano, description: 'Tiene una sesión abierta ahora' },
+        conectado_desde: {
+            ...nulable(instante),
+            description: 'Inicio de la sesión abierta («Volvió 06:01»)',
+        },
+        desconectado_desde: {
+            ...nulable(instante),
+            description:
+                'Fin de su última sesión si no está conectado («Caído desde 05:12»); null sin sesiones',
+        },
+    }),
 )
 
 export const CaidaRepetida = definirEsquema(

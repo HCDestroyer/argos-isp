@@ -2,7 +2,9 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
-import { codificarCursor, decodificarCursor, type Pagina } from '#shared/paginacion'
+import { codificarCursor, decodificarCursor, paginar, type Pagina } from '#shared/paginacion'
+import { filtrarPorAlcance, type Alcance } from '#core/acl'
+import { dimensionesServicio } from '#core/consultas/servicios'
 import type { PayloadFallaGeneral } from '#shared/eventos'
 
 /**
@@ -358,5 +360,100 @@ export async function paginaServiciosIncidente(
     return {
         data,
         nextCursor: filas.length > filtro.limit ? codificarCursor(data[data.length - 1]!) : null,
+    }
+}
+
+export interface ServicioAfectadoVista {
+    servicio_id: number
+    codigo: string
+    nombre: string | null
+    estado: string
+    empresa_id: number
+    empresa_nombre: string
+    cliente_id: number
+    cliente_nombre: string
+    plan_id: number | null
+    plan_nombre: string | null
+    router_id: number | null
+    conectado: boolean
+    conectado_desde: string | null
+    desconectado_desde: string | null
+}
+
+/**
+ * `GET /incidentes-red/:id/afectados` (tablero de fallas generales): los servicios afectados con código,
+ * cliente, plan, empresa y si están conectados ahora, por cursor (`servicio_id` ascendente). Una sola
+ * consulta por página (joins y dos `LATERAL` sobre los índices de `network.sesiones`), sin N+1.
+ * Filtra por las empresas de la lista (empresa activa o `empresas=todas`) y por el alcance del usuario
+ * (router o zona del servicio). 404 si el incidente no tiene servicios de esas empresas.
+ */
+export async function paginaAfectadosIncidente(
+    id: number,
+    filtro: { empresas: number[] | null; alcance?: Alcance; cursor?: string | null; limit?: number | null },
+    cliente: QueryClientContract = db.connection(),
+): Promise<Pagina<ServicioAfectadoVista>> {
+    await verIncidente(id, filtro.empresas, cliente)
+    const consulta = cliente
+        .from('network.incidentes_red_servicios as irs')
+        .join('core.servicios as s', 's.id', 'irs.servicio_id')
+        .join('core.clientes as cl', 'cl.id', 's.cliente_id')
+        .join('core.empresas as e', 'e.id', 'irs.empresa_id')
+        .leftJoin('network.planes as pl', 'pl.id', 's.plan_id')
+        .joinRaw(
+            `LEFT JOIN LATERAL (SELECT se.inicio FROM network.sesiones se
+                                 WHERE se.servicio_id = s.id AND se.fin IS NULL
+                                 ORDER BY se.inicio DESC LIMIT 1) abierta ON TRUE`,
+        )
+        .joinRaw(
+            `LEFT JOIN LATERAL (SELECT se.fin FROM network.sesiones se
+                                 WHERE se.servicio_id = s.id AND se.fin IS NOT NULL
+                                 ORDER BY se.inicio DESC LIMIT 1) ultima ON TRUE`,
+        )
+        .where('irs.incidente_id', id)
+        .select(
+            'irs.servicio_id',
+            's.codigo',
+            's.nombre',
+            's.estado',
+            'irs.empresa_id',
+            'e.nombre_comercial as empresa_nombre',
+            's.cliente_id',
+            'cl.nombre as cliente_nombre',
+            's.plan_id',
+            'pl.nombre as plan_nombre',
+            's.router_id',
+            'abierta.inicio as conectado_desde',
+            'ultima.fin as ultima_fin',
+        )
+    if (filtro.empresas !== null) consulta.whereIn('irs.empresa_id', filtro.empresas)
+    filtrarPorAlcance(consulta, filtro.alcance, dimensionesServicio)
+    const pagina = await paginar<Record<string, unknown>>(
+        consulta,
+        { cursor: filtro.cursor, limit: filtro.limit },
+        { columna: 'irs.servicio_id', direccion: 'asc', clave: (f) => Number(f.servicio_id) },
+    )
+    const iso = (v: unknown) => (v === null || v === undefined ? null : new Date(v as Date).toISOString())
+    const n = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+    return {
+        ...pagina,
+        data: pagina.data.map((f) => {
+            const conectado = f.conectado_desde !== null && f.conectado_desde !== undefined
+            return {
+                servicio_id: Number(f.servicio_id),
+                codigo: String(f.codigo),
+                nombre: (f.nombre as string | null) ?? null,
+                estado: String(f.estado),
+                empresa_id: Number(f.empresa_id),
+                empresa_nombre: String(f.empresa_nombre),
+                cliente_id: Number(f.cliente_id),
+                cliente_nombre: String(f.cliente_nombre),
+                plan_id: n(f.plan_id),
+                plan_nombre: (f.plan_nombre as string | null) ?? null,
+                router_id: n(f.router_id),
+                conectado,
+                conectado_desde: iso(f.conectado_desde),
+                desconectado_desde: conectado ? null : iso(f.ultima_fin),
+            }
+        }),
     }
 }

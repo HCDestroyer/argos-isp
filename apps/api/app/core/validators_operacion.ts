@@ -77,6 +77,17 @@ export const listarPromocionesValidator = vine.compile(
     vine.object({
         ...reglasPaginacion,
         estado: vine.enum(['activa', 'cancelada'] as const).optional(),
+        vigencia: vine
+            .enum(['vigente', 'programada', 'terminada', 'cancelada'] as const)
+            .optional()
+            .meta({
+                description:
+                    'Pestaña del tablero: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), ' +
+                    '`terminada` (fin ≤ ahora) o `cancelada`; las tres primeras solo de las activas',
+            }),
+        q: vine.string().trim().minLength(1).maxLength(100).optional().meta({
+            description: 'Busca en nombre y descripción',
+        }),
         empresas: empresasConsulta(),
     }),
 )
@@ -139,6 +150,14 @@ export const serviciosIncidenteValidator = vine.compile(
             .optional()
             .meta({ description: 'Hasta 1000' }),
         empresa_id: idEntidad().optional().meta({ description: 'Solo los servicios de esa empresa' }),
+    }),
+)
+
+/** `GET /incidentes-red/:incidenteId/afectados` (tablero de fallas generales). */
+export const afectadosIncidenteValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        empresas: empresasConsulta(),
     }),
 )
 

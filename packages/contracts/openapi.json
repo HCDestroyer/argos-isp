@@ -31976,6 +31976,140 @@
         "x-implementado": true
       }
     },
+    "/api/v1/incidentes-red/{incidenteId}/afectados": {
+      "get": {
+        "operationId": "incidentesRedAfectados",
+        "summary": "Servicios afectados por el incidente, con cliente, plan y conexión (tablero)",
+        "description": "Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incidenteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de afectados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ServicioAfectadoIncidente"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.leer",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.leer",
+        "x-implementado": true
+      }
+    },
     "/api/v1/incidentes-red/{incidenteId}/cerrar": {
       "post": {
         "operationId": "incidentesRedCerrar",
@@ -74754,6 +74888,7 @@
       "get": {
         "operationId": "promocionesVelocidadListar",
         "summary": "Promociones de velocidad (decisión del PM 18)",
+        "description": "Por cursor (`id` descendente). `vigencia` filtra por pestaña: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), `terminada` (fin ≤ ahora), las tres solo activas, o `cancelada`; `inicio` y `fin` son instantes y se comparan en UTC. Cada fila trae `vigencia`, `tramo_actual` y `proximo_tramo` (la franja diaria en hora de Guatemala). `conteos` trae las cuatro pestañas con los mismos filtros de empresa y `q`, sin `estado` ni `vigencia`.",
         "tags": [
           "promociones"
         ],
@@ -74800,6 +74935,32 @@
             }
           },
           {
+            "name": "vigencia",
+            "in": "query",
+            "required": false,
+            "description": "Pestaña del tablero: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), `terminada` (fin ≤ ahora) o `cancelada`; las tres primeras solo de las activas",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vigente",
+                "programada",
+                "terminada",
+                "cancelada"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Busca en nombre y descripción",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
             "name": "empresas",
             "in": "query",
             "required": false,
@@ -74818,25 +74979,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "data",
-                    "nextCursor"
-                  ],
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/PromocionVelocidad"
-                      }
-                    },
-                    "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  }
+                  "$ref": "#/components/schemas/PaginaPromocionesVelocidad"
                 }
               }
             }
@@ -129131,6 +129274,52 @@
           }
         }
       },
+      "PaginaPromocionesVelocidad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor",
+          "conteos"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromocionVelocidad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "conteos": {
+            "type": "object",
+            "required": [
+              "vigente",
+              "programada",
+              "terminada",
+              "cancelada"
+            ],
+            "properties": {
+              "vigente": {
+                "type": "integer"
+              },
+              "programada": {
+                "type": "integer"
+              },
+              "terminada": {
+                "type": "integer"
+              },
+              "cancelada": {
+                "type": "integer"
+              }
+            },
+            "description": "Promociones por pestaña con los mismos filtros de empresa y `q` (sin `estado` ni `vigencia`)"
+          }
+        }
+      },
       "PaginaReferidosLealtad": {
         "type": "object",
         "required": [
@@ -135884,6 +136073,9 @@
           "dias_semana",
           "precio",
           "estado",
+          "vigencia",
+          "tramo_actual",
+          "proximo_tramo",
           "motivo_cancelacion",
           "cancelada_en",
           "creado_por",
@@ -135995,6 +136187,58 @@
               "activa",
               "cancelada"
             ]
+          },
+          "vigencia": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "programada",
+              "terminada",
+              "cancelada"
+            ],
+            "description": "Pestaña del tablero, con `inicio` y `fin` comparados con ahora (UTC)"
+          },
+          "tramo_actual": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "inicio",
+              "fin"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "fin": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Tramo en curso según el horario (hora de Guatemala); null fuera de horario"
+          },
+          "proximo_tramo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "inicio",
+              "fin"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "fin": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Siguiente tramo que empieza después de ahora; null si no hay otro"
           },
           "motivo_cancelacion": {
             "type": [
@@ -146072,6 +146316,98 @@
               "$ref": "#/components/schemas/Advertencia"
             },
             "description": "Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)"
+          }
+        }
+      },
+      "ServicioAfectadoIncidente": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "codigo",
+          "nombre",
+          "estado",
+          "empresa_id",
+          "empresa_nombre",
+          "cliente_id",
+          "cliente_nombre",
+          "plan_id",
+          "plan_nombre",
+          "router_id",
+          "conectado",
+          "conectado_desde",
+          "desconectado_desde"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "codigo": {
+            "type": "string",
+            "description": "S-000412"
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoServicio"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_nombre": {
+            "type": "string"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "router_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "conectado": {
+            "type": "boolean",
+            "description": "Tiene una sesión abierta ahora"
+          },
+          "conectado_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Inicio de la sesión abierta («Volvió 06:01»)"
+          },
+          "desconectado_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Fin de su última sesión si no está conectado («Caído desde 05:12»); null sin sesiones"
           }
         }
       },
