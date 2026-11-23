@@ -1,9 +1,9 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
 export type EquipoServicio = Schema<'EquipoServicio'>
+export type DatosDevolucionEquipo = paths['/api/v1/servicios/{id}/equipos/{unidadId}/devolver']['post']['requestBody']['content']['application/json']
 export type DatosCambioEquipo = paths['/api/v1/servicios/{id}/equipos/cambiar']['post']['requestBody']['content']['application/json']
 export type CambioEquipo = Schema<'CambioEquipo'>
-export type DatosDevolucionEquipo = paths['/api/v1/servicios/{id}/equipos/{unidadId}/devolver']['post']['requestBody']['content']['application/json']
 
 /**
  * Equipos en comodato de un servicio (A3, fase B): asignar una unidad disponible, devolverla a una
@@ -41,9 +41,9 @@ export function useEquiposServicio() {
     }
 
     /**
-     * `POST /servicios/:id/equipos/cambiar` (`servicios.cambiar_equipo`, contrato Iris A48): sale uno y
-     * entra otro en una sola transacción; el que sale va a disponible, revisión o garantía, nunca a
-     * baja. Un 409 no se reintenta: se vuelve a leer la lista.
+     * `POST /servicios/:id/equipos/cambiar` (`servicios.cambiar_equipo`, A48): sale uno y entra otro en una
+     * sola operación. El que sale vuelve a la bodega del que entra (funciona, revisión o garantía; dañado
+     * queda en revisión): nunca se da de baja aquí. Un cobro al cliente solo se propone.
      */
     function cambiar(servicioId: number, datos: DatosCambioEquipo, clave: string): Promise<Resultado<CambioEquipo>> {
         return resolver(api.POST('/api/v1/servicios/{id}/equipos/cambiar', {

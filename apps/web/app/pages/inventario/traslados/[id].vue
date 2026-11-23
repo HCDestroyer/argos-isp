@@ -144,18 +144,57 @@ function unidadesTexto(linea: LineaOrdenTraslado) {
 <template>
     <PanelPagina
         id="inventario-traslado"
-        :titulo="orden ? `Orden N.º ${orden.numero}` : 'Orden de traslado'"
+        :titulo="orden ? `T-${String(orden.numero).padStart(4, '0')} · ${nombreCortoBodega(orden.bodega_origen_nombre)} → ${orden.usuario_destino_nombre ?? nombreCortoBodega(orden.bodega_destino_nombre)}` : 'Traslado'"
         icono="i-lucide-truck"
     >
         <template #acciones>
             <UButton
-                label="Órdenes"
-                icon="i-lucide-arrow-left"
+                label="Traslados"
+                :icon="ICONOS.volver"
                 color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
+                variant="outline"
+                class="boton-flotante hidden rounded-full sm:inline-flex"
                 to="/inventario/traslados"
             />
+            <template v-if="orden">
+                <UButton
+                    label="Imprimir"
+                    icon="i-lucide-printer"
+                    color="neutral"
+                    variant="outline"
+                    class="boton-flotante rounded-full"
+                    :loading="cargandoPdf"
+                    data-prueba="traslado-imprimir"
+                    @click="imprimir"
+                />
+                <UButton
+                    v-if="enTransito && puede('inventario.cancelar_traslado')"
+                    label="Cancelar"
+                    icon="i-lucide-ban"
+                    color="error"
+                    variant="outline"
+                    class="boton-flotante rounded-full"
+                    data-prueba="traslado-cancelar"
+                    @click="cancelarAbierto = true"
+                />
+                <UButton
+                    v-if="enTransito && puede('inventario.recibir_traslado')"
+                    label="Recibir"
+                    icon="i-lucide-package-check"
+                    size="lg"
+                    class="glow-brand rounded-full px-5"
+                    data-prueba="traslado-recibir"
+                    @click="recibirAbierto = true"
+                />
+                <UButton
+                    v-if="orden.metodo_recepcion === 'firma_papel' && recibida && !orden.documento_sha256 && puede('inventario.adjuntar_documento_traslado')"
+                    label="Adjuntar papel firmado"
+                    icon="i-lucide-paperclip"
+                    class="rounded-full"
+                    data-prueba="traslado-adjuntar"
+                    @click="documentoAbierto = true"
+                />
+            </template>
         </template>
 
         <ProblemaAlerta
@@ -176,7 +215,7 @@ function unidadesTexto(linea: LineaOrdenTraslado) {
             class="mx-auto flex w-full max-w-5xl flex-col gap-5"
             data-prueba="detalle-traslado"
         >
-            <UCard>
+            <UCard class="surface-card rounded-2xl">
                 <div class="flex flex-col gap-4">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div class="flex min-w-0 flex-col gap-1">
@@ -200,40 +239,6 @@ function unidadesTexto(linea: LineaOrdenTraslado) {
                                 {{ orden.motivo }}
                             </p>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <UButton
-                                label="Imprimir"
-                                icon="i-lucide-printer"
-                                color="neutral"
-                                variant="outline"
-                                :loading="cargandoPdf"
-                                data-prueba="traslado-imprimir"
-                                @click="imprimir"
-                            />
-                            <UButton
-                                v-if="enTransito && puede('inventario.cancelar_traslado')"
-                                label="Cancelar"
-                                icon="i-lucide-ban"
-                                color="error"
-                                variant="outline"
-                                data-prueba="traslado-cancelar"
-                                @click="cancelarAbierto = true"
-                            />
-                            <UButton
-                                v-if="enTransito && puede('inventario.recibir_traslado')"
-                                label="Recibir"
-                                icon="i-lucide-package-check"
-                                data-prueba="traslado-recibir"
-                                @click="recibirAbierto = true"
-                            />
-                            <UButton
-                                v-if="orden.metodo_recepcion === 'firma_papel' && recibida && !orden.documento_sha256 && puede('inventario.adjuntar_documento_traslado')"
-                                label="Adjuntar papel firmado"
-                                icon="i-lucide-paperclip"
-                                data-prueba="traslado-adjuntar"
-                                @click="documentoAbierto = true"
-                            />
-                        </div>
                     </div>
                     <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
                         <DatoFicha
@@ -256,7 +261,10 @@ function unidadesTexto(linea: LineaOrdenTraslado) {
                 </div>
             </UCard>
 
-            <UCard :ui="{ body: 'p-0 sm:p-0' }">
+            <UCard
+                class="surface-card rounded-2xl"
+                :ui="{ body: 'p-0 sm:p-0' }"
+            >
                 <template #header>
                     <h2 class="text-sm font-semibold text-highlighted">
                         Líneas
@@ -311,6 +319,7 @@ function unidadesTexto(linea: LineaOrdenTraslado) {
 
             <UCard
                 v-if="recibida"
+                class="surface-card rounded-2xl"
                 data-prueba="recepcion-traslado"
             >
                 <template #header>
