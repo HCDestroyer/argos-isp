@@ -57,31 +57,41 @@ function alQuitar(vinculacion: VinculacionExterna) {
         id="perfil"
         titulo="Mi cuenta"
         icono="i-lucide-circle-user"
+        descripcion="Tus datos y las cuentas de Iris u Horus con las que entras sin contraseña"
     >
         <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
             <section
                 v-if="usuario"
-                class="surface-card p-4 sm:p-6"
+                class="surface-card flex flex-col gap-4 rounded-[1.375rem] p-4 sm:flex-row sm:items-center sm:p-5"
                 aria-label="Mis datos"
             >
-                <dl class="grid gap-4 sm:grid-cols-3">
-                    <DatoFicha
-                        etiqueta="Nombre"
-                        :valor="usuario.nombre"
-                    />
-                    <DatoFicha
-                        etiqueta="Correo"
-                        :valor="usuario.email"
-                    />
-                    <DatoFicha
-                        etiqueta="Roles"
-                        :valor="usuario.roles.join(', ')"
-                    />
-                </dl>
+                <AvatarIniciales
+                    :nombre="usuario.nombre"
+                    size="3xl"
+                />
+                <div class="flex min-w-0 flex-1 flex-col gap-1">
+                    <p class="truncate text-xl font-bold text-highlighted">
+                        {{ usuario.nombre }}
+                    </p>
+                    <p class="truncate text-sm text-muted">
+                        {{ usuario.email }}
+                    </p>
+                    <div class="flex flex-wrap gap-1.5 pt-1">
+                        <UBadge
+                            v-for="rol in usuario.roles"
+                            :key="rol"
+                            :label="rol"
+                            icon="i-lucide-shield"
+                            color="primary"
+                            variant="subtle"
+                            class="capitalize"
+                        />
+                    </div>
+                </div>
             </section>
 
             <section
-                class="surface-card flex flex-col gap-4 p-4 sm:p-6"
+                class="surface-card flex flex-col gap-4 rounded-[1.375rem] p-4 sm:p-5"
                 aria-labelledby="titulo-vinculaciones"
             >
                 <div>

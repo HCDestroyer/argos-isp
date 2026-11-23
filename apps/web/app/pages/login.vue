@@ -171,7 +171,7 @@ const demasiadasSolicitudes = computed(() => problemaRecuperar.value !== null &&
                         autocomplete="username"
                         placeholder="usuario@empresa.gt"
                         icon="i-lucide-mail"
-                        size="lg"
+                        size="xl"
                         class="w-full"
                     />
                 </UFormField>
@@ -199,7 +199,7 @@ const demasiadasSolicitudes = computed(() => problemaRecuperar.value !== null &&
                         :type="verClave ? 'text' : 'password'"
                         autocomplete="current-password"
                         icon="i-lucide-lock"
-                        size="lg"
+                        size="xl"
                         class="w-full"
                         :ui="{ trailing: 'pe-1' }"
                     >
@@ -232,9 +232,9 @@ const demasiadasSolicitudes = computed(() => problemaRecuperar.value !== null &&
                 <UButton
                     type="submit"
                     label="Entrar"
-                    size="lg"
+                    size="xl"
                     block
-                    class="glow-brand mt-1"
+                    class="glow-brand mt-1 rounded-xl"
                     :loading="enviando"
                     :disabled="restanteS > 0"
                 />

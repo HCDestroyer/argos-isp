@@ -93,7 +93,8 @@ describe('plantillas · composable y fixtures', () => {
         expect(pagina.text()).toContain('Mensual día 1')
         expect(pagina.find('[data-prueba="plantilla-defecto"]').exists()).toBe(true)
         expect(pagina.find('[data-prueba="nueva-plantilla"]').exists()).toBe(true)
-        expect(pagina.find('[data-prueba="editar-plantilla-2"]').exists()).toBe(true)
-        expect(pagina.text()).toContain('Operador: con aprobación')
+        // Rediseño: la abierta (la de por defecto) se edita desde el pie de su tarjeta.
+        expect(pagina.find('[data-prueba="editar-plantilla-1"]').exists()).toBe(true)
+        expect(pagina.find('[data-prueba="linea-del-mes"]').text()).toContain('Emite')
     })
 })

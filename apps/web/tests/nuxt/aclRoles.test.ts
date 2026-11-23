@@ -120,7 +120,8 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/libro/bloqueos', espera: 'Cierre de agosto' },
         { ruta: '/usuarios', espera: 'Usuarios' },
         // Tarea 9: roles y permisos, tokens de API.
-        { ruta: '/usuarios/roles', espera: 'cobrador_zona' },
+        // OperUsuarios muestra el rol con su nombre legible («Cajero»): `cobrador_zona` se ve «cobrador zona».
+        { ruta: '/usuarios/roles', espera: 'cobrador zona' },
         { ruta: '/usuarios/tokens', espera: 'Agente de cobranza' },
         // Pendientes de la prioridad 2.
         { ruta: '/notificaciones', espera: 'Factura emitida' },
@@ -146,7 +147,8 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/cartera', espera: 'Estimación de incobrables' },
         { ruta: '/pagos/7001', espera: 'Pasarela en línea' },
         // Lealtad, fase 1.
-        { ruta: '/lealtad', espera: 'Puntos Argos' },
+        // OperLealtad no muestra el nombre del programa; se espera a un premio de los fixtures.
+        { ruta: '/lealtad', espera: 'Un mes gratis de internet' },
         { ruta: '/lealtad/referidos', espera: 'Rosa Elena Cifuentes' },
         // Sorteos (A3, lealtad §15.3): borrador, corte cerrado y ejecutado.
         { ruta: '/lealtad/sorteos', espera: 'Día del cliente' },

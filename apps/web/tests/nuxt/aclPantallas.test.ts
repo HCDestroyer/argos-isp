@@ -194,8 +194,11 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'CajaCrearModal.vue': { permisos: ['cajas.crear'], desde: ['pages/caja/index.vue'] },
     'ClienteEstadoCuenta.vue': { permisos: ['clientes.estado_cuenta'], desde: ['pages/clientes/[id]/index.vue'] },
     'ClienteResponsablePago.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
-    'ComprobanteAprobarModal.vue': { permisos: ['comprobantes.aprobar'], desde: ['pages/comprobantes/[id].vue'] },
-    'ComprobanteArchivo.vue': { permisos: ['comprobantes.ver'], desde: ['pages/comprobantes/[id].vue'] },
+    // Rediseño (decisión 13): la revisión en una sola vista se abre desde la cola y desde la pantalla del comprobante.
+    'ComprobanteRevision.vue': { permisos: ['comprobantes.ver'], desde: ['pages/comprobantes/index.vue', 'pages/comprobantes/[id].vue'] },
+    'ComprobanteArchivo.vue': { permisos: ['comprobantes.ver'], desde: ['components/ComprobanteRevision.vue'], exentos: { 'components/ComprobanteRevision.vue': ['comprobantes.ver'] } },
+    'FacturaImpresion.vue': { permisos: ['facturas.ver'], desde: ['pages/facturas/index.vue', 'pages/facturas/[id].vue'] },
+    'BitacoraDetalle.vue': { permisos: ['bitacora.ver'], desde: ['pages/bitacora/index.vue'] },
     'CuentaBancariaFormulario.vue': { permisos: ['cuentas_bancarias.editar'], desde: ['pages/configuracion/cuentas-bancarias.vue'] },
     'EgresoRegistrarModal.vue': { permisos: ['egresos.registrar'], desde: ['pages/egresos/index.vue'] },
     'EmpresaLogoModal.vue': { permisos: ['empresas.cambiar_logo'], desde: ['pages/configuracion/empresas.vue'] },
@@ -360,7 +363,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ClienteWhatsapp.vue': { permisos: ['notificaciones.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     // Contraseña del portal (A5): la tarjeta lee con el `clientes.ver` de la ficha; «Restaurar» lo comprueba con `puede()`.
     'ClientePortal.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
-    'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['pages/comprobantes/[id].vue'] },
+    'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['components/ComprobanteRevision.vue'] },
     // Tipo de conexión por router (`contratos/tipo-conexion-router.md`): la sección de la ficha lee con el
     // `routers.ver` de la página; el modal se monta solo con `routers.cambiar_tipo_conexion`.
     'RouterTipoConexion.vue': { permisos: ['routers.ver'], desde: ['components/RouterVelocidadPanel.vue'], exentos: { 'components/RouterVelocidadPanel.vue': ['routers.ver'] } },

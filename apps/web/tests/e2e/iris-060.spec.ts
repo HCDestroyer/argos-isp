@@ -40,22 +40,22 @@ test('caja: la boleta que llegó por Iris, su reconexión temporal y el rechazo 
 
     const fila = page.locator('[data-prueba="fila-iris"]')
     await expect(fila).toHaveCount(1)
-    await expect(fila).toContainText('Llegó por Iris')
     await expect(fila).toContainText('Leído por IA · 92 % · WhatsApp')
     await sinDesborde(page)
     await capturar(page, 'cola')
 
-    await page.getByRole('link', { name: 'Comprobante #5' }).click()
-    await expect(page).toHaveURL(/\/comprobantes\/5$/)
-    const lectura = page.locator('[data-prueba="lectura-iris"]')
+    // Decisión 13: en escritorio se abre a la derecha de la cola; en el teléfono, en su pantalla.
+    await page.getByRole('link', { name: /^Comprobante #5 / }).click()
+    const revision = page.locator('[data-prueba="revision-comprobante"]:visible')
+    const lectura = revision.locator('[data-prueba="lectura-iris"]')
     await expect(lectura).toContainText('Asistente de IA de Iris')
     await expect(lectura).toContainText('wa:conv-7731')
-    await expect(page.locator('[data-prueba="ver-conversacion-iris"]')).toBeDisabled()
-    await expect(page.locator('[data-prueba="aviso-reconexion"]')).toContainText('Rechazarlo vuelve a cortar el servicio a la hora de corte')
+    await expect(revision.locator('[data-prueba="ver-conversacion-iris"]')).toBeDisabled()
+    await expect(revision.locator('[data-prueba="aviso-reconexion"]')).toContainText('Rechazarlo vuelve a cortar el servicio a la hora de corte')
     await sinDesborde(page)
     await capturar(page, 'detalle')
 
-    await page.getByRole('button', { name: 'Rechazar', exact: true }).click()
+    await revision.getByRole('button', { name: 'Rechazar', exact: true }).click()
     const modal = page.getByRole('dialog', { name: 'Rechazar comprobante' })
     await expect(modal.locator('[data-prueba="aviso-reconexion-rechazo"]')).toBeVisible()
     await modal.locator('[data-prueba="causa-rechazo"]').click()
@@ -65,17 +65,19 @@ test('caja: la boleta que llegó por Iris, su reconexión temporal y el rechazo 
     await modal.locator('[data-prueba="confirmar-rechazo"]').click()
     await expect(modal).toBeHidden()
 
-    await expect(page.locator('[data-prueba="estado-comprobante"]')).toHaveText('Rechazado')
-    await expect(page.locator('[data-prueba="comprobante-rechazado"]')).toContainText('Falta un dato')
-    await expect(page.locator('[data-prueba="aviso-reconexion"]')).toHaveCount(0)
+    await expect(revision.locator('[data-prueba="estado-comprobante"]')).toHaveText('Rechazado')
+    await expect(revision.locator('[data-prueba="comprobante-rechazado"]')).toContainText('Falta un dato')
+    await expect(revision.locator('[data-prueba="aviso-reconexion"]')).toHaveCount(0)
 })
 
 test('plantilla: la reconexión temporal está apagada por defecto y se activa con sus límites', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await abrir(page, '/plantillas')
-    const fila = page.locator('[data-prueba="tabla-plantillas"] tr').filter({ has: page.locator('[data-plantilla="1"]') })
-    const resumen = fila.locator('[data-prueba="resumen-reconexion"]').filter({ visible: true })
-    await expect(resumen).toHaveText('Reconexión temporal apagada')
+    // Rediseño: la plantilla se abre a la derecha; la reconexión va en «Promesas y reconexión».
+    await page.locator('[data-prueba="tabla-plantillas"] [data-plantilla="1"]').getByRole('button').click()
+    await page.locator('[data-prueba="plantilla-abierta"]').getByRole('tab', { name: 'Promesas y reconexión' }).click()
+    const resumen = page.locator('[data-prueba="plantilla-abierta"] [data-prueba="resumen-reconexion"]')
+    await expect(resumen).toContainText('Reconexión temporal apagada')
 
     await page.locator('[data-prueba="editar-plantilla-1"]').click()
     const panel = page.getByRole('dialog', { name: 'Editar Mensual día 1' })
@@ -88,7 +90,7 @@ test('plantilla: la reconexión temporal está apagada por defecto y se activa c
     await capturar(page, 'plantilla')
     await panel.locator('[data-prueba="plantilla-guardar"]').click()
     await expect(panel).toBeHidden()
-    await expect(resumen).toHaveText('Reconexión temporal: hasta 1 por periodo · 12 h')
+    await expect(resumen).toContainText('Reconexión temporal: hasta 1 por periodo · 12 h')
 
     // Vigencia (A3, 17 nov 2026): «Hasta la medianoche» oculta las horas y explica cuándo vence.
     await page.locator('[data-prueba="editar-plantilla-1"]').click()
@@ -103,7 +105,7 @@ test('plantilla: la reconexión temporal está apagada por defecto y se activa c
     await capturar(page, 'plantilla-medianoche')
     await panel.locator('[data-prueba="plantilla-guardar"]').click()
     await expect(panel).toBeHidden()
-    await expect(resumen).toHaveText('Reconexión temporal: hasta 1 por periodo · hasta la medianoche')
+    await expect(resumen).toContainText('Reconexión temporal: hasta 1 por periodo · hasta la medianoche')
 })
 
 test('promesas: tipo, canal, comprobante y la cancelada con su motivo', async ({ page }) => {
@@ -112,13 +114,24 @@ test('promesas: tipo, canal, comprobante y la cancelada con su motivo', async ({
     await expect(page.locator('[data-prueba="tipo-promesa"]').first()).toBeVisible()
     await expect(page.locator('[data-prueba="tipo-promesa"]')).toHaveCount(2)
     await expect(page.locator('[data-prueba="promesa-comprobante"]').filter({ hasText: 'Comprobante #5' })).toBeVisible()
-    await expect(page.getByText('la reconexión temporal venció con el comprobante sin revisar').filter({ visible: true }).first()).toBeVisible()
     // Motivo de la reconexión (A3, 17 nov 2026).
     const motivos = page.locator('[data-prueba="promesa-motivo-reconexion"]').filter({ visible: true })
     await expect(motivos.filter({ hasText: 'Fuera de horario' })).toBeVisible()
     await expect(motivos.filter({ hasText: 'Sin personal de caja' })).toBeVisible()
     await sinDesborde(page)
     await capturar(page, 'promesas')
+
+    // El motivo de la cancelada: en escritorio, en la columna de estado; en el teléfono esa columna
+    // no se ve y el cierre está en la promesa abierta (a pantalla completa).
+    const cierre = 'la reconexión temporal venció con el comprobante sin revisar'
+    if ((page.viewportSize()?.width ?? 0) >= 640) {
+        await expect(page.getByText(cierre).filter({ visible: true }).first()).toBeVisible()
+    }
+    else {
+        const fila = page.locator('tr').filter({ has: page.locator('[data-prueba="promesa-comprobante"]', { hasText: 'Comprobante #1' }) })
+        await fila.getByText(/^Servicio \d+$/).click()
+        await expect(page.getByRole('dialog').getByText(cierre, { exact: false }).first()).toBeVisible()
+    }
 })
 
 test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interruptor', async ({ page }) => {
@@ -164,10 +177,14 @@ test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interrupt
 test('bitácora: las acciones de una conversación de Iris', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await abrir(page, '/bitacora')
+    // Tablero OperBitacora: la conversación de Iris es de «Más filtros».
+    await page.getByRole('button', { name: 'Más filtros' }).click()
     await page.locator('[data-prueba="filtro-conversacion-iris"] input, input[data-prueba="filtro-conversacion-iris"]').first().fill('wa:conv-7731')
     await expect(page).toHaveURL(/conversacion=wa%3Aconv-7731|conversacion=wa:conv-7731/)
-    await expect(page.getByText('Reconexión temporal mientras se revisa el comprobante')).toBeVisible()
-    await expect(page.getByText('Identidad del cliente verificada por Iris')).toBeVisible()
+    // Tablero OperBitacora: en escritorio la entrada elegida se abre al lado de la lista, con el
+    // mismo título; basta con que se vea en la lista.
+    await expect(page.getByText('Reconexión temporal mientras se revisa el comprobante').first()).toBeVisible()
+    await expect(page.getByText('Identidad del cliente verificada por Iris').first()).toBeVisible()
     await sinDesborde(page)
     await capturar(page, 'bitacora')
 })

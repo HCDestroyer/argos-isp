@@ -50,7 +50,8 @@ const columnas: TableColumn<CanjeLealtad>[] = [
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
 ]
 
-const canjearAbierto = ref(false)
+/** «Canjear puntos» del tablero de Lealtad llega con `?nuevo=1`. */
+const canjearAbierto = ref(useRoute().query.nuevo === '1' && puede('lealtad.canjear') && puede('clientes.ver'))
 
 function alCanjear(canje: CanjeLealtad) {
     toast.add({ title: `${canje.premio_nombre}: ${ESTADOS_CANJE[canje.estado].etiqueta.toLowerCase()}`, description: `${formatearPuntos(canje.puntos)} descontados.`, color: 'success', icon: 'i-lucide-gift' })
@@ -85,36 +86,48 @@ function nombreCliente(id: number): string {
         id="canjes-lealtad"
         titulo="Canjes de puntos"
         icono="i-lucide-gift"
+        descripcion="Lo que los clientes cambiaron por sus puntos, desde el panel o el portal"
     >
         <template #acciones>
             <UButton
                 v-if="puede('lealtad.canjear') && puede('clientes.ver')"
-                label="Canjear"
-                icon="i-lucide-plus"
+                label="Canjear puntos"
+                icon="i-lucide-gift"
+                size="lg"
+                class="glow-brand px-5"
                 data-prueba="nuevo-canje"
                 @click="canjearAbierto = true"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <USelect
-                v-model="estado"
-                :items="itemsEstado"
-                aria-label="Filtrar por estado"
-                class="w-full sm:w-56"
-            />
-            <ProblemaAlerta
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <LealtadPestanas actual="canjes">
+                <template #derecha>
+                    <USelect
+                        v-model="estado"
+                        :items="itemsEstado"
+                        icon="i-lucide-filter"
+                        aria-label="Filtrar por estado"
+                        class="w-full sm:w-56"
+                    />
+                </template>
+            </LealtadPestanas>
+            <div
                 v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                />
+            </div>
             <template v-else>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
-                    :ui="{ td: 'py-3' }"
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none', td: 'py-3' }"
                     data-prueba="tabla-canjes"
                 >
                     <template #premio-cell="{ row }">
@@ -174,17 +187,19 @@ function nombreCliente(id: number): string {
                         />
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
 
         <CanjeLealtadModal
             v-model:open="canjearAbierto"

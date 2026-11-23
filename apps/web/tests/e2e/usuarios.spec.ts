@@ -39,16 +39,17 @@ test('alta de usuario con rol por caja, rol propio y token de una sola vez', asy
     const fila = page.locator('[data-prueba="tabla-usuarios"] tr').filter({ hasText: 'carla@argos.test' })
     await expect(fila).toContainText('cajero')
 
-    // Desactivarlo con confirmación.
-    const id = await fila.locator('[data-usuario]').getAttribute('data-usuario')
-    await page.locator(`[data-prueba="activo-usuario-${id}"]`).click()
+    // Desactivarlo con confirmación, desde el «⋯» de su fila (rediseño OperUsuarios).
+    await fila.getByRole('button', { name: /Más acciones: Carla Cobros/ }).click()
+    await page.getByRole('menuitem', { name: 'Desactivar' }).click()
     const confirmar = page.getByRole('dialog', { name: 'Desactivar a Carla Cobros' })
     await confirmar.locator('[data-prueba="confirmar-accion"]').click()
     await expect(confirmar).toBeHidden()
-    await expect(fila).toContainText('Inactivo')
+    await page.getByRole('tab', { name: /Desactivados/ }).click()
+    await expect(page.locator('[data-prueba="tabla-usuarios"] tr').filter({ hasText: 'carla@argos.test' })).toContainText('Desactivado')
 
     // Rol propio con dos permisos elegidos del catálogo.
-    await page.locator('[data-prueba="usuarios-navegacion"]').getByRole('link', { name: 'Roles y permisos' }).click()
+    await page.getByRole('link', { name: 'Roles y permisos' }).first().click()
     await expect(page).toHaveURL(/\/usuarios\/roles$/)
     await page.locator('[data-prueba="nuevo-rol"]').click()
     const rol = page.getByRole('dialog', { name: 'Nuevo rol' })
@@ -63,7 +64,7 @@ test('alta de usuario con rol por caja, rol propio y token de una sola vez', asy
     await expect(page.locator('[data-rol="auditor_externo"]')).toBeVisible()
 
     // Token de API: se ve una vez y se revoca.
-    await page.locator('[data-prueba="usuarios-navegacion"]').getByRole('link', { name: 'Tokens de API' }).click()
+    await page.goto('/usuarios/tokens')
     await expect(page).toHaveURL(/\/usuarios\/tokens$/)
     await page.locator('[data-prueba="nuevo-token"]').click()
     const token = page.getByRole('dialog', { name: 'Nuevo token de API' })

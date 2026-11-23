@@ -111,66 +111,68 @@ onMounted(async () => {
         id="notas-credito"
         titulo="Notas de crédito"
         icono="i-lucide-file-minus"
+        descripcion="Rebajas sobre el saldo de una factura, con su asiento en el libro. Se emiten desde el detalle de la factura."
     >
-        <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Rebajas sobre el saldo de una factura, con su asiento en el libro. Se emiten desde el detalle de la factura.
-            </p>
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto_auto]">
+                    <ClienteSelector
+                        v-model="clienteId"
+                        :seleccionado="clienteElegido"
+                        placeholder="Filtrar por cliente: nombre, NIT o teléfono"
+                        aria-label="Filtrar por cliente"
+                        class="w-full sm:col-span-2 lg:col-span-1"
+                        @elegido="alElegirCliente"
+                    />
+                    <UInput
+                        v-model="facturaTexto"
+                        inputmode="numeric"
+                        placeholder="Factura #"
+                        icon="i-lucide-receipt"
+                        aria-label="Filtrar por número de factura"
+                        class="w-full"
+                        data-prueba="filtro-factura"
+                    />
+                    <UInput
+                        v-model="desde"
+                        type="date"
+                        :max="hasta || undefined"
+                        aria-label="Desde (fecha contable)"
+                        class="w-full lg:w-44"
+                    />
+                    <UInput
+                        v-model="hasta"
+                        type="date"
+                        :min="desde || undefined"
+                        aria-label="Hasta (fecha contable)"
+                        class="w-full lg:w-44"
+                    />
+                </div>
 
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto_auto]">
-                <ClienteSelector
-                    v-model="clienteId"
-                    :seleccionado="clienteElegido"
-                    placeholder="Filtrar por cliente: nombre, NIT o teléfono"
-                    aria-label="Filtrar por cliente"
-                    class="w-full sm:col-span-2 lg:col-span-1"
-                    @elegido="alElegirCliente"
-                />
-                <UInput
-                    v-model="facturaTexto"
-                    inputmode="numeric"
-                    placeholder="Factura #"
-                    icon="i-lucide-receipt"
-                    aria-label="Filtrar por número de factura"
-                    class="w-full"
-                    data-prueba="filtro-factura"
-                />
-                <UInput
-                    v-model="desde"
-                    type="date"
-                    :max="hasta || undefined"
-                    aria-label="Desde (fecha contable)"
-                    class="w-full lg:w-44"
-                />
-                <UInput
-                    v-model="hasta"
-                    type="date"
-                    :min="desde || undefined"
-                    aria-label="Hasta (fecha contable)"
-                    class="w-full lg:w-44"
-                />
+                <div
+                    v-if="hayFiltros"
+                    class="flex"
+                >
+                    <UButton
+                        label="Limpiar filtros"
+                        icon="i-lucide-filter-x"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        @click="limpiarFiltros"
+                    />
+                </div>
             </div>
-
             <div
-                v-if="hayFiltros"
-                class="flex"
+                v-if="lista.problema.value"
+                class="p-4"
             >
-                <UButton
-                    label="Limpiar filtros"
-                    icon="i-lucide-filter-x"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    @click="limpiarFiltros"
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
                 />
             </div>
-
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
 
             <template v-else>
                 <UTable
@@ -179,7 +181,7 @@ onMounted(async () => {
                     :loading="lista.cargando.value"
                     sticky
                     class="flex-1"
-                    :ui="{ td: 'py-3' }"
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none', td: 'py-3' }"
                     data-prueba="tabla-notas"
                 >
                     <template #id-cell="{ row }">
@@ -264,16 +266,18 @@ onMounted(async () => {
                     </template>
                 </UTable>
 
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
     </PanelPagina>
 </template>

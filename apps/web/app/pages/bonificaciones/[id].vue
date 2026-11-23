@@ -74,6 +74,7 @@ onMounted(cargar)
     >
         <template #acciones>
             <UButton
+                size="lg"
                 to="/bonificaciones"
                 icon="i-lucide-arrow-left"
                 label="Bonificaciones"
@@ -127,6 +128,7 @@ onMounted(cargar)
 
             <div class="grid gap-6 lg:grid-cols-2">
                 <UPageCard
+                    :ui="{ root: 'rounded-[1.375rem]' }"
                     title="Bonificación"
                     icon="i-lucide-hand-heart"
                     variant="subtle"
@@ -179,6 +181,7 @@ onMounted(cargar)
                 </UPageCard>
 
                 <UPageCard
+                    :ui="{ root: 'rounded-[1.375rem]' }"
                     title="Valor"
                     icon="i-lucide-scale"
                     variant="subtle"

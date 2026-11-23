@@ -108,24 +108,26 @@ function rechazar() {
 </script>
 
 <template>
-    <div class="min-h-dvh">
+    <div class="relative min-h-dvh overflow-hidden bg-(--ax-fondo)">
+        <!-- Mismo marco que el login (tableros OperLogin y OperLoginMovil). -->
         <div
-            class="app-aura"
+            class="bienvenida absolute inset-x-0 top-0 h-48 rounded-none rounded-b-[2.5rem] lg:inset-0 lg:h-auto lg:rounded-none"
             aria-hidden="true"
         />
-        <main class="relative flex min-h-dvh flex-col items-center justify-center gap-6 px-4 py-10">
-            <div class="flex flex-col items-center gap-3 text-highlighted">
-                <LogoArgos
-                    variante="linea"
-                    class="size-14 text-primary"
-                />
-                <span class="text-2xl font-semibold tracking-[-0.015em]">ArgosIsp</span>
-            </div>
-
+        <main class="relative flex min-h-dvh flex-col items-center justify-start gap-6 px-4 pt-24 pb-10 lg:justify-center lg:pt-10">
             <div
-                class="surface-card flex w-full max-w-lg flex-col gap-5 p-6"
+                class="flex w-full max-w-lg flex-col gap-5 rounded-[1.75rem] bg-(--ax-tarjeta) p-6 shadow-(--ax-sombra-flotante) ring ring-(--ax-borde) sm:p-8"
                 data-prueba="autorizar-iris"
             >
+                <div class="flex items-center gap-3">
+                    <span class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-(image:--ax-gradiente) text-white shadow-lg">
+                        <LogoArgos
+                            variante="linea"
+                            class="size-8"
+                        />
+                    </span>
+                    <span class="text-xl font-bold tracking-[-0.02em] text-highlighted">ArgosIsp</span>
+                </div>
                 <!-- Sin permiso: nunca se llama a la API ni se redirige a Iris. -->
                 <template v-if="!permitido">
                     <h1 class="text-xl font-semibold text-highlighted">

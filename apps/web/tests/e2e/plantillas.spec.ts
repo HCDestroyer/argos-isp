@@ -50,6 +50,7 @@ test('crear y editar una plantilla con reglas de promesas por canal', async ({ p
 
     // Editar: el formulario trae lo guardado, incluido el canal.
     const id = await nueva.getAttribute('data-plantilla')
+    await nueva.getByRole('button').click()
     await page.locator(`[data-prueba="editar-plantilla-${id}"]`).click()
     const edicion = page.getByRole('dialog', { name: 'Editar Mensual día 15' })
     await expect(campo(edicion, 'plantilla-canal-portal-plazo')).toHaveValue('2')
@@ -58,5 +59,6 @@ test('crear y editar una plantilla con reglas de promesas por canal', async ({ p
     await edicion.locator('[data-prueba="plantilla-guardar"]').click()
     await expect(edicion).toBeHidden()
     await expect(page.getByText('Mensual día 15 actualizada', { exact: true })).toBeVisible()
-    await expect(tabla.locator('tr').filter({ hasText: 'Mensual día 15' })).toContainText('7 días')
+    await page.locator('[data-prueba="plantilla-abierta"]').getByRole('tab', { name: 'Promesas y reconexión' }).click()
+    await expect(page.locator('[data-prueba="plantilla-abierta"]')).toContainText('7 días')
 })
