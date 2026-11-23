@@ -2,11 +2,14 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Franja del cliente (tablero NuevoClienteFicha): avatar, nombre con el estado (el peor de sus
- * servicios), código, teléfono y zona; contadores de saldo, próximo vencimiento y servicios; a la
- * derecha Cobrar y las acciones en iconos (`#acciones`). `compacta`: al bajar se reduce a nombre,
- * estado, saldo y Cobrar. En el teléfono los contadores son «Debe», «Vencidas» y «Servicios».
- * Lo que no se pudo leer queda con su aviso, nunca como cero.
+ * Franja del cliente (tablero NuevoClienteFicha), en una sola fila: a la izquierda avatar, nombre
+ * con el estado (el peor de sus servicios), código, teléfono y zona; en medio los contadores de
+ * saldo, próximo vencimiento y servicios; a la derecha «Cobrar Q …» con el monto y el menú «Más»
+ * (`#acciones`). Es el único lugar de la ficha que muestra el saldo. Si no cabe, los contadores se
+ * compactan; las acciones nunca bajan de línea. `compacta`: al bajar se reduce a nombre, estado,
+ * saldo y Cobrar. En el teléfono el saldo va solo en la barra de abajo («Cobrar Q …») y los
+ * contadores son «Vencidas», «Próximo» y «Servicios». Lo que no se pudo leer queda con su aviso y
+ * «Reintentar», nunca como cero.
  */
 const props = withDefaults(defineProps<{
     cliente: Cliente
@@ -24,21 +27,35 @@ const props = withDefaults(defineProps<{
     verCuenta: true,
 })
 
+const emit = defineEmits<{
+    reintentarCuenta: []
+}>()
+
 const { puede, enlace } = usePermisos()
+
+const cobro = computed(() => enlace(`/cobro?cliente=${props.cliente.id}`))
 
 const resumen = computed(() => resumenCuentaCliente(props.cuenta, props.servicios))
 const estado = computed(() => peorEstadoServicios(props.servicios))
+/** «Cobrar Q 300.00» con lo que debe; sin deuda o sin poder leer la cuenta, solo «Cobrar» (nunca «Q 0.00»). */
+const etiquetaCobrar = computed(() => (props.verCuenta && resumen.value?.debe ? `Cobrar ${formatearQuetzales(resumen.value.saldo)}` : 'Cobrar'))
+/**
+ * En el teléfono el saldo sale en la barra de abajo; el contador solo aparece si esa barra no lo
+ * muestra (sin permiso de cobrar) o si hay que avisar que no se pudo leer.
+ */
+const saldoEnTelefono = computed(() => !cobro.value || !!props.problemaCuenta)
+const textoVencidas = computed(() => (resumen.value ? (resumen.value.vencidas ? `${resumen.value.vencidas} ${resumen.value.vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : 'Sin facturas vencidas') : ''))
 </script>
 
 <template>
     <section
-        class="surface-card flex flex-col gap-3 rounded-[1.375rem] transition-[padding] duration-200 motion-reduce:transition-none sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 min-[90rem]:flex-nowrap"
+        class="surface-card flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[1.375rem] transition-[padding] duration-200 motion-reduce:transition-none lg:flex-nowrap"
         :class="compacta ? 'px-3 py-2' : 'p-4 sm:px-5'"
         :aria-label="`Cliente ${cliente.nombre}`"
         data-prueba="franja-cliente"
         :data-compacta="compacta || undefined"
     >
-        <div class="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
+        <div class="order-1 flex min-w-0 flex-1 items-center gap-3 lg:flex-initial lg:shrink">
             <AvatarIniciales
                 :nombre="cliente.nombre"
                 :size="compacta ? 'lg' : '3xl'"
@@ -66,7 +83,7 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
                     <span class="font-mono">{{ cliente.codigo }}</span>
                     <span
                         v-if="cliente.telefono || cliente.movil"
-                        class="inline-flex items-center gap-1"
+                        class="inline-flex items-center gap-1 whitespace-nowrap"
                     >
                         <UIcon
                             name="i-lucide-phone"
@@ -76,7 +93,7 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
                     </span>
                     <span
                         v-if="zona"
-                        class="inline-flex items-center gap-1"
+                        class="inline-flex items-center gap-1 whitespace-nowrap"
                     >
                         <UIcon
                             name="i-lucide-map-pin"
@@ -92,18 +109,19 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
             </div>
         </div>
 
-        <!-- Contadores con ícono y contexto. -->
+        <!-- Contadores con ícono y contexto: se compactan antes que bajar las acciones. -->
         <div
             v-if="!compacta"
-            class="grid grid-cols-3 gap-2 sm:flex sm:flex-nowrap"
+            class="order-3 grid w-full min-w-0 grid-cols-3 gap-2 sm:flex sm:flex-nowrap lg:order-2 lg:w-auto lg:shrink lg:overflow-hidden"
             data-prueba="contadores-cliente"
         >
             <template v-if="verCuenta">
                 <div
-                    class="flex min-w-0 items-center gap-2.5 rounded-xl p-2.5 ring ring-(--ax-borde) sm:pe-4"
-                    :class="resumen?.debe ? 'bg-error/8 ring-error/30' : 'bg-(--ax-panel)'"
+                    class="min-w-0 items-center gap-2.5 rounded-xl p-2.5 ring ring-(--ax-borde) sm:flex sm:pe-4"
+                    :class="[resumen?.debe ? 'bg-error/8 ring-error/30' : 'bg-(--ax-panel)', saldoEnTelefono ? 'col-span-3 flex' : 'hidden']"
+                    data-prueba="contador-saldo"
                 >
-                    <span class="hidden shrink-0 sm:block">
+                    <span class="hidden shrink-0 min-[90rem]:block">
                         <span
                             class="pastilla-icono pastilla-tono size-9 shrink-0 rounded-lg"
                             :class="resumen?.debe ? 'tono-error' : 'tono-exito'"
@@ -115,7 +133,7 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
                         </span>
                     </span>
                     <span class="flex min-w-0 flex-col">
-                        <span class="text-xs text-muted"><span class="sm:hidden">Debe</span><span class="hidden sm:inline">Saldo</span></span>
+                        <span class="text-xs text-muted">Saldo</span>
                         <span
                             v-if="resumen"
                             class="whitespace-nowrap text-base font-bold tabular-nums sm:text-lg"
@@ -124,34 +142,62 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
                         >{{ formatearQuetzales(resumen.saldo) }}</span>
                         <span
                             v-else-if="problemaCuenta"
-                            class="text-sm text-muted"
-                        >No se pudo leer</span>
+                            class="flex items-center gap-1.5 whitespace-nowrap text-sm text-error"
+                            role="alert"
+                            data-prueba="franja-saldo-error"
+                        >
+                            No se pudo leer
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-rotate-cw"
+                                color="error"
+                                variant="link"
+                                size="xs"
+                                class="p-0"
+                                @click="emit('reintentarCuenta')"
+                            />
+                        </span>
                         <USkeleton
                             v-else
                             class="h-6 w-20"
                         />
                         <span
                             v-if="resumen"
-                            class="hidden whitespace-nowrap text-[0.6875rem] text-muted sm:block"
-                        >{{ resumen.vencidas ? `${resumen.vencidas} ${resumen.vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : 'Sin facturas vencidas' }}</span>
+                            class="hidden whitespace-nowrap text-[0.6875rem] text-muted min-[90rem]:block"
+                        >{{ textoVencidas }}</span>
                     </span>
                 </div>
-                <!-- Teléfono: vencidas; escritorio: próximo vencimiento. -->
-                <div class="flex min-w-0 flex-col rounded-xl bg-(--ax-panel) p-2.5 ring ring-(--ax-borde) sm:hidden">
+                <!-- Teléfono: las vencidas (el monto va en la barra de abajo). -->
+                <div
+                    class="flex min-w-0 flex-col rounded-xl p-2.5 ring sm:hidden"
+                    :class="resumen?.vencidas ? 'bg-error/8 ring-error/30' : 'bg-(--ax-panel) ring-(--ax-borde)'"
+                >
                     <span class="text-xs text-muted">Vencidas</span>
-                    <span class="text-base font-bold tabular-nums text-highlighted">{{ resumen ? resumen.vencidas : '—' }}</span>
+                    <span
+                        class="text-base font-bold tabular-nums"
+                        :class="resumen?.vencidas ? 'text-error' : 'text-highlighted'"
+                        data-prueba="franja-vencidas"
+                    >{{ resumen ? resumen.vencidas : '—' }}</span>
                 </div>
-                <div class="hidden min-w-0 items-center gap-2.5 rounded-xl bg-(--ax-panel) p-2.5 pe-4 ring ring-(--ax-borde) lg:flex">
-                    <span class="pastilla-icono pastilla-tono tono-aviso size-9 shrink-0 rounded-lg">
-                        <UIcon
-                            name="i-lucide-clock"
-                            class="size-4.5"
-                        />
+                <div class="flex min-w-0 items-center gap-2.5 rounded-xl bg-(--ax-panel) p-2.5 ring ring-(--ax-borde) sm:pe-4">
+                    <span class="hidden shrink-0 min-[90rem]:block">
+                        <span class="pastilla-icono pastilla-tono tono-aviso size-9 shrink-0 rounded-lg">
+                            <UIcon
+                                name="i-lucide-clock"
+                                class="size-4.5"
+                            />
+                        </span>
                     </span>
                     <span class="flex min-w-0 flex-col">
-                        <span class="whitespace-nowrap text-xs text-muted">Próximo vencimiento</span>
-                        <span class="text-lg font-bold text-highlighted">{{ resumen?.proxima ? formatearFechaCorta(resumen.proxima.vence_en) : '—' }}</span>
-                        <span class="whitespace-nowrap text-[0.6875rem] text-muted">{{ resumen?.proxima ? formatearQuetzales(resumen.proxima.total) : (resumen ? 'Nada por vencer' : '') }}</span>
+                        <span class="whitespace-nowrap text-xs text-muted"><span class="sm:hidden">Próximo</span><span class="hidden sm:inline">Próximo vencimiento</span></span>
+                        <span
+                            class="whitespace-nowrap text-base font-bold text-highlighted sm:text-lg"
+                            data-prueba="franja-proximo"
+                        >{{ resumen?.proxima ? formatearFechaCorta(resumen.proxima.vence_en) : '—' }}</span>
+                        <span
+                            v-if="resumen && !resumen.proxima"
+                            class="hidden whitespace-nowrap text-[0.6875rem] text-muted min-[90rem]:block"
+                        >Nada por vencer</span>
                     </span>
                 </div>
             </template>
@@ -159,7 +205,7 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
                 v-if="puede('servicios.ver')"
                 class="flex min-w-0 items-center gap-2.5 rounded-xl bg-(--ax-panel) p-2.5 ring ring-(--ax-borde) sm:pe-4"
             >
-                <span class="hidden shrink-0 sm:block">
+                <span class="hidden shrink-0 min-[90rem]:block">
                     <span class="pastilla-icono pastilla-tono tono-marca size-9 shrink-0 rounded-lg">
                         <UIcon
                             name="i-lucide-wifi"
@@ -178,29 +224,30 @@ const estado = computed(() => peorEstadoServicios(props.servicios))
                     </span>
                     <span
                         v-if="servicios?.length"
-                        class="hidden whitespace-nowrap text-[0.6875rem] text-muted sm:block"
+                        class="hidden whitespace-nowrap text-[0.6875rem] text-muted min-[90rem]:block"
                     >{{ formatearQuetzales(sumarPrecios(servicios)) }} / mes</span>
                 </span>
             </div>
         </div>
 
+        <!-- Compacta: el saldo junto al nombre (escritorio; en el teléfono ya va en la barra). -->
         <div
-            v-else-if="verCuenta && resumen"
-            class="text-sm font-bold tabular-nums"
-            :class="resumen.debe ? 'text-error' : 'text-highlighted'"
+            v-else-if="verCuenta && (resumen || problemaCuenta)"
+            class="order-2 text-sm font-bold tabular-nums"
+            :class="[resumen?.debe || problemaCuenta ? 'text-error' : 'text-highlighted', saldoEnTelefono ? '' : 'hidden sm:block']"
         >
-            {{ formatearQuetzales(resumen.saldo) }}
+            {{ resumen ? formatearQuetzales(resumen.saldo) : 'Saldo: no se pudo leer' }}
         </div>
 
-        <div class="hidden shrink-0 items-center gap-2 sm:ms-auto sm:flex">
+        <div class="order-2 ms-auto flex shrink-0 items-center gap-2 lg:order-3">
             <UButton
-                v-if="enlace(`/cobro?cliente=${cliente.id}`)"
-                :to="enlace(`/cobro?cliente=${cliente.id}`)"
+                v-if="cobro"
+                :to="cobro"
                 :icon="ICONOS.cobrar"
-                label="Cobrar"
+                :label="etiquetaCobrar"
                 color="success"
                 :size="compacta ? 'md' : 'lg'"
-                class="rounded-full px-5"
+                class="hidden whitespace-nowrap rounded-full px-5 tabular-nums sm:inline-flex"
                 data-prueba="franja-cobrar"
             />
             <slot name="acciones" />

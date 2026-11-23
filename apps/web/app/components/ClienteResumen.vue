@@ -4,9 +4,9 @@ import Decimal from 'decimal.js'
 
 /**
  * Pestaña «Resumen» de la ficha del cliente (tablero NuevoClienteFicha): aviso de servicio
- * suspendido o limitado con Cobrar y Promesa, contadores (saldo pendiente, próximo vencimiento,
- * pagado este año y cliente desde), sus servicios y la actividad reciente de la bitácora.
- * Todo sale de la API; lo que falló se muestra con «Reintentar».
+ * suspendido o limitado con «Promesa» (sin monto ni otro Cobrar: el saldo vive solo en la franja),
+ * contadores que la franja no tiene (pagado este año, cliente desde y promesas), sus servicios y la
+ * actividad reciente de la bitácora. Todo sale de la API; lo que falló se muestra con «Reintentar».
  */
 const props = defineProps<{
     cliente: Cliente
@@ -18,9 +18,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     ir: [pestana: string]
-    promesa: []
+    cuentaCambiada: []
     reintentarServicios: []
-    reintentarCuenta: []
 }>()
 
 const { puede, enlace } = usePermisos()
@@ -55,6 +54,52 @@ async function cargarPagos() {
     pagadoAnio.value = { total: delAnio.reduce((suma, p) => suma.plus(p.monto), new Decimal(0)), pagos: delAnio.length }
 }
 
+/**
+ * Promesas del cliente: la activa (o pendiente) si hay; si no, cuántas de las cerradas se
+ * cumplieron. Se cuentan las últimas 25; con más, lo dice.
+ */
+const promesas = shallowRef<{ abierta: Promesa | null, cumplidas: number, cerradas: number, mas: boolean } | null>(null)
+const problemaPromesas = ref<Problem | null>(null)
+
+async function cargarPromesas() {
+    promesas.value = null
+    problemaPromesas.value = null
+    if (!puede('promesas.ver')) {
+        return
+    }
+    const resultado = await usePromesas().listar({ cliente_id: props.cliente.id })
+    if (!resultado.ok) {
+        problemaPromesas.value = resultado.problema
+        return
+    }
+    const lista = resultado.data.data
+    promesas.value = {
+        abierta: lista.find(p => p.estado === 'activa' || p.estado === 'pendiente_aprobacion') ?? null,
+        cumplidas: lista.filter(p => p.estado === 'cumplida').length,
+        cerradas: lista.filter(p => p.estado === 'cumplida' || p.estado === 'incumplida').length,
+        mas: !!resultado.data.nextCursor,
+    }
+}
+
+const valorPromesas = computed(() => {
+    const p = promesas.value
+    if (!p) {
+        return null
+    }
+    if (p.abierta) {
+        return p.abierta.estado === 'activa' ? `Activa hasta ${formatearFechaCorta(p.abierta.vence_en)}` : 'Por aprobar'
+    }
+    return p.cerradas ? `${p.cumplidas} de ${p.cerradas} cumplidas` : 'Ninguna'
+})
+
+const detallePromesas = computed(() => {
+    const p = promesas.value
+    if (!p || p.abierta) {
+        return p?.abierta ? `${p.cumplidas} de ${p.cerradas} cumplidas antes` : undefined
+    }
+    return p.mas ? 'de las últimas 25' : (p.cerradas ? undefined : 'Sin promesas de pago')
+})
+
 /** Actividad reciente: las 3 últimas entradas de la bitácora del cliente (sin las lecturas del portal). */
 const actividad = shallowRef<AccionAuditoria[] | null>(null)
 const problemaActividad = ref<Problem | null>(null)
@@ -72,6 +117,7 @@ async function cargarActividad() {
 
 onMounted(() => {
     void cargarPagos()
+    void cargarPromesas()
     void cargarActividad()
 })
 </script>
@@ -81,7 +127,7 @@ onMounted(() => {
         class="flex flex-col gap-4"
         data-prueba="cliente-resumen"
     >
-        <!-- Aviso de corte con las dos salidas: cobrar o dar promesa (se reactiva al instante). -->
+        <!-- Aviso de corte: qué pasó y la promesa. El monto y «Cobrar» viven solo en la franja. -->
         <div
             v-if="estadoAviso && cortados.length"
             class="flex flex-col gap-3 rounded-2xl p-4 ring sm:flex-row sm:items-center"
@@ -110,55 +156,17 @@ onMounted(() => {
                     </template>
                 </p>
                 <p class="text-sm text-default">
-                    <template v-if="resumen?.vencidas">
-                        {{ resumen.vencidas === 1 ? '1 factura vencida' : `${resumen.vencidas} facturas vencidas` }}.
-                    </template>
                     Al cobrar o dar promesa se reactiva al instante.
                 </p>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <UButton
-                    v-if="enlace(`/cobro?cliente=${cliente.id}`)"
-                    :to="enlace(`/cobro?cliente=${cliente.id}`)"
-                    :icon="ICONOS.cobrar"
-                    :label="resumen?.debe ? `Cobrar ${formatearQuetzales(resumen.saldo)}` : 'Cobrar'"
-                    color="success"
-                    class="rounded-full"
-                />
-                <UButton
-                    v-if="puede('promesas.crear')"
-                    icon="i-lucide-hand"
-                    label="Promesa"
-                    color="neutral"
-                    variant="outline"
-                    class="rounded-full"
-                    @click="emit('promesa')"
-                />
-            </div>
+            <PromesaServicioBoton
+                :servicios="cortados"
+                :boton="{ class: 'rounded-full self-start sm:self-auto' }"
+                @creada="emit('cuentaCambiada')"
+            />
         </div>
 
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <template v-if="puede('clientes.estado_cuenta')">
-                <TarjetaDato
-                    etiqueta="Saldo pendiente"
-                    :icono="ICONOS.cobrar"
-                    :tono="resumen?.debe ? 'tono-error' : 'tono-exito'"
-                    :valor="resumen ? formatearQuetzales(resumen.saldo) : null"
-                    :detalle="resumen ? (resumen.vencidas ? `${resumen.vencidas} ${resumen.vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : 'Sin facturas vencidas') : undefined"
-                    :peligro="resumen?.debe"
-                    :problema="problemaCuenta"
-                    @reintentar="emit('reintentarCuenta')"
-                />
-                <TarjetaDato
-                    etiqueta="Próximo vencimiento"
-                    icono="i-lucide-clock"
-                    tono="tono-aviso"
-                    :valor="resumen ? (resumen.proxima ? formatearFechaCorta(resumen.proxima.vence_en) : 'Nada por vencer') : null"
-                    :detalle="resumen?.proxima ? formatearQuetzales(resumen.proxima.total) : undefined"
-                    :problema="problemaCuenta"
-                    @reintentar="emit('reintentarCuenta')"
-                />
-            </template>
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <TarjetaDato
                 v-if="puede('pagos.ver')"
                 :etiqueta="`Pagado en ${anio}`"
@@ -175,6 +183,18 @@ onMounted(() => {
                 tono="tono-marca"
                 :valor="formatearMesAnio(cliente.created_at)"
                 :detalle="formatearFecha(cliente.created_at)"
+            />
+            <TarjetaDato
+                v-if="puede('promesas.ver')"
+                etiqueta="Promesas"
+                icono="i-lucide-hand"
+                tono="tono-aviso"
+                :valor="valorPromesas"
+                :detalle="detallePromesas"
+                :problema="problemaPromesas"
+                class="col-span-2 lg:col-span-1"
+                data-prueba="resumen-promesas"
+                @reintentar="cargarPromesas"
             />
         </div>
 
