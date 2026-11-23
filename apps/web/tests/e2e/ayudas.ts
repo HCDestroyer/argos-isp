@@ -26,23 +26,29 @@ export async function entrar(page: Page, email: string): Promise<void> {
     await expect(page).not.toHaveURL(/\/login/)
 }
 
+/** «Más» de la isla de navegación del teléfono: abre el menú completo a pantalla completa. */
+export function botonMasIsla(page: Page): Locator {
+    return page.locator('[data-prueba="isla-mas"]')
+}
+
 /**
- * Abre el menú lateral si está plegado (teléfono) y devuelve su contenedor. En escritorio el menú
- * arranca compacto (rail de iconos): se pasa a expandido (con nombres), que queda recordado.
+ * Abre el menú si está plegado (teléfono: «Más» de la isla de abajo) y devuelve su contenedor. En
+ * escritorio el menú arranca compacto (rail de iconos): se pasa a expandido (con nombres), que queda
+ * recordado.
  */
 export async function menu(page: Page) {
     const lateral = page.locator('#dashboard-sidebar-principal')
-    const abrir = page.getByRole('button', { name: 'Abrir barra lateral' })
-    // Esperar a que el layout pinte el menú (escritorio) o el botón que lo abre (teléfono).
+    const abrir = botonMasIsla(page)
+    // Esperar a que el layout pinte el menú (escritorio) o la isla que lo abre (teléfono).
     await expect(lateral.getByRole('link', { name: 'Inicio' }).or(abrir).first()).toBeVisible()
     if (!(await lateral.isVisible())) {
-        await page.getByRole('button', { name: 'Abrir barra lateral' }).click()
+        await abrir.click()
     }
     else if (await lateral.locator('[data-prueba="menu-rail"]').isVisible()) {
         await lateral.locator('[data-prueba="alternar-menu"]').click()
         await expect(lateral.locator('[data-prueba="menu-principal"]')).toBeVisible()
     }
-    // En teléfono el menú se abre en un panel aparte con los mismos enlaces.
+    // En teléfono el menú se abre a pantalla completa con los mismos enlaces.
     const abierto = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Inicio' }) })
     const contenedor = (await lateral.isVisible()) ? lateral : abierto
     await expandirGrupos(contenedor)

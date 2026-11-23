@@ -6,7 +6,7 @@ const { puede } = usePermisos()
 const comprobantes = useComprobantes()
 const route = useRoute()
 
-/** Menú del teléfono (USlideover) abierto. */
+/** Menú completo del teléfono abierto (lo abre «Más» de la isla de abajo, a pantalla completa). */
 const abierto = ref(false)
 /** Barra compacta (solo iconos), recordada por usuario. */
 const { compacto } = useMenuCompacto()
@@ -53,6 +53,13 @@ watch(useEmpresaActiva().eleccion, actualizarContadores)
 
 function cerrarMovil() {
     abierto.value = false
+}
+
+/** «Personalizar mis accesos» desde el menú del teléfono: primero se cierra el menú (nunca un panel sobre otro). */
+const personalizando = ref(false)
+function personalizarAccesos() {
+    abierto.value = false
+    personalizando.value = true
 }
 
 /** Grupos con al menos una sección permitida; sin ninguna, el grupo (o subgrupo) no aparece. */
@@ -231,11 +238,16 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             :max-size="20"
             :collapsed-size="4.75"
             :resizable="false"
+            mode="modal"
+            :menu="{ title: 'Menú', description: 'Todas las secciones del panel y el buscador' }"
+            toggle-side="right"
+            :toggle="{ color: 'neutral', variant: 'ghost', class: 'boton-flotante boton-circulo' }"
             class="glass-material lateral-argos"
             :ui="{
-                header: 'h-auto flex-col items-stretch gap-3 px-3 pt-3.5 pb-1.5',
+                header: 'h-auto flex-row items-center gap-3 px-4 pt-[max(0.875rem,env(safe-area-inset-top))] pb-1.5 lg:flex-col lg:items-stretch lg:px-3 lg:pt-3.5',
                 body: 'gap-1 px-3',
                 footer: 'max-h-[55%] min-h-0 flex-col items-stretch gap-2 overflow-y-auto px-3 pb-3.5',
+                content: 'menu-movil lg:hidden',
             }"
         >
             <template #header="{ collapsed }">
@@ -272,13 +284,31 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             </template>
 
             <template #default="{ collapsed }">
-                <!-- En escritorio el buscador va en la barra superior; aquí, en el teléfono. -->
-                <UDashboardSearchButton
-                    :collapsed="collapsed"
-                    label="Buscar"
-                    aria-label="Buscar sección (Ctrl+K)"
-                    class="bg-transparent ring-default lg:hidden"
-                />
+                <!-- En escritorio el buscador va en la barra superior; aquí, en el menú «Más» del teléfono,
+                     con «Personalizar mis accesos» (los dos primeros van en la isla de abajo). -->
+                <div class="flex flex-col gap-2 lg:hidden">
+                    <UDashboardSearchButton
+                        :collapsed="collapsed"
+                        label="Buscar una sección…"
+                        aria-label="Buscar sección (Ctrl+K)"
+                        variant="ghost"
+                        color="neutral"
+                        size="lg"
+                        class="boton-flotante w-full rounded-xl text-dimmed"
+                        data-prueba="menu-buscar"
+                    />
+                    <UButton
+                        v-if="accesosRapidos.accesos.value.length"
+                        label="Personalizar mis accesos"
+                        icon="i-lucide-sliders-horizontal"
+                        color="neutral"
+                        variant="soft"
+                        size="sm"
+                        class="self-start"
+                        data-prueba="menu-personalizar-accesos"
+                        @click="personalizarAccesos"
+                    />
+                </div>
                 <UNavigationMenu
                     v-if="collapsed"
                     :key="`rail-${grupoActual}`"
@@ -406,6 +436,13 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
         />
 
         <slot />
+
+        <!-- Teléfono y tableta (< lg): isla de navegación abajo; «Más» abre el menú completo. -->
+        <PanelIslaMovil
+            v-model:menu-abierto="abierto"
+            :inicio="inicio"
+        />
+        <AccesosRapidosEditor v-model:open="personalizando" />
 
         <AvisoTopeSesion />
         <SesionBloqueo />
