@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.26.0](https://github.com/HCDestroyer/argos-isp/compare/v1.25.0...v1.26.0) (2026-11-23)
+
+
+### Funcionalidades
+
+* **billing:** aviso de pequeño contribuyente, envíos por correo externo y orden de retiro a Iris ([#321](https://github.com/HCDestroyer/argos-isp/issues/321)) ([8aa1901](https://github.com/HCDestroyer/argos-isp/commit/8aa1901848f017fdc6cad1eaf4fb7e0d3df3338f))
+* **core:** iris_url y horus_url en GET /auth/opciones ([#320](https://github.com/HCDestroyer/argos-isp/issues/320)) ([2ad8488](https://github.com/HCDestroyer/argos-isp/commit/2ad8488c7f2f309882528adc06a19323dc0c799d))
+* **web:** aviso de pequeño contribuyente y Reportes › Envíos programados con correos externos ([#322](https://github.com/HCDestroyer/argos-isp/issues/322)) ([8e419dd](https://github.com/HCDestroyer/argos-isp/commit/8e419dd8df5c75752e8a57e746dde8a2cdb02c29))
+* **web:** login con recuperar contraseña, ajustes de red y cobro, SmartOLT/GenieACS e inventario pendiente ([#319](https://github.com/HCDestroyer/argos-isp/issues/319)) ([b25755a](https://github.com/HCDestroyer/argos-isp/commit/b25755a3fce27a9bf69a5a7598cbf79500eaa1c9))
+* **web:** rediseño de caja, cobro POS y bancos ([#298](https://github.com/HCDestroyer/argos-isp/issues/298)) ([663038a](https://github.com/HCDestroyer/argos-isp/commit/663038a044e0d481a421a3e34410f8b0a11d78a0))
+* **web:** rediseño de contabilidad ([#301](https://github.com/HCDestroyer/argos-isp/issues/301)) ([a750cd6](https://github.com/HCDestroyer/argos-isp/commit/a750cd66f0d464b0f616cd31995ce5225c5b9dc8))
+* **web:** rediseño de operación ([#300](https://github.com/HCDestroyer/argos-isp/issues/300)) ([5bc1850](https://github.com/HCDestroyer/argos-isp/commit/5bc18501575c04c6ce881132d7067c08cafd309d))
+* **web:** rediseño de Red y servicios ([#293](https://github.com/HCDestroyer/argos-isp/issues/293)) ([b779fba](https://github.com/HCDestroyer/argos-isp/commit/b779fbad03f9250750bf31d7396ffcc9c0ecc09d))
+
 ## [1.25.0](https://github.com/HCDestroyer/argos-isp/compare/v1.24.0...v1.25.0) (2026-11-23)
 
 
