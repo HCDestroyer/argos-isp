@@ -129,6 +129,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** Avisos fiscales a contabilidad (valor inicial; después se edita en el panel). */
     NOTIFY_CORREO_CONTABILIDAD: Env.schema.string.optional(),
     NOTIFY_CRON_TOLERANCIA_MIN: Env.schema.number.optional(),
+    /** Nombre de esta instancia en las corridas de crons (por defecto `host:pid`) */
+    ARGOSISP_INSTANCIA: Env.schema.string.optional(),
     /**
      * Conector Horus (A6): se configura desde el panel. Solo este flag de laboratorio es de
      * entorno: permite `http://` en la URL de Horus y sus receptores (por defecto solo https).

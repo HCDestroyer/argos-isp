@@ -48,6 +48,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'ip.buscar_historial': 'Búsqueda de quién tenía una IP',
     'incidentes_red.abrir': 'Falla general abierta a mano',
     'incidentes_red.cerrar': 'Falla general cerrada',
+    'incidentes_red.leer': 'Servicios de una falla general consultados',
     'incidentes_red.evaluar': 'Fallas generales revisadas',
     // Anuncios del portal (A5, `contratos/anuncios.md`).
     'anuncios.crear': 'Anuncio creado',
@@ -390,6 +391,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routeros.reconciliar': 'Router reconciliado',
     'routeros.sondear': 'Sondeo de routers con fallas',
     'sistema.recalcular_almacenamiento': 'Almacenamiento recalculado',
+    'sistema.ejecutar_cron': 'Tarea programada ejecutada a mano',
     'apariencia.editar': 'Apariencia del sistema cambiada',
     'inventario.aprobar_cobro_equipo': 'Cobro de equipo aprobado',
     'inventario.rechazar_cobro_equipo': 'Cobro de equipo rechazado',

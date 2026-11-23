@@ -262,7 +262,7 @@ const TEXTOS_CLIENTE: Record<string, { status: number; titulo: string; detalle: 
     mime_no_permitido: {
         status: 422,
         titulo: 'Tipo de archivo no permitido',
-        detalle: 'Solo fotos (JPG, PNG, WebP o HEIC) y PDF.',
+        detalle: 'Solo fotos JPG o PNG y PDF.',
     },
     demasiados_adjuntos: {
         status: 422,

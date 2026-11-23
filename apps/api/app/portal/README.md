@@ -593,8 +593,9 @@ Pedidos A30 (tickets), A31 (solicitudes de servicio), A42 (contactos desde el po
   Iris no pasa hasta agregarlo aquí y al OpenAPI. Con sesión `ip` la lista va sin `asunto` aunque Iris
   lo mande, y detalle, mensajes, adjuntos, responder, confirmar, solicitudes y contactos responden
   `403 sesion_insuficiente`. Abrir ticket con sesión `ip`: sin adjuntos y con el servicio de la sesión.
-- **Adjuntos** (`soporte/adjuntos.ts`): hasta 3, 10 MB, JPEG, PNG, WebP, HEIC o PDF por la firma de
-  los primeros bytes (413 `tamano_excedido`, 422 `mime_no_permitido`, `demasiados_adjuntos`); el total
+- **Adjuntos** (`soporte/adjuntos.ts`): hasta 3, 10 MB, JPEG, PNG o PDF por la firma de
+  los primeros bytes (desde 0.14.2 §11.6 Iris no acepta WebP ni HEIC: el navegador los convierte a
+  JPEG y el servidor rechaza los que lleguen igual) (413 `tamano_excedido`, 422 `mime_no_permitido`, `demasiados_adjuntos`); el total
   lo acota el bodyparser (20 MB). Descarga por Argos con `Content-Disposition: attachment`,
   `nosniff` y `Content-Security-Policy: sandbox`.
 - **Contrato 0.12.1 (§11.10, B28)**: toda llamada lleva `X-Iris-Contacto` (`titular`, o el `contacto_id`

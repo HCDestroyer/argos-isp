@@ -1,6 +1,7 @@
 import vine from '@vinejs/vine'
 import '#shared/vine_meta'
 import { instanteIso } from '#shared/validadores'
+import { reglasPaginacion } from '#shared/paginacion'
 import { LIMITE_MAXIMO_REGISTRO, NIVELES, ORIGENES } from '#monitoreo/registro'
 
 /** Query de `GET /sistema/registro` (contrato `salud.md` §3.1). */
@@ -13,3 +14,6 @@ export const registroSistemaValidator = vine.compile(
         limit: vine.number().withoutDecimals().range([1, LIMITE_MAXIMO_REGISTRO]).optional(),
     }),
 )
+
+/** Query de `GET /sistema/crons/:clave/corridas`. */
+export const corridasCronValidator = vine.compile(vine.object({ ...reglasPaginacion }))
