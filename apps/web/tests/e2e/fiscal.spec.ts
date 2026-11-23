@@ -17,7 +17,8 @@ test('parámetros: un valor en un mes cerrado se explica y uno futuro se inserta
     await elegirArgosNet(page)
     await expect(page.locator('[data-prueba="regimen-actual"]')).toContainText('Sobre utilidades')
 
-    await page.getByRole('tab', { name: 'Parámetros' }).click()
+    // Todos los bloques (régimen, parámetros, impuestos…) van en la misma tarjeta, sin pestañas.
+    await page.locator('#fiscal-parametros').scrollIntoViewIfNeeded()
     await page.getByText(/^Solo por confirmar con contador/).click()
     const fila = page.locator('[data-parametro="ret_iva_minimo"]')
     await expect(fila).toContainText('Confirmar con contador')
@@ -45,7 +46,7 @@ test('impuestos: la retención se muestra con signo menos y la tasa nueva se esc
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Fiscal', /\/configuracion\/fiscal/)
     await elegirArgosNet(page)
-    await page.getByRole('tab', { name: 'Impuestos' }).click()
+    await page.locator('#fiscal-impuestos').scrollIntoViewIfNeeded()
     await expect(page.locator('[data-impuesto="RET_IVA_ESP"]')).toBeVisible()
     await expect(page.getByText('−15.00 %').first()).toBeVisible()
 

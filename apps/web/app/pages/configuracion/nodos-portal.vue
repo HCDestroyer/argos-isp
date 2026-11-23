@@ -81,15 +81,18 @@ function alRevocar(nodo: NodoPortal) {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="nodos-portal"
         titulo="Nodos del portal"
-        icono="i-lucide-server"
+        descripcion="Portales del cliente instalados en otro sitio"
+        volver="/configuracion/portal-corte"
     >
         <template #acciones>
             <UButton
-                label="Nuevo nodo"
+                label="Agregar nodo"
                 icon="i-lucide-plus"
+                class="glow-brand"
+                aria-label="Nuevo nodo"
                 data-prueba="nuevo-nodo"
                 @click="abrirAlta"
             />
@@ -242,5 +245,5 @@ function alRevocar(nodo: NodoPortal) {
             :ejecutar="revocar"
             @hecho="alRevocar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
