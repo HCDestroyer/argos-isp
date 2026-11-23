@@ -11,6 +11,7 @@ def conf(on,tit,sub,acc,cuerpo,fn,titulo,groups=None,over='',migas=None):
     obuild(fn,titulo,shell2('aj',migas or ['Configuración',tit],inner,over),logic(g))
     check(fn)
 tgl=lambda on:'<span class="tg %s"><i></i></span>'%('on' if on else '')
+rowx=lambda a,b,c:f'<div class="kv2"><span style="flex:1 1 auto;min-width:0;color:#0F172A"><b>{a}</b><span class="m2" style="display:block">{b}</span></span><span style="flex:0 0 auto">{c}</span></div>'
 row=lambda a,b,c:kv(f'<span style="color:#0F172A"><b>{a}</b><span class="m2" style="display:block">{b}</span></span>',c)
 EMP=T('<div style="display:flex;gap:8px;align-items:center;flex:0 0 auto"><span class="m2">Empresa</span><span class="fc on"><i:edif:14>Conecta, S.A.</span><span class="fc">Conecta Norte, S.A.</span><span class="fc"><i:mas1:14>Nueva</span></div>')
 # --- 5.1 Empresa y fiscal
@@ -50,23 +51,54 @@ c2=EMP+T('''<section class="isla pan" style="flex:1">
   <div style="display:flex;gap:8px;align-items:center"><span class="busca" style="flex:1"><i:bus:15>Buscar banco…</span><button class="btn p sm"><i:mas1:14>Agregar banco <span class="nuevo">nuevo</span></button></div>
   <div class="m2">Al cobrar una transferencia, el cajero elige de aquí el banco de donde viene el dinero. También lo usa el portal y la conciliación.</div>
   <div style="display:flex;flex-wrap:wrap;gap:8px"><<ban>></div></div>
- <div style="flex:1;min-height:0;display:{{t.pla.v}};padding:14px 18px;gap:12px;align-items:flex-start">
-  <<l1>><<l2>><<l3>></div>
-</section>''',seg=seg('t',[('ctas','Cuentas bancarias','banco',4),('ban','Bancos de origen','lista',12),('pla','Plantillas y conceptos','doc')]),
+ <div style="flex:1;min-height:0;display:{{t.pla.v}};padding:14px 18px;gap:12px;align-items:flex-start;align-content:flex-start;flex-wrap:wrap">
+  <<l1>><<l2>><<l3>><<l4>></div>
+ <div style="flex:1;min-height:0;display:{{t.reg.v}};flex-direction:column">
+  <div class="sc" style="flex:1;padding:14px 18px;display:flex;gap:12px;align-items:flex-start">
+   <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<g1>><<g2>></div>
+   <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<g3>></div>
+  </div>
+  <div class="pf" style="padding:12px 18px"><span class="m2" style="flex:1">De Conecta, S.A. · cada empresa tiene sus reglas · último cambio: Ana Cruz, 20 nov</span><button class="btn g">Descartar</button><button class="btn p">Guardar</button></div>
+ </div>
+</section>''',seg=seg('t',[('ctas','Cuentas bancarias','banco',4),('ban','Bancos de origen','lista',12),('pla','Plantillas y conceptos','doc'),('reg','Reglas de cobro y libro','escudo')]),
+ g1=cd('Asientos manuales','fin',rowx('Pedir aprobación de otro usuario','El asiento de ajuste queda como borrador en Libro › Por aprobar hasta que otra persona lo aprueba. Quien lo crea no puede aprobarlo.',tgl(False))+T('<div class="m2" style="margin-top:6px">De fábrica: apagado (el asiento entra directo al libro).</div>')),
+ g2=cd('Pausa sin cobro','pausa',rowx('Tope de días','Lo más que puede durar una pausa sin cobro (1 a 365)',T('<div class="in" style="width:120px;padding:7px 10px;justify-content:space-between"><b class="num">90</b><span class="m2">días</span></div>'))+T('<div class="m2" style="margin-top:6px">La suspensión normal sigue facturando; la pausa sin cobro pide su propio permiso y motivo.</div>')),
+ g3=cd('Facturas de meses pasados','cal',T('<div class="av2 nf" style="align-items:flex-start"><i:info:16><div>Los <b>días de gracia antes del corte</b> no son un ajuste: los escribe quien emite, en «Emitir facturas por periodo», para cada emisión.</div></div>')),
  ctas=''.join(T('<div class="lr" style="grid-template-columns:minmax(0,1.2fr) 170px 150px minmax(0,1fr) 150px 80px"><div style="display:flex;gap:10px;align-items:center"><span class="ico nf" style="width:34px;height:34px;border-radius:10px"><i:banco:16></span><b><<a>></b></div><span class="mono"><<b>></span><span><<c>></span><span class="el m2" style="color:#334155"><<d>></span><<e>><<f>></div>',a=a,b=b,c=c,d=d,e=tgl(e),f=tgl(f)) for a,b,c,d,f,e in ctas),
  ban=''.join(T('<span class="fc" style="padding:9px 14px"><i:banco:14><<b>></span>',b=b) for b in bancos),
- l1=cd('Plantillas de facturación','cal',kv('Residencial día 1','1,102 servicios')+kv('Residencial día 15','84')+kv('Empresarial 30 días','61'),lnk='Abrir',st='flex:1'),l2=cd('Plantillas de documentos','imp',kv('Factura','Carta · POS 80 mm')+kv('Recibo de cobro','POS 80 mm')+kv('Aviso de cobro','Carta'),lnk='Abrir',st='flex:1'),l3=cd('Conceptos de cargo único','tag',kv('Instalación','Q 150.00')+kv('Cambio de domicilio','Q 150.00')+kv('Equipo no devuelto','según equipo'),lnk='Abrir',st='flex:1'))
-conf('cob','Facturación y cobro','Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos','',c2,'OperConfigCobro.dc.html','Configuración · Facturación y cobro',{'t':(['ctas','ban','pla'],'ctas')})
+ l1=cd('Plantillas de facturación','cal',kv('Residencial día 1','1,102 servicios')+kv('Residencial día 15','84')+kv('Empresarial 30 días','61'),lnk='Abrir',st='flex:1'),l2=cd('Plantillas de documentos','imp',kv('Factura','Carta · POS 80 mm')+kv('Recibo de cobro','POS 80 mm')+kv('Aviso de cobro','Carta'),lnk='Abrir',st='flex:1'),l3=cd('Conceptos de cargo único','tag',kv('Instalación','Q 150.00')+kv('Cambio de domicilio','Q 150.00')+kv('Equipo no devuelto','según equipo'),lnk='Abrir',st='flex:1'),
+ l4=cd('Adicionales','mas1',kv('<span style="display:flex;gap:6px;align-items:center;color:#0F172A"><b>IP pública fija</b> <span class="b cy" style="font-size:11px;padding:1px 7px">tipo IP pública</span></span>','Q 75.00 /mes')+kv('Streaming Plus','Q 45.00 /mes')+T('<div class="m2" style="margin-top:6px">El tipo «IP pública» cambia la IP del servicio por una de la red pública de su router y la libera al quitarlo. Los planes empresariales pueden traerla incluida.</div>'),lnk='Abrir',st='flex:1 1 100%'))
+conf('cob','Facturación y cobro','Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos','',c2,'OperConfigCobro.dc.html','Configuración · Facturación y cobro',{'t':(['ctas','ban','pla','reg'],'ctas')})
 # --- 5.3 Red y portal
-c3=T('''<section class="isla pan" style="flex:1"><div class="sc" style="flex:1;padding:14px 18px;display:flex;gap:12px">
+ALC=T('<div style="display:flex;gap:8px;align-items:center;flex:0 0 auto"><span class="m2">Ajustes para</span><span class="fc {{a.glob.cls}}" onClick="{{a.glob.ir}}"><i:globo:14>Todas las empresas</span><span class="fc {{a.emp.cls}}" onClick="{{a.emp.ir}}"><i:edif:14>Conecta, S.A.</span><span class="fc"><i:edif:14>Conecta Norte, S.A.</span><span class="m2" style="margin-left:6px">Lo que cambies en una empresa manda sobre «Todas»</span></div>')
+EMPB=lambda: T('<span class="b nf" style="font-size:11px;padding:1px 7px;display:{{a.glob.v}}"><i:edif:11>Cada empresa puede cambiarlo</span><span class="b ne" style="font-size:11px;padding:1px 7px;display:{{a.emp.v}}"><i:globo:11>Usa el de todas</span>')
+GLOB=lambda: T('<span class="b ne" style="font-size:11px;padding:1px 7px"><i:candado:11>Para todas las empresas</span>')
+GLK=lambda h: T('<div style="display:{{a.emp.v}}" class="av2 nf"><i:candado:15><div>Esto es igual para todas las empresas: se cambia en «Todas las empresas».</div></div><div style="display:{{a.glob.v}};flex-direction:column">')+h+'</div>'
+num=lambda v,u,w=110: T('<div class="in" style="width:<<w>>px;padding:7px 10px;justify-content:space-between"><b class="num"><<v>></b><span class="m2"><<u>></span></div>',v=v,u=u,w=w)
+c3=ALC+T('''<section class="isla pan" style="flex:1"><div style="padding:12px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px"><<seg>></div><div class="sc" style="flex:1;padding:14px 18px;display:{{t.cor.v}};gap:12px">
  <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<a>><<b>></div>
  <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<c>><<d>></div>
+</div>
+<div class="sc" style="flex:1;padding:14px 18px;display:{{t.cai.v}};gap:12px">
+ <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<e>></div>
+ <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<f>></div>
+</div>
+<div class="sc" style="flex:1;padding:14px 18px;display:{{t.otr.v}};gap:12px">
+ <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<g>><<h>></div>
+ <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0"><<i>></div>
 </div><div class="pf" style="padding:12px 18px"><span class="m2" style="flex:1"><i:alerta:14> Cambiar la IP o el puerto del portal actualiza las reglas de corte en los 6 routers.</span><button class="btn g">Descartar</button><button class="btn p">Guardar y actualizar routers</button></div></section>''',
  a=cd('Portal de corte · a dónde van los suspendidos','corte',T('<div class="g3"><<f1>><<f2>><<f3>></div>',f1=campo('IPv4 del portal','190.56.12.70'),f2=campo('IPv6 (opcional)','~2001:db8::20'),f3=campo('Puerto','8443'))+T('<div class="lb" style="margin-top:12px">Al suspender un servicio</div><div class="g2"><<o1>><<o2>></div>',o1=op(True,'Mostrar el portal de corte','Ve su deuda y puede pagar'),o2=op(False,'Cortar del todo','Sin navegación ni portal'))),
- b=cd('Cómo se identifica al cliente cortado','id',row('Por su IP','Automático en routers con IP conocida',tgl(True))+row('Con un código','Para redes detrás de NAT: se le da un código de 6 dígitos',tgl(True))+kv('Routers que usan código','MK Torre San Juan · MK Zona 4 <button class="lnk">Cambiar</button>')),
+ b=cd('Cómo se identifica al cliente cortado','id',row('Por su IP','Automático en routers con IP conocida',tgl(True))+row('Con un código','Para redes detrás de NAT: se le da un código de 6 dígitos',tgl(True))+rowx('El código que da el personal vale','Desde la ficha del servicio · de 5 a 60 minutos '+EMPB(),num('15','min'))+kv('Routers que usan código','MK Torre San Juan · MK Zona 4 <button class="lnk">Cambiar</button>')),
  c=cd('Portal del cliente','globo',kv('Dirección','<span class="copy">https://portal.conecta.gt</span>')+row('Contraseña inicial','La que recibe un cliente nuevo','<b>Su número de DPI</b> <button class="lnk">Cambiar</button>')+row('Pago en línea','Con la pasarela configurada',tgl(True))+row('Promesas desde el portal','Según la plantilla del servicio',tgl(True))),
- d=cd('Nodos del portal','serv',kv('portal-1 · Centro',B('ok','En línea'))+kv('portal-2 · Norte',B('ok','En línea'))+T('<div class="m2" style="margin-top:6px">Cada nodo sirve la página de corte cerca de sus routers.</div>'),lnk='Agregar nodo'))
-conf('red','Red y portal','A dónde van los clientes suspendidos y cómo entra cada cliente a su portal','',c3,'OperConfigRed.dc.html','Configuración · Red y portal')
+ d=cd('Nodos del portal','serv',kv('portal-1 · Centro',B('ok','En línea'))+kv('portal-2 · Norte',B('ok','En línea'))+T('<div class="m2" style="margin-top:6px">Cada nodo sirve la página de corte cerca de sus routers.</div>'),lnk='Agregar nodo'),
+ seg=seg('t',[('cor','Portal de corte','corte'),('cai','Caídas y fallas generales','alerta'),('otr','Retiro, historial de IP y acceso','hist')]),
+ e=cd('Caídas repetidas de un servicio','onda',rowx('Avisar las caídas repetidas','Alerta en Conectados › Caídas repetidas y un ticket en Iris, uno por servicio mientras siga abierto '+EMPB(),tgl(True))+rowx('Cuántas caídas','De 2 a 50',num('3','caídas',130))+rowx('En cuánto tiempo','De 5 a 1,440 minutos',num('60','min'))+T('<div class="m2" style="margin-top:6px">De fábrica: 3 caídas en 60 minutos. Si el servicio está en una falla general, no se abre su ticket: va al ticket general.</div>')),
+ f=cd('Falla general','alerta',GLK(rowx('Detectar fallas generales','Muchos servicios del mismo router, OLT, PON o zona caídos a la vez abren un incidente y un solo ticket en Iris '+GLOB(),tgl(True))+rowx('Cómo se mide','',T('<span class="segb"><button class="ts on">Porcentaje</button><button class="ts">Cantidad</button></span>'))+rowx('Umbral','Porcentaje de los servicios del router, OLT, PON o zona',num('30','%'))+rowx('Mínimo de servicios','Aunque el porcentaje se cumpla',num('5','serv.'))+rowx('En cuánto tiempo','De 1 a 60 minutos',num('5','min'))+T('<div class="av2 nf" style="margin-top:8px;padding:8px 12px"><i:info:15><div>Con MK Sur (410 servicios): se abre si se caen <b>123 o más en 5 minutos</b>.</div></div>'))),
+ g=cd('Retiro de servicios','power',GLK(rowx('Pedir a Iris la orden de retiro','Y dejar el equipo en comodato «por recuperar». Al retirar se puede omitir si ya se entregó '+GLOB(),tgl(True)))),
+ h=cd('Quién tenía una IP','net',GLK(rowx('Buscar hasta','Días hacia atrás en Red › Direcciones IP (30 a 3,650) '+GLOB(),num('730','días',130))+T('<div class="m2" style="margin-top:6px">Argos busca en sus propias sesiones. Lo más viejo lo guarda Horus: la búsqueda te lleva allá.</div>'))),
+ i=cd('Acceso al panel','candado',GLK(rowx('Recuperar la contraseña por correo','Muestra «¿La olvidaste?» en el inicio de sesión y manda un enlace de un solo uso '+GLOB(),tgl(True)))))
+
+conf('red','Red y portal','A dónde van los clientes suspendidos, caídas y fallas generales, y otros ajustes de operación','',c3,'OperConfigRed.dc.html','Configuración · Red y portal',{'t':(['cor','cai','otr'],'cor'),'a':(['glob','emp'],'glob')})
 # --- 5.4 Notificaciones y plantillas
 evs=[('Factura emitida','factura.emitida','Aviso de cobro con el PDF',1,1,0,1),('Factura por vencer','recordatorio · 2 días antes','Recordatorio',1,0,0,0),('Factura vencida','factura.vencida','Aviso de mora',1,1,0,0),('Servicio suspendido','servicio.estado_cambiado','Aviso de corte',1,0,1,0),('Pago recibido','pago.registrado','Recibo',1,1,0,0),('Promesa por vencer','recordatorio · 1 día antes','Recordatorio de promesa',1,0,0,0),('Comprobante rechazado','comprobante.rechazado','Motivo y qué hacer',1,0,0,0)]
 canal=lambda i,n,e,k,d: T('<div class="card" style="padding:11px 14px;display:flex;align-items:center;gap:12px;flex:1;min-width:0"><span class="ico <<k>>"><i:<<i>>:19></span><div style="min-width:0;flex:1"><b style="font-size:14px"><<n>></b><div class="m2 el"><<d>></div></div><span class="b <<k>>"><<e>></span></div>',i=i,n=n,e=e,k=k,d=d)
