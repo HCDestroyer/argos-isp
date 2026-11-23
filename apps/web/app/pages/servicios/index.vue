@@ -179,6 +179,9 @@ function alElegirFila(_evento: Event, fila: { original: Servicio }) {
     abrirVista(fila.original)
 }
 
+/** «Más filtros»: abierto si llegó con alguno de esos filtros en la URL. */
+const masFiltrosAbierto = ref(Boolean(route.query.router || route.query.plan || route.query.zona || route.query.cliente || route.query.tipo || route.query.tipo_plan))
+
 const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || estado.value !== TODOS
     || routerId.value !== TODOS
@@ -308,129 +311,148 @@ onMounted(async () => {
                 to="/servicios/nuevo"
                 icon="i-lucide-plus"
                 label="Nuevo servicio"
-                class="glow-brand"
+                size="lg"
+                class="glow-brand rounded-full px-5"
                 :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Nuevo servicio"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <div
-                class="flex flex-wrap gap-2"
-                role="group"
-                aria-label="Accesos rápidos por estado"
-            >
-                <UButton
-                    v-for="acceso in accesos"
-                    :key="acceso.etiqueta"
-                    :label="acceso.etiqueta"
-                    :color="acceso.color"
-                    :variant="accesoActivo(acceso) ? 'solid' : 'outline'"
-                    :aria-pressed="accesoActivo(acceso)"
-                    size="sm"
-                    class="rounded-full"
-                    @click="elegirAcceso(acceso)"
-                />
-            </div>
-
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-                <UInput
-                    v-model="busqueda"
-                    icon="i-lucide-search"
-                    placeholder="Usuario PPP, IP o nombre del cliente"
-                    aria-label="Buscar servicios"
-                    class="w-full sm:col-span-2 lg:col-span-1"
-                    :loading="lista.cargando.value"
-                >
-                    <template
-                        v-if="busqueda"
-                        #trailing
+        <div class="surface-card flex min-w-0 flex-col overflow-hidden rounded-2xl">
+            <!-- Tarjeta de la lista (sistema visual): buscador, accesos por estado y «Más filtros» dentro. -->
+            <div class="flex flex-col gap-3 p-3 sm:p-4">
+                <div class="flex flex-wrap items-center gap-2">
+                    <UInput
+                        v-model="busqueda"
+                        icon="i-lucide-search"
+                        placeholder="Usuario PPP, IP o nombre del cliente"
+                        aria-label="Buscar servicios"
+                        class="w-full sm:w-80"
+                        :ui="{ base: 'rounded-full' }"
+                        :loading="lista.cargando.value"
+                    >
+                        <template
+                            v-if="busqueda"
+                            #trailing
+                        >
+                            <UButton
+                                icon="i-lucide-x"
+                                color="neutral"
+                                variant="link"
+                                size="sm"
+                                aria-label="Borrar búsqueda"
+                                @click="busqueda = ''"
+                            />
+                        </template>
+                    </UInput>
+                    <div
+                        class="flex flex-wrap gap-1.5"
+                        role="group"
+                        aria-label="Accesos rápidos por estado"
                     >
                         <UButton
-                            icon="i-lucide-x"
-                            color="neutral"
-                            variant="link"
+                            v-for="acceso in accesos"
+                            :key="acceso.etiqueta"
+                            :label="acceso.etiqueta"
+                            :color="accesoActivo(acceso) ? 'primary' : 'neutral'"
+                            :variant="accesoActivo(acceso) ? 'solid' : 'outline'"
+                            :aria-pressed="accesoActivo(acceso)"
                             size="sm"
-                            aria-label="Borrar búsqueda"
-                            @click="busqueda = ''"
+                            class="rounded-full"
+                            @click="elegirAcceso(acceso)"
                         />
-                    </template>
-                </UInput>
+                        <UButton
+                            icon="i-lucide-filter"
+                            label="Más filtros"
+                            color="neutral"
+                            :variant="masFiltrosAbierto ? 'subtle' : 'outline'"
+                            :aria-expanded="masFiltrosAbierto"
+                            aria-controls="filtros-servicios"
+                            size="sm"
+                            class="rounded-full"
+                            data-prueba="mas-filtros"
+                            @click="masFiltrosAbierto = !masFiltrosAbierto"
+                        />
+                        <UButton
+                            v-if="hayFiltros"
+                            label="Limpiar"
+                            icon="i-lucide-filter-x"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            @click="limpiarFiltros"
+                        />
+                    </div>
+                </div>
 
-                <USelect
-                    v-model="estado"
-                    :items="itemsEstado"
-                    icon="i-lucide-activity"
-                    aria-label="Filtrar por estado"
-                    class="w-full"
-                />
-
-                <USelect
-                    v-if="verRouters"
-                    v-model="routerId"
-                    :items="itemsRouter"
-                    icon="i-lucide-router"
-                    aria-label="Filtrar por router"
-                    class="w-full"
-                />
-
-                <USelect
-                    v-if="verPlanes"
-                    v-model="planId"
-                    :items="itemsPlan"
-                    icon="i-lucide-gauge"
-                    aria-label="Filtrar por plan"
-                    class="w-full"
-                />
-            </div>
-
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <ClienteSelector
-                    v-model="clienteId"
-                    :seleccionado="clienteElegido"
-                    placeholder="Filtrar por cliente: nombre, NIT o teléfono"
-                    aria-label="Filtrar por cliente"
-                    class="w-full sm:max-w-md"
-                    @elegido="clienteElegido = $event"
-                />
-                <USelect
-                    v-if="verZonas"
-                    v-model="zonaId"
-                    :items="itemsZona"
-                    icon="i-lucide-map-pin"
-                    aria-label="Filtrar por zona"
-                    class="w-full sm:w-52"
-                />
-                <USelect
-                    v-model="tipo"
-                    :items="itemsTipo"
-                    icon="i-lucide-cable"
-                    aria-label="Filtrar por tipo de conexión"
-                    class="w-full sm:w-48"
-                    data-prueba="filtro-tipo"
-                />
-                <USelect
-                    v-model="tipoPlan"
-                    :items="itemsTipoPlan"
-                    icon="i-lucide-tag"
-                    aria-label="Filtrar por tipo de plan"
-                    class="w-full sm:w-48"
-                    data-prueba="filtro-tipo-plan"
-                />
-                <USwitch
-                    v-model="conDeuda"
-                    label="Con deuda vencida"
-                    class="shrink-0"
-                />
-                <UButton
-                    v-if="hayFiltros"
-                    label="Limpiar filtros"
-                    icon="i-lucide-filter-x"
-                    color="neutral"
-                    variant="ghost"
-                    class="self-start sm:self-auto"
-                    @click="limpiarFiltros"
-                />
+                <div
+                    v-show="masFiltrosAbierto"
+                    id="filtros-servicios"
+                    class="grid gap-3 rounded-xl bg-(--ax-panel) p-3 sm:grid-cols-2 lg:grid-cols-4"
+                    role="group"
+                    aria-label="Filtros de servicios"
+                >
+                    <USelect
+                        v-model="estado"
+                        :items="itemsEstado"
+                        icon="i-lucide-activity"
+                        aria-label="Filtrar por estado"
+                        class="w-full"
+                    />
+                    <USelect
+                        v-if="verRouters"
+                        v-model="routerId"
+                        :items="itemsRouter"
+                        icon="i-lucide-router"
+                        aria-label="Filtrar por router"
+                        class="w-full"
+                    />
+                    <USelect
+                        v-if="verPlanes"
+                        v-model="planId"
+                        :items="itemsPlan"
+                        icon="i-lucide-gauge"
+                        aria-label="Filtrar por plan"
+                        class="w-full"
+                    />
+                    <USelect
+                        v-if="verZonas"
+                        v-model="zonaId"
+                        :items="itemsZona"
+                        icon="i-lucide-map-pin"
+                        aria-label="Filtrar por zona"
+                        class="w-full"
+                    />
+                    <ClienteSelector
+                        v-model="clienteId"
+                        :seleccionado="clienteElegido"
+                        placeholder="Filtrar por cliente: nombre, NIT o teléfono"
+                        aria-label="Filtrar por cliente"
+                        class="w-full sm:col-span-2"
+                        @elegido="clienteElegido = $event"
+                    />
+                    <USelect
+                        v-model="tipo"
+                        :items="itemsTipo"
+                        icon="i-lucide-cable"
+                        aria-label="Filtrar por tipo de conexión"
+                        class="w-full"
+                        data-prueba="filtro-tipo"
+                    />
+                    <USelect
+                        v-model="tipoPlan"
+                        :items="itemsTipoPlan"
+                        icon="i-lucide-tag"
+                        aria-label="Filtrar por tipo de plan"
+                        class="w-full"
+                        data-prueba="filtro-tipo-plan"
+                    />
+                    <USwitch
+                        v-model="conDeuda"
+                        label="Con deuda vencida"
+                        class="sm:col-span-2 lg:col-span-4"
+                    />
+                </div>
             </div>
 
             <ProblemaAlerta
@@ -438,6 +460,7 @@ onMounted(async () => {
                 :problema="lista.problema.value"
                 :reintentar="lista.recargar"
                 :reintentando="lista.cargando.value"
+                class="mx-3 mb-3 sm:mx-4"
             />
 
             <template v-else>
@@ -449,7 +472,7 @@ onMounted(async () => {
                 />
                 <p
                     v-else-if="seguridad.pausa.value"
-                    class="flex items-center gap-1.5 text-sm text-muted"
+                    class="flex items-center gap-1.5 px-3 pb-2 text-sm text-muted sm:px-4"
                     data-prueba="seguridad-pausa"
                 >
                     <UIcon
@@ -465,7 +488,7 @@ onMounted(async () => {
                         :columns="columnas"
                         :loading="lista.cargando.value"
                         sticky
-                        class="flex-1"
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
                         data-menu-contextual
                         @select="alElegirFila"
                         @contextmenu="menuFila.alContextmenu"
@@ -582,20 +605,22 @@ onMounted(async () => {
 
                 <p
                     v-if="ocultosRetirados"
-                    class="text-xs text-muted"
+                    class="px-3 pt-2 text-xs text-muted sm:px-4"
                     data-prueba="retirados-ocultos"
                 >
                     {{ ocultosRetirados === 1 ? '1 servicio retirado de esta página' : `${ocultosRetirados} servicios retirados de esta página` }} no se muestra{{ ocultosRetirados === 1 ? '' : 'n' }}: están en «Retirados».
                 </p>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="filasVisibles.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-3 py-2 sm:px-4">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="filasVisibles.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
         </div>
         <ServicioVistaRapida

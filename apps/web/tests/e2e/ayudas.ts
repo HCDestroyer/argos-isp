@@ -120,7 +120,7 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
     }
 }
 
-/** Abre una pestaña de la ficha del router («Control de velocidad», «Pools e IPs», «Conexión»…). */
+/** Abre una pestaña de la ficha del router («Resumen», «Conexión», «Red e IPs», «Velocidad»…). */
 export async function pestanaRouter(page: Page, nombre: string): Promise<void> {
     await page.locator('[data-prueba="pestanas-router"]').getByRole('tab', { name: nombre }).click()
 }
@@ -161,6 +161,100 @@ export async function verDatosCliente(page: Page): Promise<void> {
     }
     await accionCliente(page, 'Ver datos del cliente')
     await expect(datos).toBeVisible()
+}
+
+/** Datos del alta de un router en «Conectar router» (`/routers/nuevo`, 4 pasos). */
+export interface AltaRouter {
+    nombre: string
+    host: string
+    /** Con acceso directo (usuario y clave de la API escritos a mano). */
+    apiUsuario?: string
+    apiClave?: string
+    /** «Sin RADIUS». */
+    sinRadius?: boolean
+    nas?: string
+    corte?: 'codigo' | 'ip'
+    /** Por túnel (el script) en vez de acceso directo. */
+    tunel?: boolean
+}
+
+/**
+ * Conectar router (tablero RedRouterNuevo): llena «Equipo» y «Cómo trabaja» y pulsa crear. No
+ * espera a la ficha: la prueba decide (un 409 se queda en el paso 2).
+ */
+export async function conectarRouter(page: Page, datos: AltaRouter): Promise<Locator> {
+    await page.goto('/routers/nuevo')
+    const pagina = page.locator('[data-prueba="conectar-router"]')
+    await expect(pagina).toBeVisible({ timeout: 30_000 })
+    await pagina.locator('[data-prueba="router-nombre"] input, input[data-prueba="router-nombre"]').first().fill(datos.nombre)
+    if (!datos.tunel) {
+        await pagina.locator('[data-prueba="via-conexion"]').getByRole('radio', { name: /Ya tengo acceso directo/ }).click()
+    }
+    await pagina.locator('[data-prueba="router-host"] input, input[data-prueba="router-host"]').first().fill(datos.host)
+    if (datos.apiUsuario) {
+        await pagina.getByLabel('Usuario de la API').fill(datos.apiUsuario)
+        await pagina.getByLabel('Contraseña de la API').fill(datos.apiClave ?? '')
+    }
+    await pagina.locator('[data-prueba="seguir-router"]').click()
+    await expect(pagina.locator('[data-prueba="paso-como-trabaja"]')).toBeVisible()
+    if (datos.sinRadius) {
+        await pagina.locator('[data-prueba="modo-seguridad"]').getByRole('radio', { name: /Sin RADIUS/ }).click()
+    }
+    if (datos.nas) {
+        await pagina.locator('[data-prueba="router-nas"] input, input[data-prueba="router-nas"]').first().fill(datos.nas)
+    }
+    if (datos.corte) {
+        await pagina.locator('[data-prueba="corte-identificacion"]').getByRole('radio', { name: datos.corte === 'codigo' ? /^Por código/ : /^Por IP/ }).click()
+    }
+    await pagina.locator('[data-prueba="seguir-router"]').click()
+    return pagina
+}
+
+/** Tras crear: «Seguir sin esperar» / «Ir a la ficha del router» lleva a la ficha. */
+export async function irAFichaDesdeAlta(page: Page, pagina: Locator): Promise<void> {
+    await expect(pagina.locator('[data-prueba="paso-verificar"]')).toBeVisible({ timeout: 20_000 })
+    await pagina.locator('[data-prueba="seguir-router"]').click()
+    await expect(page).toHaveURL(/\/routers\/\d+$/)
+}
+
+/**
+ * Ficha del servicio (tablero OperServicioFicha): las acciones van en una fila, la principal a la
+ * vista y el resto en «Más». Pulsa la acción por su nombre donde esté.
+ */
+export async function accionServicio(page: Page, nombre: string | RegExp): Promise<void> {
+    const fila = page.locator('[data-prueba="acciones-servicio"]')
+    await expect(fila).toBeVisible({ timeout: 30_000 })
+    const directo = fila.getByRole('button', { name: nombre, exact: typeof nombre === 'string' })
+    if (await directo.count() && await directo.first().isVisible()) {
+        await directo.first().click()
+        return
+    }
+    const mas = page.locator('[data-prueba="mas-acciones-servicio"]:visible').or(page.locator('[data-prueba="barra-telefono"]').getByRole('button', { name: 'Más acciones del servicio' }))
+    await mas.first().click()
+    await page.getByRole('menuitem', { name: nombre }).click()
+}
+
+/** ¿La acción está disponible en la ficha del servicio (a la vista o en «Más»)? */
+export async function hayAccionServicio(page: Page, nombre: string | RegExp): Promise<boolean> {
+    const fila = page.locator('[data-prueba="acciones-servicio"]')
+    await expect(fila).toBeVisible({ timeout: 30_000 })
+    const directo = fila.getByRole('button', { name: nombre, exact: typeof nombre === 'string' })
+    if (await directo.count() && await directo.first().isVisible()) {
+        return true
+    }
+    const mas = page.locator('[data-prueba="mas-acciones-servicio"]:visible').or(page.locator('[data-prueba="barra-telefono"]').getByRole('button', { name: 'Más acciones del servicio' }))
+    if (!await mas.count()) {
+        return false
+    }
+    await mas.first().click()
+    const hay = await page.getByRole('menuitem', { name: nombre }).count() > 0
+    await page.keyboard.press('Escape')
+    return hay
+}
+
+/** Ficha del servicio: abre una pestaña (Resumen, Red y equipo, Facturas, Contactos, Bitácora, Portal de corte). */
+export async function pestanaServicio(page: Page, nombre: string): Promise<void> {
+    await page.locator('[data-prueba="pestanas-servicio"]').getByRole('tab', { name: nombre }).click()
 }
 
 /**

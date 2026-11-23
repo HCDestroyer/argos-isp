@@ -5,7 +5,6 @@ import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import RoutersDuplicadosAviso from '~/components/RoutersDuplicadosAviso.vue'
-import RouterAltaModal from '~/components/RouterAltaModal.vue'
 import { esperar } from '../ayudas/esperar'
 
 function enBody(prueba: string): HTMLElement | null {
@@ -227,29 +226,5 @@ describe('routers duplicados y unión', () => {
         await esperar(() => expect(wrapper.find('[data-prueba="grupo-duplicados-0"]').exists()).toBe(true))
         expect(wrapper.find('[data-prueba="unir-grupo-0"]').exists()).toBe(false)
         expect(wrapper.text()).toContain('Pide a un administrador')
-    })
-
-    it('el alta muestra el 409 con qué router es y qué hacer', async () => {
-        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterAltaModal, { open: true }) }) })
-        await mountSuspended(conApp)
-        await esperar(() => expect(enBody('router-nombre')).not.toBeNull())
-        const escribir = (prueba: string, valor: string) => {
-            const input = enBody(prueba)?.querySelector('input') ?? enBody(prueba)
-            if (input instanceof HTMLInputElement) {
-                input.value = valor
-                input.dispatchEvent(new Event('input'))
-            }
-        }
-        escribir('router-nombre', 'RB-Centro otra vez')
-        escribir('router-host', '10.10.0.1')
-        escribir('router-nas', '10.10.0.3')
-        enBody('router-corte-identificacion')?.querySelector<HTMLElement>('[role="radio"][value="ip"]')?.click()
-        clic('router-guardar')
-        await esperar(() => expect(enBody('router-duplicado')).not.toBeNull())
-        const texto = enBody('router-duplicado')?.textContent ?? ''
-        expect(texto).toContain('Ese MikroTik ya está registrado')
-        expect(texto).toContain('«RB-Centro» (router 1)')
-        expect(texto).toContain('únelos desde Routers')
-        expect(bd.routers).toHaveLength(4)
     })
 })

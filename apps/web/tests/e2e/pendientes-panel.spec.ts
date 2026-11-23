@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, ir, pestanaRouter } from './ayudas'
+import { conectarRouter, entrar, ir, irAFichaDesdeAlta, pestanaRouter } from './ayudas'
 
 /**
  * Pantallas pendientes de la prioridad 2 (modo fixtures, escritorio y teléfono): plantillas de
@@ -61,17 +61,10 @@ test('plan temporal: programar una mejora y cancelarla', async ({ page }) => {
 
 test('router nuevo con red IPv4, bloque y pool IPv6; plan implementado en él', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await page.goto('/routers')
-    await page.locator('[data-prueba="nuevo-router"]').click()
-    const alta = page.getByRole('dialog', { name: 'Nuevo router' })
-    await campo(alta, 'router-nombre').fill('RB-Norte')
-    await campo(alta, 'router-host').fill('10.40.0.1')
-    await campo(alta, 'router-nas').fill('10.40.0.1')
-    await alta.getByRole('radio', { name: /^Por IP/ }).click()
-    await alta.locator('[data-prueba="router-guardar"]').click()
-    await expect(page).toHaveURL(/\/routers\/\d+$/)
+    const alta = await conectarRouter(page, { nombre: 'RB-Norte', host: '10.40.0.1', nas: '10.40.0.1', corte: 'ip' })
+    await irAFichaDesdeAlta(page, alta)
     const routerId = page.url().split('/').pop()
-    await pestanaRouter(page, 'Pools e IPs')
+    await pestanaRouter(page, 'Red e IPs')
 
     const direccionamiento = page.locator('[data-prueba="router-direccionamiento"]')
     await direccionamiento.locator('[data-prueba="agregar-red"]').click()

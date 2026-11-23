@@ -8,6 +8,7 @@ import PaginaBonificacion from '~/pages/bonificaciones/[id].vue'
 import PaginaBonificaciones from '~/pages/bonificaciones/index.vue'
 import PaginaReporte from '~/pages/reportes/[reporte].vue'
 import PaginaServicio from '~/pages/servicios/[id]/index.vue'
+import { opcionesMasServicio } from '../ayudas/fichaServicio'
 
 /**
  * Bonificaciones (A3, `a3/decisiones-pm`): nunca una factura de Q0. Un periodo regalado o un cargo
@@ -118,10 +119,10 @@ describe('bonificaciones', () => {
     })
 
     it('ficha del servicio y estado de cuenta: muestran los periodos bonificados', async () => {
-        const servicio = await mountSuspended(PaginaServicio, { route: '/servicios/5' })
+        const servicio = await mountSuspended(PaginaServicio, { route: '/servicios/5?pestana=facturas' })
         await vi.waitFor(() => expect(servicio.find('[data-prueba="periodos-bonificados"] [data-bonificacion="1"]').exists()).toBe(true))
         expect(servicio.find('[data-prueba="periodos-bonificados"]').text()).toContain('agosto 2026')
-        expect(servicio.find('[data-prueba="abrir-cargo-unico"]').exists()).toBe(true)
+        expect(await opcionesMasServicio(servicio)).toContain('Cargo único')
         servicio.unmount()
 
         const cuenta = await mountSuspended(ClienteEstadoCuenta, { props: { clienteId: 6 } })

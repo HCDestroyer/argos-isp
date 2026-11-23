@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { accionCliente, elegirRouter, entrar, ir, pestanaRouter } from './ayudas'
+import { accionCliente, accionServicio, elegirRouter, entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Eliminar sin historial y las vistas «Retirados» / «Inactivos» (`contratos/eliminar.md`), en
@@ -18,7 +18,7 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
     await expect(tabla.getByRole('link', { name: 'RB-Centro', exact: true })).toHaveCount(0)
     await tabla.getByRole('link', { name: /RB-Bodega/ }).click()
     await expect(page).toHaveURL(/\/routers\/3$/)
-    await pestanaRouter(page, 'Avanzado')
+    await pestanaRouter(page, 'Conexión')
 
     await page.locator('[data-prueba="eliminar-router"]').click()
     const modal = page.getByRole('dialog', { name: /Eliminar RB-Bodega/ })
@@ -31,7 +31,7 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
 
     await tabla.getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
-    await pestanaRouter(page, 'Avanzado')
+    await pestanaRouter(page, 'Conexión')
     await expect(page.locator('[data-prueba="no-eliminable"]')).toContainText('No se puede eliminar: tiene 23 servicios y 41 sesiones PPPoE. Puedes desactivarlo.')
     await expect(page.locator('[data-prueba="eliminar-router"]')).toHaveCount(0)
     await page.locator('[data-prueba="cambiar-activo-router"]').click()
@@ -82,7 +82,7 @@ test('servicio: «Retirados» aparte, el motivo de no eliminar y eliminar uno re
     await page.getByRole('link', { name: /^mario\./ }).click()
     await expect(page).toHaveURL(/\/servicios\/\d+$/)
 
-    await page.locator('[data-prueba="eliminar-servicio"]').click()
+    await accionServicio(page, 'Eliminar')
     const modal = page.getByRole('dialog', { name: /Eliminar mario\./ })
     await expect(modal.locator('[data-prueba="eliminar-libera"]')).toContainText('IPv4')
     await modal.getByRole('checkbox', { name: 'Entiendo que no se puede deshacer' }).click()

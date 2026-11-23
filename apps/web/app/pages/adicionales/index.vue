@@ -114,6 +114,7 @@ onMounted(() => void lista.recargar())
         <template #acciones>
             <UButton
                 v-if="puede('adicionales.crear')"
+                class="rounded-full"
                 label="Nuevo adicional"
                 icon="i-lucide-plus"
                 :ui="{ label: 'hidden sm:inline' }"
@@ -162,84 +163,86 @@ onMounted(() => void lista.recargar())
                 :reintentando="lista.cargando.value"
             />
             <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    :ui="{ td: 'py-2.5' }"
-                    data-prueba="tabla-adicionales"
-                >
-                    <template #nombre-cell="{ row }">
-                        <div class="flex min-w-0 flex-col gap-0.5">
-                            <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                {{ row.original.nombre }}
-                                <UBadge
-                                    v-if="!row.original.activo"
-                                    label="Desactivado"
+                <div class="surface-card overflow-hidden rounded-2xl">
+                    <UTable
+                        :data="lista.filas.value"
+                        :columns="columnas"
+                        :loading="lista.cargando.value"
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5' }"
+                        data-prueba="tabla-adicionales"
+                    >
+                        <template #nombre-cell="{ row }">
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
+                                    {{ row.original.nombre }}
+                                    <UBadge
+                                        v-if="!row.original.activo"
+                                        label="Desactivado"
+                                        color="neutral"
+                                        variant="subtle"
+                                        size="sm"
+                                        class="sm:hidden"
+                                    />
+                                </span>
+                                <span class="font-mono text-xs text-muted">{{ row.original.codigo }}</span>
+                                <span
+                                    v-if="row.original.descripcion"
+                                    class="text-xs text-muted"
+                                >{{ row.original.descripcion }}</span>
+                                <span
+                                    v-if="row.original.precio_sugerido"
+                                    class="text-xs text-muted sm:hidden"
+                                >Sugerido {{ formatearQuetzales(row.original.precio_sugerido) }}</span>
+                            </div>
+                        </template>
+                        <template #empresa_id-cell="{ row }">
+                            <span class="text-sm">{{ nombreEmpresa(row.original.empresa_id) }}</span>
+                        </template>
+                        <template #precio_sugerido-cell="{ row }">
+                            <span class="whitespace-nowrap tabular-nums">{{ row.original.precio_sugerido ? formatearQuetzales(row.original.precio_sugerido) : '—' }}</span>
+                        </template>
+                        <template #activo-cell="{ row }">
+                            <UBadge
+                                :label="row.original.activo ? 'Activo' : 'Desactivado'"
+                                :icon="row.original.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-off'"
+                                :color="row.original.activo ? 'success' : 'neutral'"
+                                variant="subtle"
+                                size="sm"
+                            />
+                        </template>
+                        <template #acciones-cell="{ row }">
+                            <div class="flex justify-end gap-1">
+                                <UButton
+                                    v-if="puede('adicionales.editar')"
+                                    icon="i-lucide-pencil"
                                     color="neutral"
-                                    variant="subtle"
+                                    variant="ghost"
                                     size="sm"
-                                    class="sm:hidden"
+                                    :aria-label="`Editar ${row.original.nombre}`"
+                                    :data-prueba="`editar-adicional-${row.original.id}`"
+                                    @click="abrir(row.original)"
                                 />
-                            </span>
-                            <span class="font-mono text-xs text-muted">{{ row.original.codigo }}</span>
-                            <span
-                                v-if="row.original.descripcion"
-                                class="text-xs text-muted"
-                            >{{ row.original.descripcion }}</span>
-                            <span
-                                v-if="row.original.precio_sugerido"
-                                class="text-xs text-muted sm:hidden"
-                            >Sugerido {{ formatearQuetzales(row.original.precio_sugerido) }}</span>
-                        </div>
-                    </template>
-                    <template #empresa_id-cell="{ row }">
-                        <span class="text-sm">{{ nombreEmpresa(row.original.empresa_id) }}</span>
-                    </template>
-                    <template #precio_sugerido-cell="{ row }">
-                        <span class="whitespace-nowrap tabular-nums">{{ row.original.precio_sugerido ? formatearQuetzales(row.original.precio_sugerido) : '—' }}</span>
-                    </template>
-                    <template #activo-cell="{ row }">
-                        <UBadge
-                            :label="row.original.activo ? 'Activo' : 'Desactivado'"
-                            :icon="row.original.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-off'"
-                            :color="row.original.activo ? 'success' : 'neutral'"
-                            variant="subtle"
-                            size="sm"
-                        />
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <div class="flex justify-end gap-1">
-                            <UButton
-                                v-if="puede('adicionales.editar')"
-                                icon="i-lucide-pencil"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Editar ${row.original.nombre}`"
-                                :data-prueba="`editar-adicional-${row.original.id}`"
-                                @click="abrir(row.original)"
+                                <UButton
+                                    v-if="puede('adicionales.desactivar') && row.original.activo"
+                                    icon="i-lucide-ban"
+                                    color="error"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Desactivar ${row.original.nombre}`"
+                                    :data-prueba="`desactivar-adicional-${row.original.id}`"
+                                    @click="pedirDesactivar(row.original)"
+                                />
+                            </div>
+                        </template>
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-package-plus"
+                                :title="busqueda || activo !== 'activos' ? 'Ningún adicional con esos filtros' : 'Todavía no hay adicionales'"
+                                variant="naked"
                             />
-                            <UButton
-                                v-if="puede('adicionales.desactivar') && row.original.activo"
-                                icon="i-lucide-ban"
-                                color="error"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Desactivar ${row.original.nombre}`"
-                                :data-prueba="`desactivar-adicional-${row.original.id}`"
-                                @click="pedirDesactivar(row.original)"
-                            />
-                        </div>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-package-plus"
-                            :title="busqueda || activo !== 'activos' ? 'Ningún adicional con esos filtros' : 'Todavía no hay adicionales'"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                        </template>
+                    </UTable>
+                </div>
 
                 <PaginacionCursor
                     :pagina="lista.pagina.value"
