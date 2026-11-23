@@ -46,3 +46,18 @@ Permisos `sistema.ver_almacenamiento` y `sistema.recalcular_almacenamiento` (adm
 | `RecalcularAlmacenamiento` | `sistema.recalcular_almacenamiento` | —       |
 
 Pruebas: `tests/monitoreo/salud.spec.ts`, `registro.spec.ts`, `almacenamiento.spec.ts`.
+
+## Tareas programadas · `GET /api/v1/sistema/crons` (`crons/`)
+
+Pantalla «Tareas programadas» del panel (`/sistema/tareas`, tablero `SistemaCrons.dc.html`). Permisos `sistema.ver_crons` y `sistema.ejecutar_cron` (admin).
+
+- **Catálogo único** (`crons/catalogo.ts`): cada cron con clave, nombre en español, módulo, horario (cada N, diario o mensual a una hora de Guatemala, o continuo), qué hace, proceso que lo corre, cola y job de BullMQ, lock, si se ejecuta a mano y con qué permisos. Los módulos siguen agendando sus crons donde siempre; `tests/monitoreo/crons_catalogo.spec.ts` falla si un archivo nuevo agenda un cron (`upsertJobScheduler`, `setInterval` o una vuelta `while (activo)` en un worker) o si un job scheduler agendado no está en el catálogo con el mismo horario.
+- **Corridas** (`crons/corridas.ts`, tabla `core.cron_corridas`): los workers de billing, core, fiscal, routeros, sesiones y notify envuelven su job con `correrJobCron(cola, job, trabajo)`. Fila `en_curso` al empezar (instancia `ARGOSISP_INSTANCIA` o `host:pid`, usuario si vino de «Ejecutar ahora»), y al terminar `ok`, `sin_cambios`, `error` u `omitido` con resumen («24 facturas emitidas», `crons/resumen.ts`). Corridas programadas seguidas sin cambios se agrupan (`repeticiones`). 90 días de retención. **No es `audit.*`**: una corrida tiene inicio y fin (se actualiza) y las corridas sin cambios de los crons de alta frecuencia no deben crecer la bitácora (excepciones de CLAUDE.md §9); lo que hizo cada corrida sigue auditado por sus acciones. Un fallo al anotar nunca rompe el cron.
+- **Estado** (`crons/estado.ts`): última corrida (o, antes de esta versión, la última fila de `audit.acciones` con canal `cron`), próxima (`getJobSchedulers` de BullMQ; si Redis no responde, calculada del horario y aviso), atraso con la regla de `notificaciones.vigilar_crons` (`evaluarAtraso`, `NOTIFY_CRON_TOLERANCIA_MIN`), y quién tiene el lock sin tomarlo (`crons/locks.ts`: `pg_locks` para los advisory locks, la clave de Redis del relay y del vigía, o el job activo). Una fila `en_curso` sin dueño vivo sale como error «se interrumpió».
+- **Ejecutar ahora** (`actions/ejecutar_cron.ts`, `sistema.ejecutar_cron`): encola el job en la cola de su módulo (`jobId` `manual-<clave>`, `origen: manual`); lo corre el worker de ese módulo con su lock (varias instancias: una sola lo corre). 202 encolada; 409 `en_curso` si el lock está tomado, hay corrida viva o ya hay una manual esperando; 422 `no_manual` y `cron_apagado`; 403 si faltan los permisos propios del cron. Acepta `Idempotency-Key`.
+
+| Acción         | Permiso                 | Eventos |
+| -------------- | ----------------------- | ------- |
+| `EjecutarCron` | `sistema.ejecutar_cron` | —       |
+
+Pruebas: `tests/monitoreo/crons.spec.ts`, `crons_catalogo.spec.ts`.

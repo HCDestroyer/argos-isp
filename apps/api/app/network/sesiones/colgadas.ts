@@ -4,6 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { contextoSistema } from '#shared/contexto'
 import CerrarSesionesColgadas from '#network/sesiones/actions/cerrar_sesiones_colgadas'
+import { correrJobCron } from '#monitoreo/crons/corridas'
 
 /**
  * Cron de sesiones colgadas (`node ace sesiones:worker`, cola `sesiones-cron`, job
@@ -121,7 +122,8 @@ export function crearWorkerCronSesiones(opciones: { prefijo?: string } = {}) {
         NOMBRE_COLA_SESIONES_CRON,
         async (job) => {
             if (job.name !== JOB_CERRAR_COLGADAS) throw new Error(`Cron de sesiones desconocido: ${job.name}`)
-            return ejecutarCierreColgadas()
+            // corrida anotada en «Tareas programadas» (`core.cron_corridas`)
+            return correrJobCron(NOMBRE_COLA_SESIONES_CRON, job, () => ejecutarCierreColgadas())
         },
         { connection: conexion(), prefix: prefijo(opciones.prefijo), concurrency: 1 },
     )
