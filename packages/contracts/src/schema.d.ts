@@ -4161,6 +4161,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidentes-red/{incidenteId}/afectados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Servicios afectados por el incidente, con cliente, plan y conexión (tablero)
+         * @description Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). `total` cuenta con el mismo filtro que las filas. 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).
+         */
+        get: operations["incidentesRedAfectados"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidentes-red/{incidenteId}/cerrar": {
         parameters: {
             query?: never;
@@ -10500,7 +10520,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Promociones de velocidad (decisión del PM 18) */
+        /**
+         * Promociones de velocidad (decisión del PM 18)
+         * @description Por cursor (`id` descendente). `vigencia` filtra por pestaña: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), `terminada` (fin ≤ ahora), las tres solo activas, o `cancelada`; `inicio` y `fin` son instantes y se comparan en UTC. Cada fila trae `vigencia`, `tramo_actual` y `proximo_tramo` (la franja diaria en hora de Guatemala). `conteos` trae las cuatro pestañas con los mismos filtros de empresa y `q`, sin `estado` ni `vigencia`.
+         */
         get: operations["promocionesVelocidadListar"];
         put?: never;
         /**
@@ -20872,6 +20895,12 @@ export interface components {
                 }[];
             }[];
         };
+        PaginaAfectadosIncidente: {
+            data: components["schemas"]["ServicioAfectadoIncidente"][];
+            nextCursor: string | null;
+            /** @description Afectados con el mismo filtro que las filas (empresa activa y alcance del usuario) */
+            total: number;
+        };
         PaginaCanjesLealtad: {
             data: components["schemas"]["CanjeLealtad"][];
             nextCursor: string | null;
@@ -20888,6 +20917,17 @@ export interface components {
         PaginaPremiosLealtad: {
             data: components["schemas"]["PremioLealtad"][];
             nextCursor: string | null;
+        };
+        PaginaPromocionesVelocidad: {
+            data: components["schemas"]["PromocionVelocidad"][];
+            nextCursor: string | null;
+            /** @description Promociones por pestaña con los mismos filtros de empresa y `q` (sin `estado` ni `vigencia`) */
+            conteos: {
+                vigente: number;
+                programada: number;
+                terminada: number;
+                cancelada: number;
+            };
         };
         PaginaReferidosLealtad: {
             data: components["schemas"]["ReferidoLealtad"][];
@@ -22756,6 +22796,25 @@ export interface components {
             precio: components["schemas"]["Dinero"] | null;
             /** @enum {string} */
             estado: "activa" | "cancelada";
+            /**
+             * @description Pestaña del tablero, con `inicio` y `fin` comparados con ahora (UTC)
+             * @enum {string}
+             */
+            vigencia: "vigente" | "programada" | "terminada" | "cancelada";
+            /** @description Tramo en curso según el horario (hora de Guatemala); null fuera de horario */
+            tramo_actual: {
+                /** Format: date-time */
+                inicio: string;
+                /** Format: date-time */
+                fin: string;
+            } | null;
+            /** @description Siguiente tramo que empieza después de ahora; null si no hay otro */
+            proximo_tramo: {
+                /** Format: date-time */
+                inicio: string;
+                /** Format: date-time */
+                fin: string;
+            } | null;
             motivo_cancelacion: string | null;
             /** Format: date-time */
             cancelada_en: string | null;
@@ -25050,6 +25109,32 @@ export interface components {
             updated_at: string;
             /** @description Solo al crear o editar: advertencias del tipo de plan (nunca bloquean) */
             warnings?: components["schemas"]["Advertencia"][];
+        };
+        ServicioAfectadoIncidente: {
+            servicio_id: number;
+            /** @description S-000412 */
+            codigo: string;
+            nombre: string | null;
+            estado: components["schemas"]["EstadoServicio"];
+            empresa_id: number;
+            empresa_nombre: string;
+            cliente_id: number;
+            cliente_nombre: string;
+            plan_id: number | null;
+            plan_nombre: string | null;
+            router_id: number | null;
+            /** @description Tiene una sesión abierta ahora */
+            conectado: boolean;
+            /**
+             * Format: date-time
+             * @description Inicio de la sesión abierta («Volvió 06:01»)
+             */
+            conectado_desde: string | null;
+            /**
+             * Format: date-time
+             * @description Fin de su última sesión si no está conectado («Caído desde 05:12»); null sin sesiones
+             */
+            desconectado_desde: string | null;
         };
         ServicioEvaluado: {
             servicio_id: number;
@@ -44210,6 +44295,71 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    incidentesRedAfectados: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path: {
+                incidenteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de afectados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaAfectadosIncidente"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso incidentes_red.leer */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -67718,6 +67868,10 @@ export interface operations {
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
                 estado?: "activa" | "cancelada";
+                /** @description Pestaña del tablero: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), `terminada` (fin ≤ ahora) o `cancelada`; las tres primeras solo de las activas */
+                vigencia?: "vigente" | "programada" | "terminada" | "cancelada";
+                /** @description Busca en nombre y descripción */
+                q?: string;
                 /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
                 empresas?: "todas";
             };
@@ -67733,10 +67887,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["PromocionVelocidad"][];
-                        nextCursor: string | null;
-                    };
+                    "application/json": components["schemas"]["PaginaPromocionesVelocidad"];
                 };
             };
             /** @description No autenticado */
