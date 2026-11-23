@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { TabsItem } from '@nuxt/ui'
+import type { DropdownMenuItem, TabsItem } from '@nuxt/ui'
 
 definePageMeta({ permiso: 'clientes.ver' })
 
@@ -80,7 +80,7 @@ const CANALES: Record<Cliente['canal_preferido'], string> = {
 
 /*
  * Pestañas segmentadas dentro de la tarjeta (tablero NuevoClienteFicha). Los datos del cliente y
- * los fiscales se abren con el ícono de persona de la franja (`?datos=1`). Contactos con la API de
+ * los fiscales se abren desde «Más › Ver datos del cliente» (`?datos=1`). Contactos con la API de
  * A1 (#281); Soporte y Documentos esperan su API (`.claude/integration/a4.md`): muestran qué falta, sin datos inventados.
  * Ids viejos de la URL: `datos`/`fiscal` abren los datos y `linea` es la bitácora.
  */
@@ -126,7 +126,7 @@ const pestana = computed<string>({
     },
 })
 
-/** Datos del cliente y fiscales: se abren con el ícono de persona de la franja. */
+/** Datos del cliente y fiscales: se abren desde el menú «Más» de la franja. */
 const datosAbiertos = computed<boolean>({
     get: () => route.query.datos === '1' || route.query.tab === 'datos' || route.query.tab === 'fiscal',
     set(abiertos) {
@@ -189,16 +189,63 @@ function irACuenta() {
     pestana.value = 'cuenta'
 }
 
-/** Más acciones de la franja (⋯). */
-const masAcciones = computed(() => {
-    const grupo = []
-    if (puede('clientes.editar')) {
-        grupo.push({ label: 'Editar datos del cliente', icon: ICONOS.editar, onSelect: abrirEdicion })
+/** Promesa desde el menú «Más»: es por servicio; con varios, el menú pregunta cuál. */
+const promesaServicio = shallowRef<Servicio | null>(null)
+const promesaAbierta = ref(false)
+const serviciosPromesa = computed(() => (serviciosLeidos.value ? servicios.value.filter(s => s.estado !== 'pendiente_instalacion' && s.estado !== 'retirado') : []))
+
+function abrirPromesa(servicio: Servicio) {
+    promesaServicio.value = servicio
+    promesaAbierta.value = true
+}
+
+function abrir(bandera: Ref<boolean>) {
+    bandera.value = true
+}
+
+function alternarDatos() {
+    datosAbiertos.value = !datosAbiertos.value
+}
+
+function alCrearPromesa() {
+    toast.add({ title: 'Promesa registrada', icon: 'i-lucide-hand', color: 'success' })
+    alCambiarCuenta()
+}
+
+/**
+ * Menú «Más» de la franja (tablero NuevoClienteFicha): todo lo que no es Cobrar, en un solo botón
+ * para que las acciones quepan en la misma fila que el cliente y sus contadores.
+ */
+const masAcciones = computed<DropdownMenuItem[][]>(() => {
+    const cobro: DropdownMenuItem[] = []
+    if (puede('promesas.crear') && serviciosPromesa.value.length) {
+        const [unico] = serviciosPromesa.value
+        cobro.push(serviciosPromesa.value.length === 1 && unico
+            ? { label: 'Promesa de pago', icon: 'i-lucide-hand', onSelect: () => abrirPromesa(unico) }
+            : {
+                    label: 'Promesa de pago',
+                    icon: 'i-lucide-hand',
+                    children: serviciosPromesa.value.map(s => ({ label: etiquetaServicio(s), description: s.plan_nombre, icon: 'i-lucide-wifi', onSelect: () => abrirPromesa(s) })),
+                })
+    }
+    if (puede('facturas.emitir_cargo_unico') && puede('facturas.ver')) {
+        cobro.push({ label: 'Cargo único', icon: 'i-lucide-receipt', onSelect: () => abrir(cargoAbierto) })
     }
     if (puede('clientes.estado_cuenta')) {
-        grupo.push({ label: 'Estado de cuenta', icon: 'i-lucide-receipt-text', onSelect: irACuenta })
+        cobro.push({ label: 'Estado de cuenta', icon: 'i-lucide-receipt-text', onSelect: irACuenta })
     }
-    return [grupo]
+    const clienteAcciones: DropdownMenuItem[] = []
+    if (puede('servicios.crear')) {
+        clienteAcciones.push({ label: 'Nuevo servicio', icon: 'i-lucide-plus', onSelect: () => abrir(altaServicioAbierta) })
+    }
+    clienteAcciones.push({ label: datosAbiertos.value ? 'Ocultar datos del cliente' : 'Ver datos del cliente', icon: 'i-lucide-user', onSelect: alternarDatos })
+    if (puede('clientes.editar')) {
+        clienteAcciones.push({ label: 'Editar cliente', icon: ICONOS.editar, onSelect: abrirEdicion })
+    }
+    return [
+        ...(cobro.length ? [[{ type: 'label' as const, label: 'Cobro' }, ...cobro]] : []),
+        [{ type: 'label' as const, label: 'Cliente' }, ...clienteAcciones],
+    ]
 })
 
 const mapa = computed(() => {
@@ -371,6 +418,7 @@ onMounted(cargar)
                     :zona="zona"
                     :compacta="compacta"
                     :ver-cuenta="puede('clientes.estado_cuenta')"
+                    @reintentar-cuenta="cargarCuenta"
                 >
                     <template #meta>
                         <p
@@ -402,102 +450,29 @@ onMounted(cargar)
                         </p>
                     </template>
                     <template #acciones>
-                        <PromesaServicioBoton
-                            v-if="!compacta"
-                            :servicios="serviciosLeidos ? servicios : null"
-                            solo-icono
-                            @creada="alCambiarCuenta"
-                        />
-                        <UButton
-                            v-if="!compacta && puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
-                            icon="i-lucide-receipt"
-                            color="neutral"
-                            variant="ghost"
-                            class="boton-flotante boton-circulo"
-                            title="Cargo único"
-                            aria-label="Cargo único"
-                            data-prueba="abrir-cargo-unico-cliente"
-                            @click="cargoAbierto = true"
-                        />
-                        <UButton
-                            v-if="!compacta && puede('servicios.crear')"
-                            icon="i-lucide-plus"
-                            color="neutral"
-                            variant="ghost"
-                            class="boton-flotante boton-circulo"
-                            title="Nuevo servicio"
-                            aria-label="Nuevo servicio"
-                            data-prueba="nuevo-servicio-cliente"
-                            @click="altaServicioAbierta = true"
-                        />
-                        <UButton
-                            v-if="!compacta"
-                            icon="i-lucide-user"
-                            color="neutral"
-                            variant="ghost"
-                            class="boton-flotante boton-circulo"
-                            :class="datosAbiertos ? 'bg-primary/10 text-primary' : ''"
-                            :aria-pressed="datosAbiertos"
-                            :aria-controls="datosAbiertos ? 'datos-cliente' : undefined"
-                            title="Datos del cliente"
-                            aria-label="Datos del cliente"
-                            data-prueba="ver-datos-cliente"
-                            @click="datosAbiertos = !datosAbiertos"
-                        />
                         <UDropdownMenu
-                            v-if="!compacta"
                             :items="masAcciones"
                             :content="{ align: 'end' }"
                         >
                             <UButton
                                 icon="i-lucide-ellipsis"
+                                trailing-icon="i-lucide-chevron-down"
                                 color="neutral"
-                                variant="ghost"
-                                class="boton-flotante boton-circulo"
-                                title="Más acciones"
+                                variant="outline"
+                                :size="compacta ? 'md' : 'lg'"
+                                class="rounded-full max-sm:size-10 max-sm:justify-center max-sm:p-0"
+                                :ui="{ trailingIcon: 'max-sm:hidden' }"
                                 aria-label="Más acciones del cliente"
-                            />
+                                data-prueba="mas-cliente"
+                            >
+                                <span class="max-sm:hidden">Más</span>
+                            </UButton>
                         </UDropdownMenu>
                     </template>
                 </ClienteFranja>
             </div>
 
-            <!-- Teléfono: las mismas acciones de la franja, en fila. -->
-            <div class="flex flex-wrap gap-2 sm:hidden">
-                <UButton
-                    v-if="puede('servicios.crear')"
-                    icon="i-lucide-plus"
-                    label="Nuevo servicio"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    class="rounded-full"
-                    @click="altaServicioAbierta = true"
-                />
-                <UButton
-                    icon="i-lucide-user"
-                    label="Datos"
-                    color="neutral"
-                    :variant="datosAbiertos ? 'subtle' : 'outline'"
-                    size="sm"
-                    class="rounded-full"
-                    :aria-pressed="datosAbiertos"
-                    data-prueba="ver-datos-cliente-movil"
-                    @click="datosAbiertos = !datosAbiertos"
-                />
-                <UButton
-                    v-if="puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
-                    icon="i-lucide-receipt"
-                    label="Cargo único"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    class="rounded-full"
-                    @click="cargoAbierto = true"
-                />
-            </div>
-
-            <!-- Datos del cliente y fiscales (ícono de persona). -->
+            <!-- Datos del cliente y fiscales (Más › Ver datos del cliente). -->
             <section
                 v-if="datosAbiertos"
                 id="datos-cliente"
@@ -690,9 +665,8 @@ onMounted(cargar)
                         :cuenta="cuenta"
                         :problema-cuenta="problemaCuenta"
                         @ir="pestana = $event"
-                        @promesa="pestana = 'servicios'"
+                        @cuenta-cambiada="alCambiarCuenta"
                         @reintentar-servicios="cargarServicios"
-                        @reintentar-cuenta="cargarCuenta"
                     />
 
                     <template v-else-if="pestana === 'servicios'">
@@ -796,6 +770,12 @@ onMounted(cargar)
             v-model:open="altaServicioAbierta"
             :cliente="cliente"
             @creado="alCrearServicio"
+        />
+        <PromesaCrearModal
+            v-if="promesaServicio"
+            v-model:open="promesaAbierta"
+            :servicio="promesaServicio"
+            @creada="alCrearPromesa"
         />
         <CargoUnicoModal
             v-if="cliente && puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
