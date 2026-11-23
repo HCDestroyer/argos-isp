@@ -6,6 +6,7 @@ import { aTexto, dec, redondear } from '#ledger/dinero'
 import { hoyFiscal } from '#fiscal/comun'
 import { datosFiscales, resolver } from '#fiscal/parametros'
 import { libroVentasLegal } from '#fiscal/libros_legales'
+import { avisoPcActivo } from '#billing/actions/configurar_panel_financiero'
 import {
     COLUMNAS_OBLIGACION,
     ESTADOS_ABIERTOS,
@@ -30,7 +31,13 @@ import {
  *   ventas del 1 de enero a hoy (FPEQ certificadas y documentos sin FEL; los avisos sin DTE no son
  *   venta). Se emite el umbral más alto de `pc_alertas` alcanzado, una vez por umbral y año. Sin
  *   `pc_limite_anual` del año no se calcula (queda en `errores`).
+ *   Decisión 12: el 100 % (límite superado) es obligatorio: se avisa aunque no esté en `pc_alertas`
+ *   y aunque la empresa haya apagado el aviso (`billing.panel_ajustes.aviso_pc_activo`), porque
+ *   obliga a cambiar de régimen. Con el aviso apagado los umbrales menores a 100 no se emiten.
  */
+
+/** Umbral del límite del pequeño contribuyente que se avisa siempre (decisión 12). */
+export const LIMITE_PC_OBLIGATORIO = '100'
 
 export interface EntradaEmitirAlertas {
     empresa_id?: number | null
@@ -147,7 +154,11 @@ export default class EmitirAlertasFiscales extends DomainAction<EntradaEmitirAle
                 })
                 continue
             }
-            if (!Array.isArray(umbrales) || umbrales.length === 0) continue
+            // decisión 12: 100 % siempre; con el aviso apagado, solo los umbrales de 100 o más
+            const activo = await avisoPcActivo(t.trx, id)
+            const lista = (Array.isArray(umbrales) ? umbrales : []).map((u) => dec(String(u)))
+            if (!lista.some((u) => u.eq(LIMITE_PC_OBLIGATORIO))) lista.push(dec(LIMITE_PC_OBLIGATORIO))
+            const vigentes = activo ? lista : lista.filter((u) => u.gte(LIMITE_PC_OBLIGATORIO))
             await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_CALENDARIO, id])
 
             const ventas = await libroVentasLegal(id, { desde: `${anio}-01-01`, hasta: hoy }, t.trx)
@@ -155,10 +166,7 @@ export default class EmitirAlertasFiscales extends DomainAction<EntradaEmitirAle
             const tope = dec(limite.valor)
             if (tope.lte(0)) continue
             const porcentaje = acumulado.div(tope).times(100)
-            const alcanzados = umbrales
-                .map((u) => dec(String(u)))
-                .filter((u) => porcentaje.gte(u))
-                .sort((a, b) => a.comparedTo(b))
+            const alcanzados = vigentes.filter((u) => porcentaje.gte(u)).sort((a, b) => a.comparedTo(b))
             const umbral = alcanzados.at(-1)
             if (!umbral) continue
             const umbralTexto = aTexto(umbral)

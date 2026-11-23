@@ -87,7 +87,7 @@ Lecturas (`libros.ver`): `GET /libros/diario`, `/libros/mayor`, `/libros/ventas`
 | Acción (permiso)                               | Ruta                    | Qué hace                                                                                                        |
 | ---------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `fiscal.generar_calendario` (sistema)          | cron, consumidor        | Genera y concilia las obligaciones de todo lo pendiente hasta el periodo en curso                               |
-| `fiscal.emitir_alertas` (sistema)              | cron                    | `fiscal.vencimiento_proximo` (umbrales 7, 3, 1, 0) y `fiscal.limite_pc` (umbrales de `pc_alertas`), sin repetir |
+| `fiscal.emitir_alertas` (sistema)              | cron                    | `fiscal.vencimiento_proximo` (umbrales 7, 3, 1, 0) y `fiscal.limite_pc` (umbrales de `pc_alertas` más el 100 %, obligatorio; con `aviso_pc_activo` apagado, solo el 100 %), sin repetir |
 | `fiscal.agregar_feriado` (`fiscal.configurar`) | `POST /fiscal/feriados` | Agrega o retira un feriado (global) y recalcula el calendario de todas las empresas                             |
 
 Lecturas: `GET /fiscal/obligaciones` y `/fiscal/obligaciones/:id` (`declaraciones.ver`), `GET /fiscal/feriados?anio=` (`fiscal.ver`).

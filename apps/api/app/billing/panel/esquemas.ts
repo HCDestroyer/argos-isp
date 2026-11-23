@@ -136,7 +136,11 @@ const Alerta = objeto({
     nivel: enumerado(['aviso', 'critico']),
     titulo: texto,
     detalle: texto,
-    datos: jsonLibre,
+    datos: {
+        ...jsonLibre,
+        description:
+            'Datos de la alerta. En limite_pequeno_contribuyente: los del bloque pequeno_contribuyente del tablero fiscal más aviso_apagado (true si la empresa apagó el aviso y la alerta llega por haber alcanzado el 100 %)',
+    },
 })
 
 export const AlertasPanel = definirEsquema(
@@ -162,7 +166,7 @@ export const AlertasPanel = definirEsquema(
                 apagadas: {
                     ...lista(enumerado(TIPOS_ALERTA)),
                     description:
-                        'Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no se revisan, ni alerta ni error',
+                        'Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Si esa revisión falla, su error llega en errores (no se sabe si llegó al 100 %). Los umbrales menores (80, 95…) no llegan',
                 },
             }),
         ),
@@ -177,7 +181,7 @@ export const AjustesPanel = definirEsquema(
         aviso_pc_activo: {
             ...booleano,
             description:
-                'Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica)',
+                'Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica). Apagado silencia los umbrales menores a 100 % (panel y fiscal.limite_pc); el 100 % (límite superado) se avisa siempre',
         },
         aviso_pc_umbrales: {
             ...nulable(lista({ type: 'string', pattern: '^\\d{1,3}\\.\\d{2}$' })),
