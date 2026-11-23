@@ -24,6 +24,11 @@ import CambiarTitularServicio, { EvidenciaRequerida } from '#core/actions/cambia
 import { Servicio } from '#core/esquemas'
 import RegistrarIdentidadCliente from '#core/actions/registrar_identidad_cliente'
 import VerIdentidadCliente from '#core/actions/ver_identidad_cliente'
+import VerificarNitCliente from '#core/actions/verificar_nit_cliente'
+import AprobarTitularEmpresa from '#core/actions/aprobar_titular_empresa'
+import RechazarTitularEmpresa from '#core/actions/rechazar_titular_empresa'
+import VerRevisionTitularEmpresa from '#core/actions/ver_revision_titular_empresa'
+import { listarRevisionesTitularEmpresa } from '#core/consultas/titulares_empresa_revision'
 import { leerFoto } from '#core/identidad'
 import { exigirCliente } from '#core/acceso_empresa'
 import { Prohibido, ValidacionFallida } from '#shared/errores'
@@ -128,6 +133,70 @@ const CambioTitularIris = definirEsquema(
     }),
 )
 
+const NitVerificado = definirEsquema(
+    'NitVerificado',
+    objeto({
+        cliente_id: idEsquema,
+        nit_verificado_en: instante,
+        nit_verificado_por: { ...idEsquema, description: 'Usuario de Argos que lo verificó' },
+        version: entero,
+    }),
+)
+
+const camposRevision = {
+    id: idEsquema,
+    empresa_id: idEsquema,
+    servicio_id: idEsquema,
+    de_cliente_id: { ...idEsquema, description: 'Titular del servicio al pedir el cambio' },
+    candidatos: { ...lista(idEsquema), description: 'Clientes empresa con ese NIT verificado' },
+    motivo_revision: enumerado(['representante_nuevo', 'varios_candidatos']),
+    estado: enumerado(['pendiente', 'aprobada', 'rechazada', 'reemplazada']),
+    razon_social: texto,
+    nit: { ...texto, description: 'Normalizado: sin guiones ni espacios, en mayúsculas' },
+    representante_documento_tipo: enumerado(['dpi', 'pasaporte']),
+    motivo_codigo: texto,
+    origen_tipo: nulable(texto),
+    origen_id: nulable(texto),
+    cliente_asignado_id: nulable(idEsquema),
+    decidida_por: nulable(idEsquema),
+    decidida_en: nulable(instante),
+    version: entero,
+    created_at: instante,
+}
+
+const RevisionTitularEmpresa = definirEsquema('RevisionTitularEmpresa', objeto(camposRevision))
+
+const RevisionTitularEmpresaDetalle = definirEsquema(
+    'RevisionTitularEmpresaDetalle',
+    objeto({
+        ...camposRevision,
+        telefono: nulable(texto),
+        email: nulable(texto),
+        relacion: nulable(texto),
+        motivo: { ...texto, description: 'El motivo que escribió quien pidió el cambio' },
+        decision_motivo: nulable(texto),
+        representante: objeto({
+            documento_tipo: enumerado(['dpi', 'pasaporte']),
+            documento_numero: { ...nulable(texto), description: 'null después de decidir (se borra)' },
+            nombre: { ...nulable(texto), description: 'null después de decidir (se borra)' },
+        }),
+        tiene_frente: booleano,
+        tiene_reverso: booleano,
+    }),
+)
+
+const TitularEmpresaAprobado = definirEsquema(
+    'TitularEmpresaAprobado',
+    objeto({
+        revision: RevisionTitularEmpresa,
+        servicio_id: idEsquema,
+        titular: objeto({ cliente_id: idEsquema, existente: booleano }),
+        identidad_id: idEsquema,
+        de_cliente_id: idEsquema,
+        de_cliente_eliminado: booleano,
+    }),
+)
+
 const instalacion: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -224,7 +293,7 @@ const instalacion: Ruta[] = [
         metodo: 'post',
         ruta: '/servicios/:id/cambiar-titular',
         operacion: 'serviciosCambiarTitular',
-        resumen: 'Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4)',
+        resumen: 'Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4; empresa 0.14.1)',
         descripcion:
             '`multipart/form-data`: la parte `datos` (JSON) y las fotos `frente` y `reverso?` de A41. Quién es el titular lo ' +
             'decide Argos (nunca se manda `cliente_id`): mismo documento y nombre normalizado en la empresa del servicio → ese ' +
@@ -232,7 +301,12 @@ const instalacion: Ruta[] = [
             'un cliente nuevo. Solo en pendiente (`422 servicio_no_pendiente`); sin `frente` o sin `coincide`, ' +
             '`422 evidencia_requerida`; 2 cambios por servicio y 10 por empresa y actor al día (`429 demasiados_cambios_titular` ' +
             'con `Retry-After`). El cliente anterior sin servicios ni movimientos se elimina. Emite `servicio.titular_cambiado` y ' +
-            '`cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`.',
+            '`cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`. ' +
+            'Titular empresa (0.14.1): `cliente.tipo: empresa` con NIT (`422 nit_requerido`) y `representante` (`422 ' +
+            'representante_requerido`; con persona, `422 representante_no_permitido`); las fotos son del representante. Existente ' +
+            'solo por NIT verificado en el panel y entre clientes empresa: misma razón social y representante ya registrado → ' +
+            'al momento; representante nuevo o varios candidatos → `422 titular_empresa_en_revision` (no cambia nada; lo decide ' +
+            'una persona en `/titulares-empresa/revisiones`); otra razón social → `422 titular_no_coincide`.',
         etiqueta: 'servicios',
         permiso: 'servicios.cambiar_titular',
         cuerpo: vi.cambiarTitularPartesValidator,
@@ -358,6 +432,138 @@ const instalacion: Ruta[] = [
             ctx.response.header('Cache-Control', 'private, no-store')
             ctx.response.header('X-Content-Type-Options', 'nosniff')
             return salida.contenido
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/verificar-nit',
+        operacion: 'clientesVerificarNit',
+        resumen: 'Marcar el NIT del cliente como verificado (contrato Iris 0.14.1)',
+        descripcion:
+            'Una persona del panel confirma el NIT (con el documento o la consulta SAT/FEL) y queda `nit_verificado_en` y ' +
+            '`nit_verificado_por`. Solo un cliente `tipo = empresa` con NIT verificado cuenta como titular existente por NIT en ' +
+            '`cambiar-titular`. Nunca con un token de API, el de Iris o un agente (403). La marca se borra cuando cambia `nit_cui`. ' +
+            '`422 nit_no_verificable` si el cliente no tiene un NIT válido; `409` si la `version` no coincide.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.verificar_nit',
+        cuerpo: vi.verificarNitValidator,
+        respuesta: { status: 200, descripcion: 'NIT verificado', esquema: NitVerificado },
+        handler: async (ctx, { cuerpo, params }) => {
+            exigirNoIris(ctx)
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return new VerificarNitCliente().execute({ ...cuerpo, cliente_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/titulares-empresa/revisiones',
+        operacion: 'titularesEmpresaRevisiones',
+        resumen: 'Cambios de titular a una empresa en revisión (contrato Iris 0.14.1)',
+        descripcion:
+            'Los que respondieron `422 titular_empresa_en_revision`: el representante no coincide con una identidad de la ' +
+            'empresa del NIT o hay más de un candidato. Sin datos del representante (salvo el tipo de documento). Filtrado por ' +
+            'las empresas de la petición. Nunca con el token de Iris (403).',
+        etiqueta: 'servicios',
+        permiso: 'clientes.ver_identidad',
+        query: vi.listarRevisionesTitularEmpresaValidator,
+        respuesta: { status: 200, descripcion: 'Revisiones', esquema: pagina(RevisionTitularEmpresa) },
+        handler: (ctx, { query }) => {
+            exigirNoIris(ctx)
+            return listarRevisionesTitularEmpresa(query, empresasDeLaLista(ctx.empresa))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/titulares-empresa/revisiones/:id',
+        operacion: 'titularesEmpresaVerRevision',
+        resumen:
+            'Ver una revisión de titular empresa con el documento del representante (cada vista queda auditada)',
+        descripcion: 'Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).',
+        etiqueta: 'servicios',
+        permiso: 'clientes.ver_identidad',
+        respuesta: { status: 200, descripcion: 'Revisión', esquema: RevisionTitularEmpresaDetalle },
+        handler: async (ctx, { params }) => {
+            exigirNoIris(ctx)
+            const salida = await new VerRevisionTitularEmpresa().execute(
+                { id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+            if (salida.tipo !== 'datos') throw new ValidacionFallida([])
+            return salida.revision
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/titulares-empresa/revisiones/:id/fotos/:parte',
+        operacion: 'titularesEmpresaVerFotoRevision',
+        resumen: 'Ver una foto del documento del representante en revisión (cada vista queda auditada)',
+        descripcion:
+            '`parte` = `frente` o `reverso`. Solo con `clientes.ver_identidad`; nunca con el token de Iris (403). Después ' +
+            'de decidir, las fotos se borran (404).',
+        etiqueta: 'servicios',
+        permiso: 'clientes.ver_identidad',
+        parametros: { parte: enumerado(['frente', 'reverso']) },
+        respuesta: { status: 200, descripcion: 'Foto (JPEG o PNG)', contenido: 'image/*' },
+        handler: async (ctx, { params }) => {
+            exigirNoIris(ctx)
+            const parte = String(params.parte)
+            if (parte !== 'frente' && parte !== 'reverso') {
+                throw new ValidacionFallida([{ field: 'parte', rule: 'enum', message: 'frente o reverso' }])
+            }
+            const salida = await new VerRevisionTitularEmpresa().execute(
+                { id: Number(params.id), parte },
+                ctx.contextoAccion(),
+            )
+            if (salida.tipo !== 'foto') throw new ValidacionFallida([])
+            ctx.response.header('Content-Type', salida.mime)
+            ctx.response.header('Cache-Control', 'private, no-store')
+            ctx.response.header('X-Content-Type-Options', 'nosniff')
+            return salida.contenido
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/titulares-empresa/revisiones/:id/aprobar',
+        operacion: 'titularesEmpresaAprobar',
+        resumen: 'Aprobar un cambio de titular a una empresa en revisión (contrato Iris 0.14.1)',
+        descripcion:
+            'Una persona del panel con `clientes.ver_identidad` aprueba al representante: el servicio pasa al cliente empresa ' +
+            '(con varios candidatos, el `cliente_id` elegido) y su identidad queda registrada en la empresa. Emite ' +
+            '`servicio.titular_cambiado` (`existente: true`, `tipo_titular: empresa`) y `cliente.identidad_registrada`. ' +
+            '`422 servicio_no_pendiente`, `409 titular_ya_cambiado`, `422 candidato_no_valido`, `422 revision_no_pendiente`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.aprobar_titular_empresa',
+        cuerpo: vi.aprobarTitularEmpresaValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Titular cambiado', esquema: TitularEmpresaAprobado },
+        handler: async (ctx, { cuerpo, params }) => {
+            exigirNoIris(ctx)
+            return new AprobarTitularEmpresa().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/titulares-empresa/revisiones/:id/rechazar',
+        operacion: 'titularesEmpresaRechazar',
+        resumen: 'Rechazar un cambio de titular a una empresa en revisión (contrato Iris 0.14.1)',
+        descripcion:
+            'No cambia nada del servicio ni del cliente; se borran el documento y las fotos del representante. Persona del ' +
+            'panel con `clientes.ver_identidad`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.rechazar_titular_empresa',
+        cuerpo: vi.rechazarTitularEmpresaValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Revisión rechazada', esquema: RevisionTitularEmpresa },
+        handler: async (ctx, { cuerpo, params }) => {
+            exigirNoIris(ctx)
+            return new RechazarTitularEmpresa().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
         },
     }),
 ]

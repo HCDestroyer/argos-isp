@@ -223,3 +223,88 @@ export class TitularNoCoincide extends Problema {
         )
     }
 }
+
+// ── Titular empresa (contrato Iris 0.14.1 §3.4.4) ────────────────────────────────────────────
+
+/** NIT normalizado como en §7.5: sin guiones ni espacios y en mayúsculas (la `K`). */
+export function normalizarNit(nit: string): string {
+    return limpiarDocumento(nit)
+}
+
+/** SQL del NIT normalizado de una columna (mismo criterio que `normalizarNit`). */
+export function sqlNitNormalizado(columna: string): string {
+    return `upper(regexp_replace(coalesce(${columna}, ''), '[[:space:]-]', '', 'g'))`
+}
+
+/**
+ * ¿El representante (tipo, número y nombre normalizado) coincide con una identidad A41, vigente o
+ * anterior, del cliente empresa? Devuelve el id de esa identidad o null.
+ */
+export async function representanteRegistrado(
+    trx: QueryClientContract,
+    clienteId: number,
+    tipo: DocumentoIdentidad,
+    numero: string,
+    nombre: string,
+): Promise<number | null> {
+    const fila = (await trx
+        .from('core.clientes_identidades')
+        .where({
+            cliente_id: clienteId,
+            documento_tipo: tipo,
+            documento_huella: huella(numero),
+            nombre_huella: huella(normalizarNombre(nombre)),
+        })
+        .orderBy('version', 'desc')
+        .select('id')
+        .first()) as { id: number } | null
+    return fila ? Number(fila.id) : null
+}
+
+/** Datos que guarda la revisión de un cambio de titular a empresa (fuera de la transacción). */
+export interface SolicitudRevisionEmpresa {
+    empresa_id: number
+    servicio_id: number
+    de_cliente_id: number
+    candidatos: number[]
+    motivo_revision: 'representante_nuevo' | 'varios_candidatos'
+    razon_social: string
+    nit: string
+    telefono: string
+    whatsapp: boolean
+    email: string | null
+    relacion: string | null
+    representante: { documento_tipo: DocumentoIdentidad; documento_numero: string; nombre: string }
+    frente: FotoIdentidad
+    reverso: FotoIdentidad | null
+    verificado_en: Date
+    metodo: MetodoIdentidad
+    motivo_codigo: string
+    motivo: string
+    origen_tipo: string | null
+    origen_id: string | null
+}
+
+/**
+ * 422 `titular_empresa_en_revision` (§3.4.7, 0.14.1): el representante no coincide con una identidad
+ * A41 de la empresa del NIT, o hay más de un candidato. Sin datos del cliente; no cambia nada. La
+ * solicitud de revisión (privada: nunca se serializa) la guarda `CambiarTitularServicio` después del
+ * rollback.
+ */
+export class TitularEmpresaEnRevision extends Problema {
+    #solicitud: SolicitudRevisionEmpresa | null
+
+    constructor(solicitud: SolicitudRevisionEmpresa | null = null) {
+        super(
+            422,
+            'titular_empresa_en_revision',
+            'Titular empresa en revisión',
+            'El cambio de titular a esta empresa lo revisa una persona de Argos',
+        )
+        this.#solicitud = solicitud
+    }
+
+    get solicitud(): SolicitudRevisionEmpresa | null {
+        return this.#solicitud
+    }
+}

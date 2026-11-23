@@ -54,6 +54,8 @@ export default class EditarCliente extends DomainAction<EntradaEditarCliente, Cl
         }
         await actualizarConVersion(t.trx, 'core.clientes', id, version, columnas)
         const despues = await verCliente(id, t.trx)
+        // Iris 0.14.1: un NIT que cambia deja de estar verificado (trigger `core.borrar_nit_verificado`);
+        // `nit_verificado_en` y `nit_verificado_por` vienen en la vista, así que el diff los registra
         await t.registrarCambios({ tipo: 'cliente', id }, antes, despues)
         const campos = CAMPOS_CLIENTE_ACTUALIZADO.filter((campo) => antes[campo] !== despues[campo])
         if (campos.length > 0) await t.emit('cliente.actualizado', { cliente_id: id, campos })

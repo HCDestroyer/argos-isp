@@ -6,6 +6,8 @@ export type DependientePago = Schema<'DependientePago'>
 export type FiltrosClientes = Omit<NonNullable<paths['/api/v1/clientes']['get']['parameters']['query']>, 'cursor'>
 export type DatosCliente = paths['/api/v1/clientes']['post']['requestBody']['content']['application/json']
 export type CambiosCliente = paths['/api/v1/clientes/{id}']['put']['requestBody']['content']['application/json']
+export type DatosVerificarNit = paths['/api/v1/clientes/{id}/verificar-nit']['post']['requestBody']['content']['application/json']
+export type NitVerificado = Schema<'NitVerificado'>
 
 /** Tamaño de página de la lista de clientes. */
 export const LIMITE_CLIENTES = 20
@@ -92,5 +94,14 @@ export function useClientes() {
         }))
     }
 
-    return { listar, ver, crear, editar, estadoCuenta, dependientes, asignarResponsable, quitarResponsable, vincularTelegram, desvincularTelegram }
+    /**
+     * `POST /clientes/:id/verificar-nit` (`clientes.verificar_nit`, Iris 0.14.1): una persona del
+     * panel confirma el NIT con el documento o la consulta SAT. 409 si el cliente cambió (`version`);
+     * 422 `nit_no_verificable` sin un NIT válido. La marca se borra sola al cambiar el NIT.
+     */
+    function verificarNit(id: number, datos: DatosVerificarNit): Promise<Resultado<NitVerificado>> {
+        return resolver(api.POST('/api/v1/clientes/{id}/verificar-nit', { params: { path: { id } }, body: datos }))
+    }
+
+    return { listar, ver, crear, editar, verificarNit, estadoCuenta, dependientes, asignarResponsable, quitarResponsable, vincularTelegram, desvincularTelegram }
 }

@@ -45,6 +45,8 @@ export const COLUMNAS_CLIENTE = [
     'responsable_pago_id',
     'referido_por_id',
     'referido_empresa_id',
+    'nit_verificado_en',
+    'nit_verificado_por',
     'version',
     'created_at',
     'updated_at',
@@ -56,6 +58,8 @@ export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & 
     responsable_pago_id: number | null
     /** nombre del responsable de pago (lectura; no es columna) */
     responsable_pago_nombre: string | null
+    /** nombre de quien verificó el NIT (Iris 0.14.1; lectura, no es columna) */
+    nit_verificado_por_nombre: string | null
     /** códigos de referido del cliente, uno por empresa (`core.codigos_referido`; lectura) */
     codigos_referido: Array<{ empresa_id: number; codigo: string }>
     /** id en el sistema de origen (`core.ids_externos`, importador) o null */
@@ -68,6 +72,10 @@ export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & 
 const NOMBRE_RESPONSABLE =
     '(SELECT r.nombre FROM core.clientes r WHERE r.id = c.responsable_pago_id) AS responsable_pago_nombre'
 
+/** Nombre del usuario que verificó el NIT de `core.clientes as c` (subconsulta escalar). */
+const NOMBRE_VERIFICADOR_NIT =
+    '(SELECT u.nombre FROM core.usuarios u WHERE u.id = c.nit_verificado_por) AS nit_verificado_por_nombre'
+
 /** Códigos de referido de `core.clientes as c`, por empresa (subconsulta escalar). */
 const CODIGOS_REFERIDO =
     "(SELECT coalesce(jsonb_agg(jsonb_build_object('empresa_id', k.empresa_id, 'codigo', k.codigo) ORDER BY k.empresa_id), '[]'::jsonb) FROM core.codigos_referido k WHERE k.cliente_id = c.id) AS codigos_referido"
@@ -76,6 +84,7 @@ function columnasVista(cliente: QueryClientContract) {
     return [
         ...COLUMNAS_CLIENTE.map((col) => `c.${col}`),
         cliente.raw(NOMBRE_RESPONSABLE),
+        cliente.raw(NOMBRE_VERIFICADOR_NIT),
         cliente.raw(CODIGOS_REFERIDO),
         cliente.raw(sqlExterno('cliente', 'c.id')),
     ]
