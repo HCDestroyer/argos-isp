@@ -944,7 +944,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/inventario/conteos/[id]': {
         titulo: 'Conteos físicos · Captura y cierre',
-        resumen: 'En la sección «Capturar»:',
+        resumen: 'La tarjeta «Lo contado» lista todo lo que la bodega tiene en el sistema, con las pastillas «Todos», «Con diferencia» y «Sin contar»:',
         pagina: 'inventario/conteos',
         ancla: 'captura-y-cierre',
         temas: [
@@ -966,7 +966,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/inventario/mi-bodega': {
         titulo: 'Bodegas y Mi bodega · Mi bodega',
-        resumen: 'Menú: Inventario → Movimientos → Mi bodega. Permiso inventario.ver.',
+        resumen: 'Pensada para el teléfono del técnico: arriba, cada traslado por recibir con «Recibir»; luego sus equipos (los tres primeros y «Ver los …») y sus materiales con la cantidad (en rojo si está bajo el mínimo), y los movimientos recientes plegados. El botón de código de barras busca un equipo por serie o MAC.',
         pagina: 'inventario/bodegas',
         ancla: 'mi-bodega',
         temas: [],
@@ -976,7 +976,9 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         resumen: 'Cuando un servicio se retira, cada equipo en comodato de ese servicio pasa solo a «Por recuperar». Si el servicio vuelve a otro estado, sus equipos vuelven a «En comodato».',
         pagina: 'inventario/equipos',
         ancla: 'equipos-por-recuperar',
-        temas: [],
+        temas: [
+            'No recuperados y cobros de equipo',
+        ],
     },
     '/inventario/productos': {
         titulo: 'Productos y tipos de producto',
@@ -998,6 +1000,13 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         resumen: 'Menú: botón «Alta por lote» en Productos. Permiso productos.crearlote.',
         pagina: 'inventario/productos',
         ancla: 'alta-de-productos-por-lote',
+        temas: [],
+    },
+    '/inventario/revision': {
+        titulo: 'Equipos por serie y comodato · Revisión y garantía',
+        resumen: 'Tres columnas:',
+        pagina: 'inventario/equipos',
+        ancla: 'revision-y-garantia',
         temas: [],
     },
     '/inventario/tipos-producto': {
@@ -1050,6 +1059,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Qué ves',
             'Equipos en comodato',
             'Equipos por recuperar',
+            'Revisión y garantía',
             'Preguntas frecuentes y errores',
             'Relacionado',
         ],

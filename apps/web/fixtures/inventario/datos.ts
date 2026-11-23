@@ -33,6 +33,7 @@ export const bodegasIniciales: Bodega[] = [
     { id: 1, empresa_id: 1, nombre: 'Bodega central', tipo: 'bodega', usuario_id: null, usuario_nombre: null, zona_id: null, router_id: null, activo: true, ...meta },
     { id: 2, empresa_id: 1, nombre: 'Vehículo de Pedro', tipo: 'tecnico', usuario_id: 4, usuario_nombre: 'Pedro Técnico', zona_id: null, router_id: null, activo: true, ...meta },
     { id: 3, empresa_id: 2, nombre: 'Bodega Fibra del Sur', tipo: 'bodega', usuario_id: null, usuario_nombre: null, zona_id: null, router_id: null, activo: true, ...meta },
+    { id: 4, empresa_id: 1, nombre: 'Cuadrilla Norte', tipo: 'cuadrilla', usuario_id: null, usuario_nombre: null, zona_id: null, router_id: null, activo: true, cuadrilla_id_iris: 'cua-norte', jefe_id: 4, ...meta },
     { id: BODEGA_TRANSITO_ID, empresa_id: 1, nombre: 'En tránsito', tipo: TIPO_BODEGA_TRANSITO, usuario_id: null, usuario_nombre: null, zona_id: null, router_id: null, activo: true, ...meta },
 ]
 
@@ -106,6 +107,9 @@ export function unidadesIniciales(): Unidad[] {
         unidad(3, 3, 'HWTC1A2B3C03', 'AA:BB:CC:00:00:03', { bodega_id: 2, bodega_nombre: 'Vehículo de Pedro' }),
         unidad(4, 4, 'TPAX15000001', 'AA:BB:CC:00:10:01', { costo: '425.00' }),
         unidad(6, 3, 'HWTC1A2B3C06', 'AA:BB:CC:00:00:06', { bodega_id: BODEGA_TRANSITO_ID, bodega_nombre: 'En tránsito' }),
+        unidad(7, 3, 'HWTC1A2B3C07', 'AA:BB:CC:00:00:07', { estado: 'en_reparacion', condicion: 'usado' }),
+        unidad(8, 4, 'TPAX15000002', 'AA:BB:CC:00:10:02', { estado: 'en_reparacion', condicion: 'usado', costo: '425.00' }),
+        unidad(9, 3, 'HWTC1A2B3C09', 'AA:BB:CC:00:00:09', { estado: 'no_recuperada', bodega_id: null, bodega_nombre: null, servicio_id: SERVICIO_RETIRADO?.id ?? null, cliente_id: SERVICIO_RETIRADO?.cliente_id ?? null, activo_id: null, costo: '248.00' }),
         unidad(5, 3, 'HWTC1A2B3C05', 'AA:BB:CC:00:00:05', { estado: 'por_recuperar', bodega_id: null, bodega_nombre: null, servicio_id: SERVICIO_RETIRADO?.id ?? null, cliente_id: SERVICIO_RETIRADO?.cliente_id ?? null, activo_id: 902 }),
     ]
 }
@@ -127,6 +131,11 @@ export function movimientosIniciales(): Movimiento[] {
         mover('2026-09-01', { tipo: 'saldo_inicial', fecha: '', producto_id: 3, bodega_id: 1, cantidad: '1', costo_total: '350.00', unidad_id: u })
     }
     mover('2026-09-01', { tipo: 'saldo_inicial', fecha: '', producto_id: 4, bodega_id: 1, cantidad: '1', costo_total: '425.00', unidad_id: 4 })
+    // Equipos que volvieron de un cambio (A48): una ONU en revisión, un router en garantía y una ONU no recuperada.
+    mover('2026-09-01', { tipo: 'saldo_inicial', fecha: '', producto_id: 3, bodega_id: 1, cantidad: '1', costo_total: '350.00', unidad_id: 7 })
+    mover('2026-09-01', { tipo: 'saldo_inicial', fecha: '', producto_id: 4, bodega_id: 1, cantidad: '1', costo_total: '425.00', unidad_id: 8 })
+    mover('2026-09-01', { tipo: 'saldo_inicial', fecha: '', producto_id: 3, bodega_id: 1, cantidad: '1', costo_total: '248.00', unidad_id: 9 })
+    mover('2026-09-20', { tipo: 'asignacion_comodato', fecha: '', producto_id: 3, bodega_id: 1, cantidad: '-1', costo_total: '-248.00', unidad_id: 9, servicio_id: SERVICIO_RETIRADO?.id ?? null })
     // Orden de traslado N.º 1 (D.1): sale al tránsito el 5 y Pedro la recibe con firma el 6.
     const orden = (id: number) => ({ origen_tipo: 'orden_traslado', origen_id: id, asiento_id: null })
     mover('2026-09-05', { tipo: 'traslado', fecha: '', producto_id: 3, bodega_id: 1, cantidad: '-1', costo_total: '-350.00', unidad_id: 3, traslado_id: 1, motivo: 'Para instalaciones de la semana', ...orden(1) })

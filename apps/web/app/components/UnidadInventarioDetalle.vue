@@ -2,22 +2,23 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Historial de un equipo por serie o MAC (A3, `GET /inventario/unidades/:id`): estado, ubicación,
- * costo y cada movimiento. Con `inventario.marcar_reparada`, una unidad en reparación vuelve a
- * disponible (con motivo).
+ * Ficha de un equipo por serie o MAC (tablero NuevoInventario, A48 `GET /inventario/unidades/:id`):
+ * estado con dónde o con quién está, costo y condición, y el historial completo (cambios de estado,
+ * kardex, garantías, intentos de recuperación y contactos). Abajo, las acciones que permite su
+ * estado y los permisos de quien mira; elegir una cierra el panel y abre su ventana (`accion`), así
+ * nunca hay una ventana encima de otra.
  */
 const props = defineProps<{
     unidadId: number | null
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
-const emit = defineEmits<{ cambiada: [unidad: UnidadInventario] }>()
+const emit = defineEmits<{ accion: [accion: AccionEquipo, unidad: UnidadInventarioDetalle] }>()
 
 const { puede, enlace } = usePermisos()
-const unidad = shallowRef<UnidadInventarioHistorial | null>(null)
+const unidad = shallowRef<UnidadInventarioDetalle | null>(null)
 const cargando = ref(false)
 const problema = ref<Problem | null>(null)
-const reparadaAbierto = ref(false)
 
 async function cargar() {
     if (!props.unidadId) {
@@ -37,23 +38,48 @@ watch(() => [abierto.value, props.unidadId], () => {
     }
 }, { immediate: true })
 
-function marcarReparada(motivo: string): Promise<Resultado<UnidadInventario>> {
-    return useUnidadesInventario().marcarReparada(props.unidadId ?? 0, motivo)
-}
+defineExpose({ cargar })
 
-function alReparar(cambiada: UnidadInventario) {
-    emit('cambiada', cambiada)
-    void cargar()
+const estado = computed(() => (unidad.value ? ESTADOS_EQUIPO[estadoEquipoDe(unidad.value)] : null))
+const eventos = computed(() => (unidad.value ? lineaTiempoUnidad(unidad.value) : []))
+const acciones = computed(() => (unidad.value ? accionesEquipo(unidad.value, puede) : []))
+const garantiaAbierta = computed(() => unidad.value?.garantias.find(g => g.resuelta_en === null) ?? null)
+
+function elegir(accion: AccionEquipo) {
+    const actual = unidad.value
+    if (!actual) {
+        return
+    }
+    abierto.value = false
+    emit('accion', accion, actual)
 }
 </script>
 
 <template>
     <USlideover
         v-model:open="abierto"
-        :title="unidad ? identificacionUnidad(unidad) : 'Equipo'"
-        :description="unidad ? `${unidad.producto_nombre} · ${unidad.producto_sku}` : undefined"
-        :ui="{ content: 'sm:max-w-lg' }"
+        :ui="{ content: 'sm:max-w-lg', body: 'flex flex-col gap-5' }"
     >
+        <template #title>
+            <span class="flex items-center gap-3">
+                <span class="pastilla-icono pastilla-tono tono-marca size-10 shrink-0 rounded-xl">
+                    <UIcon
+                        name="i-lucide-barcode"
+                        class="size-5"
+                    />
+                </span>
+                <span class="flex min-w-0 flex-col">
+                    <span class="truncate">{{ unidad?.producto_nombre ?? 'Equipo' }}</span>
+                    <span
+                        v-if="unidad"
+                        class="truncate font-mono text-xs font-normal text-muted"
+                    >{{ identificacionUnidad(unidad) }}</span>
+                </span>
+            </span>
+        </template>
+        <template #description>
+            <span class="sr-only">Estado, costo e historial del equipo</span>
+        </template>
         <template #body>
             <USkeleton
                 v-if="cargando && !unidad"
@@ -65,97 +91,108 @@ function alReparar(cambiada: UnidadInventario) {
                 :reintentar="cargar"
                 :reintentando="cargando"
             />
-            <div
-                v-else-if="unidad"
-                class="flex flex-col gap-5"
-                data-prueba="unidad-detalle"
-            >
-                <dl class="grid grid-cols-2 gap-4">
-                    <DatoFicha etiqueta="Estado">
-                        <UBadge
-                            :label="ESTADOS_UNIDAD[unidad.estado].etiqueta"
-                            :icon="ESTADOS_UNIDAD[unidad.estado].icono"
-                            :color="ESTADOS_UNIDAD[unidad.estado].color"
-                            variant="subtle"
-                            size="sm"
-                        />
-                    </DatoFicha>
-                    <DatoFicha
-                        etiqueta="Condición"
-                        :valor="CONDICIONES_UNIDAD[unidad.condicion]"
+            <template v-else-if="unidad && estado">
+                <div
+                    class="flex flex-wrap items-center gap-2"
+                    data-prueba="unidad-detalle"
+                >
+                    <UBadge
+                        :label="estado.etiqueta"
+                        :icon="estado.icono"
+                        :color="estado.color"
+                        variant="subtle"
+                        class="rounded-full"
+                        data-prueba="unidad-estado"
                     />
-                    <DatoFicha
-                        etiqueta="Costo"
-                        :valor="formatearQuetzales(unidad.costo)"
-                    />
-                    <DatoFicha etiqueta="Dónde está">
-                        <ULink
-                            v-if="unidad.servicio_id"
-                            :to="enlace(`/servicios/${unidad.servicio_id}`)"
-                            class="text-primary"
-                        >Servicio #{{ unidad.servicio_id }}</ULink>
-                        <span v-else>{{ unidad.bodega_nombre ?? '—' }}</span>
-                    </DatoFicha>
-                    <DatoFicha
-                        etiqueta="Serie"
-                        :valor="unidad.serie"
-                        mono
-                    />
-                    <DatoFicha
-                        etiqueta="MAC"
-                        :valor="unidad.mac"
-                        mono
-                    />
-                </dl>
-                <UButton
-                    v-if="unidad.estado === 'en_reparacion' && puede('inventario.marcar_reparada')"
-                    label="Marcar reparada"
-                    icon="i-lucide-wrench"
-                    color="success"
-                    variant="outline"
-                    class="self-start"
-                    data-prueba="unidad-reparada"
-                    @click="reparadaAbierto = true"
-                />
-                <section class="flex flex-col gap-2">
-                    <h3 class="text-sm font-medium text-highlighted">
+                    <ULink
+                        v-if="unidad.servicio_id"
+                        :to="enlace(`/servicios/${unidad.servicio_id}#equipos`)"
+                        class="text-sm text-highlighted hover:text-primary"
+                    >Servicio #{{ unidad.servicio_id }}</ULink>
+                    <span
+                        v-else-if="unidad.bodega_nombre"
+                        class="text-sm text-highlighted"
+                    >{{ unidad.bodega_nombre }}</span>
+                    <span
+                        v-if="garantiaAbierta?.proveedor_nombre"
+                        class="text-sm text-muted"
+                    >· {{ garantiaAbierta.proveedor_nombre }}{{ garantiaAbierta.rma ? ` · RMA ${garantiaAbierta.rma}` : '' }}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="rounded-xl bg-(--ax-panel) p-3">
+                        <p class="text-[0.8125rem] text-muted">
+                            Costo
+                        </p>
+                        <p class="text-lg font-bold tabular-nums text-highlighted">
+                            {{ formatearQuetzales(unidad.costo) }}
+                        </p>
+                    </div>
+                    <div class="rounded-xl bg-(--ax-panel) p-3">
+                        <p class="text-[0.8125rem] text-muted">
+                            Condición
+                        </p>
+                        <p class="text-lg font-bold text-highlighted">
+                            {{ CONDICIONES_UNIDAD[unidad.condicion] }}
+                        </p>
+                    </div>
+                </div>
+                <section class="flex flex-col gap-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wide text-muted">
                         Historial
                     </h3>
                     <ol
-                        class="flex flex-col gap-2"
+                        class="flex flex-col gap-3"
                         data-prueba="unidad-historial"
                     >
                         <li
-                            v-for="m in unidad.historial"
-                            :key="m.id"
-                            class="flex flex-col gap-0.5 rounded-md border border-default p-2.5 text-sm"
+                            v-for="evento in eventos"
+                            :key="evento.clave"
+                            class="flex items-start gap-3"
                         >
-                            <span class="flex flex-wrap items-center justify-between gap-2">
-                                <span class="font-medium text-highlighted">{{ TIPOS_MOVIMIENTO_INVENTARIO[m.tipo] }}</span>
-                                <span class="text-xs text-muted tabular-nums">{{ formatearFecha(m.fecha) }}</span>
-                            </span>
-                            <span class="text-xs text-muted">{{ m.bodega_nombre }} · {{ formatearQuetzales(m.costo_total) }}<template v-if="m.servicio_id">
-                                · servicio #{{ m.servicio_id }}
-                            </template></span>
                             <span
-                                v-if="m.motivo"
-                                class="text-xs text-muted"
-                            >{{ m.motivo }}</span>
+                                class="pastilla-icono pastilla-tono size-8 shrink-0 rounded-lg"
+                                :class="evento.tono"
+                            >
+                                <UIcon
+                                    :name="evento.icono"
+                                    class="size-4"
+                                />
+                            </span>
+                            <div class="flex min-w-0 flex-col">
+                                <span class="text-sm font-semibold text-highlighted">{{ evento.titulo }}</span>
+                                <span class="text-xs text-muted">{{ formatearFechaCorta(evento.fecha) }}{{ evento.detalle ? ` · ${evento.detalle}` : '' }}</span>
+                            </div>
+                        </li>
+                        <li
+                            v-if="!eventos.length"
+                            class="text-sm text-muted"
+                        >
+                            Sin movimientos todavía.
                         </li>
                     </ol>
                 </section>
+            </template>
+        </template>
+        <template
+            v-if="acciones.length"
+            #footer
+        >
+            <div
+                class="flex w-full flex-wrap gap-2"
+                data-prueba="unidad-acciones"
+            >
+                <UButton
+                    v-for="(accion, i) in acciones"
+                    :key="accion"
+                    :label="ACCIONES_EQUIPO[accion].etiqueta"
+                    :icon="ACCIONES_EQUIPO[accion].icono"
+                    :color="ACCIONES_EQUIPO[accion].color ?? (i === 0 ? 'primary' : 'neutral')"
+                    :variant="i === 0 && !ACCIONES_EQUIPO[accion].color ? 'solid' : 'outline'"
+                    class="rounded-full"
+                    :data-accion-equipo="accion"
+                    @click="elegir(accion)"
+                />
             </div>
-            <AccionMotivoModal
-                v-model:open="reparadaAbierto"
-                titulo="Marcar reparada"
-                efecto="El equipo vuelve a disponible en su bodega; se puede prestar otra vez."
-                confirmar="Marcar reparada"
-                icono="i-lucide-wrench"
-                color="success"
-                placeholder="Ej.: se cambió el adaptador de corriente"
-                :ejecutar="motivo => marcarReparada(motivo)"
-                @hecho="alReparar"
-            />
         </template>
     </USlideover>
 </template>

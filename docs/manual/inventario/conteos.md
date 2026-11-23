@@ -37,16 +37,16 @@ Solo puede haber un conteo abierto por bodega. **La bodega sigue trabajando mien
 
 ### Capturar una línea
 
-En la sección «Capturar»:
+La tarjeta «Lo contado» lista todo lo que la bodega tiene en el sistema, con las pastillas «Todos», «Con diferencia» y «Sin contar»:
 
-1. Elige el producto.
-2. Si es por cantidad, escribe lo **Contado** (0 si no hay). Si es por serie, pega o escanea las **Series o MAC encontradas**, una por línea.
-3. Solo si sobra algo de un producto que no tenía existencia, escribe el **Costo del sobrante**.
-4. Pulsa «Capturar línea».
+1. En un producto por cantidad, escribe lo **Contado** en su fila (0 si no hay) y pulsa Enter o sal del campo: se guarda solo.
+2. En un producto por serie, pulsa su botón o «Escanear series» arriba, y pega o escanea las **Series o MAC encontradas**, una por línea.
+3. Si encontraste un producto que no está en la lista, usa «Contar otro producto». Si sobra algo de un producto que no tenía existencia, escribe su **Costo c/u** antes de guardar lo contado.
+4. «Hoja para contar» imprime la lista para contar en papel.
 
 Lo esperado se toma **en el momento de capturar** la línea. Lo que se mueva después (una venta, un consumo) no cuenta como faltante ni sobrante; la tabla lo avisa con «… movimientos después de capturar (no cuentan como diferencia)». Capturar otra vez el mismo producto reemplaza la línea y vuelve a tomar lo esperado.
 
-La tabla muestra por producto lo esperado, lo contado y la diferencia en cantidad y en quetzales: en rojo lo que falta, en verde lo que sobra. Arriba ves el «Faltante si se cierra» y el «Sobrante si se cierra».
+La tabla muestra por producto lo esperado, lo contado y la diferencia en cantidad y en quetzales: en rojo lo que falta, en verde lo que sobra. A la derecha, «Antes de cerrar» muestra el faltante, el sobrante y el ajuste neto.
 
 En productos por serie:
 

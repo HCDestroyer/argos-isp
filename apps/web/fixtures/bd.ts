@@ -56,6 +56,7 @@ import { fotosIniciales, revisionesIniciales, servicioPendienteTitular, type Fot
 import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
 import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDatos'
+import { equiposIniciales, type EquiposFixtures } from './inventario/equipos'
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
@@ -231,6 +232,8 @@ interface BaseFixtures {
     movimientosInventario: Schema<'MovimientoInventario'>[]
     unidadesInventario: Schema<'UnidadInventario'>[]
     conteosInventario: Schema<'ConteoInventarioDetalle'>[]
+    /** Equipos del cliente (A48) y miembros de cuadrilla (A47): estados, garantías, intentos, contactos y cobros. */
+    equipos: EquiposFixtures
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
     /** Inicio de la facturación y `facturar_desde` por servicio (emisión manual de periodos, A3). */
@@ -433,6 +436,7 @@ function inicial(): BaseFixtures {
         movimientosInventario: movimientosIniciales(),
         unidadesInventario: unidadesIniciales(),
         conteosInventario: conteosIniciales(),
+        equipos: equiposIniciales(),
         inventarioFaseD: faseDInicial(),
         conciliacionesPasarela,
         roles,
