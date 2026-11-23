@@ -48,6 +48,9 @@ const semillas: Semilla[] = [
     { nombre: 'Walter Isaías Coc', zona: 1 },
     { nombre: 'Heidy Johana Velásquez', zona: 2 },
     { nombre: 'Edgar Leonel Batz', zona: null },
+    // Iris 0.14.1: otra empresa con el NIT del Hotel Posada del Valle (11), también verificado: la
+    // revisión de titular empresa con varios candidatos elige entre las dos.
+    { nombre: 'Hotel Posada del Valle, sucursal Antigua', tipo: 'empresa', nit: '3344556-7', fiscal: 'INVERSIONES POSADA DEL VALLE, S.A.', zona: 1 },
 ]
 
 function telefono(indice: number): string {
@@ -90,6 +93,19 @@ export function codigoCliente(id: number): string {
     return `C-${String(id).padStart(6, '0')}`
 }
 
+/**
+ * NIT verificado en el panel (Iris 0.14.1, `POST /clientes/:id/verificar-nit`) por la administradora
+ * (usuario 1): solo estas empresas cuentan como titular existente por NIT en el cambio de titular.
+ * Comercial El Progreso (3) tiene un NIT válido sin verificar, para probar «Verificar NIT».
+ */
+export const NIT_VERIFICADOS: Record<number, string> = {
+    11: '2026-10-05T17:45:00.000Z',
+    29: '2026-10-06T14:10:00.000Z',
+}
+
+/** Usuario que verificó los NIT de las semillas (`me.admin.json`). */
+export const VERIFICADOR_NIT = { id: 1, nombre: 'Ana Administradora' }
+
 /** Cliente importado de Mikrowisp (con un pago histórico en `facturacion/datos.ts`). */
 export const CLIENTE_IMPORTADO = 8
 
@@ -126,6 +142,10 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         referido_por_id: null,
         referido_empresa_id: null,
         codigos_referido: [],
+        // Como la API: null sin verificar (Iris 0.14.1)
+        nit_verificado_en: NIT_VERIFICADOS[id] ?? null,
+        nit_verificado_por: NIT_VERIFICADOS[id] ? VERIFICADOR_NIT.id : null,
+        nit_verificado_por_nombre: NIT_VERIFICADOS[id] ? VERIFICADOR_NIT.nombre : null,
         // Como la API (`core.ids_externos`): el 8 vino de Mikrowisp; los demás se crearon en Argos.
         externo: id === CLIENTE_IMPORTADO ? { sistema: 'mikrowisp', id: '1042' } : null,
         version: 1,

@@ -110,7 +110,7 @@ describe('eliminar sin historial', () => {
         document.body.querySelector<HTMLElement>('[data-prueba="eliminar-entiende"] button, button[data-prueba="eliminar-entiende"]')!.click()
         await flushPromises()
         document.body.querySelector<HTMLButtonElement>('[data-prueba="eliminar-confirmar"]')!.click()
-        await esperar(() => expect(document.body.querySelector('[data-prueba="eliminar-422"]')?.textContent).toContain('No se puede eliminar: tiene 22 servicios y 41 sesiones PPPoE. Puedes desactivarlo.'))
+        await esperar(() => expect(document.body.querySelector('[data-prueba="eliminar-422"]')?.textContent).toContain('No se puede eliminar: tiene 23 servicios y 41 sesiones PPPoE. Puedes desactivarlo.'))
         expect(document.body.querySelector<HTMLButtonElement>('[data-prueba="eliminar-confirmar"]')?.disabled).toBe(true)
         historial.unmount()
     })
