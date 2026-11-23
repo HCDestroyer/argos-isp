@@ -1540,6 +1540,18 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Cómo leerla',
         ],
     },
+    '/sistema/tareas': {
+        titulo: 'Tareas programadas',
+        resumen: 'Muestra todas las tareas que el sistema hace solo, a su hora: generar facturas, vencer y aplicar mora, el corte por hora, cerrar promesas vencidas, sellar el libro, el calendario fiscal y la facturación electrónica, los puntos de lealtad, las sesiones colgadas, el sondeo y la reconciliación de los routers, los recordatorios de pago, las particiones de la bitácora, el cálculo de almacenamiento y los procesos que…',
+        pagina: 'general/tareas-programadas',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué muestra cada tarea',
+            'Historial',
+            'Ejecutar ahora',
+        ],
+    },
     '/usuarios': {
         titulo: 'Usuarios',
         resumen: 'Las personas que entran al panel: su correo, sus roles (qué pueden hacer), el alcance de cada rol (dónde lo pueden hacer) y las empresas en las que trabajan.',

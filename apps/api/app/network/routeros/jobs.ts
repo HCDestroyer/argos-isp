@@ -18,6 +18,7 @@ import {
 } from '#network/routeros/dispatcher'
 import { ejecutarCambioControl, type EntradaCambioControl } from '#network/routeros/cambio_control'
 import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions/sondear_routers'
+import { correrJobCron } from '#monitoreo/crons/corridas'
 
 /**
  * Crons del reconciliador (`node ace routeros:worker`), cola `routeros-cron`:
@@ -352,7 +353,10 @@ export function crearWorkerRouterOS(opciones: { prefijo?: string; dispatcher?: O
             ? ejecutarCambioControl(job.data as EntradaCambioControl)
             : job.name === 'reconciliar_router'
               ? ejecutarReconciliacionManual(job.data as DatosReconciliarManual, opciones.dispatcher)
-              : ejecutarCronRouterOS(job.name, opciones.dispatcher)
+              : // corrida anotada en «Tareas programadas» (`core.cron_corridas`)
+                correrJobCron(NOMBRE_COLA_ROUTEROS, job, () =>
+                    ejecutarCronRouterOS(job.name, opciones.dispatcher),
+                )
     const worker = new Worker(NOMBRE_COLA_ROUTEROS, procesar, {
         connection: conexion(),
         prefix: prefijo(opciones.prefijo),

@@ -7,8 +7,12 @@
 | panel lo lea con su cliente tipado (packages/contracts). Contrato: `.claude/integration/contratos/salud.md`.
 */
 import { definirRuta, type Ruta } from '#shared/rutas'
+import type { HttpContext } from '@adonisjs/core/http'
 import {
     Almacenamiento,
+    CorridasCronPagina,
+    EjecucionCron,
+    TareasProgramadas,
     MedicionAlmacenamiento,
     RegistroSistemaPagina,
     SaludSistema,
@@ -19,7 +23,33 @@ import { saludSistema } from '#monitoreo/salud'
 import { registroSistema } from '#monitoreo/registro'
 import { verAlmacenamiento } from '#monitoreo/almacenamiento'
 import RecalcularAlmacenamiento, { PRESUPUESTO_MANUAL_MS } from '#monitoreo/actions/recalcular_almacenamiento'
-import { registroSistemaValidator } from '#monitoreo/validators'
+import { corridasCronValidator, registroSistemaValidator } from '#monitoreo/validators'
+import { corridasDeCron, listarCrons } from '#monitoreo/crons/estado'
+import { buscarCron } from '#monitoreo/crons/catalogo'
+import EjecutarCron from '#monitoreo/actions/ejecutar_cron'
+import { permisosDeUsuario } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { Prohibido } from '#shared/errores'
+
+/** «Ejecutar ahora» pide además los permisos propios del cron (p. ej. `facturas.generar`). */
+async function exigirPermisosCron(ctx: HttpContext, clave: string): Promise<void> {
+    const cron = buscarCron(clave)
+    const usuario = ctx.auth.user
+    if (!cron || !usuario) return
+    const tiene = await permisosDeUsuario(usuario.id, alcancesDelToken(ctx))
+    const faltan = cron.permisos.filter((p) => !tiene.includes(p))
+    if (faltan.length > 0) {
+        throw new Prohibido(`Para ejecutar esta tarea necesitas además: ${faltan.join(', ')}`)
+    }
+}
+
+const parametroClave = {
+    clave: {
+        type: 'string',
+        pattern: '^[a-z_]+\\.[a-z_:]+$',
+        description: 'Clave del cron (`billing.generar`)',
+    },
+}
 
 const monitoreo: Ruta[] = [
     definirRuta({
@@ -96,6 +126,57 @@ const monitoreo: Ruta[] = [
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Medición nueva', esquema: MedicionAlmacenamiento },
         handler: (ctx) => new RecalcularAlmacenamiento().execute({ origen: 'manual' }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/sistema/crons',
+        operacion: 'sistemaCrons',
+        resumen: 'Tareas programadas: horario, última y próxima corrida, atrasos y quién las corre',
+        descripcion:
+            'Todas las tareas del catálogo (`app/monitoreo/crons/catalogo.ts`) con su última corrida ' +
+            '(`core.cron_corridas`, o `audit.acciones` antes de esta versión), la próxima (agenda de BullMQ o ' +
+            'calculada del horario), si está atrasada (regla de `notificaciones.vigilar_crons`) y qué instancia ' +
+            'tiene el lock. Solo lee; sin caché. Si Redis no responde, `avisos` lo dice y la próxima se calcula.',
+        etiqueta: 'sistema',
+        permiso: 'sistema.ver_crons',
+        respuesta: { status: 200, descripcion: 'Tareas programadas', esquema: TareasProgramadas },
+        handler: () => listarCrons(),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/sistema/crons/:clave/corridas',
+        operacion: 'sistemaCronCorridas',
+        resumen: 'Historial de corridas de una tarea programada',
+        descripcion:
+            'De la más nueva a la más vieja, paginado por cursor. Las corridas programadas seguidas sin ' +
+            'cambios van agrupadas en una fila (`repeticiones`). Se guardan 90 días. 404 si la clave no existe.',
+        etiqueta: 'sistema',
+        permiso: 'sistema.ver_crons',
+        parametros: parametroClave,
+        query: corridasCronValidator,
+        respuesta: { status: 200, descripcion: 'Página de corridas', esquema: CorridasCronPagina },
+        handler: (_ctx, { params, query }) => corridasDeCron(String(params.clave), query),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/sistema/crons/:clave/ejecutar',
+        operacion: 'sistemaEjecutarCron',
+        resumen: 'Ejecutar ahora una tarea programada',
+        descripcion:
+            'Encola el job en la cola del cron; lo corre el worker de su módulo con el mismo lock que la ' +
+            'corrida programada. Responde 202 en cuanto queda encolada; la corrida aparece en su historial. ' +
+            '409 `en_curso` si ya se está ejecutando o hay otra ejecución esperando; 422 `no_manual` en los ' +
+            'procesos continuos y `cron_apagado` si está apagada; 403 si faltan los permisos propios del cron.',
+        etiqueta: 'sistema',
+        permiso: 'sistema.ejecutar_cron',
+        parametros: parametroClave,
+        idempotente: true,
+        respuesta: { status: 202, descripcion: 'Ejecución encolada', esquema: EjecucionCron },
+        handler: async (ctx, { params }) => {
+            const clave = String(params.clave)
+            await exigirPermisosCron(ctx, clave)
+            return new EjecutarCron().execute({ clave }, ctx.contextoAccion())
+        },
     }),
 ]
 

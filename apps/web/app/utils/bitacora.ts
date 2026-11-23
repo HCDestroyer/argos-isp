@@ -390,6 +390,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routeros.reconciliar': 'Router reconciliado',
     'routeros.sondear': 'Sondeo de routers con fallas',
     'sistema.recalcular_almacenamiento': 'Almacenamiento recalculado',
+    'sistema.ejecutar_cron': 'Tarea programada ejecutada a mano',
     'apariencia.editar': 'Apariencia del sistema cambiada',
     'inventario.aprobar_cobro_equipo': 'Cobro de equipo aprobado',
     'inventario.rechazar_cobro_equipo': 'Cobro de equipo rechazado',
