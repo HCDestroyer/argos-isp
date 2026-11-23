@@ -48,6 +48,22 @@ export function hostDeUrl(url: string | null | undefined): string | null {
 }
 
 /**
+ * Origen público (`https://host[:puerto]`) de una URL http(s); null si no hay o no se entiende.
+ * Nunca lleva credenciales, ruta, consulta ni fragmento: sirve para mostrarla en una pantalla pública.
+ */
+export function origenDeUrl(url: string | null | undefined): string | null {
+    if (!url) return null
+    try {
+        const u = new URL(url.trim())
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+        // `URL.origin` es esquema + host (puerto solo si no es el estándar), sin usuario ni contraseña
+        return u.host ? u.origin : null
+    } catch {
+        return null
+    }
+}
+
+/**
  * Instalación del otro sistema que pidió el autologin: el host de la `url_base` de su conector
  * (p. ej. `iris.isp.example` o `horus.isp.example:8443`), o null si el conector no tiene
  * `url_base`. Se muestra en `/sso/entrar` antes de pedir el login, para que quien entra vea a qué

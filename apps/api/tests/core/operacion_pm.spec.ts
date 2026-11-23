@@ -347,6 +347,55 @@ test.group('Recuperar la contraseña (decisión 22)', (group) => {
         assert.isFalse(despues.body().recuperar_contrasena)
     })
 
+    test('/auth/opciones lleva la dirección de Iris y Horus conectados, sin secretos', async ({
+        client,
+        assert,
+    }) => {
+        const tablas = ['integraciones.iris_conector', 'integraciones.horus_conector'] as const
+        const previas = await Promise.all(tablas.map((t) => db.from(t).select('*')))
+        for (const t of tablas) await db.from(t).delete()
+        try {
+            const sin = await estado(client.get('/api/v1/auth/opciones'), 200)
+            assert.containsSubset(sin.body(), { iris: false, horus: false, iris_url: null, horus_url: null })
+
+            // conectados: solo el origen público, nunca credenciales, ruta ni consulta
+            await db.table('integraciones.iris_conector').insert({
+                id: 1,
+                activo: true,
+                url_base: 'https://usuario:clave@iris.isp.example:8443/api/v1?x=1#f',
+                token_cifrado: 'cifrado-secreto-iris',
+            })
+            await db.table('integraciones.horus_conector').insert({
+                id: 1,
+                activo: true,
+                url_base: 'https://horus.isp.example/',
+                token_cifrado: 'cifrado-secreto-horus',
+            })
+            const con = await estado(client.get('/api/v1/auth/opciones'), 200)
+            assert.containsSubset(con.body(), {
+                iris: true,
+                horus: true,
+                iris_url: 'https://iris.isp.example:8443',
+                horus_url: 'https://horus.isp.example',
+            })
+            const texto = JSON.stringify(con.body())
+            for (const prohibido of ['clave', 'usuario', 'cifrado', '/api/v1', 'x=1']) {
+                assert.notInclude(texto, prohibido)
+            }
+
+            // apagado: el botón se esconde aunque quede la `url_base`
+            await db.from('integraciones.iris_conector').where('id', 1).update({ activo: false })
+            const apagado = await estado(client.get('/api/v1/auth/opciones'), 200)
+            assert.containsSubset(apagado.body(), { iris: false, iris_url: null, horus: true })
+        } finally {
+            for (const [i, t] of tablas.entries()) {
+                await db.from(t).delete()
+                const filas = previas[i] ?? []
+                if (filas.length) await db.table(t).multiInsert(filas)
+            }
+        }
+    })
+
     test('límite por correo: 429 al pasarse del tope en la ventana', async ({ client }) => {
         const anterior = process.env.RECUPERAR_CONTRASENA_LIMITE_USUARIO
         process.env.RECUPERAR_CONTRASENA_LIMITE_USUARIO = '2'

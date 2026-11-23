@@ -560,7 +560,7 @@ export interface paths {
         };
         /**
          * Qué muestra la pantalla de login (decisión del PM 22)
-         * @description Pública: si se puede recuperar la contraseña por correo y si Iris y Horus están conectados (sus botones). Sin datos de nadie.
+         * @description Pública: si se puede recuperar la contraseña por correo y si Iris y Horus están conectados (sus botones). `iris_url` y `horus_url` son el origen público de cada app conectada (o null): el botón lleva allí y el autologin sale de esa app («Abrir en Argos»). Sin datos de nadie ni secretos.
          */
         get: operations["authOpciones"];
         put?: never;
@@ -20824,6 +20824,10 @@ export interface components {
             iris: boolean;
             /** @description Horus conectado: mostrar «Entrar con Horus» */
             horus: boolean;
+            /** @description Origen público de Iris (`https://host[:puerto]`) al que lleva «Entrar con Iris»; allí se usa «Abrir en Argos». null si Iris no está conectado. Nunca credenciales ni ruta */
+            iris_url: string | null;
+            /** @description Origen público de Horus al que lleva «Entrar con Horus»; null si Horus no está conectado. Nunca credenciales ni ruta */
+            horus_url: string | null;
         };
         OrdenRetiroSolicitada: {
             unidad_id: number;
