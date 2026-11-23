@@ -421,6 +421,9 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'contactos.gestionar': 'Contacto del cliente cambiado',
     'servicios.cambiar_plan_pendiente': 'Plan cambiado antes de instalar',
     'servicios.cambiar_titular': 'Titular del servicio cambiado',
+    'servicios.aprobar_titular_empresa': 'Cambio de titular a empresa aprobado',
+    'servicios.rechazar_titular_empresa': 'Cambio de titular a empresa rechazado',
+    'clientes.verificar_nit': 'NIT del cliente verificado',
     'servicios.completar_datos': 'Datos del servicio completados',
     'servicios.reservar_ip': 'IP reservada para la instalación',
     'servicios.vencer_reserva_ip': 'Reserva de IP vencida',
@@ -555,6 +558,10 @@ const ICONOS_ACCION: Record<string, string> = {
     reconexion_temporal: 'i-lucide-plug-zap',
     cancelar_reconexion: 'i-lucide-plug-zap',
     verificar_identidad: 'i-lucide-shield-check',
+    ver_identidad: 'i-lucide-eye',
+    verificar_nit: 'i-lucide-badge-check',
+    aprobar_titular_empresa: 'i-lucide-circle-check',
+    rechazar_titular_empresa: 'i-lucide-circle-x',
     registrar_consentimiento: 'i-lucide-message-circle',
 }
 
@@ -651,6 +658,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     ticket_iris: { etiqueta: 'Ticket en Iris' },
     solicitud_iris: { etiqueta: 'Solicitud de servicio en Iris' },
     contacto_cliente: { etiqueta: 'Contacto del cliente' },
+    // Iris 0.14.1: revisión de un cambio de titular a empresa (pantalla «Revisión de titulares»)
+    titular_empresa_revision: { etiqueta: 'Revisión de titular empresa', ruta: id => `/clientes/titulares/${id}` },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */
@@ -712,6 +721,13 @@ function estadoDestino(entrada: unknown): EstadoServicio | null {
  * dice a qué estado pasó: "Servicio suspendido", "Servicio activo".
  */
 export function tituloAccion(accion: Accion): string {
+    // Iris 0.14.1: la misma acción lee la identidad de un cliente o el representante de una revisión.
+    if (accion.accion === 'clientes.ver_identidad' && accion.entidad_tipo === 'titular_empresa_revision') {
+        const parte = typeof accion.entrada === 'object' && accion.entrada !== null && 'parte' in accion.entrada ? accion.entrada.parte : null
+        return parte === 'frente' || parte === 'reverso'
+            ? `Foto del documento del representante consultada (${parte})`
+            : 'Revisión de titular empresa consultada'
+    }
     if (accion.accion === 'servicios.cambiar_estado') {
         const estado = estadoDestino(accion.entrada)
         if (estado) {

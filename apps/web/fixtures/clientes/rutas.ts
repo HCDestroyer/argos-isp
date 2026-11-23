@@ -1,7 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { errorValorCampo, type ValorCampoFormulario } from '~/utils/camposPersonalizados'
-import { deducirTipoDocumento, errorDocumentoFiscal, limpiarDocumento, type TipoDocumentoFiscal } from '~/utils/documentoFiscal'
+import { deducirTipoDocumento, errorDocumentoFiscal, limpiarDocumento, nitValido, type TipoDocumentoFiscal } from '~/utils/documentoFiscal'
 import { errorTelefono, telefonoGuardado } from '../telefonos'
 import { bd, siguienteId } from '../bd'
 import {
@@ -16,7 +16,9 @@ import {
     normalizar,
     numeroQuery,
     paginar,
+    problemaTipado,
     registrarAccion,
+    usuariosPorToken,
     versionCambiada,
 } from '../comun'
 import { estadoCuentaDe } from './estado-cuenta'
@@ -172,6 +174,9 @@ const VACIO: CamposCliente = {
     referido_empresa_id: null,
     codigos_referido: [],
     externo: null,
+    nit_verificado_en: null,
+    nit_verificado_por: null,
+    nit_verificado_por_nombre: null,
 }
 
 /** Como `RESUMEN_SERVICIOS` de la API: suspendido > limitado > activo > pendiente de instalación. */
@@ -407,6 +412,51 @@ export const rutasClientes: RutasFixture = {
         return { status: 201, cuerpo: cliente }
     })),
 
+    /**
+     * Como `VerificarNitCliente` (A1, Iris 0.14.1): una persona del panel confirma el NIT con el
+     * documento o la consulta SAT. 422 `nit_no_verificable` sin un NIT válido; 409 si cambió la versión.
+     */
+    'POST /api/v1/clientes/:id/verificar-nit': conPermiso('clientes.verificar_nit', (solicitud) => {
+        const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        const errores: NonNullable<Problem['errors']> = []
+        if (cuerpo.metodo !== 'documento' && cuerpo.metodo !== 'consulta_sat') {
+            errores.push({ field: 'metodo', message: 'Uno de: documento, consulta_sat', rule: 'enum' })
+        }
+        if (typeof cuerpo.version !== 'number') {
+            errores.push({ field: 'version', message: 'La versión es obligatoria', rule: 'required' })
+        }
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        if (cuerpo.version !== cliente.version) {
+            return problemaTipado(409, 'conflicto_version', 'Conflicto de versión', `El cliente ${cliente.id} cambió desde que lo leíste; vuelve a cargarlo`)
+        }
+        if (cliente.tipo_documento_fiscal !== 'nit' || !cliente.nit_cui || !nitValido(cliente.nit_cui)) {
+            return problemaTipado(422, 'nit_no_verificable', 'Regla de negocio', 'El cliente no tiene un NIT válido (tipo nit con dígito verificador)')
+        }
+        const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+        const momento = ahora()
+        Object.assign(cliente, {
+            nit_verificado_en: momento,
+            nit_verificado_por: usuario?.id ?? null,
+            nit_verificado_por_nombre: usuario?.nombre ?? null,
+            version: cliente.version + 1,
+            updated_at: momento,
+        })
+        registrarAccion(solicitud, 'clientes.verificar_nit', { tipo: 'cliente', id: cliente.id }, cuerpo)
+        const respuesta: Schema<'NitVerificado'> = {
+            cliente_id: cliente.id,
+            nit_verificado_en: momento,
+            nit_verificado_por: usuario?.id ?? 0,
+            version: cliente.version,
+        }
+        return { status: 200, cuerpo: respuesta }
+    }),
+
     'PUT /api/v1/clientes/:id': conPermiso('clientes.editar', (solicitud) => {
         const indice = bd.clientes.findIndex(c => c.id === idDe(solicitud))
         const actual = bd.clientes[indice]
@@ -426,6 +476,10 @@ export const rutasClientes: RutasFixture = {
             ...aplicar(actual, cuerpo),
             version: actual.version + 1,
             updated_at: ahora(),
+        }
+        // Iris 0.14.1: como el trigger `core.borrar_nit_verificado`, un NIT que cambia deja de estar verificado.
+        if (editado.nit_cui !== actual.nit_cui) {
+            Object.assign(editado, { nit_verificado_en: null, nit_verificado_por: null, nit_verificado_por_nombre: null })
         }
         bd.clientes[indice] = editado
         registrarAccion(solicitud, 'clientes.editar', { tipo: 'cliente', id: editado.id }, cuerpo)

@@ -28,8 +28,11 @@ const suspensionManual: Record<number, string> = {
  */
 export const CLIENTES_SIN_PLANTILLA = new Set([17, 22, 23, 26, 27])
 
-/** Clientes sin servicio todavía (recién dados de alta). */
-const sinServicio = new Set([14, 28])
+/**
+ * Clientes sin servicio todavía (recién dados de alta). El 28 tiene uno por instalar que se siembra
+ * aparte (`titularesEmpresa/datos.ts`); el 29 es la segunda empresa con el NIT del 11 (Iris 0.14.1).
+ */
+const sinServicio = new Set([14, 28, 29])
 
 /** Clientes con un segundo servicio (empresas con sucursal). */
 const conSegundo = new Set([3, 11])
