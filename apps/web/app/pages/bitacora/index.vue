@@ -87,6 +87,9 @@ const hasta = ref(FECHA.test(textoQuery(route.query.hasta)) ? textoQuery(route.q
 const peticion = ref(textoQuery(route.query.peticion))
 /** `X-Iris-Conversacion` de las acciones que llegaron de Iris (contrato Iris 0.6.0 §7.1). */
 const conversacion = ref(textoQuery(route.query.conversacion))
+/* Un filtro de «Más filtros» que llega en la URL se ve aplicado: la sección arranca abierta. */
+filtrosAbiertos.value = conversacion.value !== '' || rango.value === 'elegir'
+    || (pestana.value === 'acciones' && (entidadTipo.value !== TODOS || entidadId.value !== ''))
 
 const usuarios = shallowRef<UsuarioPanel[]>([])
 
