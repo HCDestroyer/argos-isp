@@ -165,7 +165,8 @@ const filtrosAbiertos = ref(masFiltros.value > 0)
 
 async function abrir(comprobante: Comprobante) {
     if (!esEscritorio()) {
-        await navigateTo(`/comprobantes/${comprobante.id}`)
+        // La cola filtrada viaja con él: al decidir pasa al siguiente de esta misma cola.
+        await navigateTo({ path: `/comprobantes/${comprobante.id}`, query: queryFiltrosCola(route.query) })
         return
     }
     seleccionado.value = comprobante.id

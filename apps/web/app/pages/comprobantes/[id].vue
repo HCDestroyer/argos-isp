@@ -17,8 +17,11 @@ useHead(() => ({ title: `Comprobante #${route.params.id} · ArgosIsp` }))
 const pendientes = shallowRef<Comprobante[]>([])
 const totalPendientes = ref<number | null>(null)
 
+/** Los filtros de la cola de la que vino (`?canal=iris`…): el siguiente sale de esa misma cola. */
+const filtrosCola = computed(() => queryFiltrosCola(route.query))
+
 async function cargarCola() {
-    const resultado = await useComprobantes().listar({ estado: 'pendiente', limit: 50 })
+    const resultado = await useComprobantes().listar({ ...filtrosColaDeQuery(route.query), estado: 'pendiente', limit: 50 })
     pendientes.value = resultado.ok ? resultado.data.data : []
     totalPendientes.value = resultado.ok ? resultado.data.resumen.total : null
 }
@@ -33,7 +36,7 @@ async function alDecidir(decidido: Comprobante) {
     const siguiente = pendientes.value.slice(indice + 1)[0] ?? pendientes.value.find(c => c.id !== decidido.id)
     await cargarCola()
     if (siguiente && pendientes.value.some(c => c.id === siguiente.id)) {
-        await navigateTo(`/comprobantes/${siguiente.id}`)
+        await navigateTo({ path: `/comprobantes/${siguiente.id}`, query: filtrosCola.value })
     }
 }
 
@@ -57,7 +60,7 @@ onMounted(cargarCola)
             >
                 <template #antes-del-titulo>
                     <UButton
-                        to="/comprobantes"
+                        :to="{ path: '/comprobantes', query: filtrosCola }"
                         :icon="ICONOS.volver"
                         color="neutral"
                         variant="ghost"
