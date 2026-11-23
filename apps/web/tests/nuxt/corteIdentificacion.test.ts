@@ -212,7 +212,7 @@ describe('identificación del cliente cortado', () => {
             expect(ip.find('[data-prueba="corte-accion-portal_ve_otra_ip"]').exists()).toBe(false)
             const accion = ip.find('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]').text()
             expect(accion).toContain('«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT»')
-            expect(accion).toContain('pestaña Pools e IPs')
+            expect(accion).toContain('pestaña Red e IPs')
             expect(ip.text()).not.toContain('pega estos comandos')
             expect(ip.find('[data-prueba="corte-editar-router"]').exists()).toBe(false)
             expect(ip.find('[data-prueba="comandos-routeros"]').text()).toContain('http://10.255.0.1:8088/api/v1/portal/eco-ip')
