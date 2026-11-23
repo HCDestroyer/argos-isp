@@ -4210,7 +4210,7 @@ export interface paths {
         };
         /**
          * Servicios afectados por el incidente (solo ids, por páginas)
-         * @description Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera del alcance.
+         * @description Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera del alcance. Cada lectura queda auditada (`incidentes_red.leer`), también el 404.
          */
         get: operations["incidentesRedServicios"];
         put?: never;
@@ -10024,7 +10024,7 @@ export interface paths {
         put?: never;
         /**
          * El cliente abre un ticket de soporte en Iris
-         * @description Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. `multipart/form-data`: los campos y hasta 3 `archivos` (JPEG, PNG, WebP, HEIC o PDF por el contenido, 10 MB cada uno; 413 `tamano_excedido`, 422 `mime_no_permitido` o `demasiados_adjuntos`). Con sesión `ip`, sin adjuntos (422 `adjuntos_no_permitidos`) y solo con el servicio de la sesión. Acción `portal.abrir_ticket` (actor cliente, canal portal). Con `contacto_id` (A46) reporta la falla de un servicio que tiene a cargo: exige sesión `documento`, `servicio_id` y el permiso `reportar` (403 `permiso_de_contacto`; 404 si no está a su cargo).
+         * @description Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. `multipart/form-data`: los campos y hasta 3 `archivos` (JPEG, PNG o PDF por el contenido, 10 MB cada uno; WebP y HEIC no, contrato 0.14.2; 413 `tamano_excedido`, 422 `mime_no_permitido` o `demasiados_adjuntos`). Con sesión `ip`, sin adjuntos (422 `adjuntos_no_permitidos`) y solo con el servicio de la sesión. Acción `portal.abrir_ticket` (actor cliente, canal portal). Con `contacto_id` (A46) reporta la falla de un servicio que tiene a cargo: exige sesión `documento`, `servicio_id` y el permiso `reportar` (403 `permiso_de_contacto`; 404 si no está a su cargo).
          */
         post: operations["portalSoporteAbrirTicket"];
         delete?: never;

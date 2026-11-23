@@ -433,6 +433,33 @@ test.group('Portal: soporte con Iris (0.9.0 §11, A30 y A31)', (group) => {
         )
         assert.equal(malo.body().type, 'urn:argosisp:problema:mime_no_permitido')
         assert.equal(llamadas.length, antes)
+
+        // contrato 0.14.2 §11.6: WebP y HEIC ya no van a Iris (el navegador los convierte a JPEG)
+        const webp = Buffer.concat([
+            Buffer.from('RIFF'),
+            Buffer.alloc(4),
+            Buffer.from('WEBPVP8 '),
+            Buffer.alloc(16),
+        ])
+        const heic = Buffer.concat([Buffer.alloc(4), Buffer.from('ftypheic'), Buffer.alloc(16)])
+        for (const [contenido, filename, contentType] of [
+            [webp, 'foto.webp', 'image/webp'],
+            [heic, 'foto.heic', 'image/heic'],
+        ] as const) {
+            const rechazada = await estado(
+                abrir(client, c.cookie, { asunto: 'Sin internet', descripcion: 'x' }).file(
+                    'archivos',
+                    contenido,
+                    {
+                        filename,
+                        contentType,
+                    },
+                ),
+                422,
+            )
+            assert.equal(rechazada.body().type, 'urn:argosisp:problema:mime_no_permitido')
+        }
+        assert.equal(llamadas.length, antes)
     })
 
     test('errores de Iris: tope con Retry-After, validación y credencial rechazada', async ({

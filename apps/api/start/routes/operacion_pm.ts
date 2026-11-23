@@ -24,12 +24,7 @@ import {
 } from '#core/auth/recuperacion'
 import { verAjustesOperacion } from '#core/ajustes_operacion'
 import { listarAsignacionesPromocion, listarPromociones, verPromocion } from '#core/promociones_velocidad'
-import {
-    listarIncidentes,
-    paginaAfectadosIncidente,
-    paginaServiciosIncidente,
-    verIncidente,
-} from '#network/incidentes_red'
+import { listarIncidentes, paginaAfectadosIncidente, verIncidente } from '#network/incidentes_red'
 import { listarCaidasRepetidas } from '#network/consultas/caidas'
 import CrearPromocionVelocidad from '#core/actions/crear_promocion_velocidad'
 import AsignarPromocionVelocidad from '#core/actions/asignar_promocion_velocidad'
@@ -42,6 +37,7 @@ import RestablecerContrasena from '#core/actions/restablecer_contrasena'
 import BuscarHistorialIp from '#network/actions/buscar_historial_ip'
 import AbrirIncidenteRed from '#network/actions/abrir_incidente_red'
 import CerrarIncidenteRed from '#network/actions/cerrar_incidente_red'
+import LeerServiciosIncidenteRed from '#network/actions/leer_servicios_incidente_red'
 import {
     AjustesOperacion,
     CaidaRepetida,
@@ -480,17 +476,22 @@ const incidentes: Ruta[] = [
         descripcion:
             'Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], ' +
             'nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera ' +
-            'del alcance.',
+            'del alcance. Cada lectura queda auditada (`incidentes_red.leer`), también el 404.',
         etiqueta: 'red',
         permiso: 'incidentes_red.leer',
         query: v.serviciosIncidenteValidator,
         respuesta: { status: 200, descripcion: 'Página de ids', esquema: PaginaIdsServicio },
         handler: (ctx, { params, query }) =>
-            paginaServiciosIncidente(Number(params.incidenteId), {
-                empresas: empresasIncidente(ctx, query.empresa_id),
-                cursor: query.cursor,
-                limit: query.limit ?? 1000,
-            }),
+            new LeerServiciosIncidenteRed().execute(
+                {
+                    incidente_id: Number(params.incidenteId),
+                    empresa_id: query.empresa_id,
+                    permitidas: ctx.empresa?.permitidas ?? null,
+                    cursor: query.cursor,
+                    limit: query.limit ?? 1000,
+                },
+                ctx.contextoAccion(),
+            ),
     }),
     definirRuta({
         metodo: 'get',
