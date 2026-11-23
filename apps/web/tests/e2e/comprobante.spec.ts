@@ -16,19 +16,19 @@ test('aprobar un comprobante del portal reactiva el servicio', async ({ page }) 
     await enlace.click()
     await expect(page).toHaveURL(/\/comprobantes$/)
 
-    await page.getByRole('link', { name: 'Comprobante #2' }).click()
-    await expect(page).toHaveURL(/\/comprobantes\/2$/)
-    await expect(page.locator('[data-prueba="comprobante-imagen"]')).toBeVisible()
-    await expect(page.getByText('40022931')).toBeVisible()
+    // Decisión 13: lista, foto y decisión en una sola pantalla (en el teléfono, la del comprobante).
+    await page.getByRole('link', { name: /^Comprobante #2 / }).click()
+    const revision = page.locator('[data-prueba="revision-comprobante"]:visible')
+    await expect(revision.locator('[data-prueba="comprobante-imagen"]')).toBeVisible()
+    await expect(revision.getByText('40022931')).toBeVisible()
+    await expect(revision.locator('[data-factura="209"]')).toBeVisible()
+    await expect(revision.getByRole('list', { name: 'Cómo se aplicará el pago' })).toContainText('Aviso #210')
 
-    await page.getByRole('button', { name: 'Aprobar', exact: true }).click()
-    const modal = page.getByRole('dialog', { name: 'Aprobar comprobante' })
-    await expect(modal.locator('[data-factura="209"]')).toBeVisible()
-    await expect(modal.locator('[data-prueba="distribucion-comprobante"]')).toContainText('Aviso #210')
-    await modal.getByRole('button', { name: 'Aprobar y registrar pago' }).click()
+    await revision.locator('[data-prueba="aprobar-comprobante"]').click()
 
-    await expect(page.locator('[data-prueba="comprobante-aprobado"]')).toBeVisible()
-    await expect(page.locator('[data-prueba="servicio-reactivado"]')).toContainText('Suspendido → Activo', { timeout: 2_000 })
-    await expect(page.locator('[data-prueba="estado-comprobante"]')).toHaveText('Aprobado')
-    await expect(page.getByRole('button', { name: 'Aprobar', exact: true })).toHaveCount(0)
+    // Decisión 13: al aprobar la pantalla pasa al siguiente por revisar; el servicio reactivado
+    // (de `pago.servicios[]`, sin sondear) se dice en el aviso.
+    const aviso = page.locator('li').filter({ hasText: 'Comprobante aprobado' }).first()
+    await expect(aviso).toBeVisible()
+    await expect(aviso).toContainText('Servicio 2: Suspendido → Activo', { timeout: 2_000 })
 })

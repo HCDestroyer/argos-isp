@@ -58,27 +58,31 @@ function alGuardar(premio: PremioLealtad) {
         id="premios-lealtad"
         titulo="Premios de lealtad"
         icono="i-lucide-gift"
+        descripcion="El catálogo de premios por los que los clientes cambian sus puntos"
     >
         <template #acciones>
             <UButton
                 v-if="programa && puede('lealtad.configurar')"
                 label="Nuevo premio"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand px-5"
                 data-prueba="nuevo-premio"
                 @click="abrir(null)"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
             <ProblemaAlerta
                 v-if="problemaPrograma"
                 :problema="problemaPrograma"
                 :reintentar="cargar"
                 :reintentando="cargandoPrograma"
+                class="m-4"
             />
             <USkeleton
                 v-else-if="cargandoPrograma"
-                class="h-32 w-full"
+                class="m-4 h-32"
             />
             <UEmpty
                 v-else-if="!programa"
@@ -92,9 +96,14 @@ function alGuardar(premio: PremioLealtad) {
                 :problema="lista.problema.value"
                 :reintentar="lista.recargar"
                 :reintentando="lista.cargando.value"
+                class="m-4"
             />
             <template v-else>
-                <p class="text-sm text-muted">
+                <p class="flex items-center gap-2 border-b border-(--ax-borde) bg-(--ax-panel) px-4 py-3 text-sm text-muted">
+                    <UIcon
+                        name="i-lucide-gem"
+                        class="size-4 shrink-0 text-primary"
+                    />
                     {{ programa.nombre }} · un punto vale {{ formatearQuetzales(programa.valor_punto) }}<template v-if="programa.minimo_canje">
                         · canje desde {{ formatearPuntos(programa.minimo_canje) }}
                     </template> · portal: {{ programa.canje_portal ? 'se canjea ahí' : programa.visible_portal ? 'solo se ve' : 'oculto' }}.
@@ -103,7 +112,7 @@ function alGuardar(premio: PremioLealtad) {
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
-                    :ui="{ td: 'py-3' }"
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none', td: 'py-3' }"
                     data-prueba="tabla-premios"
                 >
                     <template #nombre-cell="{ row }">
@@ -162,17 +171,19 @@ function alGuardar(premio: PremioLealtad) {
                         />
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
 
         <PremioLealtadModal
             v-if="programa"

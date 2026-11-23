@@ -146,7 +146,9 @@ describe('plantillas · asignar a servicios sin plantilla', () => {
         const pagina = await mountSuspended(enApp(PaginaPlantillas))
         await esperar(() => expect(pagina.find('[data-plantilla="3"]').exists()).toBe(true))
         expect(pagina.find('[data-prueba="asignar-sin-plantilla"]').exists()).toBe(true)
-        expect(pagina.find(`[data-prueba="asignar-sin-plantilla-${GENERA_1_VENCE_15}"]`).exists()).toBe(true)
+        // Rediseño: la plantilla abierta ofrece asignar al pie de su tarjeta.
+        await pagina.find(`[data-plantilla="${GENERA_1_VENCE_15}"] button`).trigger('click')
+        await esperar(() => expect(pagina.find(`[data-prueba="asignar-sin-plantilla-${GENERA_1_VENCE_15}"]`).exists()).toBe(true))
         const aviso = pagina.get('[data-prueba="marcar-por-defecto"]')
         expect(aviso.text()).toContain('Genera 1 · vence 15 no es la plantilla por defecto')
         await aviso.findAll('button').find(b => b.text().includes('Marcar como por defecto'))!.trigger('click')

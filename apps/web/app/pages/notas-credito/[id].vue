@@ -109,6 +109,7 @@ onMounted(cargar)
     >
         <template #acciones>
             <UButton
+                size="lg"
                 to="/notas-credito"
                 icon="i-lucide-arrow-left"
                 label="Notas de crédito"
@@ -201,6 +202,7 @@ onMounted(cargar)
             />
 
             <UPageCard
+                :ui="{ root: 'rounded-[1.375rem]' }"
                 title="Datos de la nota"
                 icon="i-lucide-receipt-text"
                 variant="subtle"
@@ -256,6 +258,7 @@ onMounted(cargar)
 
             <UPageCard
                 v-if="puede('fel.ver')"
+                :ui="{ root: 'rounded-[1.375rem]' }"
                 title="NCRE (certificación FEL)"
                 icon="i-lucide-badge-check"
                 variant="subtle"

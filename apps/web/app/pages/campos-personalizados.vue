@@ -109,33 +109,37 @@ function textoTipo(campo: CampoPersonalizado): string {
         id="campos-personalizados"
         titulo="Campos personalizados"
         icono="i-lucide-text-cursor-input"
+        descripcion="Datos extra que se piden en la ficha de cada cliente, en este orden. Un campo no se borra: al desactivarlo deja de pedirse y los valores ya guardados se conservan."
     >
         <template #acciones>
             <UButton
                 v-if="puede('campos_personalizados.crear')"
                 label="Nuevo campo"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand px-5"
                 data-prueba="nuevo-campo"
                 @click="abrirAlta"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Datos extra que se piden en la ficha de cada cliente, en este orden. Un campo no se borra: al desactivarlo deja de pedirse y los valores ya guardados se conservan.
-            </p>
-            <ProblemaAlerta
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div
                 v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="problema"
+                    :reintentar="cargar"
+                    :reintentando="cargando"
+                />
+            </div>
             <UTable
                 v-else
                 :data="campos"
                 :columns="columnas"
                 :loading="cargando"
-                :ui="{ td: 'py-3' }"
+                :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none', td: 'py-3' }"
                 data-prueba="tabla-campos"
             >
                 <template #etiqueta-cell="{ row }">
@@ -219,7 +223,7 @@ function textoTipo(campo: CampoPersonalizado): string {
                     />
                 </template>
             </UTable>
-        </div>
+        </section>
 
         <CampoPersonalizadoFormulario
             v-model:open="formularioAbierto"
