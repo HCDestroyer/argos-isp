@@ -1,6 +1,7 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
 export type Bodega = Schema<'Bodega'>
+export type MiembrosCuadrilla = Schema<'MiembrosCuadrilla'>
 export type FiltrosBodegas = Omit<NonNullable<paths['/api/v1/bodegas']['get']['parameters']['query']>, 'cursor'>
 export type DatosBodega = paths['/api/v1/bodegas']['post']['requestBody']['content']['application/json']
 export type CambiosBodega = paths['/api/v1/bodegas/{id}/editar']['post']['requestBody']['content']['application/json']
@@ -45,5 +46,10 @@ export function useBodegas() {
         return resolver(api.POST('/api/v1/bodegas/{id}/desactivar', { params: { path: { id: bodega.id } }, body: { version: bodega.version, motivo } }))
     }
 
-    return { listar, activas, ver, crear, editar, desactivar }
+    /** `GET /bodegas/:id/miembros` (A47): jefe y miembros de una bodega de cuadrilla (llegan de Iris). */
+    function miembros(id: number): Promise<Resultado<MiembrosCuadrilla>> {
+        return resolver(api.GET('/api/v1/bodegas/{id}/miembros', { params: { path: { id } } }))
+    }
+
+    return { listar, activas, ver, crear, editar, desactivar, miembros }
 }

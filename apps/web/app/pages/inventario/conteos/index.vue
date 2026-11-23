@@ -1,26 +1,63 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 import type { SelectItem, TableColumn } from '@nuxt/ui'
+import { h } from 'vue'
 import * as z from 'zod'
 
 /**
- * Conteos físicos (A3, fase C): uno abierto por bodega. «Abrir conteo»
+ * Conteos físicos (A3, fase C; sistema visual del tablero NuevoConteo): tarjeta isla con
+ * «Todos / Abiertos / Cerrados / Cancelados» y la bodega; uno abierto por bodega. «Abrir conteo»
  * (`inventario.abrir_conteo`) lleva a la captura; cerrados con su faltante y sobrante valorizados.
+ * `?abrir=<bodega>` (desde «Contar esta bodega») abre la ventana con la bodega elegida.
  */
 definePageMeta({ permiso: 'inventario.ver' })
 
 useHead({ title: 'Conteos físicos · ArgosIsp' })
 
 const { puede } = usePermisos()
+const route = useRoute()
 
-const lista = usePaginacionCursor(cursor => useConteosInventario().listar({}, cursor))
-onMounted(() => void lista.recargar())
+type Pastilla = 'todos' | ConteoInventario['estado']
+const pastilla = ref<Pastilla>('todos')
+const pastillas: { valor: Pastilla, etiqueta: string }[] = [
+    { valor: 'todos', etiqueta: 'Todos' },
+    { valor: 'abierto', etiqueta: 'Abiertos' },
+    { valor: 'cerrado', etiqueta: 'Cerrados' },
+    { valor: 'cancelado', etiqueta: 'Cancelados' },
+]
+const TODAS = 'todas'
+const bodegaFiltro = ref<string>(TODAS)
+const bodegasLista = shallowRef<Bodega[]>([])
+const itemsBodegaFiltro = computed<SelectItem[]>(() => [{ label: 'Bodega: todas', value: TODAS }, ...bodegasLista.value.filter(b => !esBodegaTransito(b)).map(b => ({ label: b.nombre, value: String(b.id), icon: TIPOS_BODEGA[b.tipo].icono }))])
+
+const lista = usePaginacionCursor(cursor => useConteosInventario().listar({
+    ...(pastilla.value !== 'todos' ? { estado: pastilla.value } : {}),
+    ...(bodegaFiltro.value !== TODAS ? { bodega_id: Number(bodegaFiltro.value) } : {}),
+}, cursor))
+watch([pastilla, bodegaFiltro], () => void lista.recargar())
+onMounted(async () => {
+    void lista.recargar()
+    const r = await useBodegas().activas()
+    bodegasLista.value = r.ok ? r.data : []
+    const pedida = Number(route.query.abrir)
+    if (Number.isInteger(pedida) && pedida > 0 && puede('inventario.abrir_conteo')) {
+        await abrirModal(pedida)
+    }
+})
+
+const codigoConteo = (c: Pick<ConteoInventario, 'id'>) => `C-${String(c.id).padStart(3, '0')}`
 
 const columnas: TableColumn<ConteoInventario>[] = [
     { accessorKey: 'bodega_nombre', header: 'Conteo', meta: { class: { td: 'whitespace-normal' } } },
+    { accessorKey: 'fecha_corte', header: 'Corte', meta: SOLO_ANCHO },
     { accessorKey: 'estado', header: 'Estado' },
-    { id: 'resultado', header: 'Faltante / sobrante', meta: { class: { th: 'text-right hidden sm:table-cell', td: 'text-right hidden sm:table-cell' } } },
+    { id: 'resultado', header: 'Faltante / sobrante', meta: { class: { th: 'text-end hidden sm:table-cell', td: 'text-end hidden sm:table-cell' } } },
+    { id: 'ir', header: () => h('span', { class: 'sr-only' }, 'Abrir'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } },
 ]
+
+function alElegir(_evento: Event, fila: { original: ConteoInventario }) {
+    void navigateTo(`/inventario/conteos/${fila.original.id}`)
+}
 
 /* Abrir */
 const bodegas = shallowRef<SelectItem[]>([])
@@ -35,8 +72,8 @@ const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
 
-async function abrirModal() {
-    Object.assign(estado, { bodega_id: undefined, motivo: '' })
+async function abrirModal(bodegaId?: number) {
+    Object.assign(estado, { bodega_id: bodegaId, motivo: '' })
     problema.value = null
     clave = nuevaClaveIdempotencia()
     abrirAbierto.value = true
@@ -64,65 +101,116 @@ async function abrir(evento: { data: z.output<typeof esquema> }) {
         id="inventario-conteos"
         titulo="Conteos físicos"
         icono="i-lucide-clipboard-list"
+        descripcion="Se cuenta producto por producto contra el sistema; al cerrar, los faltantes van a mermas (5.6.02) y los sobrantes a 4.2.04. La bodega sigue operando mientras se cuenta."
     >
         <template #acciones>
             <UButton
                 v-if="puede('inventario.abrir_conteo')"
                 label="Abrir conteo"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand rounded-full px-5"
                 data-prueba="abrir-conteo"
-                @click="abrirModal"
+                @click="abrirModal()"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Se captura producto por producto contra lo que había al capturarlo; al cerrar, los faltantes van a mermas (5.6.02) y los sobrantes a 4.2.04. La bodega sigue operando mientras se cuenta.
-            </p>
-            <ProblemaAlerta
+        <div class="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-auto rounded-2xl">
+            <div class="flex flex-wrap items-center gap-2 p-3 sm:px-4">
+                <div
+                    class="flex flex-wrap gap-1.5"
+                    role="group"
+                    aria-label="Filtrar conteos por estado"
+                >
+                    <UButton
+                        v-for="p in pastillas"
+                        :key="p.valor"
+                        :label="p.etiqueta"
+                        :color="pastilla === p.valor ? 'primary' : 'neutral'"
+                        :variant="pastilla === p.valor ? 'solid' : 'outline'"
+                        :aria-pressed="pastilla === p.valor"
+                        size="sm"
+                        class="rounded-full"
+                        @click="pastilla = p.valor"
+                    />
+                </div>
+                <USelect
+                    v-model="bodegaFiltro"
+                    :items="itemsBodegaFiltro"
+                    icon="i-lucide-filter"
+                    aria-label="Filtrar por bodega"
+                    class="w-full sm:ms-auto sm:w-56"
+                />
+            </div>
+            <div
                 v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
+                class="p-3 sm:p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                />
+            </div>
             <template v-else>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
-                    :ui="{ td: 'py-3' }"
+                    sticky
+                    :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3', tr: 'cursor-pointer' }"
                     data-prueba="tabla-conteos"
+                    @select="alElegir"
                 >
                     <template #bodega_nombre-cell="{ row }">
-                        <div class="flex min-w-0 flex-col gap-0.5">
-                            <ULink
-                                :to="`/inventario/conteos/${row.original.id}`"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                                :data-conteo="row.original.id"
-                            >Conteo #{{ row.original.id }} · {{ row.original.bodega_nombre }}</ULink>
-                            <span class="text-xs text-muted">Corte {{ formatearFecha(row.original.fecha_corte) }}<template v-if="row.original.motivo">
-                                · {{ row.original.motivo }}
-                            </template></span>
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span class="pastilla-icono pastilla-tono tono-marca size-9 shrink-0 rounded-xl">
+                                <UIcon
+                                    name="i-lucide-clipboard-list"
+                                    class="size-4"
+                                />
+                            </span>
+                            <div class="flex min-w-0 flex-col">
+                                <ULink
+                                    :to="`/inventario/conteos/${row.original.id}`"
+                                    class="font-semibold text-highlighted hover:text-primary"
+                                    :data-conteo="row.original.id"
+                                >Conteo {{ codigoConteo(row.original) }} · {{ row.original.bodega_nombre }}</ULink>
+                                <span
+                                    v-if="row.original.motivo"
+                                    class="text-xs text-muted"
+                                >{{ row.original.motivo }}</span>
+                            </div>
                         </div>
+                    </template>
+                    <template #fecha_corte-cell="{ row }">
+                        <span class="whitespace-nowrap text-sm text-muted">{{ formatearFechaCorta(row.original.fecha_corte) }}</span>
                     </template>
                     <template #estado-cell="{ row }">
                         <UBadge
                             :label="ESTADOS_CONTEO[row.original.estado].etiqueta"
                             :icon="ESTADOS_CONTEO[row.original.estado].icono"
-                            :color="ESTADOS_CONTEO[row.original.estado].color"
+                            :color="row.original.estado === 'abierto' ? 'warning' : ESTADOS_CONTEO[row.original.estado].color"
                             variant="subtle"
                             size="sm"
+                            class="rounded-full"
                         />
                     </template>
                     <template #resultado-cell="{ row }">
                         <span
                             v-if="row.original.estado === 'cerrado'"
                             class="text-sm tabular-nums"
-                        >{{ formatearQuetzales(row.original.faltante) }} / {{ formatearQuetzales(row.original.sobrante) }}</span>
+                        ><span class="text-error">− {{ formatearQuetzales(row.original.faltante) }}</span> / <span class="text-success">+ {{ formatearQuetzales(row.original.sobrante) }}</span></span>
                         <span
                             v-else
                             class="text-sm text-muted"
                         >—</span>
+                    </template>
+                    <template #ir-cell>
+                        <UIcon
+                            name="i-lucide-chevron-right"
+                            class="size-4 text-muted"
+                        />
                     </template>
                     <template #empty>
                         <UEmpty
@@ -133,15 +221,20 @@ async function abrir(evento: { data: z.output<typeof esquema> }) {
                         />
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div
+                    v-if="lista.hayAnterior.value || lista.haySiguiente.value"
+                    class="border-t border-(--ax-borde) px-3 py-2 sm:px-4"
+                >
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
         </div>
 

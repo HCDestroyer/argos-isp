@@ -18,7 +18,7 @@ async function elegir(page: Page, contenedor: Locator, prueba: string, opcion: s
 test('existencias: registrar un consumo de cable al costo promedio', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/inventario')
-    const fila = page.locator('[data-existencia="1/1"]')
+    const fila = page.locator('[data-existencia="1"]')
     await expect(fila).toContainText('Cable UTP Cat6', { timeout: 15_000 })
     await page.locator('[data-prueba="inventario-registrar"]').click()
     await page.getByRole('menuitem', { name: 'Consumo' }).click()
@@ -61,16 +61,16 @@ test('productos y bodegas: alta de un producto por serie y de la bodega de un t�
 test('conteo físico: capturar con faltante y cerrar con la diferencia valorizada', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/inventario/conteos')
-    await expect(page.locator('[data-prueba="tabla-conteos"]')).toContainText('Conteo #1', { timeout: 15_000 })
+    await expect(page.locator('[data-prueba="tabla-conteos"]')).toContainText('Conteo C-001', { timeout: 15_000 })
     await page.locator('[data-prueba="abrir-conteo"]').click()
     const abrir = page.getByRole('dialog', { name: 'Abrir conteo' })
     await elegir(page, abrir, 'conteo-bodega', 'Bodega central')
     await abrir.locator('[data-prueba="conteo-abrir-confirmar"]').click()
     await expect(page).toHaveURL(/\/inventario\/conteos\/2$/)
-    await elegir(page, page.locator('body'), 'captura-producto', /Conector RJ45/)
-    await campo(page.locator('body'), 'captura-contado').fill('36')
-    await page.locator('[data-prueba="captura-guardar"]').click()
-    await expect(page.locator('[data-linea="CON-RJ45"]')).toBeVisible()
+    // Lo contado se escribe en la fila del producto (tablero NuevoConteo) y se guarda con Enter.
+    const fila = page.locator('tr', { has: page.locator('[data-linea="CON-RJ45"]') })
+    await campo(fila, 'captura-contado').fill('36')
+    await campo(fila, 'captura-contado').press('Enter')
     await expect(page.locator('[data-prueba="conteo-faltante"]')).toContainText('Q 5.00')
     await page.locator('[data-prueba="conteo-cerrar"]').click()
     const cierre = page.getByRole('dialog', { name: 'Cerrar conteo' })
@@ -104,7 +104,7 @@ test('servicio: asignar un equipo en comodato y devolverlo a reparación', async
 test('cajero: ve el inventario pero no registra movimientos', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     await ir(page, 'Existencias', /\/inventario$/)
-    await expect(page.locator('[data-existencia="1/1"]')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('[data-existencia="1"]')).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('[data-prueba="inventario-registrar"]')).toHaveCount(0)
 })
 
