@@ -6,6 +6,7 @@ import { conLock, conexionRedisBilling } from '#billing/jobs'
 import { procesarColaFel } from '#fiscal/fel/cola'
 import GenerarCalendario from '#fiscal/actions/generar_calendario'
 import EmitirAlertasFiscales from '#fiscal/actions/emitir_alertas_fiscales'
+import { correrJobCron } from '#monitoreo/crons/corridas'
 
 /**
  * Cola `fel-cron` del worker `node ace fiscal:worker` (contrato §8.3): un job scheduler `fel`
@@ -75,7 +76,11 @@ export async function ejecutarColaFel(ahora: Date = new Date()) {
 export function crearWorkerFel(opciones: OpcionesColaFel = {}) {
     const worker = new Worker(
         NOMBRE_COLA_FEL,
-        (job: Job) => (job.name === 'calendario' ? ejecutarCalendarioFiscal() : ejecutarColaFel()),
+        (job: Job) =>
+            // corrida anotada en «Tareas programadas» (`core.cron_corridas`)
+            correrJobCron<unknown>(NOMBRE_COLA_FEL, job, () =>
+                job.name === 'calendario' ? ejecutarCalendarioFiscal() : ejecutarColaFel(),
+            ),
         {
             connection: opciones.conexion ?? conexionRedisBilling(),
             prefix: prefijo(opciones),
