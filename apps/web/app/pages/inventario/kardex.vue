@@ -4,15 +4,16 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 /**
- * Kardex por producto (A3, `GET /inventario/movimientos`): cada entrada y salida con su costo y el
- * saldo corrido (cantidad y valor) de su bodega, filtrable por bodega, fechas y tipo. Solo
- * inserción: una corrección es otro movimiento.
+ * Inventario · Kardex (tablero NuevoInventario, A3 `GET /inventario/movimientos`): el producto
+ * elegido arriba y cada entrada y salida con su tipo, detalle, bodega, cantidad, costo y el saldo
+ * corrido de su bodega. Filtros por bodega, fechas y tipo en «Más filtros». Solo se agregan
+ * movimientos: una corrección es otro movimiento (un reverso).
  */
 definePageMeta({ permiso: 'inventario.ver' })
 
 const { enlace } = usePermisos()
 
-useHead({ title: 'Kardex · ArgosIsp' })
+useHead({ title: 'Kardex · Inventario · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
@@ -38,7 +39,7 @@ async function cargarCatalogos() {
 }
 
 const itemsProducto = computed<SelectItem[]>(() => productos.value.map(p => ({ label: `${p.nombre} · ${p.sku}`, value: p.id })))
-const itemsBodega = computed<SelectItem[]>(() => [{ label: 'Todas las bodegas', value: 0 }, ...bodegas.value.map(b => ({ label: b.nombre, value: b.id }))])
+const itemsBodega = computed<SelectItem[]>(() => [{ label: 'Bodega: todas', value: 0 }, ...bodegas.value.map(b => ({ label: b.nombre, value: b.id }))])
 const itemsTipo: SelectItem[] = [{ label: 'Todos los movimientos', value: TODOS }, ...Object.entries(TIPOS_MOVIMIENTO_INVENTARIO).map(([value, label]) => ({ label, value }))]
 const elegido = computed(() => productos.value.find(p => p.id === producto.value) ?? null)
 
@@ -68,131 +69,211 @@ onMounted(() => {
 
 const columnas: TableColumn<MovimientoInventario>[] = [
     { accessorKey: 'fecha', header: 'Fecha' },
-    { accessorKey: 'tipo', header: 'Movimiento', meta: { class: { td: 'whitespace-normal' } } },
-    { accessorKey: 'cantidad', header: 'Cantidad', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'costo_total', header: 'Costo', meta: { class: { th: 'text-right hidden sm:table-cell', td: 'text-right hidden sm:table-cell' } } },
-    { accessorKey: 'saldo_cantidad', header: 'Saldo', meta: { class: { th: 'text-right hidden sm:table-cell', td: 'text-right hidden sm:table-cell' } } },
-    { accessorKey: 'saldo_valor', header: 'Valor del saldo', meta: { class: { th: 'text-right hidden lg:table-cell', td: 'text-right hidden lg:table-cell' } } },
+    { accessorKey: 'tipo', header: 'Tipo' },
+    { id: 'detalle', header: 'Detalle', meta: { class: { th: 'hidden md:table-cell', td: 'hidden md:table-cell whitespace-normal' } } },
+    { accessorKey: 'bodega_nombre', header: 'Bodega', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'cantidad', header: 'Cant.', meta: { class: { th: 'text-end', td: 'text-end' } } },
+    { accessorKey: 'costo_total', header: 'Costo', meta: { class: { th: 'text-end hidden sm:table-cell', td: 'text-end hidden sm:table-cell' } } },
+    { accessorKey: 'saldo_cantidad', header: 'Saldo', meta: { class: { th: 'text-end', td: 'text-end' } } },
 ]
 
 function entra(m: MovimientoInventario): boolean {
     return new Decimal(m.cantidad).isPositive()
+}
+
+/** Tono de la pastilla del tipo: entradas en índigo, salidas en neutro. */
+function colorTipo(m: MovimientoInventario): 'primary' | 'neutral' {
+    return entra(m) ? 'primary' : 'neutral'
+}
+
+function detalle(m: MovimientoInventario): string {
+    return [
+        m.producto_nombre,
+        m.servicio_id ? `servicio #${m.servicio_id}` : null,
+        m.traslado_id ? `traslado ${m.traslado_id}` : null,
+        m.causa ? CAUSAS_BAJA[m.causa] : null,
+        m.motivo,
+        m.origen_externo_id ? `orden ${m.origen_externo_id} (Iris)` : null,
+    ].filter(Boolean).join(' · ')
+}
+
+const masFiltros = ref(Boolean(desde.value || hasta.value || tipo.value !== TODOS))
+const filtrosPuestos = computed(() => [desde.value, hasta.value, tipo.value !== TODOS ? tipo.value : ''].filter(Boolean).length)
+const marco = useTemplateRef<{ recargar: () => void }>('marco')
+
+function alHacer() {
+    void lista.recargar()
+    marco.value?.recargar()
 }
 </script>
 
 <template>
     <PanelPagina
         id="inventario-kardex"
-        titulo="Kardex"
+        titulo="Inventario"
         icono="i-lucide-list-ordered"
+        sin-descripcion
     >
-        <div class="flex flex-col gap-4">
-            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                <USelectMenu
-                    :model-value="producto || undefined"
-                    :items="itemsProducto"
-                    value-key="value"
-                    placeholder="Todos los productos"
-                    class="w-full lg:col-span-2"
-                    aria-label="Producto"
-                    data-prueba="kardex-producto"
-                    @update:model-value="v => producto = typeof v === 'number' ? v : 0"
-                />
+        <template #acciones>
+            <InventarioAcciones @hecho="alHacer" />
+        </template>
+
+        <InventarioMarco
+            ref="marco"
+            pestana="kardex"
+        >
+            <template #herramientas>
                 <USelect
                     v-model="bodega"
                     :items="itemsBodega"
-                    class="w-full"
-                    aria-label="Bodega"
+                    icon="i-lucide-filter"
+                    class="w-full sm:w-52"
+                    aria-label="Filtrar por bodega"
                 />
-                <UInput
-                    v-model="desde"
-                    type="date"
-                    aria-label="Desde"
-                    class="w-full"
-                />
-                <UInput
-                    v-model="hasta"
-                    type="date"
-                    aria-label="Hasta"
-                    class="w-full"
-                />
-                <USelect
-                    v-model="tipo"
-                    :items="itemsTipo"
-                    class="w-full sm:col-span-2 lg:col-span-1"
-                    aria-label="Tipo de movimiento"
+                <UButton
+                    icon="i-lucide-sliders-horizontal"
+                    label="Más filtros"
+                    color="neutral"
+                    :variant="masFiltros ? 'subtle' : 'outline'"
+                    :aria-expanded="masFiltros"
+                    aria-controls="filtros-kardex"
+                    class="rounded-full"
+                    @click="masFiltros = !masFiltros"
+                >
+                    <template
+                        v-if="filtrosPuestos"
+                        #trailing
+                    >
+                        <UBadge
+                            :label="String(filtrosPuestos)"
+                            size="sm"
+                            variant="solid"
+                        />
+                    </template>
+                </UButton>
+            </template>
+
+            <div class="flex flex-col gap-3 p-3 sm:px-4">
+                <div class="flex flex-wrap items-center gap-2 text-sm">
+                    <span class="text-highlighted">Producto:</span>
+                    <USelectMenu
+                        :model-value="producto || undefined"
+                        :items="itemsProducto"
+                        value-key="value"
+                        placeholder="Todos los productos"
+                        class="w-full sm:w-72"
+                        :ui="{ base: producto ? 'rounded-full bg-primary text-inverted font-semibold' : 'rounded-full' }"
+                        aria-label="Producto"
+                        data-prueba="kardex-producto"
+                        @update:model-value="v => producto = typeof v === 'number' ? v : 0"
+                    />
+                    <span class="text-muted">· solo se agregan movimientos; las correcciones son reversos</span>
+                </div>
+                <div
+                    v-show="masFiltros"
+                    id="filtros-kardex"
+                    class="grid gap-3 rounded-xl bg-(--ax-panel) p-3 sm:grid-cols-3"
+                    role="group"
+                    aria-label="Filtros del kardex"
+                >
+                    <UFormField label="Desde">
+                        <UInput
+                            v-model="desde"
+                            type="date"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Hasta">
+                        <UInput
+                            v-model="hasta"
+                            type="date"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField label="Tipo de movimiento">
+                        <USelect
+                            v-model="tipo"
+                            :items="itemsTipo"
+                            class="w-full"
+                        />
+                    </UFormField>
+                </div>
+                <p
+                    v-if="elegido"
+                    class="text-xs text-muted"
+                >
+                    {{ elegido.nombre }}: {{ formatearCantidad(elegido.existencia, elegido.unidad) }} en todas las bodegas. El saldo de cada fila es el de su bodega.
+                </p>
+                <ProblemaAlerta
+                    v-if="problemaCatalogos"
+                    :problema="problemaCatalogos"
+                    :reintentar="cargarCatalogos"
                 />
             </div>
-            <p
-                v-if="elegido"
-                class="text-sm text-muted"
-            >
-                {{ elegido.nombre }}: {{ formatearCantidad(elegido.existencia, elegido.unidad) }} en todas las bodegas, valor {{ formatearQuetzales(elegido.valor) }}. El saldo de cada fila es el de su bodega.
-            </p>
-            <ProblemaAlerta
-                v-if="problemaCatalogos"
-                :problema="problemaCatalogos"
-                :reintentar="cargarCatalogos"
-            />
-            <ProblemaAlerta
+
+            <div
                 v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
+                class="p-3 sm:p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                />
+            </div>
             <template v-else>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
-                    :ui="{ td: 'py-2.5' }"
+                    sticky
+                    :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
                     data-prueba="tabla-kardex"
                 >
                     <template #fecha-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ formatearFecha(row.original.fecha) }}</span>
+                        <span class="whitespace-nowrap text-sm tabular-nums text-muted">{{ formatearFechaCorta(row.original.fecha) }} {{ formatearHora(row.original.ocurrido_en ?? row.original.created_at) }}</span>
                     </template>
                     <template #tipo-cell="{ row }">
                         <div
-                            class="flex min-w-0 flex-col gap-0.5"
+                            class="flex flex-col items-start gap-0.5"
                             :data-movimiento="row.original.id"
                         >
-                            <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                <UIcon
-                                    :name="entra(row.original) ? 'i-lucide-arrow-down-left' : 'i-lucide-arrow-up-right'"
-                                    :class="entra(row.original) ? 'text-success' : 'text-error'"
-                                    class="size-4"
-                                />
-                                {{ TIPOS_MOVIMIENTO_INVENTARIO[row.original.tipo] }}
-                            </span>
-                            <span class="text-xs text-muted">{{ row.original.producto_nombre }} · {{ row.original.bodega_nombre }}</span>
-                            <span
-                                v-if="row.original.motivo || row.original.causa"
-                                class="text-xs text-muted"
-                            >{{ [row.original.causa ? CAUSAS_BAJA[row.original.causa] : null, row.original.motivo].filter(Boolean).join(' · ') }}</span>
-                            <ULink
-                                v-if="row.original.servicio_id"
-                                :to="enlace(`/servicios/${row.original.servicio_id}`)"
-                                class="text-xs text-primary"
-                            >Servicio #{{ row.original.servicio_id }}</ULink>
+                            <UBadge
+                                :label="TIPOS_MOVIMIENTO_INVENTARIO[row.original.tipo]"
+                                :icon="entra(row.original) ? 'i-lucide-arrow-down-left' : 'i-lucide-arrow-up-right'"
+                                :color="colorTipo(row.original)"
+                                variant="subtle"
+                                size="sm"
+                                class="rounded-full"
+                            />
+                            <span class="text-xs text-muted md:hidden">{{ detalle(row.original) }}</span>
                         </div>
+                    </template>
+                    <template #detalle-cell="{ row }">
+                        <span class="text-sm text-highlighted">{{ detalle(row.original) }}</span>
+                        <ULink
+                            v-if="row.original.servicio_id"
+                            :to="enlace(`/servicios/${row.original.servicio_id}`)"
+                            class="ms-1 text-xs text-primary"
+                        >Ver servicio</ULink>
+                    </template>
+                    <template #bodega_nombre-cell="{ row }">
+                        <span class="text-sm">{{ row.original.bodega_nombre }}</span>
                     </template>
                     <template #cantidad-cell="{ row }">
                         <span
-                            class="text-sm font-medium tabular-nums"
+                            class="text-sm font-semibold tabular-nums"
                             :class="entra(row.original) ? 'text-success' : 'text-error'"
-                        >{{ entra(row.original) ? '+' : '' }}{{ formatearCantidad(row.original.cantidad) }}</span>
+                        >{{ entra(row.original) ? '+ ' : '− ' }}{{ formatearCantidad(new Decimal(row.original.cantidad).abs().toString()) }}</span>
                     </template>
                     <template #costo_total-cell="{ row }">
-                        <div class="flex flex-col items-end text-sm tabular-nums">
-                            <span>{{ formatearQuetzales(row.original.costo_total) }}</span>
-                            <span class="text-xs text-muted">{{ formatearQuetzales(new Decimal(row.original.costo_unitario).toFixed(2)) }} c/u</span>
-                        </div>
+                        <span class="text-sm tabular-nums">{{ formatearQuetzales(new Decimal(row.original.costo_total).abs().toFixed(2)) }}</span>
                     </template>
                     <template #saldo_cantidad-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ formatearCantidad(row.original.saldo_cantidad) }}</span>
-                    </template>
-                    <template #saldo_valor-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ formatearQuetzales(row.original.saldo_valor) }}</span>
+                        <span
+                            class="text-sm tabular-nums text-muted"
+                            :title="`Valor del saldo: ${formatearQuetzales(row.original.saldo_valor)}`"
+                        >{{ formatearCantidad(row.original.saldo_cantidad) }}</span>
                     </template>
                     <template #empty>
                         <UEmpty
@@ -203,16 +284,21 @@ function entra(m: MovimientoInventario): boolean {
                         />
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div
+                    v-if="lista.hayAnterior.value || lista.haySiguiente.value"
+                    class="border-t border-(--ax-borde) px-3 py-2 sm:px-4"
+                >
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </InventarioMarco>
     </PanelPagina>
 </template>

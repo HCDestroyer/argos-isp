@@ -57,6 +57,12 @@ function destinoCubierto(destino: string | string[], pagina: string | string[] |
     return (typeof destino === 'string' ? [destino] : destino).some(permiso => cubre(pagina, permiso) || vistos.has(permiso))
 }
 
+/** El `<template>` de un archivo `.vue` (donde se montan los componentes), sin el `<script>`. */
+function plantilla(texto: string): string {
+    const inicio = texto.indexOf('<template')
+    return inicio < 0 ? '' : texto.slice(inicio)
+}
+
 function comprobados(texto: string): Set<string> {
     return new Set([...texto.matchAll(/puede\w*\(\s*'([a-z_0-9.]+)'/g)].map(m => m[1] ?? ''))
 }
@@ -300,7 +306,24 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'BodegaFormulario.vue': { permisos: ['bodegas.crear', 'bodegas.editar'], desde: ['pages/inventario/bodegas.vue'] },
     'ProductoFormulario.vue': { permisos: ['productos.crear', 'productos.editar', 'inventario.ver'], desde: ['pages/inventario/productos.vue'] },
     'TipoProductoFormulario.vue': { permisos: ['tipos_producto.crear', 'tipos_producto.editar'], desde: ['pages/inventario/tipos-producto.vue'] },
-    'MovimientoInventarioModal.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue'] },
+    // Rediseño de inventario (A47/A48): las operaciones a mano se abren desde las acciones del encabezado,
+    // que solo montan las páginas de inventario (`inventario.ver`) y comprueban el permiso de cada operación.
+    'InventarioAcciones.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue', 'pages/inventario/unidades.vue', 'pages/inventario/kardex.vue', 'pages/inventario/por-recuperar.vue', 'pages/inventario/revision.vue'] },
+    'MovimientoInventarioModal.vue': { permisos: ['inventario.ver'], desde: ['components/InventarioAcciones.vue'], exentos: { 'components/InventarioAcciones.vue': ['inventario.ver'] } },
+    // Marco de las pantallas de inventario: lee los contadores de las pestañas con el `inventario.ver` de la página.
+    'InventarioMarco.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue', 'pages/inventario/unidades.vue', 'pages/inventario/kardex.vue', 'pages/inventario/por-recuperar.vue', 'pages/inventario/revision.vue'] },
+    'InventarioTrasladosLista.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/traslados/index.vue', 'pages/inventario/bodegas.vue'] },
+    // Acciones sobre un equipo (A48): EquipoAcciones lo montan Equipos, Por recuperar y Revisión (`inventario.ver`)
+    // y monta cada ventana solo con el permiso de su acción; `ejecutar` tampoco abre una acción sin él.
+    'EquipoAcciones.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue', 'pages/inventario/por-recuperar.vue', 'pages/inventario/revision.vue'] },
+    'CobroEquipoAprobarModal.vue': { permisos: ['inventario.cobrar_equipo'], desde: ['pages/inventario/por-recuperar.vue'] },
+    // Elegir la unidad nueva lee con `inventario.ver`: lo tienen las páginas de inventario que montan EquipoAcciones
+    // y la ficha del servicio solo monta ServicioEquipos con `inventario.ver`.
+    'EquipoCambiarModal.vue': { permisos: ['servicios.cambiar_equipo', 'inventario.ver'], desde: ['components/EquipoAcciones.vue', 'components/ServicioEquipos.vue'], exentos: { 'components/EquipoAcciones.vue': ['inventario.ver'], 'components/ServicioEquipos.vue': ['inventario.ver'] } },
+    'EquipoContactoModal.vue': { permisos: ['inventario.registrar_contacto_recuperacion'], desde: ['components/EquipoAcciones.vue'] },
+    'EquipoDevolverModal.vue': { permisos: ['inventario.devolver_comodato'], desde: ['components/EquipoAcciones.vue'] },
+    'EquipoGarantiaModal.vue': { permisos: ['inventario.enviar_garantia', 'inventario.resolver_garantia'], desde: ['components/EquipoAcciones.vue'] },
+    'EquipoNoRecuperadoModal.vue': { permisos: ['inventario.cobrar_equipo'], desde: ['components/EquipoAcciones.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
     'CampoPersonalizadoFormulario.vue': { permisos: ['campos_personalizados.crear', 'campos_personalizados.editar'], desde: ['pages/campos-personalizados.vue'] },
@@ -378,7 +401,8 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
         const huecos: string[] = []
         for (const [componente, { permisos, desde, exentos }] of Object.entries(ABIERTOS_DESDE)) {
             const nombre = componente.replace(/\.vue$/, '')
-            const usuarios = ARCHIVOS.filter(archivo => leer(archivo).includes(`<${nombre}`)).map(archivo => relativo(archivo).replace(/^app\//, ''))
+            // Solo en la plantilla: `shallowRef<UnidadInventarioDetalle>` es un tipo con el nombre del componente, no lo monta.
+            const usuarios = ARCHIVOS.filter(archivo => plantilla(leer(archivo)).includes(`<${nombre}`)).map(archivo => relativo(archivo).replace(/^app\//, ''))
             for (const archivo of usuarios) {
                 const texto = leer(join(WEB, 'app', archivo))
                 const pagina = permisoDePagina(texto)
