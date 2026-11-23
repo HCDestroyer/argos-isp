@@ -4150,7 +4150,7 @@ export interface paths {
         };
         /**
          * Servicios afectados por el incidente, con cliente, plan y conexión (tablero)
-         * @description Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).
+         * @description Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). `total` cuenta con el mismo filtro que las filas. 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).
          */
         get: operations["incidentesRedAfectados"];
         put?: never;
@@ -20648,6 +20648,12 @@ export interface components {
                     recibida: boolean | null;
                 }[];
             }[];
+        };
+        PaginaAfectadosIncidente: {
+            data: components["schemas"]["ServicioAfectadoIncidente"][];
+            nextCursor: string | null;
+            /** @description Afectados con el mismo filtro que las filas (empresa activa y alcance del usuario) */
+            total: number;
         };
         PaginaCanjesLealtad: {
             data: components["schemas"]["CanjeLealtad"][];
@@ -43860,10 +43866,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["ServicioAfectadoIncidente"][];
-                        nextCursor: string | null;
-                    };
+                    "application/json": components["schemas"]["PaginaAfectadosIncidente"];
                 };
             };
             /** @description No autenticado */
