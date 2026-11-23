@@ -166,7 +166,7 @@ export const AlertasPanel = definirEsquema(
                 apagadas: {
                     ...lista(enumerado(TIPOS_ALERTA)),
                     description:
-                        'Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Los umbrales menores (80, 95…) no llegan',
+                        'Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Si esa revisión falla, su error llega en errores (no se sabe si llegó al 100 %). Los umbrales menores (80, 95…) no llegan',
                 },
             }),
         ),

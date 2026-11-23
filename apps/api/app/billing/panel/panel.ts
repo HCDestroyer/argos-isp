@@ -271,7 +271,8 @@ export interface EmpresaAlertas {
     errores: Array<{ tipo: TipoAlerta; error: ReturnType<Problema['toJSON']> }>
     /**
      * avisos que la empresa apagó en sus ajustes: no dan alerta ni error, salvo
-     * `limite_pequeno_contribuyente` al 100 % (decisión 12), que llega igual en `alertas`
+     * `limite_pequeno_contribuyente` (decisión 12): al 100 % su alerta llega igual en `alertas` y, si
+     * la revisión falla, su error llega en `errores`
      */
     apagadas: TipoAlerta[]
 }
@@ -341,7 +342,13 @@ export async function alertasPanel(opciones: {
             fila.apagadas.push('limite_pequeno_contribuyente')
         }
         const revisar = async (tipos: TipoAlerta[], fn: () => Promise<void>) => {
-            const propios = tipos.filter((t) => revisados.includes(t) && !fila.apagadas.includes(t))
+            // decisión 12: el límite de pequeño contribuyente se revisa aunque esté apagado (el 100 %
+            // es obligatorio), y si la revisión falla su error se ve
+            const propios = tipos.filter(
+                (t) =>
+                    revisados.includes(t) &&
+                    (!fila.apagadas.includes(t) || t === 'limite_pequeno_contribuyente'),
+            )
             if (propios.length === 0) return
             try {
                 await fn()
@@ -446,13 +453,8 @@ export async function alertasPanel(opciones: {
                         })
                     }
                 }
-                // apagado: un error del bloque no se reporta (la empresa silenció el aviso); el cron
-                // fiscal emite igual `fiscal.limite_pc` al 100 %
-                const pc = pcApagado
-                    ? bloques.pequeno_contribuyente?.estado === 'ok'
-                        ? (bloques.pequeno_contribuyente.datos as Record<string, unknown>)
-                        : null
-                    : conError('limite_pequeno_contribuyente', bloques.pequeno_contribuyente)
+                // apagado también: un error del bloque se reporta (no se sabe si llegó al 100 %)
+                const pc = conError('limite_pequeno_contribuyente', bloques.pequeno_contribuyente)
                 const llegoAlLimite = pc
                     ? pc.supera_limite === true || dec(String(pc.acumulado)).gte(dec(String(pc.limite)))
                     : false

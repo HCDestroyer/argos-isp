@@ -14135,7 +14135,7 @@ export interface components {
                     tipo: "integridad_libro" | "cierres_pendientes" | "contingencia_fel" | "fel_desactivada" | "vencimientos_fiscales" | "limite_pequeno_contribuyente";
                     error: components["schemas"]["Problem"];
                 }[];
-                /** @description Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Los umbrales menores (80, 95…) no llegan */
+                /** @description Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no dan alerta ni error. Excepción (decisión 12): con limite_pequeno_contribuyente apagado, la alerta de ese tipo llega igual en alertas si el facturado del año alcanzó el 100 % del límite (obliga a cambiar de régimen); el panel no debe ocultarla. Si esa revisión falla, su error llega en errores (no se sabe si llegó al 100 %). Los umbrales menores (80, 95…) no llegan */
                 apagadas: ("integridad_libro" | "cierres_pendientes" | "contingencia_fel" | "fel_desactivada" | "vencimientos_fiscales" | "limite_pequeno_contribuyente")[];
             }[];
         };

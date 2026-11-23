@@ -118,10 +118,11 @@ test.group('billing · aviso de pequeño contribuyente (decisión 12)', (group) 
         assert.equal(err.codigo, 'localizacion_no_instalada')
     })
 
-    test('apagar el aviso: diff, evento y la alerta deja de revisarse (ni alerta ni error)', async ({
+    test('apagar el aviso: diff, evento; la revisión del límite que falla sigue en errores', async ({
         assert,
     }) => {
-        // sin localización fiscal la revisión del límite va como error: apagada, ya no
+        // sin localización fiscal la revisión del límite va como error: apagado también (el 100 % es
+        // obligatorio y no se sabe si llegó)
         const E = await crearEmpresaFila()
         const antes = await alertasPanel({ empresas: [E], permisos: new Set(['fiscal.ver']) })
         assert.include(
@@ -150,10 +151,12 @@ test.group('billing · aviso de pequeño contribuyente (decisión 12)', (group) 
         const despues = await alertasPanel({ empresas: [E], permisos: new Set(['fiscal.ver']) })
         const fila = despues.empresas[0]!
         assert.deepEqual(fila.apagadas, ['limite_pequeno_contribuyente'])
-        assert.notInclude(
+        assert.include(
             fila.errores.map((x) => x.tipo),
             'limite_pequeno_contribuyente',
+            'errores visibles: apagado no calla que no se pudo revisar',
         )
+        assert.lengthOf(fila.alertas, 0)
         assert.include(
             fila.errores.map((x) => x.tipo),
             'vencimientos_fiscales',
