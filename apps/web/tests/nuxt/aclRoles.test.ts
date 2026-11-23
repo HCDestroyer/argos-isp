@@ -7,6 +7,7 @@ import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaSinPermiso from '~/pages/sin-permiso.vue'
 import { esperar } from '../ayudas/esperar'
+import { opcionesMasServicio } from '../ayudas/fichaServicio'
 
 /**
  * Revisión de ACL del panel en ejecución (semana 3, tarea 3; checklist en
@@ -128,7 +129,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/lealtad/premios', espera: 'Un mes gratis de internet' },
         { ruta: '/lealtad/canjes', espera: 'Sin canjes' },
         { ruta: '/planes/1', espera: 'profile argos-hogar' },
-        { ruta: '/routers/1?pestana=pools', espera: '100.64.10.0/24' },
+        { ruta: '/routers/1?pestana=red', espera: '100.64.10.0/24' },
         { ruta: '/configuracion/cuentas-bancarias', espera: 'Cuentas bancarias' },
         { ruta: '/configuracion/empresa', espera: 'Contacto y pagos' },
         // Rediseño: la pantalla es «Datos de la empresa» dentro de «Empresa y fiscal»; se espera el formulario cargado.
@@ -184,7 +185,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
 
     // Control: con admin las mismas pantallas sí muestran sus acciones (la prueba de arriba no pasa en vacío).
     // /routers no tiene acciones en la lista (Velocidad abre el panel, cuyas acciones van aparte).
-    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', '/usuarios/roles', '/usuarios/tokens', '/plantillas', '/cobros/pasarela', '/lealtad/premios', '/routers/1?pestana=pools', '/configuracion/nodos-portal', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/anuncios', '/anuncios/2']) {
+    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', '/usuarios/roles', '/usuarios/tokens', '/plantillas', '/cobros/pasarela', '/lealtad/premios', '/routers/1?pestana=red', '/configuracion/nodos-portal', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/anuncios', '/anuncios/2']) {
         it(`${ruta}: con admin sí hay botones de acción`, async () => {
             const wrapper = await montar(ruta)
             await esperar(() => expect(botones(wrapper.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))
@@ -199,7 +200,8 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         for (const ruta of [`/servicios/${suspendido?.id}`, `/facturas/${pendiente?.id}`]) {
             useUsuarioActual().value = LECTURA
             const lectura = await montar(ruta)
-            await esperar(() => expect(lectura.text()).toMatch(/Historial|Líneas|Aviso/))
+            // OperServicioFicha: la ficha del servicio tiene la pestaña «Bitácora» (ya no «Historial»).
+            await esperar(() => expect(lectura.text()).toMatch(/Historial|Líneas|Aviso|Bitácora/))
             await new Promise(listo => setTimeout(listo, 50))
             expect(botones(lectura.element).filter(texto => ACCION.test(texto)), ruta).toEqual([])
             lectura.unmount()
@@ -217,8 +219,11 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         useUsuarioActual().value = meCajero
         const activo = bd.servicios.find(servicio => servicio.estado === 'activo')
         const wrapper = await montar(`/servicios/${activo?.id}`)
-        await esperar(() => expect(botones(wrapper.element)).toContain('Promesa de pago'))
-        const textos = botones(wrapper.element)
+        // OperServicioFicha: «Promesa de pago» va en el menú «Más» de la ficha, con el resto de acciones.
+        await esperar(() => expect(wrapper.find('[data-prueba="mas-acciones-servicio"]').exists()).toBe(true))
+        const opciones = await opcionesMasServicio(wrapper)
+        expect(opciones).toContain('Promesa de pago')
+        const textos = [...botones(wrapper.element), ...opciones]
         for (const accion of ['Suspender', 'Limitar', 'Retirar', 'Desconectar', 'Editar', 'Mostrar']) {
             expect(textos.some(texto => texto.startsWith(accion)), accion).toBe(false)
         }

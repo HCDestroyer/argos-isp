@@ -87,11 +87,24 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         bloque: 'Gestión',
         corta: 'Red',
         secciones: [
-            { id: 'routers', etiqueta: 'Routers', descripcion: 'Routers MikroTik, redes IPv4 y bloques IPv6.', icono: 'i-lucide-router', ruta: '/routers', permiso: 'routers.ver' },
-            { id: 'planes', etiqueta: 'Planes', descripcion: 'Velocidades, precios e implementación por router.', icono: 'i-lucide-gauge', ruta: '/planes', permiso: 'planes.ver' },
-            { id: 'qos', etiqueta: 'Prioridad (QoS)', descripcion: 'Clases de tráfico: lo interactivo y la web antes que las descargas cuando el plan o el router se llenan.', icono: 'i-lucide-list-ordered', ruta: '/red/qos', permiso: 'qos.ver' },
-            { id: 'adicionales', etiqueta: 'Adicionales', descripcion: 'Catálogo de streaming, IPTV y otros adicionales, y motivos de cortesía.', icono: 'i-lucide-package-plus', ruta: '/adicionales', permiso: 'adicionales.ver' },
-            { id: 'migracion', etiqueta: 'Migración de router', descripcion: 'Quién volvió a conectarse desde que el router pasó al nuevo servidor RADIUS, y fallos de red.', icono: 'i-lucide-arrow-right-left', ruta: '/routers/migracion', permiso: 'routers.ver' },
+            { id: 'routers', etiqueta: 'Routers', descripcion: 'Routers MikroTik: estado, conexión, velocidad, redes y comandos.', icono: 'i-lucide-router', ruta: '/routers', permiso: 'routers.ver' },
+            { id: 'planes', etiqueta: 'Planes', descripcion: 'Velocidades, precios y en qué routers se ofrece cada plan.', icono: 'i-lucide-gauge', ruta: '/planes', permiso: 'planes.ver' },
+            { id: 'ips', etiqueta: 'Direcciones IP', descripcion: 'Todas las redes de todos los routers y de quién es cada IP.', icono: 'i-lucide-network', ruta: '/red/ips', permiso: 'redes.ver' },
+            { id: 'red-acceso', etiqueta: 'Red de acceso', descripcion: 'Por dónde llega cada cliente: OLT, puerto PON, VLAN, servidor PPPoE y red.', icono: 'i-lucide-cable', ruta: '/red/acceso', permiso: 'red_acceso.ver' },
+            { id: 'conectados', etiqueta: 'Conectados ahora', descripcion: 'Quién está navegando, desde cuándo y por cuál router.', icono: 'i-lucide-wifi', ruta: '/red/conectados', permiso: 'sesiones.ver' },
+        ],
+        // Decisión 29 del PM: el menú Red son esas cinco; lo demás va aparte, en «Más de red».
+        subgrupos: [
+            {
+                id: 'red-mas',
+                etiqueta: 'Más de red',
+                icono: 'i-lucide-ellipsis',
+                secciones: [
+                    { id: 'qos', etiqueta: 'Prioridad (QoS)', descripcion: 'Clases de tráfico: lo interactivo y la web antes que las descargas cuando el plan o el router se llenan.', icono: 'i-lucide-list-ordered', ruta: '/red/qos', permiso: 'qos.ver' },
+                    { id: 'adicionales', etiqueta: 'Adicionales', descripcion: 'Catálogo de streaming, IPTV y otros adicionales, y motivos de cortesía.', icono: 'i-lucide-package-plus', ruta: '/adicionales', permiso: 'adicionales.ver' },
+                    { id: 'migracion', etiqueta: 'Migración de router', descripcion: 'Quién volvió a conectarse desde que el router pasó al nuevo servidor RADIUS, y fallos de red.', icono: 'i-lucide-arrow-right-left', ruta: '/routers/migracion', permiso: 'routers.ver' },
+                ],
+            },
         ],
     },
     {

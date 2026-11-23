@@ -118,6 +118,7 @@ watch(perfilId, () => void cargar())
         <template #acciones>
             <UButton
                 v-if="perfil && puede('qos.gestionar')"
+                class="rounded-full"
                 label="Copiar perfil"
                 icon="i-lucide-copy-plus"
                 color="neutral"
@@ -133,7 +134,7 @@ watch(perfilId, () => void cargar())
                 label="Perfiles"
                 color="neutral"
                 variant="ghost"
-                class="hidden sm:inline-flex"
+                class="hidden sm:inline-flex rounded-full"
             />
         </template>
 
@@ -234,85 +235,87 @@ watch(perfilId, () => void cargar())
                         @click="abrirClase(null)"
                     />
                 </div>
-                <UTable
-                    :data="clases"
-                    :columns="columnas"
-                    :loading="cargando"
-                    :ui="{ td: 'py-2.5' }"
-                    data-prueba="tabla-clases"
-                >
-                    <template #orden-cell="{ row }">
-                        <span class="text-muted">{{ row.original.es_resto || esDescargaQos(row.original) ? '—' : row.original.orden }}</span>
-                    </template>
-                    <template #nombre-cell="{ row }">
-                        <div
-                            class="flex min-w-0 flex-col gap-0.5"
-                            :data-clase="row.original.nombre"
-                        >
-                            <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                {{ row.original.nombre }}
-                                <UBadge
-                                    :label="row.original.activa ? 'Activa' : 'Inactiva'"
-                                    :icon="row.original.activa ? 'i-lucide-circle-check' : 'i-lucide-circle-off'"
-                                    :color="row.original.activa ? 'success' : 'neutral'"
-                                    variant="subtle"
+                <div class="surface-card overflow-hidden rounded-2xl">
+                    <UTable
+                        :data="clases"
+                        :columns="columnas"
+                        :loading="cargando"
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5' }"
+                        data-prueba="tabla-clases"
+                    >
+                        <template #orden-cell="{ row }">
+                            <span class="text-muted">{{ row.original.es_resto || esDescargaQos(row.original) ? '—' : row.original.orden }}</span>
+                        </template>
+                        <template #nombre-cell="{ row }">
+                            <div
+                                class="flex min-w-0 flex-col gap-0.5"
+                                :data-clase="row.original.nombre"
+                            >
+                                <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
+                                    {{ row.original.nombre }}
+                                    <UBadge
+                                        :label="row.original.activa ? 'Activa' : 'Inactiva'"
+                                        :icon="row.original.activa ? 'i-lucide-circle-check' : 'i-lucide-circle-off'"
+                                        :color="row.original.activa ? 'success' : 'neutral'"
+                                        variant="subtle"
+                                        size="sm"
+                                    />
+                                </span>
+                                <span class="flex items-center gap-1 text-xs text-muted">
+                                    <UIcon
+                                        :name="tipoClase(row.original).icono"
+                                        class="size-3.5 shrink-0"
+                                    />
+                                    {{ tipoClase(row.original).etiqueta }}
+                                    <span class="sm:hidden">· garantizado {{ row.original.garantizado_pct }} % · tope {{ row.original.tope_pct === null ? '—' : `${row.original.tope_pct} %` }}</span>
+                                </span>
+                                <span class="text-xs text-muted lg:hidden">{{ resumenReglas(row.original, clases) }}</span>
+                            </div>
+                        </template>
+                        <template #garantizado_pct-cell="{ row }">
+                            {{ row.original.garantizado_pct }} %
+                        </template>
+                        <template #tope_pct-cell="{ row }">
+                            {{ row.original.tope_pct === null ? 'Sin tope' : `${row.original.tope_pct} %` }}
+                        </template>
+                        <template #reglas-cell="{ row }">
+                            <span class="text-xs">{{ resumenReglas(row.original, clases) }}</span>
+                        </template>
+                        <template #acciones-cell="{ row }">
+                            <div
+                                v-if="puede('qos.gestionar')"
+                                class="flex justify-end gap-1"
+                            >
+                                <UButton
+                                    icon="i-lucide-pencil"
+                                    color="neutral"
+                                    variant="ghost"
                                     size="sm"
+                                    :aria-label="`Editar ${row.original.nombre}`"
+                                    :data-prueba="`editar-clase-${row.original.id}`"
+                                    @click="abrirClase(row.original)"
                                 />
-                            </span>
-                            <span class="flex items-center gap-1 text-xs text-muted">
-                                <UIcon
-                                    :name="tipoClase(row.original).icono"
-                                    class="size-3.5 shrink-0"
+                                <UButton
+                                    v-if="!row.original.es_resto"
+                                    :icon="row.original.activa ? 'i-lucide-circle-off' : 'i-lucide-circle-play'"
+                                    :color="row.original.activa ? 'warning' : 'success'"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="row.original.activa ? `Desactivar ${row.original.nombre}` : `Activar ${row.original.nombre}`"
+                                    :data-prueba="`estado-clase-${row.original.id}`"
+                                    @click="pedirCambio(row.original)"
                                 />
-                                {{ tipoClase(row.original).etiqueta }}
-                                <span class="sm:hidden">· garantizado {{ row.original.garantizado_pct }} % · tope {{ row.original.tope_pct === null ? '—' : `${row.original.tope_pct} %` }}</span>
-                            </span>
-                            <span class="text-xs text-muted lg:hidden">{{ resumenReglas(row.original, clases) }}</span>
-                        </div>
-                    </template>
-                    <template #garantizado_pct-cell="{ row }">
-                        {{ row.original.garantizado_pct }} %
-                    </template>
-                    <template #tope_pct-cell="{ row }">
-                        {{ row.original.tope_pct === null ? 'Sin tope' : `${row.original.tope_pct} %` }}
-                    </template>
-                    <template #reglas-cell="{ row }">
-                        <span class="text-xs">{{ resumenReglas(row.original, clases) }}</span>
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <div
-                            v-if="puede('qos.gestionar')"
-                            class="flex justify-end gap-1"
-                        >
-                            <UButton
-                                icon="i-lucide-pencil"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Editar ${row.original.nombre}`"
-                                :data-prueba="`editar-clase-${row.original.id}`"
-                                @click="abrirClase(row.original)"
+                            </div>
+                        </template>
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-list-ordered"
+                                title="El perfil no tiene clases"
+                                variant="naked"
                             />
-                            <UButton
-                                v-if="!row.original.es_resto"
-                                :icon="row.original.activa ? 'i-lucide-circle-off' : 'i-lucide-circle-play'"
-                                :color="row.original.activa ? 'warning' : 'success'"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="row.original.activa ? `Desactivar ${row.original.nombre}` : `Activar ${row.original.nombre}`"
-                                :data-prueba="`estado-clase-${row.original.id}`"
-                                @click="pedirCambio(row.original)"
-                            />
-                        </div>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-list-ordered"
-                            title="El perfil no tiene clases"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                        </template>
+                    </UTable>
+                </div>
             </section>
 
             <section
@@ -328,31 +331,33 @@ watch(perfilId, () => void cargar())
                 <p class="text-sm text-muted">
                     Solo cuestan los planes con el extra «Prioridad por clases (QoS)»: hojas = planes × 2 estados × 2 sentidos × clases activas.
                 </p>
-                <UTable
-                    :data="perfil.routers"
-                    :columns="usosColumnas"
-                    data-prueba="tabla-routers-qos"
-                >
-                    <template #nombre-cell="{ row }">
-                        <ULink
-                            :to="puede('routers.ver') ? `/routers/${row.original.router_id}` : undefined"
-                            class="text-sm font-medium text-highlighted"
-                        >
-                            {{ row.original.nombre }}
-                        </ULink>
-                    </template>
-                    <template #costo-cell="{ row }">
-                        <QosCosto :uso="row.original" />
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-router"
-                            :title="perfil.predeterminado ? 'Ningún router activo' : 'Ningún router usa este perfil'"
-                            description="Se elige en la ficha del router, en «Prioridad por clases (QoS)»."
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                <div class="surface-card overflow-hidden rounded-2xl">
+                    <UTable
+                        :data="perfil.routers"
+                        :columns="usosColumnas"
+                        data-prueba="tabla-routers-qos"
+                    >
+                        <template #nombre-cell="{ row }">
+                            <ULink
+                                :to="puede('routers.ver') ? `/routers/${row.original.router_id}` : undefined"
+                                class="text-sm font-medium text-highlighted"
+                            >
+                                {{ row.original.nombre }}
+                            </ULink>
+                        </template>
+                        <template #costo-cell="{ row }">
+                            <QosCosto :uso="row.original" />
+                        </template>
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-router"
+                                :title="perfil.predeterminado ? 'Ningún router activo' : 'Ningún router usa este perfil'"
+                                description="Se elige en la ficha del router, en «Prioridad por clases (QoS)»."
+                                variant="naked"
+                            />
+                        </template>
+                    </UTable>
+                </div>
             </section>
         </div>
 

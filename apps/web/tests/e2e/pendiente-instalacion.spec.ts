@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { accionCliente, elegirRouter, entrar, ir } from './ayudas'
+import { accionCliente, elegirRouter, entrar, hayAccionServicio, ir } from './ayudas'
 
 /**
  * Servicio pendiente de instalación (`contratos/instalacion.md`, pedido A1 de Iris): el
@@ -42,13 +42,13 @@ test('alta pendiente de instalación y activación con planta', async ({ page })
     await enlace.click()
     await expect(page).toHaveURL(/\/servicios\/\d+$/)
 
-    const encabezado = page.getByRole('heading', { level: 2, name: /^ramiro\./ })
-    await expect(encabezado.locator('..')).toContainText('Pendiente de instalación')
+    const encabezado = page.locator('[data-prueba="franja-servicio"]')
+    await expect(encabezado).toContainText('Pendiente de instalación')
     await expect(page.locator('[data-prueba="aviso-pendiente-instalacion"]')).toBeVisible()
     const acciones = page.getByRole('group', { name: 'Acciones del servicio' })
-    await expect(acciones.getByRole('button', { name: 'Retirar' })).toBeVisible()
-    await expect(acciones.getByRole('button', { name: 'Suspender' })).toHaveCount(0)
-    await expect(acciones.getByRole('button', { name: 'Promesa de pago' })).toHaveCount(0)
+    expect(await hayAccionServicio(page, 'Retirar')).toBe(true)
+    expect(await hayAccionServicio(page, 'Suspender')).toBe(false)
+    expect(await hayAccionServicio(page, 'Promesa de pago')).toBe(false)
 
     await acciones.getByRole('button', { name: 'Activar instalación' }).click()
     const modal = page.getByRole('dialog', { name: 'Activar instalación' })
@@ -59,10 +59,11 @@ test('alta pendiente de instalación y activación con planta', async ({ page })
     await modal.getByRole('button', { name: 'Activar instalación' }).click()
 
     await expect(modal).toBeHidden()
-    await expect(encabezado.locator('..')).toContainText('Activo')
+    await expect(encabezado).toContainText('Activo')
     await expect(page.locator('[data-prueba="aviso-pendiente-instalacion"]')).toHaveCount(0)
+    await page.locator('[data-prueba="pestanas-servicio"]').getByRole('tab', { name: 'Red y equipo' }).click()
     await expect(page.locator('[data-prueba="planta-servicio"]')).toContainText('NAP-21')
     await expect(page.locator('[data-prueba="planta-servicio"]')).toContainText('-19.40 dBm')
     await expect(page.locator('[data-prueba="instalado-en-servicio"]')).not.toContainText('Pendiente')
-    await expect(acciones.getByRole('button', { name: 'Suspender' })).toBeVisible()
+    expect(await hayAccionServicio(page, 'Suspender')).toBe(true)
 })

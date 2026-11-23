@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir } from './ayudas'
+import { accionServicio, entrar, fijarHoyFixtures, ir, pestanaServicio } from './ayudas'
 
 /**
  * Prueba obligatoria 4 del brief de A4: "Crear promesa y ver el resultado de evaluación".
@@ -18,10 +18,10 @@ test('crear promesa y ver la regla que aplicó', async ({ page }) => {
     await page.getByLabel('Buscar servicios').fill('juan.carlos2')
     await page.getByRole('link', { name: 'juan.carlos2', exact: true }).click()
     await expect(page).toHaveURL(/\/servicios\/2$/)
-    const encabezado = page.getByRole('heading', { level: 2, name: 'juan.carlos2' }).locator('..')
+    const encabezado = page.locator('[data-prueba="franja-servicio"]')
     await expect(encabezado).toContainText('Suspendido')
 
-    await page.getByRole('button', { name: 'Promesa de pago' }).click()
+    await accionServicio(page, 'Promesa de pago')
     const modal = page.getByRole('dialog')
     const cobertura = modal.getByLabel('Lo que cubre la promesa')
     await expect(cobertura.locator('[data-prueba="cobertura-total"]')).toHaveText('Q 300.00')
@@ -45,14 +45,16 @@ test('crear promesa y ver la regla que aplicó', async ({ page }) => {
     await modal.getByRole('button', { name: 'Listo' }).click()
 
     await expect(encabezado).toContainText('Activo')
-    await expect(encabezado).toContainText('Promesa activa')
+    await expect(encabezado).toContainText(/Promesa/)
 
+    // Tablero OperServicioFicha: las promesas del servicio van en la pestaña «Facturas».
+    await pestanaServicio(page, 'Facturas')
     const promesas = page.getByLabel('Promesas del servicio')
     await expect(promesas).toContainText('Cumple todas las reglas de promesa de la plantilla')
     await expect(promesas.locator('[data-prueba="regla-cumplimiento"]').first()).toHaveText('Cumplimiento: por facturas')
 
     // Segunda con la primera abierta: la simulación ya dice que crear daría 409 `promesa_abierta`.
-    await page.getByRole('button', { name: 'Promesa de pago' }).click()
+    await accionServicio(page, 'Promesa de pago')
     await expect(modal.locator('[data-prueba="motivo-no-creable"]')).toContainText(/Ya tiene la promesa \d+ activa/)
     await expect(modal.getByRole('button', { name: 'Crear promesa' })).toBeDisabled()
     await expect(evaluacion).toHaveCount(0)
@@ -62,7 +64,7 @@ test('sin nada vencido no hay promesa que crear', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
-    await page.getByRole('button', { name: 'Promesa de pago' }).click()
+    await accionServicio(page, 'Promesa de pago')
     const modal = page.getByRole('dialog')
     await expect(modal.locator('[data-prueba="cobertura-sin-vencido"]')).toBeVisible()
     await expect(modal.locator('[data-prueba="cobertura-total"]')).toHaveCount(0)

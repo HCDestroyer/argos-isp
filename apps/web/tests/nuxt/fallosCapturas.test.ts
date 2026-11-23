@@ -128,7 +128,7 @@ describe('fallos de las capturas 06 y 07', () => {
         useUsuarioActual().value = meAdmin
         // La ficha usa `UTooltip`: necesita el `TooltipProvider` de `UApp`, como en la app real.
         const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaServicio) }) })
-        const wrapper = await mountSuspended(conApp, { route: `/servicios/${servicio.id}` })
+        const wrapper = await mountSuspended(conApp, { route: `/servicios/${servicio.id}?pestana=bitacora` })
         await esperar(() => expect(wrapper.text()).toContain('Servicio creado'))
         expect(wrapper.text()).not.toContain('Consulta desde la página de corte')
         expect(wrapper.text()).not.toContain('portal.quien_soy')

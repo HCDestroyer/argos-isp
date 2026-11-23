@@ -5,7 +5,7 @@ import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaAvisos from '~/pages/notificaciones/index.vue'
-import PaginaPlan from '~/pages/planes/[id].vue'
+import PaginaPlan from '~/pages/planes/[id]/index.vue'
 import PaginaRouter from '~/pages/routers/[id].vue'
 import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { esperar } from '../ayudas/esperar'
@@ -91,9 +91,11 @@ describe('servicio: planes temporales y configuración efectiva', () => {
     })
 
     it('la ficha del servicio muestra ambas secciones', async () => {
+        const red = await mountSuspended(PaginaServicio, { route: '/servicios/1?pestana=red' })
+        await esperar(() => expect(red.find('[data-prueba="configuracion-efectiva"]').text()).toContain('Rate-limit activo'))
+        red.unmount()
         const pagina = await mountSuspended(PaginaServicio, { route: '/servicios/1' })
-        await esperar(() => expect(pagina.find('[data-prueba="configuracion-efectiva"]').text()).toContain('Rate-limit activo'))
-        expect(pagina.find('[data-prueba="planes-temporales"]').text()).toContain('Sin planes temporales')
+        await esperar(() => expect(pagina.find('[data-prueba="planes-temporales"]').text()).toContain('Sin planes temporales'))
         expect(pagina.find('[data-prueba="programar-plan-temporal"]').exists()).toBe(true)
         pagina.unmount()
     })

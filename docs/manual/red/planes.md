@@ -3,6 +3,8 @@ orden: 5
 pantallas:
     - /planes
     - /planes/[id]#ficha-del-plan
+    - /planes/nuevo#crear-o-editar-un-plan
+    - /planes/[id]/editar#crear-o-editar-un-plan
 ---
 
 # Planes
@@ -32,6 +34,7 @@ Se filtra por tipo de plan. Cada fila tiene «Editar» (`planes.editar`) y un en
 ## Crear o editar un plan
 
 - **Permisos:** `planes.crear` («Nuevo plan») y `planes.editar` («Editar»).
+- **Dónde:** el formulario se abre en su propia página. Al crear vas a la ficha del plan, para elegir en qué routers se ofrece si no es global; al editar vuelves a la ficha.
 - **Campos** (velocidades en kbps; 1 Mbps = 1000 kbps):
     - **Nombre**, **Precio mensual** y **Tipo de plan.** El tipo solo cambia avisos y reportes, nunca la velocidad; un dedicado suele ser 1:1 y simétrico.
     - **Bajada** y **Subida.**

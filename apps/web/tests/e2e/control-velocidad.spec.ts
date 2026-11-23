@@ -19,7 +19,13 @@ test('router: editar por capas, revisar la vista previa y aplicar con «Reconect
     const tipoCola = modal.locator('[data-prueba="capa-tipo-cola"]')
     // PCQ no sirve en la cola de un solo cliente: se ve deshabilitado con el porqué.
     await expect(tipoCola.getByRole('radio', { name: 'PCQ' })).toBeDisabled()
-    await expect(tipoCola).toContainText('No disponible: PCQ reparte entre varios clientes')
+    // Tablero RedRouterFicha: cada tipo de cola es una ficha con su «?»; el porqué sale en la
+    // explicación de abajo (y en el título de la ficha tachada).
+    await expect(tipoCola.getByRole('radio', { name: 'PCQ' })).toHaveAttribute('title', /^No disponible: PCQ reparte entre varios clientes/)
+    await tipoCola.getByRole('button', { name: 'Cómo funciona PCQ' }).click()
+    const explicacion = modal.locator('[data-prueba="explicacion-cola"]')
+    await expect(explicacion).toContainText('No disponible aquí')
+    await expect(explicacion).toContainText('Por qué no: PCQ reparte entre varios clientes')
     await expect(modal.locator('[data-prueba="revisar-estrategia"]')).toBeDisabled()
     await tipoCola.getByRole('radio', { name: 'CAKE' }).click()
     await modal.locator('[data-prueba="revisar-estrategia"]').click()
@@ -50,7 +56,12 @@ test('router con RouterOS 6: CAKE y fq_codel deshabilitados con el porqué', asy
     await expect(tipoCola.getByRole('radio', { name: 'SFQ' })).toBeEnabled()
     await expect(tipoCola.getByRole('radio', { name: 'CAKE' })).toBeDisabled()
     await expect(tipoCola.getByRole('radio', { name: 'fq_codel' })).toBeDisabled()
-    await expect(tipoCola).toContainText('Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
+    await tipoCola.getByRole('button', { name: 'Cómo funciona CAKE' }).click()
+    const explicacion = modal.locator('[data-prueba="explicacion-cola"]')
+    await expect(explicacion).toContainText('No disponible aquí')
+    await expect(explicacion).toContainText('Por qué no: Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
+    await tipoCola.getByRole('button', { name: 'Cómo funciona fq_codel' }).click()
+    await expect(explicacion).toContainText('Por qué no: Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
 })
 
 test('plan: «Sincronizar plan» con el resumen por router; el router sin API dice «Solo RADIUS»', async ({ page }) => {

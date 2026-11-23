@@ -205,6 +205,7 @@ onMounted(cargar)
     >
         <template #acciones>
             <UButton
+                class="rounded-full"
                 :to="enlace(`/servicios/${servicioId}`)"
                 icon="i-lucide-arrow-left"
                 label="Atrás"
