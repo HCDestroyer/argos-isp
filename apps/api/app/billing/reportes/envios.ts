@@ -271,7 +271,7 @@ export async function listarCorreosExternos(
         Record<string, unknown>
     >
     const ids = filas.map((f) => Number(f.id))
-    const usos = new Map<number, { total: number; activos: number }>()
+    const usos = new Map<number, { programados: number; activos: number }>()
     if (ids.length > 0) {
         const conteos = (await db
             .from('billing.reportes_envios_destinatarios as d')
@@ -285,11 +285,14 @@ export async function listarCorreosExternos(
             .groupBy('d.correo_externo_id')
             .select(
                 'd.correo_externo_id',
-                db.raw('count(*)::int as total'),
+                db.raw('count(*)::int as programados'),
                 db.raw('count(*) FILTER (WHERE e.activo)::int as activos'),
-            )) as Array<{ correo_externo_id: number; total: number; activos: number }>
+            )) as Array<{ correo_externo_id: number; programados: number; activos: number }>
         for (const c of conteos) {
-            usos.set(Number(c.correo_externo_id), { total: Number(c.total), activos: Number(c.activos) })
+            usos.set(Number(c.correo_externo_id), {
+                programados: Number(c.programados),
+                activos: Number(c.activos),
+            })
         }
     }
     return {
@@ -299,7 +302,7 @@ export async function listarCorreosExternos(
                 ...serializarCorreo(f),
                 aprobado_por_nombre: (f.aprobado_por_nombre as string | null) ?? null,
                 retirado_por_nombre: (f.retirado_por_nombre as string | null) ?? null,
-                envios_programados: uso?.total ?? 0,
+                envios_programados: uso?.programados ?? 0,
                 envios_activos: uso?.activos ?? 0,
             }
         }),
