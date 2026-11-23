@@ -232,7 +232,7 @@ function aMovimientoSinConciliar(m: MovimientoBancoFixture): Schema<'MovimientoS
 }
 
 /** Como `ImportarExtracto` (A3): fechas en el rango, Σ = final − inicial, encadenado y sin duplicados. */
-function importar(solicitud: SolicitudFixture): RespuestaFixture {
+export function importar(solicitud: SolicitudFixture): RespuestaFixture {
     const cuerpo = cuerpoObjeto(solicitud)
     const errores: Errores = []
     for (const campo of ['desde', 'hasta'] as const) {

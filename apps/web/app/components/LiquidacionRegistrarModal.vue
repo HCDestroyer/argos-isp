@@ -110,12 +110,12 @@ async function enviar(evento: FormSubmitEvent<SalidaLiquidacion>) {
 </script>
 
 <template>
-    <UModal
+    <USlideover
         v-model:open="abierto"
         :title="`Registrar liquidación · ${resumen.nombre}`"
         description="El bruto sale de la cuenta puente, el neto entra al banco y la comisión va a gastos. Un pago se liquida una sola vez."
         :dismissible="!enviando"
-        :ui="{ content: 'sm:max-w-2xl' }"
+        :ui="{ content: 'sm:max-w-2xl sm:m-4 sm:rounded-[1.375rem] sm:h-[calc(100dvh-2rem)]' }"
     >
         <template #body>
             <UForm
@@ -301,5 +301,5 @@ async function enviar(evento: FormSubmitEvent<SalidaLiquidacion>) {
                 />
             </div>
         </template>
-    </UModal>
+    </USlideover>
 </template>

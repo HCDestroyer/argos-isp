@@ -61,7 +61,9 @@ describe('pago de terceros y responsable de pago', () => {
     it('el cobro carga solas las facturas de los dependientes y el pago las cubre', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=10' })
         await esperar(() => expect(vista.find('[data-grupo="12"]').exists()).toBe(true))
-        expect(vista.get('[data-grupo="12"]').text()).toContain('Responsable de pago de:')
+        // «A su cargo» (tablero NuevoCobro), plegado hasta «Verifiqué el DPI».
+        expect(vista.get('[data-grupo="12"]').text()).toContain('A su cargo')
+        expect(vista.find('[data-grupo="12"] [data-factura]').exists()).toBe(false)
 
         const cuenta = await useClientes().estadoCuenta(12)
         const pendientes = cuenta.ok ? cuenta.data.facturas_pendientes : []
@@ -109,6 +111,8 @@ describe('pago de terceros y responsable de pago', () => {
 
     it('en pantalla: marcar el grupo del dependiente suma "de otros clientes" y tras el pago no quedan marcadas', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=10' })
+        await esperar(() => expect(vista.find('[data-grupo="12"] [data-prueba="verifique-dpi"]').exists()).toBe(true))
+        await vista.get('[data-grupo="12"] [data-prueba="verifique-dpi"]').trigger('click')
         await esperar(() => expect(vista.find('[data-grupo="12"] button[role="checkbox"]').exists()).toBe(true))
         await vista.get('[data-grupo="12"] button[role="checkbox"]').trigger('click')
         await esperar(() => expect(vista.get('[data-prueba="total-marcadas"]').text()).toMatch(/de otros clientes \(Q [\d,]+\.\d{2}\)/))
