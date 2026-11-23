@@ -60,15 +60,17 @@ function porcentajeDe(bytes: number, total: number): number {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="almacenamiento"
-        titulo="Almacenamiento"
-        icono="i-lucide-hard-drive"
+        titulo="Sistema"
+        descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
         <template #acciones>
             <UButton
                 v-if="puede('sistema.recalcular_almacenamiento')"
                 label="Recalcular"
+                color="neutral"
+                variant="outline"
                 :icon="ICONOS.actualizar"
                 :loading="recalculando"
                 data-prueba="recalcular-almacenamiento"
@@ -98,7 +100,7 @@ function porcentajeDe(bytes: number, total: number): number {
                 <section
                     v-for="volumen in datos.volumenes"
                     :key="volumen.id"
-                    class="flex flex-col gap-3 surface-card p-4 sm:p-5"
+                    class="flex flex-col gap-3 rounded-2xl border border-(--ax-borde) p-4 sm:p-5"
                     :data-volumen="volumen.id"
                 >
                     <div class="flex items-center gap-3">
@@ -160,7 +162,7 @@ function porcentajeDe(bytes: number, total: number): number {
             />
             <template v-else>
                 <section
-                    class="flex flex-col gap-4 surface-card p-4 sm:p-5"
+                    class="flex flex-col gap-4 rounded-2xl border border-(--ax-borde) p-4 sm:p-5"
                     aria-labelledby="titulo-categorias"
                 >
                     <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -211,7 +213,7 @@ function porcentajeDe(bytes: number, total: number): number {
 
                 <div class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <section
-                        class="flex flex-col gap-3 surface-card p-4 sm:p-5"
+                        class="flex flex-col gap-3 rounded-2xl border border-(--ax-borde) p-4 sm:p-5"
                         aria-labelledby="titulo-tablas"
                     >
                         <h2
@@ -247,7 +249,7 @@ function porcentajeDe(bytes: number, total: number): number {
                         </p>
                     </section>
                     <section
-                        class="flex flex-col gap-3 surface-card p-4 sm:p-5"
+                        class="flex flex-col gap-3 rounded-2xl border border-(--ax-borde) p-4 sm:p-5"
                         aria-labelledby="titulo-redis"
                     >
                         <h2
@@ -280,5 +282,5 @@ function porcentajeDe(bytes: number, total: number): number {
                 </div>
             </template>
         </div>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

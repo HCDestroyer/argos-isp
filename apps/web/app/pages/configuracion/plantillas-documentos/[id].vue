@@ -260,21 +260,12 @@ onBeforeUnmount(liberarVista)
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="plantilla-documento"
         :titulo="plantilla ? plantilla.nombre : 'Plantilla de documento'"
-        icono="i-lucide-file-code-2"
+        descripcion="Plantilla de documento: HTML a la izquierda y vista previa a la derecha"
+        :volver="volver"
     >
-        <template #acciones>
-            <UButton
-                label="Plantillas"
-                icon="i-lucide-arrow-left"
-                color="neutral"
-                variant="ghost"
-                :to="volver"
-            />
-        </template>
-
         <ProblemaAlerta
             v-if="problema"
             :problema="problema"
@@ -600,5 +591,5 @@ onBeforeUnmount(liberarVista)
                 </div>
             </template>
         </UModal>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
