@@ -258,6 +258,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         temas: [
             'Botones de la ficha',
             'Datos del cliente',
+            'Verificar el NIT de una empresa',
             'Pestañas',
             'Telegram',
             'Portal del cliente',
@@ -279,6 +280,28 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         temas: [
             'Campos del formulario',
         ],
+    },
+    '/clientes/titulares': {
+        titulo: 'Revisión de titulares',
+        resumen: 'Cuando un técnico de Iris cambia el titular de un servicio por instalar a una empresa y Argos no puede decidir solo, el cambio espera aquí a que una persona lo apruebe o lo rechace. Mientras tanto el servicio sigue con su titular de antes.',
+        pagina: 'clientes-y-servicios/titulares-empresa',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Por qué un cambio queda en revisión',
+            'Qué ves',
+            'Detalle de una revisión',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
+    '/clientes/titulares/[id]': {
+        titulo: 'Revisión de titulares · Detalle de una revisión',
+        resumen: 'Al abrir una revisión ves todo lo que hace falta para decidir: quién es el representante, su documento y a qué empresa pasaría el servicio. Haz clic en la empresa de la lista; verás:',
+        pagina: 'clientes-y-servicios/titulares-empresa',
+        ancla: 'detalle-de-una-revision',
+        temas: [],
     },
     '/cobro': {
         titulo: 'Cobrar',

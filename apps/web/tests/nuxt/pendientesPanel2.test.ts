@@ -69,7 +69,7 @@ describe('procesos: pasarela, corte y certificación en lote', () => {
 
     it('el corte evalúa los servicios no retirados; el lote pide la certificación por rango', async () => {
         const corte = await useFacturas().corte(nuevaClaveIdempotencia())
-        expect(corte.ok && corte.data.evaluados).toBe(bd.servicios.filter(s => s.estado !== 'retirado').length)
+        expect(corte.ok && corte.data.evaluados).toBe(bd.servicios.filter(s => s.estado !== 'retirado' && s.estado !== 'pendiente_instalacion').length)
         const lote = await useDte().certificarLote({ desde: '2026-01-01', hasta: '2026-12-31' }, nuevaClaveIdempotencia())
         expect(lote.ok && lote.data.solicitadas.length + lote.data.errores.length).toBeGreaterThan(0)
         const sinRango = await useDte().certificarLote({}, nuevaClaveIdempotencia())

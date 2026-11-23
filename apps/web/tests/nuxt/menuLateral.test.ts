@@ -21,7 +21,7 @@ describe('menú lateral agrupado', () => {
         expect(new Set(ids).size).toBe(ids.length)
         expect(ids).toContain('migracion')
         const dia = GRUPOS_PANEL.find(grupo => grupo.id === 'dia')
-        expect(dia?.secciones.map(seccion => seccion.id)).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes'])
+        expect(dia?.secciones.map(seccion => seccion.id)).toEqual(['cobro', 'caja', 'clientes', 'titulares-empresa', 'servicios', 'promesas', 'comprobantes'])
         expect(GRUPOS_PANEL.map(grupo => grupo.corta)).toEqual(['Día a día', 'Facturas', 'Red', 'Inventario', 'Lealtad', 'Finanzas', 'Reportes', 'Ajustes'])
         // Decisión 1 del PM: Finanzas agrupa panel, libro, cierres, cartera, impuestos, compras y bancos.
         const finanzas = GRUPOS_PANEL.find(grupo => grupo.id === 'finanzas')

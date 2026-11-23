@@ -853,6 +853,7 @@ export interface CatalogoEventos {
      * Contrato Iris 0.10.0 §3.4.4 (A39): el servicio pendiente pasó a otro titular. `existente`: el
      * titular ya era cliente (documento y nombre normalizado iguales); notify le manda un aviso
      * informativo. `motivo_codigo` sin el texto (queda en la auditoría). Nunca documento ni identidad.
+     * `tipo_titular` (Iris 0.14.1): `persona` o `empresa` (con representante).
      */
     'servicio.titular_cambiado': {
         servicio_id: number
@@ -865,6 +866,7 @@ export interface CatalogoEventos {
         motivo_codigo: 'menor_de_edad' | 'otro'
         origen_tipo: string | null
         origen_id: string | null
+        tipo_titular: 'persona' | 'empresa'
     }
 
     // billing (A3)
