@@ -158,6 +158,8 @@ const conPestanas = computed(() => pestanas.value.length > 1 && ubicacion.value?
                     />
                 </div>
 
+                <slot name="alcance" />
+
                 <slot
                     v-if="props.sinTarjeta"
                 />
