@@ -6,6 +6,7 @@ import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { esperadoDelTurno } from '~~/fixtures/cajas/rutas'
 import PaginaCaja from '~/pages/caja/index.vue'
+import CajaCierreModal from '~/components/CajaCierreModal.vue'
 import { esperar } from '../ayudas/esperar'
 
 describe('tarea 12 · caja', () => {
@@ -78,10 +79,12 @@ describe('tarea 12 · caja', () => {
         expect(turno).toBeDefined()
         const oficial = turno ? esperadoDelTurno(turno) : new Decimal(0)
 
-        const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-        await esperar(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
-        expect(vista.get('[data-prueba="turno-esperado"]').text()).toContain(formatearQuetzales(oficial))
-        expect(vista.get('[data-prueba="turno-egresos"]').text()).toContain('− Q 120.00')
+        // El resumen del turno (`GET /cajas/turno-actual/resumen`) da el mismo «debe haber» que el cierre.
+        const resumen = await useCajas().resumen(1)
+        expect(resumen.ok && resumen.data.esperado).toBe(oficial.toFixed(2))
+        expect(resumen.ok && resumen.data.retiros.egresos.monto).toBe('120.00')
+        const vista = await mountSuspended(CajaCierreModal, { props: { caja: bd.cajas.find(c => c.id === 1)!, open: true } })
+        await esperar(() => expect(document.body.querySelector('[data-prueba="cierre-esperado"]')?.textContent).toContain(formatearQuetzales(oficial)))
         vista.unmount()
 
         const cerrado = await useCajas().cerrar(1, { contado: oficial.toFixed(2) }, nuevaClaveIdempotencia())
@@ -93,11 +96,12 @@ describe('tarea 12 · caja', () => {
         useUsuarioActual().value = meCajero
         const turno = bd.turnos.find(t => t.caja_id === 1 && t.cerrado_en === null)
         const oficial = turno ? esperadoDelTurno(turno) : new Decimal(0)
-        const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-        await esperar(() => expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(true))
-        await esperar(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
-        expect(vista.get('[data-prueba="turno-esperado"]').text()).toContain(formatearQuetzales(oficial))
-        expect(vista.find('[data-prueba="sin-esperado"]').exists()).toBe(false)
+        // Sin caja_id, el resumen es el de la caja del cajero.
+        const resumen = await useCajas().resumen()
+        expect(resumen.ok && [resumen.data.caja_id, resumen.data.esperado]).toEqual([1, oficial.toFixed(2)])
+        const vista = await mountSuspended(PaginaCaja, { route: '/caja' })
+        await esperar(() => expect(vista.find('[data-prueba="cerrar-caja"]').exists()).toBe(true))
+        await esperar(() => expect(vista.get('[data-contador="abiertas"]').text()).toContain('Cajas abiertas'))
         vista.unmount()
         useUsuarioActual().value = null
     })
@@ -125,7 +129,7 @@ describe('tarea 12 · caja', () => {
         await esperar(() => expect(vista.text()).toContain('Operación no disponible'))
         expect(vista.text()).toContain('Reintentar')
         expect(vista.text()).not.toContain('Q ')
-        expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(false)
+        expect(vista.find('[data-prueba="contadores-cajas"]').exists()).toBe(false)
     })
 })
 

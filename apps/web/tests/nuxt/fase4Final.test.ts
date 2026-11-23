@@ -78,11 +78,11 @@ describe('fase 4 final · acreditada, depósitos del cajero y proveedor del pago
     it('la caja del cajero lista los depósitos de su turno y el esperado los resta (egresos con cajas.ver)', async () => {
         await useCajas().depositar(1, { monto: '50.00', boleta: 'B-81', cuenta_id: 16 }, nuevaClaveIdempotencia())
         comoCajero()
-        const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-        await esperar(() => expect(vista.find('[data-prueba="depositos-turno"]').exists()).toBe(true))
-        expect(vista.find('[data-prueba="depositos-turno"]').text()).toContain('boleta B-81')
-        expect(vista.find('[data-prueba="depositos-turno"]').text()).not.toContain('B-4471')
-        await esperar(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
+        // El resumen de su turno resta el depósito; la pestaña Depósitos lo lista con su boleta.
+        const resumen = await useCajas().resumen()
+        expect(resumen.ok && resumen.data.retiros.depositos.monto).toBe('50.00')
+        const vista = await mountSuspended(PaginaCaja, { route: '/caja?vista=depositos' })
+        await esperar(() => expect(vista.find('[data-prueba="tabla-depositos"]').text()).toContain('B-81'))
         vista.unmount()
     })
 

@@ -19,6 +19,7 @@ import { rutasVersion } from './version/rutas'
 import { rutasSistema } from './sistema/rutas'
 import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
+import { rutasArchivoExtracto } from './conciliacion/archivo'
 import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
 import { rutasCanjesLealtad } from './lealtad/canjes'
@@ -527,6 +528,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     // `GET /reportes/conciliacion-bancaria` antes que los reportes genéricos.
     ...rutasCobros,
     ...rutasConciliacion,
+    ...rutasArchivoExtracto,
     ...rutasCartera,
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,

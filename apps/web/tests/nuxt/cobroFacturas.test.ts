@@ -67,16 +67,21 @@ describe('cobro · elegir facturas (pedido del PM)', () => {
     it('la pantalla marca las vencidas, cambia el monto al desmarcar y avisa del parcial', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=2' })
         await esperar(() => expect(vista.find('[data-factura="209"]').exists()).toBe(true))
-        const monto = vista.get<HTMLInputElement>('input[inputmode="decimal"]')
-        await esperar(() => expect(monto.element.value).toBe('300.00'))
+        // Pago completo: «A cobrar» es la suma de las marcadas.
+        await esperar(() => expect(vista.get('[data-prueba="a-cobrar"]').text()).toBe('Q 300.00'))
         expect(vista.get('[data-prueba="total-marcadas"]').text()).toContain('2 marcadas')
 
         await vista.get('[data-factura="210"] button[role="checkbox"]').trigger('click')
-        await esperar(() => expect(monto.element.value).toBe('150.00'))
+        await esperar(() => expect(vista.get('[data-prueba="a-cobrar"]').text()).toBe('Q 150.00'))
 
+        // Abono: el monto se escribe y se ve cómo queda cada factura.
+        const estado = (vista.vm as unknown as { $: { setupState: { modo: string } } }).$.setupState
+        estado.modo = 'abono'
+        await esperar(() => expect(vista.find('[data-prueba="campo-abono"]').exists()).toBe(true))
+        const monto = vista.get<HTMLInputElement>('input[data-prueba="campo-abono"]')
         await monto.setValue('100.00')
-        await esperar(() => expect(vista.find('[data-prueba="aviso-parcial"]').exists()).toBe(true))
-        expect(vista.get('[data-prueba="aviso-parcial"]').text()).toContain('#209')
+        await esperar(() => expect(vista.find('[data-prueba="resumen-abono"]').exists()).toBe(true))
+        expect(vista.get('[data-prueba="resumen-abono"]').text()).toContain('abona Q 100.00, queda Q 50.00')
 
         await monto.setValue('200.00')
         await esperar(() => expect(vista.find('[data-prueba="aviso-excedente"]').exists()).toBe(true))
