@@ -227,13 +227,14 @@ describe('multiempresa · pantallas', () => {
         localStorage.clear()
     })
 
-    it('Empresas: lista con la principal y las acciones; la principal no se desactiva', async () => {
+    it('Empresas: pastillas de cada empresa y los datos de la principal con «Todas»', async () => {
         const vista = await mountSuspended(PaginaEmpresas, { route: '/configuracion/empresas' })
-        await esperar(() => expect(vista.text()).toContain('Fibra del Sur'))
-        expect(vista.text()).toContain('ArgosNet')
-        expect(vista.text()).toContain('Principal')
-        const desactivar = vista.findAll('button').filter(b => b.text() === 'Desactivar')
-        expect(desactivar).toHaveLength(1)
+        await esperar(() => expect(vista.find('[data-prueba="empresa-datos"]').exists()).toBe(true))
+        expect(vista.get('[data-prueba="pastillas-empresa"]').text()).toContain('Fibra del Sur')
+        expect(vista.get('[data-prueba="pastillas-empresa"]').text()).toContain('ArgosNet')
+        const nombre = vista.get('[data-prueba="empresa-datos"] input').element as HTMLInputElement
+        expect(nombre.value).toBe('ArgosNet')
+        expect(vista.find('[data-prueba="empresa-guardar"]').exists()).toBe(true)
     })
 
     it('ficha del servicio: muestra su empresa y "Cambiar empresa" explica el saldo pendiente', async () => {

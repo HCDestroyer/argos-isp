@@ -334,10 +334,11 @@ const enPausa = computed(() => {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="integracion-horus"
         titulo="Horus Flow"
-        icono="i-lucide-radar"
+        descripcion="Tráfico, salud y seguridad de la red: conexión, avisos y autologin"
+        volver="/configuracion/integraciones?ver=horus"
     >
         <template #acciones>
             <UButton
@@ -874,5 +875,5 @@ const enPausa = computed(() => {
             :ejecutar="revocarVinculaciones"
             @hecho="alRevocarVinculaciones"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

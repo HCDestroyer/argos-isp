@@ -140,31 +140,41 @@ function acciones(plantilla: PlantillaDocumentoResumen): DropdownMenuItem[][] {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="aviso-cobro"
         titulo="Plantillas de documentos"
-        icono="i-lucide-file-code-2"
+        descripcion="Aviso, recibo y nota en carta o POS 80 mm"
+        volver="/configuracion/plantillas-conceptos"
     >
         <template #acciones>
             <UButton
                 v-if="puede('documentos.crear')"
                 label="Nueva plantilla"
                 icon="i-lucide-plus"
+                class="glow-brand"
                 :to="rutaNueva()"
                 data-prueba="nueva-plantilla"
             />
         </template>
-
-        <div class="mb-4 flex shrink-0 flex-col gap-2">
+        <template #cabecera>
             <UTabs
                 v-model="tipo"
                 :items="TIPOS_DOCUMENTO"
+                variant="pill"
+                color="neutral"
                 :content="false"
-                variant="link"
-                class="w-full overflow-x-auto"
-                :ui="{ list: 'w-max sm:w-full', label: 'whitespace-nowrap' }"
+                class="min-w-0 max-w-full"
+                :ui="{
+                    list: 'w-auto max-w-full justify-start self-start overflow-x-auto rounded-xl bg-(--ax-panel) p-1',
+                    indicator: 'rounded-lg bg-(--ax-tarjeta) shadow-sm ring ring-(--ax-borde)',
+                    trigger: 'shrink-0 grow-0 rounded-lg px-3 text-muted data-[state=active]:text-primary',
+                    leadingIcon: 'size-4',
+                }"
                 data-prueba="tipo-plantilla"
             />
+        </template>
+
+        <div class="flex shrink-0 flex-col gap-2">
             <p class="text-sm text-muted">
                 {{ tipoActual.descripcion }} La <strong class="text-highlighted">predeterminada</strong> es la que usan el portal, el correo y los procesos automáticos; al imprimir desde el panel puedes elegir otra activa.
             </p>
@@ -196,7 +206,7 @@ function acciones(plantilla: PlantillaDocumentoResumen): DropdownMenuItem[][] {
         />
         <ul
             v-else
-            class="flex flex-col divide-y divide-default rounded-md border border-default"
+            class="flex flex-col divide-y divide-(--ax-borde) rounded-2xl border border-(--ax-borde)"
             aria-label="Plantillas"
             data-prueba="lista-plantillas"
         >
@@ -245,7 +255,7 @@ function acciones(plantilla: PlantillaDocumentoResumen): DropdownMenuItem[][] {
                     :content="{ align: 'end' }"
                 >
                     <UButton
-                        icon="i-lucide-ellipsis-vertical"
+                        icon="i-lucide-ellipsis"
                         color="neutral"
                         variant="ghost"
                         :aria-label="`Acciones de ${plantilla.nombre}`"
@@ -280,5 +290,5 @@ function acciones(plantilla: PlantillaDocumentoResumen): DropdownMenuItem[][] {
                 </div>
             </template>
         </UModal>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
