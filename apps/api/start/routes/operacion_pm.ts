@@ -50,12 +50,12 @@ import {
     HistorialIp,
     IncidenteRed,
     OpcionesLogin,
+    PaginaAfectadosIncidente,
     PaginaIdsServicio,
     PaginaPromocionesVelocidad,
     PromocionServicio,
     PromocionVelocidad,
     RecuperacionAceptada,
-    ServicioAfectadoIncidente,
 } from '#core/esquemas_operacion'
 import * as v from '#core/validators_operacion'
 
@@ -501,14 +501,14 @@ const incidentes: Ruta[] = [
             'Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está ' +
             'conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la ' +
             'empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). ' +
-            '404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).',
+            '`total` cuenta con el mismo filtro que las filas. 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).',
         etiqueta: 'red',
         permiso: 'incidentes_red.leer',
         query: v.afectadosIncidenteValidator,
         respuesta: {
             status: 200,
             descripcion: 'Página de afectados',
-            esquema: pagina(ServicioAfectadoIncidente),
+            esquema: PaginaAfectadosIncidente,
         },
         handler: (ctx, { params, query }) =>
             paginaAfectadosIncidente(Number(params.incidenteId), {

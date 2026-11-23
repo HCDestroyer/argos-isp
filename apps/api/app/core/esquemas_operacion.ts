@@ -231,6 +231,18 @@ export const ServicioAfectadoIncidente = definirEsquema(
     }),
 )
 
+export const PaginaAfectadosIncidente = definirEsquema(
+    'PaginaAfectadosIncidente',
+    objeto({
+        data: lista(ServicioAfectadoIncidente),
+        nextCursor: nulable(texto),
+        total: {
+            ...entero,
+            description: 'Afectados con el mismo filtro que las filas (empresa activa y alcance del usuario)',
+        },
+    }),
+)
+
 export const CaidaRepetida = definirEsquema(
     'CaidaRepetida',
     objeto({

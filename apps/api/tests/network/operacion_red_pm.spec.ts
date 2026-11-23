@@ -403,11 +403,13 @@ test.group('Falla general y caídas repetidas (decisión 31)', (group) => {
         const p1 = await estado(client.get(url).qs({ limit: 2 }).bearerToken(admin.token), 200)
         assert.lengthOf(p1.body().data, 2)
         assert.isString(p1.body().nextCursor)
+        assert.equal(p1.body().total, 3)
         const p2 = await estado(
             client.get(url).qs({ limit: 2, cursor: p1.body().nextCursor }).bearerToken(admin.token),
             200,
         )
         assert.isNull(p2.body().nextCursor)
+        assert.equal(p2.body().total, 3)
         const filas = [...p1.body().data, ...p2.body().data]
         assert.deepEqual(
             filas.map((f: any) => f.servicio_id),
@@ -453,7 +455,7 @@ test.group('Falla general y caídas repetidas (decisión 31)', (group) => {
             alcance_id: otro.routerId,
         })
         const vacio = await estado(client.get(url).bearerToken(ajeno.token), 200)
-        assert.deepEqual(vacio.body(), { data: [], nextCursor: null })
+        assert.deepEqual(vacio.body(), { data: [], nextCursor: null, total: 0 })
         const propio = await usuarioConRoles([])
         await db.table('core.usuarios_roles').insert({
             usuario_id: propio.usuario.id,
@@ -463,6 +465,7 @@ test.group('Falla general y caídas repetidas (decisión 31)', (group) => {
         })
         const delPropio = await estado(client.get(url).bearerToken(propio.token), 200)
         assert.lengthOf(delPropio.body().data, 3)
+        assert.equal(delPropio.body().total, 3)
 
         const sinPermiso = await usuarioConRoles(['contabilidad'])
         await estado(client.get(url).bearerToken(sinPermiso.token), 403)

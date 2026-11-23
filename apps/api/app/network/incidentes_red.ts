@@ -385,13 +385,14 @@ export interface ServicioAfectadoVista {
  * cliente, plan, empresa y si están conectados ahora, por cursor (`servicio_id` ascendente). Una sola
  * consulta por página (joins y dos `LATERAL` sobre los índices de `network.sesiones`), sin N+1.
  * Filtra por las empresas de la lista (empresa activa o `empresas=todas`) y por el alcance del usuario
- * (router o zona del servicio). 404 si el incidente no tiene servicios de esas empresas.
+ * (router o zona del servicio). 404 si el incidente no tiene servicios de esas empresas. `total` cuenta
+ * con el mismo filtro que las filas (para «1–50 de 395»).
  */
 export async function paginaAfectadosIncidente(
     id: number,
     filtro: { empresas: number[] | null; alcance?: Alcance; cursor?: string | null; limit?: number | null },
     cliente: QueryClientContract = db.connection(),
-): Promise<Pagina<ServicioAfectadoVista>> {
+): Promise<Pagina<ServicioAfectadoVista> & { total: number }> {
     await verIncidente(id, filtro.empresas, cliente)
     const consulta = cliente
         .from('network.incidentes_red_servicios as irs')
@@ -427,15 +428,27 @@ export async function paginaAfectadosIncidente(
         )
     if (filtro.empresas !== null) consulta.whereIn('irs.empresa_id', filtro.empresas)
     filtrarPorAlcance(consulta, filtro.alcance, dimensionesServicio)
-    const pagina = await paginar<Record<string, unknown>>(
-        consulta,
-        { cursor: filtro.cursor, limit: filtro.limit },
-        { columna: 'irs.servicio_id', direccion: 'asc', clave: (f) => Number(f.servicio_id) },
-    )
+    // el total con el mismo filtro que las filas (empresas y alcance del usuario), sin el cursor
+    const conteo = cliente
+        .from('network.incidentes_red_servicios as irs')
+        .join('core.servicios as s', 's.id', 'irs.servicio_id')
+        .where('irs.incidente_id', id)
+        .count('* as total')
+    if (filtro.empresas !== null) conteo.whereIn('irs.empresa_id', filtro.empresas)
+    filtrarPorAlcance(conteo, filtro.alcance, dimensionesServicio)
+    const [pagina, filaTotal] = await Promise.all([
+        paginar<Record<string, unknown>>(
+            consulta,
+            { cursor: filtro.cursor, limit: filtro.limit },
+            { columna: 'irs.servicio_id', direccion: 'asc', clave: (f) => Number(f.servicio_id) },
+        ),
+        conteo.first() as Promise<{ total: string | number } | null>,
+    ])
     const iso = (v: unknown) => (v === null || v === undefined ? null : new Date(v as Date).toISOString())
     const n = (v: unknown) => (v === null || v === undefined ? null : Number(v))
     return {
         ...pagina,
+        total: Number(filaTotal?.total ?? 0),
         data: pagina.data.map((f) => {
             const conectado = f.conectado_desde !== null && f.conectado_desde !== undefined
             return {
