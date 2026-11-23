@@ -89,7 +89,7 @@ const ACCIONES: Partial<Record<NonNullable<Chequeo['codigo']>, Accion>> = {
         propia: false,
     },
     portal_ve_otra_ip_tunel: {
-        texto: '«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT» antes del masquerade. Si después sigue en rojo, revisa que las redes de clientes de este router estén en Argos (pestaña Pools e IPs): el agente de WireGuard las agrega al peer del servidor. El comando de abajo repite la prueba desde el router.',
+        texto: '«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT» antes del masquerade. Si después sigue en rojo, revisa que las redes de clientes de este router estén en Argos (pestaña Red e IPs): el agente de WireGuard las agrega al peer del servidor. El comando de abajo repite la prueba desde el router.',
         editar: false,
         propia: true,
     },

@@ -5,6 +5,7 @@ import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import ServicioActivarInstalacionModal from '~/components/ServicioActivarInstalacionModal.vue'
 import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import PaginaServicios from '~/pages/servicios/index.vue'
+import { accionesServicio } from '../ayudas/fichaServicio'
 import { esperar } from '../ayudas/esperar'
 
 /** Servicio pendiente de instalación (`contratos/instalacion.md`): estado, activación y ficha. */
@@ -105,8 +106,7 @@ describe('servicio pendiente de instalación', () => {
         await esperar(() => expect(vista.find('[data-prueba="aviso-pendiente-instalacion"]').exists()).toBe(true))
         expect(vista.text()).toContain('Pendiente de instalación')
         expect(vista.find('[data-prueba="abrir-activar-instalacion"]').exists()).toBe(true)
-        expect(vista.find('[data-prueba="instalado-en-servicio"]').text()).toContain('Pendiente')
-        const botones = vista.findAll('[role="group"] button').map(b => b.text())
+        const botones = await accionesServicio(vista)
         expect(botones).toContain('Retirar')
         for (const prohibido of ['Suspender', 'Limitar', 'Reactivar', 'Desconectar sesión', 'Promesa de pago', 'Simular promesa']) {
             expect(botones).not.toContain(prohibido)
@@ -115,8 +115,9 @@ describe('servicio pendiente de instalación', () => {
 
     it('el modal activa con la planta y la ficha muestra instalado_en y la referencia de planta', async () => {
         const servicio = await crearPendiente()
-        const vista = await mountSuspended(PaginaServicio, { route: `/servicios/${servicio.id}` })
+        const vista = await mountSuspended(PaginaServicio, { route: `/servicios/${servicio.id}?pestana=red` })
         await esperar(() => expect(vista.find('[data-prueba="abrir-activar-instalacion"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="instalado-en-servicio"]').text()).toContain('Pendiente')
         await vista.find('[data-prueba="abrir-activar-instalacion"]').trigger('click')
         await esperar(() => expect(document.body.querySelector('[data-prueba="form-activar-instalacion"]')).not.toBeNull())
 

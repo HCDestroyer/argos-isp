@@ -78,11 +78,15 @@ describe('control de velocidad por capas', () => {
         const vista = await mountSuspended(EstrategiaVelocidadEditor, { props: { matriz: MATRIZ, version: '6.49.10 (long-term)', router: simple(), estrategias: estrategias.value } })
         const texto = vista.text()
         expect(texto).toContain('La velocidad viaja con la sesión PPPoE')
-        expect(texto).toContain('Ejemplo:')
         // En PPPoE ya no hay aplicación deshabilitada: cola simple también vale (bug del PM, 5 nov)
         expect(texto).not.toContain('No disponible: PPPoE ya crea su cola dinámica')
-        expect(texto).toContain('No disponible: Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
-        expect(texto).toContain('Reduce la latencia bajo carga')
+        // El tipo de cola va como ficha tachada con su «?»: al tocarlo explica qué hace y por qué no aplica.
+        const cake = vista.find('[data-prueba="capa-tipo-cola"] [value="cake"]')
+        expect(cake.attributes('disabled')).toBeDefined()
+        expect(cake.attributes('title')).toBe('No disponible: Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
+        await vista.findAll('[data-prueba="capa-tipo-cola"] button').find(b => b.attributes('aria-label') === 'Cómo funciona CAKE')!.trigger('click')
+        expect(vista.find('[data-prueba="explicacion-cola"]').text()).toContain('Reduce la latencia bajo carga')
+        expect(vista.find('[data-prueba="explicacion-cola"]').text()).toContain('Requiere RouterOS 7')
         expect(vista.find('[data-prueba="igual-para-todos"]').exists()).toBe(true)
     })
 

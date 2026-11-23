@@ -21,5 +21,16 @@ export function useSesiones() {
         return resultado.ok ? { ok: true, data: resultado.data.data[0] ?? null } : resultado
     }
 
-    return { listar, activaDe }
+    /**
+     * `POST /sesiones/:id/desconectar` (`sesiones.desconectar`): manda el Disconnect al NAS; la sesión
+     * se cierra cuando llega el Stop. 409 si ya terminó.
+     */
+    function desconectar(id: number, motivo: string, claveIdempotencia?: string): Promise<Resultado<unknown>> {
+        return resolver(api.POST('/api/v1/sesiones/{id}/desconectar', {
+            params: { path: { id }, header: claveIdempotencia ? { 'Idempotency-Key': claveIdempotencia } : {} },
+            body: { motivo },
+        }))
+    }
+
+    return { listar, activaDe, desconectar }
 }
