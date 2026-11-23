@@ -357,8 +357,9 @@ const soporte: Ruta[] = [
         operacion: 'portalSoporteAbrirTicket',
         resumen: 'El cliente abre un ticket de soporte en Iris',
         descripcion:
-            `${SOBRE_SOPORTE} ${SOBRE_CLAVE} \`multipart/form-data\`: los campos y hasta 3 \`archivos\` (JPEG, PNG, ` +
-            'WebP, HEIC o PDF por el contenido, 10 MB cada uno; 413 `tamano_excedido`, 422 `mime_no_permitido` o ' +
+            `${SOBRE_SOPORTE} ${SOBRE_CLAVE} \`multipart/form-data\`: los campos y hasta 3 \`archivos\` (JPEG, PNG ` +
+            'o PDF por el contenido, 10 MB cada uno; WebP y HEIC no, contrato 0.14.2; 413 `tamano_excedido`, ' +
+            '422 `mime_no_permitido` o ' +
             '`demasiados_adjuntos`). Con sesión `ip`, sin adjuntos (422 `adjuntos_no_permitidos`) y solo con el ' +
             'servicio de la sesión. Acción `portal.abrir_ticket` (actor cliente, canal portal). Con `contacto_id` ' +
             '(A46) reporta la falla de un servicio que tiene a cargo: exige sesión `documento`, `servicio_id` y el ' +
