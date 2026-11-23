@@ -84,10 +84,14 @@ describe('cobro · cinco métodos', () => {
         await usePagos().registrar({ cliente_id: 4, metodo: 'deposito', monto: '1.00', cuenta_bancaria_id: 1, referencia: 'BOL-55' }, nuevaClaveIdempotencia())
 
         const estado = (vista.vm as unknown as { $: { setupState: { estado: EntradaCobro } } }).$.setupState.estado
-        estado.metodo = 'transferencia'
+        // Transferencia por ACH: banco de origen del catálogo; del mismo banco, el de la cuenta.
+        estado.metodo = 'ach'
         await esperar(() => expect(vista.text()).toContain('Banco de origen'))
-        expect(vista.text()).toContain('Cuenta de destino')
-        expect(vista.text()).toContain('Referencia de la transferencia')
+        expect(vista.text()).toContain('De la lista de bancos de Configuración')
+        expect(vista.text()).toContain('Cuenta que recibió')
+        expect(vista.text()).toContain('Número de referencia')
+        estado.metodo = 'transferencia'
+        await esperar(() => expect(vista.find('[data-prueba="banco-mismo"]').exists()).toBe(true))
 
         estado.metodo = 'deposito'
         await esperar(() => expect(vista.text()).toContain('Número de boleta'))

@@ -4,7 +4,20 @@ export type Extracto = Schema<'Extracto'>
 export type LineaExtracto = Schema<'LineaExtracto'>
 export type ResultadoAplicarReglas = Schema<'ResultadoAplicarReglas'>
 export type DatosExtracto = paths['/api/v1/bancos/extractos']['post']['requestBody']['content']['application/json']
+export type VistaPreviaExtracto = Schema<'VistaPreviaExtracto'>
+export type MapeoExtracto = Schema<'MapeoExtracto'>
+export type ExtractoDesdeArchivo = Schema<'ExtractoDesdeArchivo'>
+export type MapeoExtractoGuardado = Schema<'MapeoExtractoGuardado'>
 export type DatosRegistrarLinea = paths['/api/v1/bancos/extractos/lineas/{id}/registrar']['post']['requestBody']['content']['application/json']
+
+/** Estado de cuenta del banco para la vista previa o la importación (multipart). */
+export interface ArchivoExtracto {
+    cuentaBancariaId: number
+    archivo: File
+    mapeo?: MapeoExtracto | null
+    guardarMapeo?: boolean
+    motivoNoEncadena?: string | null
+}
 
 /**
  * Extractos bancarios (A3, fase 4 §10.3), solo de inserción: importar (huella única por cuenta),
@@ -63,5 +76,47 @@ export function useExtractos() {
         }))
     }
 
-    return { listar, ver, lineas, importar, aplicarReglas, registrarLinea }
+    /** Campos multipart del estado de cuenta tal como lo descarga el banco. */
+    function formularioArchivo(datos: ArchivoExtracto): FormData {
+        const formulario = new FormData()
+        formulario.append('cuenta_bancaria_id', String(datos.cuentaBancariaId))
+        formulario.append('archivo', datos.archivo, datos.archivo.name)
+        if (datos.mapeo) {
+            formulario.append('mapeo', JSON.stringify(datos.mapeo))
+        }
+        if (datos.guardarMapeo !== undefined) {
+            formulario.append('guardar_mapeo', String(datos.guardarMapeo))
+        }
+        if (datos.motivoNoEncadena) {
+            formulario.append('motivo_no_encadena', datos.motivoNoEncadena)
+        }
+        return formulario
+    }
+
+    /**
+     * `POST /bancos/extractos/vista-previa` (`bancos.importar_extracto`): lee el archivo del banco
+     * sin importar nada; reconoce el banco o sugiere el mapeo (`requiere_confirmacion`). 422
+     * `archivo_no_legible` y `mapeo_invalido`.
+     */
+    function vistaPrevia(datos: ArchivoExtracto): Promise<Resultado<VistaPreviaExtracto>> {
+        return resolver(api.POST('/api/v1/bancos/extractos/vista-previa', {
+            body: { cuenta_bancaria_id: datos.cuentaBancariaId, archivo: datos.archivo.name },
+            bodySerializer: () => formularioArchivo(datos),
+        }))
+    }
+
+    /**
+     * `POST /bancos/extractos/archivo` (`bancos.importar_extracto`): importa el archivo tal cual y
+     * guarda el mapeo para la cuenta (salvo `guardarMapeo: false`). 422 `formato_no_reconocido`,
+     * `extracto_con_errores`, `extracto_descuadrado`, `extracto_no_encadena`; 409 `extracto_duplicado`.
+     */
+    function importarArchivo(datos: ArchivoExtracto, claveIdempotencia: string): Promise<Resultado<ExtractoDesdeArchivo>> {
+        return resolver(api.POST('/api/v1/bancos/extractos/archivo', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { cuenta_bancaria_id: datos.cuentaBancariaId, archivo: datos.archivo.name },
+            bodySerializer: () => formularioArchivo(datos),
+        }))
+    }
+
+    return { listar, ver, lineas, importar, aplicarReglas, registrarLinea, vistaPrevia, importarArchivo }
 }

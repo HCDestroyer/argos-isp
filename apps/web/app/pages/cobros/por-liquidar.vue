@@ -85,18 +85,22 @@ onMounted(() => {
         icono="i-lucide-hand-coins"
     >
         <template #acciones>
-            <UButton
-                :to="enlace('/configuracion/proveedores-cobro')"
-                label="Proveedores"
-                icon="i-lucide-credit-card"
-                color="neutral"
-                variant="outline"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Proveedores de cobro"
-            />
+            <UDropdownMenu
+                :items="[[{ label: 'Proveedores de cobro', icon: 'i-lucide-credit-card', to: enlace('/configuracion/proveedores-cobro') }]]"
+                :content="{ align: 'end' }"
+            >
+                <UButton
+                    icon="i-lucide-ellipsis"
+                    color="neutral"
+                    variant="outline"
+                    size="lg"
+                    class="rounded-full"
+                    aria-label="Más: proveedores de cobro"
+                />
+            </UDropdownMenu>
         </template>
 
-        <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-4">
             <USkeleton
                 v-if="cargando && !resumenes.length"
                 class="h-48 w-full"
@@ -118,21 +122,23 @@ onMounted(() => {
                 :actions="puede('cobros.configurar') ? [{ label: 'Proveedores de cobro', icon: 'i-lucide-credit-card', to: '/configuracion/proveedores-cobro' }] : []"
             />
 
-            <UPageCard
+            <div
                 v-for="resumen in resumenes"
                 v-else
                 :key="resumen.proveedor_cobro_id"
-                variant="subtle"
+                class="surface-card rounded-2xl p-3 sm:p-4"
                 :data-proveedor="resumen.proveedor_cobro_id"
             >
                 <div class="flex min-w-0 flex-col gap-4">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="flex min-w-0 flex-col">
-                            <h2 class="flex items-center gap-2 text-lg font-semibold text-highlighted">
-                                <UIcon
-                                    :name="METODOS_PROVEEDOR[resumen.metodo].icono"
-                                    class="size-5 text-muted"
-                                />
+                            <h2 class="flex items-center gap-3 text-lg font-bold text-highlighted">
+                                <span class="pastilla-icono size-10 bg-primary/10 text-primary">
+                                    <UIcon
+                                        :name="METODOS_PROVEEDOR[resumen.metodo].icono"
+                                        class="size-5"
+                                    />
+                                </span>
                                 {{ resumen.nombre }}
                             </h2>
                             <p class="text-sm text-muted">
@@ -143,6 +149,7 @@ onMounted(() => {
                             v-if="puede('cobros.liquidar') && resumen.pagos.length"
                             label="Registrar liquidación"
                             icon="i-lucide-hand-coins"
+                            class="glow-brand rounded-full"
                             data-prueba="abrir-liquidacion"
                             @click="aLiquidar = resumen"
                         />
@@ -164,6 +171,7 @@ onMounted(() => {
                                 :color="resumen.cuadra ? 'success' : 'error'"
                                 :icon="resumen.cuadra ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
                                 variant="subtle"
+                                class="rounded-full"
                                 data-prueba="cuadra-puente"
                             />
                         </DatoFicha>
@@ -173,6 +181,7 @@ onMounted(() => {
                                 :color="resumen.anomalias.length ? 'error' : 'neutral'"
                                 :icon="resumen.anomalias.length ? 'i-lucide-alarm-clock' : 'i-lucide-check'"
                                 variant="subtle"
+                                class="rounded-full"
                                 data-prueba="anomalias"
                             />
                         </DatoFicha>
@@ -183,6 +192,8 @@ onMounted(() => {
                         :columns="columnasPagos"
                         tabindex="0"
                         :aria-label="`Pagos sin liquidar de ${resumen.nombre}`"
+                        class="overflow-hidden rounded-xl border border-(--ax-borde)"
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
                     >
                         <template #pago_id-cell="{ row }">
                             <div class="flex min-w-0 flex-col whitespace-normal">
@@ -224,10 +235,14 @@ onMounted(() => {
                         </template>
                     </UTable>
                 </div>
-            </UPageCard>
+            </div>
 
-            <section class="flex flex-col gap-2">
-                <h3 class="text-sm font-semibold text-highlighted">
+            <section class="surface-card flex flex-col overflow-hidden rounded-2xl">
+                <h3 class="flex items-center gap-2 border-b border-(--ax-borde) px-4 py-3 font-bold text-highlighted">
+                    <UIcon
+                        name="i-lucide-file-spreadsheet"
+                        class="size-4 text-muted"
+                    />
                     Liquidaciones registradas
                 </h3>
                 <ProblemaAlerta
@@ -241,6 +256,7 @@ onMounted(() => {
                         :data="liquidaciones.filas.value"
                         :columns="columnasLiquidaciones"
                         :loading="liquidaciones.cargando.value"
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
                         data-prueba="tabla-liquidaciones"
                     >
                         <template #referencia-cell="{ row }">

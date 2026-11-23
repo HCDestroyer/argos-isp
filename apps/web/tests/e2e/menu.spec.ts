@@ -9,7 +9,7 @@ test('buscador de secciones con Ctrl+K, solo con las permitidas', async ({ page 
     await entrar(page, 'cajero@argos.test')
     // El cajero entra directo a su caja; el atajo vive en el layout: esperar a que esté pintada.
     await expect(page).toHaveURL(/\/caja$/)
-    await expect(page.locator('[data-prueba="turno-abierto"]')).toBeVisible()
+    await expect(page.locator('[data-prueba="pestanas-cajas"]')).toBeVisible()
     const buscador = page.getByRole('dialog')
     await expect(async () => {
         await page.keyboard.press('ControlOrMeta+k')
