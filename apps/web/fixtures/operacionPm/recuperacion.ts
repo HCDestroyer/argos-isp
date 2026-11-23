@@ -11,6 +11,18 @@ function recuperacionEncendida(): boolean {
     return (bd.operacionPm.ajustesGlobal['auth.recuperar_contrasena'] ?? FABRICA_AJUSTES['auth.recuperar_contrasena']) === true
 }
 
+/** Como la API: solo el origen `https://host[:puerto]` de un conector activo, o null. */
+function origenPublico(activo: boolean, url: string | null | undefined): string | null {
+    if (!activo || !url) return null
+    try {
+        const u = new URL(url)
+        return u.protocol === 'https:' || u.protocol === 'http:' ? u.origin : null
+    }
+    catch {
+        return null
+    }
+}
+
 /**
  * `GET /auth/opciones`, `POST /auth/recuperar-contrasena` y `POST /auth/restablecer-contrasena`
  * (A1, `core/auth/recuperacion.ts`): públicas, sin datos de nadie; siempre 202 igual, exista o no el
@@ -20,9 +32,13 @@ export const rutasRecuperacion: RutasFixture = {
     'GET /api/v1/auth/opciones': () => {
         const cuerpo: Schema<'OpcionesLogin'> = {
             recuperar_contrasena: recuperacionEncendida(),
-            iris: bd.iris.conector.activo && Boolean(bd.iris.conector.url_base),
-            horus: bd.horus.conector.activo && Boolean(bd.horus.conector.url_base),
+            iris: false,
+            horus: false,
+            iris_url: origenPublico(bd.iris.conector.activo, bd.iris.conector.url_base),
+            horus_url: origenPublico(bd.horus.conector.activo, bd.horus.conector.url_base),
         }
+        cuerpo.iris = cuerpo.iris_url !== null
+        cuerpo.horus = cuerpo.horus_url !== null
         return { status: 200, cuerpo }
     },
 

@@ -32,8 +32,8 @@ onMounted(async () => {
 })
 const recuperarApagada = computed(() => opciones.value?.recuperar_contrasena === false)
 const conectores = computed(() => [
-    ...(opciones.value?.iris ? [{ id: 'iris', nombre: 'Iris', ayuda: 'Inicia sesión en Iris y usa «Abrir en Argos»: entras aquí sin escribir tu contraseña.' }] : []),
-    ...(opciones.value?.horus ? [{ id: 'horus', nombre: 'Horus', ayuda: 'Inicia sesión en Horus y usa «Abrir en Argos»: entras aquí sin escribir tu contraseña.' }] : []),
+    ...(opciones.value?.iris_url ? [{ id: 'iris', nombre: 'Iris', url: opciones.value.iris_url }] : []),
+    ...(opciones.value?.horus_url ? [{ id: 'horus', nombre: 'Horus', url: opciones.value.horus_url }] : []),
 ])
 
 /* Entrar */
@@ -127,7 +127,7 @@ async function pedirEnlace(evento: FormSubmitEvent<DatosRecuperarContrasena>) {
         return
     }
     if (codigoProblema(r.problema) === 'recuperacion_apagada') {
-        opciones.value = { ...(opciones.value ?? { iris: false, horus: false }), recuperar_contrasena: false }
+        opciones.value = { ...(opciones.value ?? { iris: false, horus: false, iris_url: null, horus_url: null }), recuperar_contrasena: false }
     }
     problemaRecuperar.value = r.problema
 }
@@ -251,26 +251,22 @@ const demasiadasSolicitudes = computed(() => problemaRecuperar.value !== null &&
                     :class="conectores.length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
                     data-prueba="login-conectores"
                 >
-                    <UPopover
+                    <UButton
                         v-for="c in conectores"
                         :key="c.id"
-                        :content="{ side: 'top' }"
-                    >
-                        <UButton
-                            :label="c.nombre"
-                            icon="i-lucide-link"
-                            color="neutral"
-                            variant="outline"
-                            block
-                            :data-conector="c.id"
-                        />
-                        <template #content>
-                            <p class="max-w-64 p-3 text-sm">
-                                {{ c.ayuda }}
-                            </p>
-                        </template>
-                    </UPopover>
+                        :label="c.nombre"
+                        :href="c.url"
+                        external
+                        icon="i-lucide-link"
+                        color="neutral"
+                        variant="outline"
+                        block
+                        :data-conector="c.id"
+                    />
                 </div>
+                <p class="mt-2 text-center text-xs text-muted">
+                    Inicia sesión allí y usa «Abrir en Argos»: entras aquí sin escribir tu contraseña.
+                </p>
             </template>
 
             <p class="mt-4 text-center text-xs text-muted">

@@ -73,7 +73,11 @@ afterEach(() => {
 describe('login · recuperar la contraseña (decisión 22)', () => {
     it('opciones públicas: recuperar encendido de fábrica; Iris y Horus según su conector', async () => {
         const r = await useRecuperacionContrasena().opciones()
-        expect(r.ok && r.data).toEqual({ recuperar_contrasena: true, iris: false, horus: false })
+        expect(r.ok && r.data).toEqual({ recuperar_contrasena: true, iris: false, horus: false, iris_url: null, horus_url: null })
+        bd.iris.conector = { ...bd.iris.conector, activo: true, url_base: 'https://iris.argosnet.gt/api/v1' }
+        const conIris = await useRecuperacionContrasena().opciones()
+        expect(conIris.ok && conIris.data).toMatchObject({ iris: true, iris_url: 'https://iris.argosnet.gt', horus: false, horus_url: null })
+        bd.iris.conector = { ...bd.iris.conector, activo: false }
         await useAjustesOperacion().guardar(null, { 'auth.recuperar_contrasena': false })
         const apagada = await useRecuperacionContrasena().opciones()
         expect(apagada.ok && apagada.data.recuperar_contrasena).toBe(false)
