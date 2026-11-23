@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { servicios } from '../../fixtures/servicios/datos'
-import { entrar } from './ayudas'
+import { entrar, pestanaServicio } from './ayudas'
 
 /**
  * Pedido del PM (5 nov): «Editar servicio» cambia la IPv4 fija (con el selector del alta) o la
@@ -39,6 +39,8 @@ test('cambiar la IPv4 fija del servicio', async ({ page }) => {
     await ip.fill('100.64.10.77')
     await panel.getByRole('button', { name: 'Guardar cambios' }).click()
     await expect(panel).toBeHidden()
+    // Tablero OperServicioFicha: la IPv4 y las credenciales van en la pestaña «Red y equipo».
+    await pestanaServicio(page, 'Red y equipo')
     await expect(page.getByText('100.64.10.77').first()).toBeVisible()
 })
 
@@ -71,6 +73,7 @@ test('cambiar el usuario y la contraseña PPPoE', async ({ page }) => {
     await expect(panel).toBeHidden()
 
     // La ficha muestra el usuario nuevo y la contraseña nueva al pedirla (queda en la bitácora).
+    await pestanaServicio(page, 'Red y equipo')
     await expect(page.getByText('maria.nueva').filter({ visible: true }).first()).toBeVisible()
     await page.getByRole('button', { name: 'Mostrar' }).click()
     await expect(page.getByText(generada)).toBeVisible()

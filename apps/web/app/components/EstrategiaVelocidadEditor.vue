@@ -29,10 +29,19 @@ const props = withDefaults(defineProps<{
     tipos?: TipoConexionVelocidad[]
     /** El router no usa RADIUS (`modo_seguridad = 'api'`): PPPoE va con secrets locales. */
     sinRadius?: boolean
+    /**
+     * Solo el tipo de conexión del router (es uno por router): sin pestañas de tipo ni «Igual para
+     * todos» (ficha del router, pestaña Velocidad del rediseño).
+     */
+    tipoFijo?: TipoConexionVelocidad
+    /** Qué se muestra: las capas 1 a 3, los extras o todo (la ficha pone los extras en su columna). */
+    partes?: 'todo' | 'capas' | 'extras'
 }>(), {
     errores: () => ({}),
     sinRadius: false,
     tipos: () => [...TIPOS_CONEXION_VELOCIDAD],
+    tipoFijo: undefined,
+    partes: 'todo',
 })
 
 /** Modo router: las tres estrategias completas. */
@@ -43,7 +52,12 @@ const excepcion = defineModel<EstrategiasPlan | null>('excepcion')
 const modoPlan = computed(() => estrategias.value === undefined)
 const HEREDAR = 'heredar'
 
-const tipo = ref<TipoConexionVelocidad>(props.tipos[0] ?? 'pppoe')
+const tipo = ref<TipoConexionVelocidad>(props.tipoFijo ?? props.tipos[0] ?? 'pppoe')
+watch(() => props.tipoFijo, (valor) => {
+    if (valor) {
+        tipo.value = valor
+    }
+})
 const itemsTipos = computed<TabsItem[]>(() => TIPOS_CONEXION_VELOCIDAD.map(t => ({
     label: ETIQUETAS_TIPO_CONEXION[t],
     value: t,
@@ -122,40 +136,52 @@ function heredado<C extends 'aplicacion' | 'padre' | 'tipo_cola'>(capa: C, etiqu
         : []
 }
 
+/*
+ * Control de velocidad: 3 a la vista y «Ver las otras» (decisión del PM, tablero RedRouterFicha):
+ * Árbol con PCQ, RADIUS y Cola simple; Perfil PPP y PCQ por plan quedan plegadas salvo que una
+ * de ellas sea la elegida.
+ */
+const VISIBLES: readonly Aplicacion[] = ['arbol_pcq', 'radius_rate_limit', 'cola_simple']
+const verOtras = ref(false)
+const otrasCuantas = APLICACIONES.length - VISIBLES.length
+const elegidaOculta = computed(() => !VISIBLES.includes(efectiva.value.aplicacion) && !(modoPlan.value && valorCapa('aplicacion') === HEREDAR))
+const aplicacionesVistas = computed(() => (verOtras.value || elegidaOculta.value ? APLICACIONES : VISIBLES))
+
 const itemsAplicacion = computed<RadioGroupItem[]>(() => [
     ...heredado('aplicacion', OPCIONES_APLICACION),
-    ...APLICACIONES.map((valor) => {
+    ...aplicacionesVistas.value.map((valor) => {
         const disponible = aplicacionDisponible(props.matriz, valor, tipo.value)
         return {
             label: OPCIONES_APLICACION[valor].etiqueta,
             value: valor,
             description: disponible.valida
-                ? `${OPCIONES_APLICACION[valor].explicacion} Ejemplo: ${OPCIONES_APLICACION[valor].escenario}`
-                : `${OPCIONES_APLICACION[valor].explicacion} No disponible: ${disponible.motivo}`,
+                ? OPCIONES_APLICACION[valor].explicacion
+                : `No disponible: ${disponible.motivo}`,
             disabled: !disponible.valida,
         }
     }),
 ])
 
-const itemsPadre = computed<RadioGroupItem[]>(() => [
-    ...heredado('padre', OPCIONES_PADRE),
-    ...PADRES.map(valor => ({ label: OPCIONES_PADRE[valor].etiqueta, value: valor, description: OPCIONES_PADRE[valor].explicacion })),
+/* Capas 2 y 3 como fichas (tablero RedRouterFicha): cada tipo de cola con su «?» que explica cómo funciona. */
+const opcionesPadre = computed(() => [
+    ...(modoPlan.value ? [{ valor: HEREDAR, etiqueta: `Heredar (${OPCIONES_PADRE[props.router[tipo.value].padre].etiqueta})`, explicacion: 'Si cambias el router, este plan sigue el cambio.' }] : []),
+    ...PADRES.map(valor => ({ valor, etiqueta: OPCIONES_PADRE[valor].etiqueta, explicacion: OPCIONES_PADRE[valor].explicacion })),
 ])
+const padreElegido = computed(() => opcionesPadre.value.find(o => o.valor === valorCapa('padre')))
 
-const itemsTipoCola = computed<RadioGroupItem[]>(() => [
-    ...heredado('tipo_cola', OPCIONES_TIPO_COLA),
+const opcionesCola = computed(() => [
+    ...(modoPlan.value ? [{ valor: HEREDAR, etiqueta: `Heredar (${OPCIONES_TIPO_COLA[props.router[tipo.value].tipo_cola].etiqueta})`, explicacion: 'Si cambias el router, este plan sigue el cambio.', valida: true, motivo: null as string | null }] : []),
     ...TIPOS_COLA.map((valor) => {
         const disponible = tipoColaDisponible(props.matriz, valor, efectiva.value.aplicacion, props.version)
-        return {
-            label: OPCIONES_TIPO_COLA[valor].etiqueta,
-            value: valor,
-            description: disponible.valida
-                ? [OPCIONES_TIPO_COLA[valor].explicacion, disponible.motivo].filter(Boolean).join(' ')
-                : `${OPCIONES_TIPO_COLA[valor].explicacion} No disponible: ${disponible.motivo}`,
-            disabled: !disponible.valida,
-        }
+        return { valor, etiqueta: OPCIONES_TIPO_COLA[valor].etiqueta, explicacion: OPCIONES_TIPO_COLA[valor].explicacion, valida: disponible.valida, motivo: disponible.motivo }
     }),
 ])
+/** La cola que explica la tarjeta de abajo: la del «?» tocado o la elegida. */
+const colaVista = ref<string | null>(null)
+const colaExplicada = computed(() => opcionesCola.value.find(o => o.valor === (colaVista.value ?? valorCapa('tipo_cola'))) ?? opcionesCola.value[0])
+watch(tipo, () => {
+    colaVista.value = null
+})
 
 function valorExtra(extra: Extra): boolean {
     return efectiva.value.extras[extra]
@@ -199,7 +225,10 @@ function erroresDe(capa: string): string | undefined {
         class="flex flex-col gap-4"
         data-prueba="editor-estrategia"
     >
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div
+            v-if="!tipoFijo && partes !== 'extras'"
+            class="flex flex-wrap items-center justify-between gap-2"
+        >
             <UTabs
                 v-model="tipo"
                 :items="itemsTipos"
@@ -221,13 +250,16 @@ function erroresDe(capa: string): string | undefined {
             />
         </div>
 
-        <p class="text-sm text-muted">
+        <p
+            v-if="partes !== 'extras'"
+            class="text-sm text-muted"
+        >
             <span class="font-medium text-highlighted">{{ ETIQUETAS_TIPO_CONEXION[tipo] }}:</span>
             {{ resumenEstrategia(efectiva) }}
         </p>
 
         <UAlert
-            v-if="reglaSinRadius"
+            v-if="reglaSinRadius && partes !== 'extras'"
             color="info"
             variant="subtle"
             icon="i-lucide-plug"
@@ -236,60 +268,182 @@ function erroresDe(capa: string): string | undefined {
             data-prueba="estrategia-sin-radius"
         />
 
-        <UFormField
-            label="1 · Cómo se limita a cada cliente"
-            :error="erroresDe('aplicacion')"
-        >
-            <URadioGroup
-                :model-value="valorCapa('aplicacion')"
-                :items="itemsAplicacion"
-                variant="card"
-                class="w-full"
-                :ui="{ fieldset: 'grid gap-2' }"
-                data-prueba="capa-aplicacion"
-                @update:model-value="valor => fijar('aplicacion', valor as Aplicacion)"
-            />
-        </UFormField>
+        <template v-if="partes !== 'extras'">
+            <UFormField
+                :error="erroresDe('aplicacion')"
+                :ui="{ label: 'flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted' }"
+            >
+                <template #label>
+                    <UIcon
+                        name="i-lucide-gauge"
+                        class="size-4"
+                    />
+                    1 · Cómo se limita a cada cliente
+                </template>
+                <URadioGroup
+                    :model-value="valorCapa('aplicacion')"
+                    :items="itemsAplicacion"
+                    variant="card"
+                    class="w-full"
+                    :ui="{ fieldset: 'grid gap-2 sm:grid-cols-3', item: 'rounded-xl', label: 'font-semibold' }"
+                    data-prueba="capa-aplicacion"
+                    @update:model-value="valor => fijar('aplicacion', valor as Aplicacion)"
+                >
+                    <template #label="{ item }">
+                        <span class="flex flex-wrap items-center gap-1.5">
+                            {{ (item as RadioGroupItem & { label: string }).label }}
+                            <UBadge
+                                v-if="(item as RadioGroupItem & { value: string }).value === 'arbol_pcq'"
+                                label="Recomendado"
+                                color="success"
+                                variant="soft"
+                                size="sm"
+                            />
+                        </span>
+                    </template>
+                </URadioGroup>
+                <UButton
+                    v-if="!elegidaOculta"
+                    :label="verOtras ? 'Ocultar las otras' : `Ver las otras (${otrasCuantas})`"
+                    :trailing-icon="verOtras ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                    variant="link"
+                    size="sm"
+                    class="mt-1 px-0"
+                    data-prueba="ver-otras-aplicaciones"
+                    @click="verOtras = !verOtras"
+                />
+            </UFormField>
 
-        <UFormField
-            label="2 · Cómo se agrupan (padre)"
-            :error="erroresDe('padre')"
-        >
-            <URadioGroup
-                :model-value="valorCapa('padre')"
-                :items="itemsPadre"
-                variant="card"
-                class="w-full"
-                :ui="{ fieldset: 'grid gap-2 sm:grid-cols-2' }"
-                data-prueba="capa-padre"
-                @update:model-value="valor => fijar('padre', valor as Padre)"
-            />
-        </UFormField>
+            <UFormField
+                :error="erroresDe('padre')"
+                :ui="{ label: 'flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted' }"
+            >
+                <template #label>
+                    <UIcon
+                        name="i-lucide-layers"
+                        class="size-4"
+                    />
+                    2 · Cómo se reparte cuando se llena
+                </template>
+                <div
+                    role="radiogroup"
+                    aria-label="Cómo se reparte cuando se llena"
+                    class="flex flex-wrap gap-2"
+                    data-prueba="capa-padre"
+                >
+                    <UButton
+                        v-for="opcion in opcionesPadre"
+                        :key="opcion.valor"
+                        role="radio"
+                        :aria-checked="valorCapa('padre') === opcion.valor"
+                        :value="opcion.valor"
+                        :label="opcion.etiqueta"
+                        :color="valorCapa('padre') === opcion.valor ? 'primary' : 'neutral'"
+                        :variant="valorCapa('padre') === opcion.valor ? 'soft' : 'outline'"
+                        size="sm"
+                        class="rounded-full"
+                        :class="valorCapa('padre') === opcion.valor ? 'ring-1 ring-primary' : ''"
+                        @click="fijar('padre', opcion.valor as Padre)"
+                    />
+                </div>
+                <p
+                    v-if="padreElegido"
+                    class="mt-2 text-sm text-muted"
+                >
+                    <span class="font-medium text-default">{{ padreElegido.etiqueta }}:</span> {{ padreElegido.explicacion }}
+                </p>
+            </UFormField>
 
-        <UFormField
-            label="3 · Tipo de cola"
-            :error="erroresDe('tipo_cola')"
-            :help="version ? `RouterOS ${version}` : 'Versión de RouterOS desconocida: «Probar conexión» la lee.'"
-        >
-            <URadioGroup
-                :model-value="valorCapa('tipo_cola')"
-                :items="itemsTipoCola"
-                variant="card"
-                class="w-full"
-                :ui="{ fieldset: 'grid gap-2 sm:grid-cols-2' }"
-                data-prueba="capa-tipo-cola"
-                @update:model-value="valor => fijar('tipo_cola', valor as TipoCola)"
-            />
-        </UFormField>
+            <UFormField
+                :error="erroresDe('tipo_cola')"
+                :help="version ? `RouterOS ${version}. Toca el «?» de cada una para ver cómo funciona; las tachadas no aplican con el modo elegido.` : 'Versión de RouterOS desconocida: «Probar conexión» la lee.'"
+                :ui="{ label: 'flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted' }"
+            >
+                <template #label>
+                    <UIcon
+                        name="i-lucide-list"
+                        class="size-4"
+                    />
+                    3 · Tipo de cola
+                </template>
+                <div
+                    role="radiogroup"
+                    aria-label="Tipo de cola"
+                    class="flex flex-wrap gap-2"
+                    data-prueba="capa-tipo-cola"
+                >
+                    <span
+                        v-for="opcion in opcionesCola"
+                        :key="opcion.valor"
+                        class="inline-flex items-center rounded-full ring-1"
+                        :class="valorCapa('tipo_cola') === opcion.valor ? 'bg-primary/10 ring-primary' : 'ring-(--ax-borde)'"
+                    >
+                        <UButton
+                            role="radio"
+                            :aria-checked="valorCapa('tipo_cola') === opcion.valor"
+                            :value="opcion.valor"
+                            :title="opcion.valida ? undefined : `No disponible: ${opcion.motivo}`"
+                            :label="opcion.etiqueta"
+                            :disabled="!opcion.valida"
+                            color="neutral"
+                            variant="link"
+                            size="sm"
+                            class="rounded-full ps-3 pe-1"
+                            :class="[valorCapa('tipo_cola') === opcion.valor ? 'font-semibold text-primary' : 'text-default', opcion.valida ? '' : 'line-through']"
+                            @click="fijar('tipo_cola', opcion.valor as TipoCola)"
+                        />
+                        <UButton
+                            icon="i-lucide-circle-help"
+                            color="neutral"
+                            variant="link"
+                            size="xs"
+                            class="rounded-full pe-2"
+                            :aria-label="`Cómo funciona ${opcion.etiqueta}`"
+                            :aria-pressed="colaExplicada?.valor === opcion.valor"
+                            data-ayuda
+                            @click="colaVista = opcion.valor"
+                        />
+                    </span>
+                </div>
+                <div
+                    v-if="colaExplicada"
+                    class="mt-3 flex flex-col gap-1 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm"
+                    data-prueba="explicacion-cola"
+                    aria-live="polite"
+                >
+                    <span class="flex flex-wrap items-center gap-2">
+                        <span class="font-semibold text-highlighted">{{ colaExplicada.etiqueta }}</span>
+                        <UBadge
+                            :label="valorCapa('tipo_cola') === colaExplicada.valor ? 'En uso' : (colaExplicada.valida ? 'Disponible' : 'No disponible aquí')"
+                            :color="valorCapa('tipo_cola') === colaExplicada.valor ? 'success' : (colaExplicada.valida ? 'neutral' : 'warning')"
+                            variant="soft"
+                            size="sm"
+                        />
+                    </span>
+                    <span class="text-default">{{ colaExplicada.explicacion }}</span>
+                    <span
+                        v-if="colaExplicada.motivo"
+                        class="text-muted"
+                    ><span class="font-medium">{{ colaExplicada.valida ? 'Ojo:' : 'Por qué no:' }}</span> {{ colaExplicada.motivo }}</span>
+                </div>
+            </UFormField>
+        </template>
 
-        <fieldset class="flex flex-col gap-3">
-            <legend class="mb-2 text-sm font-medium text-default">
+        <fieldset
+            v-if="partes !== 'capas'"
+            class="flex flex-col"
+        >
+            <legend class="mb-2 flex items-center gap-2 text-xs font-semibold tracking-[0.06em] text-muted uppercase">
+                <UIcon
+                    name="i-lucide-zap"
+                    class="size-4"
+                />
                 4 · Extras
             </legend>
             <div
                 v-for="extra in extrasVisibles"
                 :key="extra"
-                class="flex flex-col gap-1"
+                class="flex flex-col gap-1 border-t border-(--ax-borde) py-2.5 first-of-type:border-t-0"
                 :data-extra="extra"
             >
                 <USwitch
@@ -297,6 +451,7 @@ function erroresDe(capa: string): string | undefined {
                     :label="OPCIONES_EXTRA[extra].etiqueta"
                     :description="descripcionExtra(extra)"
                     :disabled="extraDeshabilitado(extra)"
+                    size="lg"
                     :data-prueba="`extra-${extra}`"
                     @update:model-value="valor => fijarExtra(extra, valor)"
                 />

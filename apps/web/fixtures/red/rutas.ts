@@ -21,14 +21,21 @@ function migracionDe(routerId: number): Migracion {
  * `GET /routers/:id/resumen-sesiones`, con las mismas reglas que la API.
  */
 export const rutasRed: RutasFixture = {
-    /** `GET /ip/:ip` (`ip.resolver`): la sesión activa gana sobre la asignación; 404 si nadie la tiene (solo IPv4 en fixtures). */
+    /**
+     * `GET /ip/:ip` (`ip.resolver`): la sesión activa gana sobre la asignación; una IPv6 dentro del
+     * prefijo delegado o de enlace. 404 si nadie la tiene (un servicio retirado ya no la tiene).
+     */
     'GET /api/v1/ip/:ip': conPermiso('ip.resolver', (solicitud) => {
-        const ip = solicitud.params.ip ?? ''
-        const sesion = bd.sesiones.find(s => s.fin === null && s.ipv4 === ip && s.servicio_id !== null)
-        const servicio = bd.servicios.find(s => s.id === sesion?.servicio_id) ?? bd.servicios.find(s => s.ipv4 === ip && s.estado !== 'retirado')
-        return servicio
-            ? { status: 200, cuerpo: { servicio_id: servicio.id, cliente_id: servicio.cliente_id, prefijo: `${ip}/32` } satisfies Schema<'ResolucionIp'> }
-            : noEncontrado(`un servicio con la IP ${ip}`)
+        const ip = decodeURIComponent(solicitud.params.ip ?? '').trim()
+        const enPrefijo = (prefijo: string | null) => Boolean(prefijo && ip.includes(':') && ip.toLowerCase().startsWith(prefijo.split('::')[0]!.toLowerCase()))
+        const sesion = bd.sesiones.find(s => s.fin === null && s.servicio_id !== null && (s.ipv4 === ip || enPrefijo(s.prefijo_delegado_v6) || enPrefijo(s.prefijo_enlace_v6)))
+        const servicio = bd.servicios.find(s => s.id === sesion?.servicio_id)
+            ?? bd.servicios.find(s => s.estado !== 'retirado' && (s.ipv4 === ip || enPrefijo(s.prefijo_delegado_v6) || enPrefijo(s.prefijo_enlace_v6)))
+        if (!servicio) {
+            return noEncontrado(`un servicio con la IP ${ip}`)
+        }
+        const prefijo = servicio.ipv4 === ip || sesion?.ipv4 === ip ? `${ip}/32` : (sesion?.prefijo_delegado_v6 ?? servicio.prefijo_delegado_v6 ?? servicio.prefijo_enlace_v6 ?? ip)
+        return { status: 200, cuerpo: { servicio_id: servicio.id, cliente_id: servicio.cliente_id, prefijo } satisfies Schema<'ResolucionIp'> }
     }),
 
     'GET /api/v1/red/eventos': conPermiso('red.ver', (solicitud) => {

@@ -35,30 +35,36 @@ describe('ficha del router', () => {
         useUsuarioActual().value = null
     })
 
-    it('abre en «Control de velocidad» con el modo del router en tarjetas y la salud arriba', async () => {
+    it('abre en «Resumen» (tablero RedRouterFicha) con contacto, túnel, sesiones, IPs y el enlace a Horus', async () => {
         const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1' })
-        await esperar(() => expect(pagina.find('[data-prueba="control-actual"]').exists()).toBe(true))
-        const pestanas = pagina.findAll('[data-prueba="pestanas-router"] [role="tab"]').map(t => t.text())
-        expect(pestanas).toEqual(['Control de velocidad', 'Red de acceso', 'Pools e IPs', 'Servicios', 'Conexión', 'Avanzado'])
-        expect(pagina.find('[data-prueba="pestanas-router"] [role="tab"][aria-selected="true"]').text()).toBe('Control de velocidad')
-
-        const pppoe = pagina.find('[data-prueba="control-actual"] [data-tipo="pppoe"]')
-        expect(pppoe.text()).toContain('RADIUS por sesión')
-        expect(pppoe.text()).toContain('Qué crea en el MikroTik')
-        expect(pppoe.text()).toContain('Cuándo conviene')
-        expect(pppoe.text()).toContain('CPU media')
-        expect(pagina.find('[data-prueba="abrir-cambio-control"]').exists()).toBe(true)
-
+        await esperar(() => expect(pagina.find('[data-prueba="router-resumen"]').exists()).toBe(true))
+        const pestanas = pagina.findAll('[data-prueba="pestanas-router"] [role="tab"]').map(t => t.text().trim())
+        expect(pestanas).toEqual(['Resumen', 'Conexión', 'Red e IPs', 'Velocidad', 'Servicios', 'Bitácora de comandos'])
+        expect(pagina.find('[data-prueba="pestanas-router"] [role="tab"][aria-selected="true"]').text().trim()).toBe('Resumen')
         expect(pagina.find('[data-prueba="router-modo-seguridad"]').text()).toBe('RADIUS')
-        await esperar(() => expect(pagina.find('[data-prueba="salud-tunel"]').text()).toBe('Conectado'))
-        await esperar(() => expect(pagina.find('[data-prueba="salud-sesiones"]').text()).toMatch(/^\d+$/))
-        await esperar(() => expect(pagina.find('[data-prueba="salud-ipv4"]').text()).toContain('libres'))
+        await esperar(() => expect(pagina.find('[data-prueba="router-sesiones-abiertas"]').text()).toMatch(/^\d+$/))
+        await esperar(() => expect(pagina.find('[data-prueba="router-resumen"]').text()).toContain('Conectado'))
+        // El uso del router lo mide Horus (decisión 27): ni CPU ni memoria propias.
+        expect(pagina.find('[data-prueba="router-resumen"]').text()).toContain('lo mide Horus')
+        expect(pagina.find('[data-prueba="router-resumen"]').text()).not.toMatch(/CPU \d/)
+    })
+
+    it('«Velocidad»: 3 opciones a la vista, «Ver las otras» y el «?» de cada tipo de cola', async () => {
+        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1?pestana=velocidad' })
+        await esperar(() => expect(pagina.find('[data-prueba="capa-aplicacion"]').exists()).toBe(true))
+        expect(pagina.findAll('[data-prueba="capa-aplicacion"] [role="radio"]')).toHaveLength(3)
+        await pagina.find('[data-prueba="ver-otras-aplicaciones"]').trigger('click')
+        await esperar(() => expect(pagina.findAll('[data-prueba="capa-aplicacion"] [role="radio"]')).toHaveLength(5))
+        const ayuda = pagina.findAll('[data-prueba="capa-tipo-cola"] button').find(b => b.attributes('aria-label') === 'Cómo funciona CAKE')
+        await ayuda?.trigger('click')
+        await esperar(() => expect(pagina.find('[data-prueba="explicacion-cola"]').text()).toContain('CAKE'))
+        expect(pagina.find('[data-prueba="ver-vista-previa-velocidad"]').attributes('disabled')).toBeDefined()
         // Sin excepciones heredadas en el RB-Centro: no hay aviso.
         expect(pagina.find('[data-prueba="excepciones-heredadas"]').exists()).toBe(false)
     })
 
     it('excepción heredada por plan: «Unificar» con la vista previa de la API y aplicar', async () => {
-        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/2' })
+        const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/2?pestana=velocidad' })
         await esperar(() => expect(pagina.find('[data-prueba="excepciones-heredadas"]').exists()).toBe(true))
         const aviso = pagina.find('[data-prueba="excepciones-heredadas"]')
         expect(aviso.text()).toContain('1 plan tiene su propia velocidad en este router')
@@ -85,10 +91,10 @@ describe('ficha del router', () => {
         expect(!viejo.ok && codigoProblema(viejo.problema)).toBe('excepciones_cambiaron')
     })
 
-    it('la pestaña va en la URL: «Avanzado» muestra la baja y los datos del equipo', async () => {
+    it('la pestaña va en la URL: «avanzado» (nombre anterior) abre «Conexión» con la baja y los datos del equipo', async () => {
         const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1?pestana=avanzado' })
         await esperar(() => expect(pagina.find('[data-prueba="router-baja"]').exists()).toBe(true))
         expect(pagina.text()).toContain('Datos del equipo')
-        expect(pagina.find('[data-prueba="control-actual"]').exists()).toBe(false)
+        expect(pagina.find('[data-prueba="router-resumen"]').exists()).toBe(false)
     })
 })

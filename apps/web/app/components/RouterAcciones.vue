@@ -11,9 +11,12 @@ const props = withDefaults(defineProps<{
     router: RouterNas
     conEditar?: boolean
     tamano?: 'xs' | 'sm' | 'md'
+    /** Solo el «⋯» en círculo (filas de la lista y encabezado de la ficha, rediseño de Red). */
+    soloIcono?: boolean
 }>(), {
     conEditar: false,
     tamano: 'md',
+    soloIcono: false,
 })
 
 const emit = defineEmits<{
@@ -72,11 +75,12 @@ function alActualizar(router: RouterNas) {
             :content="{ align: 'end' }"
         >
             <UButton
-                label="Acciones"
+                :label="soloIcono ? undefined : 'Acciones'"
                 icon="i-lucide-ellipsis"
                 color="neutral"
-                variant="outline"
+                :variant="soloIcono ? 'ghost' : 'outline'"
                 :size="tamano"
+                :class="soloIcono ? 'rounded-full' : ''"
                 :ui="{ label: 'hidden sm:inline' }"
                 :aria-label="`Acciones de ${router.nombre}`"
                 :data-prueba="`acciones-router-${router.id}`"

@@ -90,6 +90,7 @@ onMounted(cargar)
         <template #acciones>
             <UButton
                 v-if="puede('adicionales.crear_motivo')"
+                class="rounded-full"
                 label="Nuevo motivo"
                 icon="i-lucide-plus"
                 :ui="{ label: 'hidden sm:inline' }"
@@ -124,61 +125,66 @@ onMounted(cargar)
                 :reintentar="cargar"
                 :reintentando="cargando"
             />
-            <UTable
+            <div
                 v-else
-                :data="motivos"
-                :columns="columnas"
-                :loading="cargando"
-                data-prueba="tabla-motivos"
+                class="surface-card overflow-hidden rounded-2xl"
             >
-                <template #nombre-cell="{ row }">
-                    <div class="flex flex-col">
-                        <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
-                        <span class="font-mono text-xs text-muted">{{ row.original.codigo }}</span>
-                    </div>
-                </template>
-                <template #empresa_id-cell="{ row }">
-                    <UBadge
-                        v-if="row.original.empresa_id === null"
-                        label="Común"
-                        icon="i-lucide-globe"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                    />
-                    <span
-                        v-else
-                        class="text-sm"
-                    >{{ nombreEmpresa(row.original.empresa_id) }}</span>
-                </template>
-                <template #activo-cell="{ row }">
-                    <UBadge
-                        :label="row.original.activo ? 'Activo' : 'Desactivado'"
-                        :color="row.original.activo ? 'success' : 'neutral'"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </template>
-                <template #acciones-cell="{ row }">
-                    <UButton
-                        v-if="puedeDesactivar(row.original)"
-                        icon="i-lucide-ban"
-                        color="error"
-                        variant="ghost"
-                        size="sm"
-                        :aria-label="`Desactivar ${row.original.nombre}`"
-                        :data-prueba="`desactivar-motivo-${row.original.id}`"
-                        @click="pedirDesactivar(row.original)"
-                    />
-                </template>
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-gift"
-                        title="Sin motivos"
-                        variant="naked"
-                    />
-                </template>
-            </UTable>
+                <UTable
+                    :data="motivos"
+                    :columns="columnas"
+                    :loading="cargando"
+                    :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5' }"
+                    data-prueba="tabla-motivos"
+                >
+                    <template #nombre-cell="{ row }">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
+                            <span class="font-mono text-xs text-muted">{{ row.original.codigo }}</span>
+                        </div>
+                    </template>
+                    <template #empresa_id-cell="{ row }">
+                        <UBadge
+                            v-if="row.original.empresa_id === null"
+                            label="Común"
+                            icon="i-lucide-globe"
+                            color="neutral"
+                            variant="outline"
+                            size="sm"
+                        />
+                        <span
+                            v-else
+                            class="text-sm"
+                        >{{ nombreEmpresa(row.original.empresa_id) }}</span>
+                    </template>
+                    <template #activo-cell="{ row }">
+                        <UBadge
+                            :label="row.original.activo ? 'Activo' : 'Desactivado'"
+                            :color="row.original.activo ? 'success' : 'neutral'"
+                            variant="subtle"
+                            size="sm"
+                        />
+                    </template>
+                    <template #acciones-cell="{ row }">
+                        <UButton
+                            v-if="puedeDesactivar(row.original)"
+                            icon="i-lucide-ban"
+                            color="error"
+                            variant="ghost"
+                            size="sm"
+                            :aria-label="`Desactivar ${row.original.nombre}`"
+                            :data-prueba="`desactivar-motivo-${row.original.id}`"
+                            @click="pedirDesactivar(row.original)"
+                        />
+                    </template>
+                    <template #empty>
+                        <UEmpty
+                            icon="i-lucide-gift"
+                            title="Sin motivos"
+                            variant="naked"
+                        />
+                    </template>
+                </UTable>
+            </div>
         </div>
 
         <MotivoCortesiaModal

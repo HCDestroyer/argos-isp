@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import Decimal from 'decimal.js'
 import { servicios } from '../../fixtures/servicios/datos'
-import { entrar, fijarHoyFixtures } from './ayudas'
+import { accionServicio, entrar, fijarHoyFixtures } from './ayudas'
 
 /**
  * Pedido del PM (19 nov): «No puedo agregar facturas siguientes (pago por adelantado)». Desde la
@@ -39,9 +39,7 @@ test('adelantar 3 meses desde la ficha del servicio', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
     // Con el servidor de desarrollo, la primera visita a la ficha la compila (varios segundos).
-    const abrir = page.locator('[data-prueba="abrir-facturas-periodo"]')
-    await expect(abrir).toBeVisible({ timeout: 20_000 })
-    await abrir.click()
+    await accionServicio(page, 'Emitir facturas de periodos')
     await expect(page).toHaveURL(/\/servicios\/1\/facturas-periodo$/)
 
     const lista = page.locator('[data-prueba="lista-periodos"]')
