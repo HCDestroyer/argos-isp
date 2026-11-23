@@ -690,7 +690,7 @@ test.group('Pools · IPv6', () => {
             client
                 .put(`/api/v1/ipv6-pools/${pool.id}`)
                 .bearerToken(token)
-                .json({ version: v + 1, prefijo: '2001:db8:ff00::/44' }),
+                .json({ version: v + 1, prefijo: '2001:db7:ff00::/44' }),
             422,
         )
     })

@@ -5,36 +5,28 @@ import type { ArchivoIris } from '#portal/soporte/iris_portal'
 
 /**
  * Adjuntos de un ticket desde el portal (contrato Iris 0.9.0 §11.6): hasta 3 por mensaje, 10 MB
- * cada uno, solo JPEG, PNG, WebP, HEIC y PDF **por el contenido** (nunca por el nombre ni por el
- * `Content-Type` del navegador). Argos los revisa antes de mandarlos para no gastar el envío, e Iris
- * los vuelve a revisar, recodifica y les quita los metadatos. El total por petición lo acota además
- * el bodyparser (20 MB: `config/bodyparser.ts`).
+ * cada uno, solo JPEG, PNG y PDF **por el contenido** (nunca por el nombre ni por el `Content-Type`
+ * del navegador). Desde 0.14.2 (§11.6) Iris no acepta HEIC ni WebP: el portal los convierte a JPEG en
+ * el navegador (`apps/portal/app/utils/fotos.ts`) y aquí un HEIC o WebP que llegue igual responde
+ * 422 `mime_no_permitido` sin llamar a Iris. Argos los revisa antes de mandarlos para no gastar el
+ * envío, e Iris los vuelve a revisar, recodifica y les quita los metadatos. El total por petición lo
+ * acota además el bodyparser (20 MB: `config/bodyparser.ts`).
  */
 
 export const MAXIMO_ADJUNTOS = 3
 export const TAMANO_MAXIMO_ADJUNTO = 10 * 1024 * 1024
 
-export type MimeAdjunto = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'application/pdf'
+export type MimeAdjunto = 'image/jpeg' | 'image/png' | 'application/pdf'
 
 function empiezaCon(bytes: Uint8Array, firma: number[], desde = 0): boolean {
     return firma.every((b, i) => bytes[desde + i] === b)
 }
 
-/** Tipo real por los primeros bytes, o null si no es uno de los permitidos. */
+/** Tipo real por los primeros bytes, o null si no es uno de los permitidos (WebP y HEIC no lo son). */
 export function detectarMimeAdjunto(bytes: Uint8Array): MimeAdjunto | null {
     if (empiezaCon(bytes, [0xff, 0xd8, 0xff])) return 'image/jpeg'
     if (empiezaCon(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png'
-    if (empiezaCon(bytes, [0x52, 0x49, 0x46, 0x46]) && empiezaCon(bytes, [0x57, 0x45, 0x42, 0x50], 8)) {
-        return 'image/webp'
-    }
     if (empiezaCon(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf'
-    // HEIC/HEIF: caja `ftyp` en el byte 4 con una marca de imagen HEIF
-    if (empiezaCon(bytes, [0x66, 0x74, 0x79, 0x70], 4)) {
-        const marca = String.fromCharCode(...bytes.slice(8, 12))
-        if (['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1'].includes(marca)) {
-            return 'image/heic'
-        }
-    }
     return null
 }
 
@@ -51,8 +43,6 @@ export function nombreSaneado(nombre: string | null | undefined, mime: MimeAdjun
     const extension = {
         'image/jpeg': 'jpg',
         'image/png': 'png',
-        'image/webp': 'webp',
-        'image/heic': 'heic',
         'application/pdf': 'pdf',
     }[mime]
     return `adjunto.${extension}`
@@ -98,12 +88,12 @@ export async function adjuntosDeLaPeticion(ctx: HttpContext, permitidos: boolean
                 422,
                 'mime_no_permitido',
                 'Tipo de archivo no permitido',
-                'Solo fotos (JPG, PNG, WebP o HEIC) y PDF.',
+                'Solo fotos JPG o PNG y PDF.',
                 [
                     {
                         field: `archivos.${i}`,
                         rule: 'mime',
-                        message: 'Solo fotos (JPG, PNG, WebP o HEIC) y PDF',
+                        message: 'Solo fotos JPG o PNG y PDF',
                     },
                 ],
             )

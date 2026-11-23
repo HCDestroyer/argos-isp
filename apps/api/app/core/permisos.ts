@@ -472,6 +472,10 @@ export const PERMISOS = {
         'Ver qué se almacena y cuánto espacio ocupa: carpetas de archivos, base de datos, Redis y discos',
     'sistema.recalcular_almacenamiento':
         'Recalcular el almacenamiento a pedido (solo lee y suma; no borra nada)',
+    'sistema.ver_crons':
+        'Ver las tareas programadas: horario, última y próxima corrida, atrasos, quién las corre e historial',
+    'sistema.ejecutar_cron':
+        'Ejecutar ahora una tarea programada (respeta su lock; algunas piden además el permiso de lo que hacen)',
     'apariencia.ver': 'Ver la apariencia de la instalación (tema, marca y archivos del inicio de sesión)',
     'apariencia.editar': 'Cambiar el tema, el modo predeterminado, el nombre de la marca y el eslogan',
     'apariencia.subir_logo_login': 'Subir el logo del inicio de sesión del panel y del portal',

@@ -6,6 +6,7 @@ import { conexionRedis, prefijoColas, type ColaEnvios, type OpcionesCola } from 
 import { ID_PARTICIONES, ejecutarParticiones } from '#notify/particiones'
 import { ID_VIGILANCIA, ejecutarVigilancia } from '#notify/vigilancia'
 import { ID_ALMACENAMIENTO, ejecutarAlmacenamiento } from '#monitoreo/cron_almacenamiento'
+import { correrJobCron } from '#monitoreo/crons/corridas'
 
 /**
  * Cron de recordatorios de pago. Un job scheduler de BullMQ (`notify-cron`, id `recordatorios`)
@@ -67,27 +68,8 @@ export async function programarCronRecordatorios(opciones: OpcionesCola & { cada
 export function crearWorkerCron(colaEnvios: ColaEnvios, opciones: OpcionesCola = {}) {
     const worker = new Worker(
         NOMBRE_COLA_CRON,
-        async (job) => {
-            if (job.name === ID_PARTICIONES) {
-                const resultado = await ejecutarParticiones()
-                logger.info(resultado, 'Particiones de auditoría aseguradas')
-                return resultado
-            }
-            if (job.name === ID_VIGILANCIA) {
-                const resultado = await ejecutarVigilancia(colaEnvios)
-                if (resultado.atrasados.length > 0) logger.warn(resultado, 'Crons atrasados')
-                return resultado
-            }
-            if (job.name === ID_ALMACENAMIENTO) {
-                const medicion = await ejecutarAlmacenamiento()
-                logger.info({ id: medicion.id, parcial: medicion.parcial }, 'Almacenamiento calculado')
-                return { id: medicion.id, parcial: medicion.parcial }
-            }
-            if (job.name !== ID_RECORDATORIOS) return null
-            const totales = await ejecutarRecordatorios(colaEnvios)
-            if (totales.procesadas > 0) logger.info(totales, 'Recordatorios programados')
-            return totales
-        },
+        // corrida anotada en «Tareas programadas» (`core.cron_corridas`)
+        (job) => correrJobCron(NOMBRE_COLA_CRON, job, () => procesarCronNotify(colaEnvios, job.name)),
         {
             connection: opciones.conexion ?? conexionRedis(),
             prefix: opciones.prefijo ?? prefijoColas(),
@@ -97,4 +79,27 @@ export function crearWorkerCron(colaEnvios: ColaEnvios, opciones: OpcionesCola =
     worker.on('failed', (job, error) => logger.error({ err: error, cron: job?.name }, 'Cron de notify falló'))
     worker.on('error', (error) => logger.error({ err: error }, 'Worker del cron de notify'))
     return worker
+}
+
+/** Un disparo de la cola `notify-cron` por nombre de job. */
+export async function procesarCronNotify(colaEnvios: ColaEnvios, nombre: string) {
+    if (nombre === ID_PARTICIONES) {
+        const resultado = await ejecutarParticiones()
+        logger.info(resultado, 'Particiones de auditoría aseguradas')
+        return resultado
+    }
+    if (nombre === ID_VIGILANCIA) {
+        const resultado = await ejecutarVigilancia(colaEnvios)
+        if (resultado.atrasados.length > 0) logger.warn(resultado, 'Crons atrasados')
+        return resultado
+    }
+    if (nombre === ID_ALMACENAMIENTO) {
+        const medicion = await ejecutarAlmacenamiento()
+        logger.info({ id: medicion.id, parcial: medicion.parcial }, 'Almacenamiento calculado')
+        return { id: medicion.id, parcial: medicion.parcial }
+    }
+    if (nombre !== ID_RECORDATORIOS) return null
+    const totales = await ejecutarRecordatorios(colaEnvios)
+    if (totales.procesadas > 0) logger.info(totales, 'Recordatorios programados')
+    return totales
 }

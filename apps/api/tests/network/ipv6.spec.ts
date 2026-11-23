@@ -71,7 +71,7 @@ test.group('IPv6 · bloques, pools y reservas', () => {
             client
                 .post(`/api/v1/ipv6-bloques/${b.body().id}/pools`)
                 .bearerToken(token)
-                .json({ prefijo: '2001:db8:ff00::/48', tipo: 'enlace', tamano_entrega: 64 }),
+                .json({ prefijo: '2001:db7:ff00::/48', tipo: 'enlace', tamano_entrega: 64 }),
             422,
         )
         await estado(

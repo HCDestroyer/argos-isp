@@ -593,3 +593,132 @@ test.group('Promociones de velocidad · routers con velocidad por plan (decisió
         assert.equal(conTemporal.body().type, 'urn:argosisp:problema:promocion_con_plan_temporal')
     })
 })
+
+test.group('Promociones de velocidad · pestañas del tablero', () => {
+    test('vigencia: vigente, programada, terminada y cancelada, con conteos, cursor y tramos en hora de Guatemala', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const marca = unico('Tablero')
+        const crear = async (nombre: string, datos: Record<string, unknown>) => {
+            const r = await estado(
+                client
+                    .post('/api/v1/promociones-velocidad')
+                    .bearerToken(token)
+                    .json({
+                        nombre: `${marca} ${nombre}`,
+                        tipo_velocidad: 'multiplicador',
+                        multiplicador: 2,
+                        ...datos,
+                    }),
+                201,
+            )
+            return r.body() as Record<string, any>
+        }
+        const ahora = Date.now()
+        const vigenteDias = await crear('dias', {
+            modo: 'dias',
+            inicio: new Date(ahora - HORA).toISOString(),
+            fin: new Date(ahora + 2 * HORA).toISOString(),
+        })
+        // franja de un minuto que ya pasó hoy: vigente pero fuera de su horario
+        const local = new Date(ahora - 6 * HORA - 3 * HORA)
+        const hh = (d: Date) =>
+            `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+        const vigenteFranja = await crear('franja', {
+            modo: 'franja',
+            inicio: new Date(ahora - 48 * HORA).toISOString(),
+            fin: new Date(ahora + 72 * HORA).toISOString(),
+            franja_inicio: hh(local),
+            franja_fin: hh(new Date(local.getTime() + 60_000)),
+        })
+        const programada = await crear('programada', {
+            modo: 'dias',
+            inicio: '2033-03-01T06:00:00Z',
+            fin: '2033-03-10T06:00:00Z',
+        })
+        const terminada = await crear('terminada', {
+            modo: 'dias',
+            inicio: new Date(ahora + HORA).toISOString(),
+            fin: new Date(ahora + 2 * HORA).toISOString(),
+        })
+        // el periodo ya pasó (escrito directo: la API no deja crear en el pasado)
+        await db
+            .from('core.promociones_velocidad')
+            .where('id', terminada.id)
+            .update({ inicio: new Date(ahora - 10 * HORA), fin: new Date(ahora - 5 * HORA) })
+        const cancelada = await crear('cancelada', {
+            modo: 'dias',
+            inicio: '2033-04-01T06:00:00Z',
+            fin: '2033-04-10T06:00:00Z',
+        })
+        await estado(
+            client
+                .post(`/api/v1/promociones-velocidad/${cancelada.id}/cancelar`)
+                .bearerToken(token)
+                .json({ version: cancelada.version, motivo: 'no va' }),
+            200,
+        )
+
+        const listar = async (qs: Record<string, unknown>) => {
+            const r = await estado(
+                client
+                    .get('/api/v1/promociones-velocidad')
+                    .qs({ q: marca, ...qs })
+                    .bearerToken(token),
+                200,
+            )
+            return r.body() as Record<string, any>
+        }
+        const todas = await listar({})
+        assert.deepEqual(todas.conteos, { vigente: 2, programada: 1, terminada: 1, cancelada: 1 })
+        assert.lengthOf(todas.data, 5)
+
+        const vigentes = await listar({ vigencia: 'vigente', limit: 1 })
+        assert.deepEqual(vigentes.conteos, todas.conteos)
+        assert.lengthOf(vigentes.data, 1)
+        assert.isString(vigentes.nextCursor)
+        const segunda = await listar({ vigencia: 'vigente', limit: 1, cursor: vigentes.nextCursor })
+        assert.isNull(segunda.nextCursor)
+        const [franja, dias] = [vigentes.data[0], segunda.data[0]]
+        assert.equal(franja.id, vigenteFranja.id)
+        assert.equal(dias.id, vigenteDias.id)
+        assert.equal(dias.vigencia, 'vigente')
+        assert.deepEqual(dias.tramo_actual, { inicio: dias.inicio, fin: dias.fin })
+        assert.isNull(dias.proximo_tramo)
+        assert.isNull(franja.tramo_actual)
+        assert.isNotNull(franja.proximo_tramo)
+        assert.isAbove(new Date(franja.proximo_tramo.inicio).getTime(), ahora)
+
+        const { data: prog } = await listar({ vigencia: 'programada' })
+        assert.deepEqual(
+            prog.map((p: any) => [p.id, p.vigencia]),
+            [[programada.id, 'programada']],
+        )
+        assert.equal(prog[0].proximo_tramo.inicio, '2033-03-01T06:00:00.000Z')
+        const { data: ter } = await listar({ vigencia: 'terminada' })
+        assert.deepEqual(
+            ter.map((p: any) => [p.id, p.vigencia, p.tramo_actual, p.proximo_tramo]),
+            [[terminada.id, 'terminada', null, null]],
+        )
+        const { data: can } = await listar({ vigencia: 'cancelada' })
+        assert.deepEqual(
+            can.map((p: any) => [p.id, p.vigencia]),
+            [[cancelada.id, 'cancelada']],
+        )
+        // `estado` y `vigencia` se combinan
+        const ninguna = await listar({ vigencia: 'cancelada', estado: 'activa' })
+        assert.lengthOf(ninguna.data, 0)
+        await estado(
+            client.get('/api/v1/promociones-velocidad').qs({ vigencia: 'otra' }).bearerToken(token),
+            422,
+        )
+
+        const ver = await estado(
+            client.get(`/api/v1/promociones-velocidad/${programada.id}`).bearerToken(token),
+            200,
+        )
+        assert.equal(ver.body().vigencia, 'programada')
+    })
+})

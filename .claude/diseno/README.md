@@ -4,7 +4,7 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
 
 - Artifact vivo (canvas de diseño): https://claude.ai/artifact/23h8ugCpjc33ue1KxYnsM5
 - `tableros/`: copia de cada tablero (`*.dc.html`) y del índice `canvas.json` (páginas: Propuesta visual, Día a día, Lo nuevo, Inventario y bodegas, Red, Reportes y contabilidad, Operación, Portal del cliente y Pendientes del backend).
-- `generadores/`: los scripts Python que generan los tableros (`c3.py` ficha, `c4.py` alta, `c8.py` cobro POS, `c9.py` cierre de caja, `c10.py` cajas, `c11.py` abrir caja y conciliación, `c12.py` importar extracto, `c13.py` inventario, `red*.py` red). Escriben en una carpeta temporal; cambia la ruta de `os.chdir` antes de usarlos.
+- `generadores/`: los scripts Python que generan los tableros (`c3.py` ficha, `c4.py` alta, `c8.py` cobro POS, `c9.py` cierre de caja, `c10.py` cajas, `c11.py` abrir caja y conciliación, `c12.py` importar extracto, `c13.py` inventario, `red*.py` red, `crons.py` tareas programadas). Escriben en una carpeta temporal; cambia la ruta de `os.chdir` antes de usarlos.
 - `generadores/pend*.py` (página «Pendientes del backend»): cargan `pend_base.py`, que reúne `red_base.py`, `oper_base.py` y los íconos de `conta_base.py` de la misma carpeta sin tocar su `os.chdir`, y escriben en `tableros/` (o en `SALIDA_TABLEROS`). Sus tableros traen modo oscuro con el estado `{"tema":"osc"}` y el botón de la luna.
 - `herramientas/render.js`: dibuja un tablero en PNG con Playwright para revisarlo: `node render.js <tablero> <png> <ancho> <alto> '<estado json>'` (el estado activa pestañas, pasos y ventanas; ver `renderVals()` de cada tablero).
 

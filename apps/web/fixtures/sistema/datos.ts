@@ -115,6 +115,145 @@ export function aparienciaPublica(apariencia: Schema<'Apariencia'>): Schema<'Apa
     return { tema, paleta, modo_predeterminado, nombre_marca, eslogan, logo_login_url, fondo_login_url, version }
 }
 
+/*
+ * Tareas programadas (`GET /sistema/crons`): una muestra del catálogo de la API
+ * (`apps/api/app/monitoreo/crons/catalogo.ts`) con los mismos textos y valores por defecto. Los
+ * instantes se guardan como desfase en segundos desde «ahora» y se arman al pedirlos.
+ */
+type Tarea = Schema<'TareaProgramada'>
+type Corrida = Schema<'CorridaCron'>
+
+const ZONA = 'America/Guatemala'
+const horarioCada = (segundos: number, texto: string): Tarea['horario'] => ({ tipo: 'cada', cada_segundos: segundos, hora: null, dia: null, zona: ZONA, texto })
+const horarioDiario = (hora: string): Tarea['horario'] => ({ tipo: 'diario', cada_segundos: null, hora, dia: null, zona: ZONA, texto: `Todos los días a las ${hora}` })
+
+export interface CorridaSemilla {
+    hace: number
+    estado: Corrida['estado']
+    duracion_ms: number | null
+    resumen: string | null
+    error?: string | null
+    repeticiones?: number
+    origen?: Corrida['origen']
+    instancia?: string
+}
+
+export interface TareaSemilla {
+    base: Omit<Tarea, 'ultima' | 'ultima_correcta' | 'proxima' | 'en_curso'>
+    /** segundos hasta la próxima corrida (negativo: debió correr) */
+    proxima: number | null
+    en_curso?: { hace: number, instancia: string }
+    corridas: CorridaSemilla[]
+}
+
+const EJECUTAR = 'sistema.ejecutar_cron'
+const lockPg = (tomado: boolean, instancia: string | null = null): Tarea['lock'] => ({ tipo: 'postgres', tomado, dueno: tomado ? '48211' : null, instancia })
+
+export const tareasSemilla: TareaSemilla[] = [
+    {
+        base: { clave: 'billing.corte', nombre: 'Corte por hora', modulo: 'cobranza', modulo_nombre: 'Cobranza', descripcion: 'A cada hora de corte de las plantillas, limita o suspende los servicios con facturas vencidas.', proceso: 'billing:worker', horario: horarioCada(60, 'Cada minuto'), activo: true, manual: true, permisos: [EJECUTAR, 'servicios.suspender'], estado: 'ok', proxima_fuente: 'bullmq', atrasada: false, lock: lockPg(false), nota: null },
+        proxima: 40,
+        corridas: [
+            { hace: 20, estado: 'ok', duracion_ms: 840, resumen: '3 servicios cambiaron de estado, 1 hora de corte procesada' },
+            { hace: 80, estado: 'sin_cambios', duracion_ms: 120, resumen: 'Nada pendiente', repeticiones: 58 },
+        ],
+    },
+    {
+        base: { clave: 'billing.generar', nombre: 'Generar facturas', modulo: 'facturacion', modulo_nombre: 'Facturación', descripcion: 'Emite las facturas de todos los periodos que ya tocan y aún no tienen factura.', proceso: 'billing:worker', horario: horarioCada(3600, 'Cada hora'), activo: true, manual: true, permisos: [EJECUTAR, 'facturas.generar'], estado: 'en_curso', proxima_fuente: 'bullmq', atrasada: false, lock: lockPg(true, 'worker-2'), nota: null },
+        proxima: 3300,
+        en_curso: { hace: 300, instancia: 'worker-2' },
+        corridas: [
+            { hace: 300, estado: 'en_curso', duracion_ms: null, resumen: null, instancia: 'worker-2' },
+            { hace: 3900, estado: 'ok', duracion_ms: 61_200, resumen: '24 facturas emitidas, 1 periodo bonificado', instancia: 'worker-2' },
+        ],
+    },
+    {
+        base: { clave: 'billing.vencer', nombre: 'Vencimiento y mora', modulo: 'facturacion', modulo_nombre: 'Facturación', descripcion: 'Marca vencidas las facturas que pasaron su fecha y aplica la mora de la plantilla.', proceso: 'billing:worker', horario: horarioCada(3600, 'Cada hora'), activo: true, manual: true, permisos: [EJECUTAR], estado: 'atrasada', proxima_fuente: 'calculada', atrasada: true, lock: lockPg(false), nota: null },
+        proxima: -2040,
+        corridas: [
+            { hace: 8040, estado: 'ok', duracion_ms: 3100, resumen: '18 facturas vencidas, 6 moras aplicadas', instancia: 'worker-1' },
+            { hace: 11_640, estado: 'sin_cambios', duracion_ms: 200, resumen: 'Nada pendiente', repeticiones: 6, instancia: 'worker-1' },
+            { hace: 40_000, estado: 'ok', duracion_ms: 2800, resumen: '4 facturas vencidas', origen: 'manual', instancia: 'worker-2' },
+        ],
+    },
+    {
+        base: { clave: 'fiscal.fel', nombre: 'Cola de facturación electrónica', modulo: 'fiscal', modulo_nombre: 'Fiscal', descripcion: 'Certifica los DTE pendientes, reintenta los que fallaron y envía las anulaciones.', proceso: 'fiscal:worker', horario: horarioCada(60, 'Cada minuto'), activo: true, manual: true, permisos: [EJECUTAR, 'fel.certificar'], estado: 'error', proxima_fuente: 'bullmq', atrasada: false, lock: lockPg(false), nota: null },
+        proxima: 10,
+        corridas: [
+            { hace: 50, estado: 'error', duracion_ms: 400, resumen: '2 DTE enviados', error: '3 elementos fallaron' },
+            { hace: 110, estado: 'ok', duracion_ms: 900, resumen: '5 DTE enviados' },
+        ],
+    },
+    {
+        base: { clave: 'billing.sellar', nombre: 'Sellar el libro', modulo: 'contabilidad', modulo_nombre: 'Contabilidad', descripcion: 'Encadena con su huella (hash) los asientos nuevos para que nadie pueda alterarlos.', proceso: 'billing:worker', horario: horarioCada(60, 'Cada minuto'), activo: true, manual: true, permisos: [EJECUTAR], estado: 'sin_cambios', proxima_fuente: 'bullmq', atrasada: false, lock: lockPg(false), nota: null },
+        proxima: 30,
+        corridas: [{ hace: 30, estado: 'sin_cambios', duracion_ms: 90, resumen: 'Nada pendiente', repeticiones: 58 }],
+    },
+    {
+        base: { clave: 'routeros.reconciliar', nombre: 'Reconciliar RouterOS', modulo: 'red', modulo_nombre: 'Red', descripcion: 'Revisa que cada router tenga la configuración que Argos espera (colas, corte, secrets) y la corrige.', proceso: 'routeros:worker', horario: horarioCada(900, 'Cada 15 min'), activo: true, manual: true, permisos: [EJECUTAR, 'routers.reconciliar'], estado: 'ok', proxima_fuente: 'bullmq', atrasada: false, lock: lockPg(false), nota: null },
+        proxima: 540,
+        corridas: [{ hace: 360, estado: 'ok', duracion_ms: 4200, resumen: '4 correcciones' }],
+    },
+    {
+        base: { clave: 'billing.integridad', nombre: 'Verificar integridad del libro', modulo: 'contabilidad', modulo_nombre: 'Contabilidad', descripcion: 'Recalcula la cadena de sellos del libro y avisa si algún asiento fue alterado.', proceso: 'billing:worker', horario: horarioDiario('02:15'), activo: true, manual: true, permisos: [EJECUTAR], estado: 'ok', proxima_fuente: 'bullmq', atrasada: false, lock: lockPg(false), nota: null },
+        proxima: 60_000,
+        corridas: [{ hace: 26_000, estado: 'ok', duracion_ms: 1500, resumen: '2 empresas verificadas' }],
+    },
+    {
+        base: { clave: 'sistema.relay_outbox', nombre: 'Relay de eventos', modulo: 'sistema', modulo_nombre: 'Sistema', descripcion: 'Publica los eventos guardados en la base para que los demás procesos se enteren.', proceso: 'eventos:relay', horario: { tipo: 'continuo', cada_segundos: 1, hora: null, dia: null, zona: ZONA, texto: 'Siempre activo' }, activo: true, manual: false, permisos: [], estado: 'ok', proxima_fuente: null, atrasada: false, lock: { tipo: 'redis', tomado: true, dueno: '8c1f6a2e-4b1d-4f7a-9d0e-3b6a1c2d4e5f', instancia: null }, nota: 'Sin eventos pendientes' },
+        proxima: null,
+        corridas: [],
+    },
+    {
+        base: { clave: 'routeros.sondear', nombre: 'Sondeo de routers', modulo: 'red', modulo_nombre: 'Red', descripcion: 'Pregunta a los routers sin contacto reciente si siguen en línea.', proceso: 'routeros:worker', horario: null, activo: false, manual: true, permisos: [EJECUTAR], estado: 'apagada', proxima_fuente: null, atrasada: false, lock: lockPg(false), nota: 'Apagada por configuración (su periodo está en 0).' },
+        proxima: null,
+        corridas: [],
+    },
+]
+
+const iso = (ms: number) => new Date(ms).toISOString()
+
+export function corridasDe(semilla: TareaSemilla, ahoraMs: number): Corrida[] {
+    return semilla.corridas.map((c, i) => {
+        const inicio = ahoraMs - c.hace * 1000
+        const repeticiones = c.repeticiones ?? 1
+        return {
+            id: 1000 - i,
+            clave: semilla.base.clave,
+            origen: c.origen ?? 'programado',
+            estado: c.estado,
+            inicio: iso(inicio),
+            primera: iso(inicio - (repeticiones - 1) * (semilla.base.horario?.cada_segundos ?? 60) * 1000),
+            fin: c.estado === 'en_curso' ? null : iso(inicio + (c.duracion_ms ?? 0)),
+            duracion_ms: c.duracion_ms,
+            repeticiones,
+            resumen: c.resumen,
+            error: c.error ?? null,
+            instancia: c.instancia ?? 'worker-1',
+            usuario_id: c.origen === 'manual' ? 1 : null,
+            fuente: 'corridas',
+        }
+    })
+}
+
+export function tareasDe(semillas: TareaSemilla[], ahoraMs: number): Schema<'TareasProgramadas'> {
+    return {
+        data: semillas.map((s) => {
+            const corridas = corridasDe(s, ahoraMs).filter(c => c.estado !== 'en_curso')
+            const correcta = corridas.find(c => c.estado === 'ok' || c.estado === 'sin_cambios')
+            return {
+                ...s.base,
+                ultima: corridas[0] ?? null,
+                ultima_correcta: correcta?.fin ?? null,
+                proxima: s.proxima === null ? null : iso(ahoraMs + s.proxima * 1000),
+                en_curso: s.en_curso ? { corrida_id: 1000, desde: iso(ahoraMs - s.en_curso.hace * 1000), instancia: s.en_curso.instancia, origen: 'programado' } : null,
+            }
+        }),
+        avisos: [],
+        generado_en: iso(ahoraMs),
+    }
+}
+
 export interface SistemaFixtures {
     salud: Schema<'SaludSistema'>
     registro: Schema<'EntradaRegistro'>[]
@@ -122,6 +261,7 @@ export interface SistemaFixtures {
     apariencia: Schema<'Apariencia'>
     /** Por id de usuario; sin fila = predeterminados de su rol. */
     accesos: Record<number, { secciones: string[], version: number }>
+    tareas: TareaSemilla[]
 }
 
 export function sistemaInicial(): SistemaFixtures {
@@ -131,5 +271,6 @@ export function sistemaInicial(): SistemaFixtures {
         almacenamiento: structuredClone(almacenamientoFixture),
         apariencia: structuredClone(aparienciaFixture),
         accesos: {},
+        tareas: structuredClone(tareasSemilla),
     }
 }

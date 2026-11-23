@@ -24,7 +24,7 @@ import {
 } from '#core/auth/recuperacion'
 import { verAjustesOperacion } from '#core/ajustes_operacion'
 import { listarAsignacionesPromocion, listarPromociones, verPromocion } from '#core/promociones_velocidad'
-import { listarIncidentes, paginaServiciosIncidente, verIncidente } from '#network/incidentes_red'
+import { listarIncidentes, paginaAfectadosIncidente, verIncidente } from '#network/incidentes_red'
 import { listarCaidasRepetidas } from '#network/consultas/caidas'
 import CrearPromocionVelocidad from '#core/actions/crear_promocion_velocidad'
 import AsignarPromocionVelocidad from '#core/actions/asignar_promocion_velocidad'
@@ -37,6 +37,7 @@ import RestablecerContrasena from '#core/actions/restablecer_contrasena'
 import BuscarHistorialIp from '#network/actions/buscar_historial_ip'
 import AbrirIncidenteRed from '#network/actions/abrir_incidente_red'
 import CerrarIncidenteRed from '#network/actions/cerrar_incidente_red'
+import LeerServiciosIncidenteRed from '#network/actions/leer_servicios_incidente_red'
 import {
     AjustesOperacion,
     CaidaRepetida,
@@ -45,7 +46,9 @@ import {
     HistorialIp,
     IncidenteRed,
     OpcionesLogin,
+    PaginaAfectadosIncidente,
     PaginaIdsServicio,
+    PaginaPromocionesVelocidad,
     PromocionServicio,
     PromocionVelocidad,
     RecuperacionAceptada,
@@ -68,13 +71,24 @@ const promociones: Ruta[] = [
         ruta: '/promociones-velocidad',
         operacion: 'promocionesVelocidadListar',
         resumen: 'Promociones de velocidad (decisión del PM 18)',
+        descripcion:
+            'Por cursor (`id` descendente). `vigencia` filtra por pestaña: `vigente` (inicio ≤ ahora < fin), ' +
+            '`programada` (inicio > ahora), `terminada` (fin ≤ ahora), las tres solo activas, o `cancelada`; ' +
+            '`inicio` y `fin` son instantes y se comparan en UTC. Cada fila trae `vigencia`, `tramo_actual` y ' +
+            '`proximo_tramo` (la franja diaria en hora de Guatemala). `conteos` trae las cuatro pestañas con los ' +
+            'mismos filtros de empresa y `q`, sin `estado` ni `vigencia`.',
         etiqueta: 'promociones',
         permiso: 'promociones_velocidad.ver',
         query: v.listarPromocionesValidator,
-        respuesta: { status: 200, descripcion: 'Página de promociones', esquema: pagina(PromocionVelocidad) },
+        respuesta: { status: 200, descripcion: 'Página de promociones', esquema: PaginaPromocionesVelocidad },
         handler: (ctx, { query }) =>
             listarPromociones(
-                { empresas: empresasDeLaLista(ctx.empresa, query.empresas), estado: query.estado },
+                {
+                    empresas: empresasDeLaLista(ctx.empresa, query.empresas),
+                    estado: query.estado,
+                    vigencia: query.vigencia,
+                    q: query.q,
+                },
                 query,
             ),
     }),
@@ -462,16 +476,47 @@ const incidentes: Ruta[] = [
         descripcion:
             'Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], ' +
             'nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera ' +
-            'del alcance.',
+            'del alcance. Cada lectura queda auditada (`incidentes_red.leer`), también el 404.',
         etiqueta: 'red',
         permiso: 'incidentes_red.leer',
         query: v.serviciosIncidenteValidator,
         respuesta: { status: 200, descripcion: 'Página de ids', esquema: PaginaIdsServicio },
         handler: (ctx, { params, query }) =>
-            paginaServiciosIncidente(Number(params.incidenteId), {
-                empresas: empresasIncidente(ctx, query.empresa_id),
+            new LeerServiciosIncidenteRed().execute(
+                {
+                    incidente_id: Number(params.incidenteId),
+                    empresa_id: query.empresa_id,
+                    permitidas: ctx.empresa?.permitidas ?? null,
+                    cursor: query.cursor,
+                    limit: query.limit ?? 1000,
+                },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/incidentes-red/:incidenteId/afectados',
+        operacion: 'incidentesRedAfectados',
+        resumen: 'Servicios afectados por el incidente, con cliente, plan y conexión (tablero)',
+        descripcion:
+            'Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está ' +
+            'conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la ' +
+            'empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). ' +
+            '`total` cuenta con el mismo filtro que las filas. 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).',
+        etiqueta: 'red',
+        permiso: 'incidentes_red.leer',
+        query: v.afectadosIncidenteValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de afectados',
+            esquema: PaginaAfectadosIncidente,
+        },
+        handler: (ctx, { params, query }) =>
+            paginaAfectadosIncidente(Number(params.incidenteId), {
+                empresas: empresasDeLaLista(ctx.empresa, query.empresas),
+                alcance: ctx.alcance,
                 cursor: query.cursor,
-                limit: query.limit ?? 1000,
+                limit: query.limit,
             }),
     }),
     definirRuta({
