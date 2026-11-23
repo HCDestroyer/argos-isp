@@ -22,6 +22,7 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
 - El desplazamiento ocurre dentro del contenedor, nunca en la página.
 - Botón principal con aire alrededor; ayuda «?» del manual en cada pantalla.
 - **Teléfono (390 px):** por pantallas y a pantalla completa, con la acción principal fija abajo.
+- **Marco del teléfono** (tablero `MarcoMovil`, pedido del PM como en el portal): isla de navegación abajo, a 12 px de los bordes, con Inicio, los 2 accesos rápidos del usuario (Cobrar en verde), Avisos con su punto y «Más», que abre el menú completo a pantalla completa con el buscador. La acción principal fija de cada pantalla va como otra isla justo encima. Desde 1024 px no aparece y manda el menú lateral.
 
 ## Decisiones por pantalla
 
