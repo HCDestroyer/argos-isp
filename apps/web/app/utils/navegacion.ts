@@ -126,6 +126,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                     { id: 'tipos-producto', etiqueta: 'Tipos de producto', descripcion: 'Catálogo de tipos con su seguimiento y modalidad por defecto (comodato, gasto o cobro).', icono: 'i-lucide-tags', ruta: '/inventario/tipos-producto', permiso: 'inventario.ver' },
                     { id: 'bodegas', etiqueta: 'Bodegas', descripcion: 'Bodegas y vehículos de técnico, con su tope.', icono: 'i-lucide-warehouse', ruta: '/inventario/bodegas', permiso: 'inventario.ver' },
                     { id: 'kardex', etiqueta: 'Kardex', descripcion: 'Entradas y salidas de cada producto con su saldo corrido.', icono: 'i-lucide-list-ordered', ruta: '/inventario/kardex', permiso: 'inventario.ver' },
+                    { id: 'tecnicos-iris', etiqueta: 'Técnicos de Iris', descripcion: 'Cómo se vincula cada técnico de Iris con su usuario de Argos para mover su bodega; conciliar los rechazados.', icono: 'i-lucide-link', ruta: '/inventario/tecnicos-iris', permiso: 'inventario.ver' },
                     { id: 'valorizado', etiqueta: 'Inventario valorizado', descripcion: 'Existencias y valor a una fecha, con el cuadre contra 1.1.14.', icono: 'i-lucide-scale', ruta: '/inventario/valorizado', permiso: 'inventario.ver' },
                 ],
             },
@@ -291,7 +292,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                 secciones: [
                     { id: 'notificaciones', etiqueta: 'Notificaciones', descripcion: 'Correo, Telegram y WhatsApp (por Iris): servidor, bot, interruptores por canal y por aviso, global y por empresa.', icono: 'i-lucide-bell-ring', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver' },
                     { id: 'notificaciones-plantillas', etiqueta: 'Plantillas de avisos', descripcion: 'Texto de cada aviso por evento y canal, recordatorios de pago y registro de envíos.', icono: 'i-lucide-message-square-text', ruta: '/notificaciones', permiso: 'notificaciones.ver' },
-                    { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow e Iris: conexión, token, enlace de conexión y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver'] },
+                    { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow, Iris, SmartOLT y GenieACS: conexión, credenciales y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'equipos.ver'] },
                     { id: 'integracion-iris', etiqueta: 'Iris', descripcion: 'Conector con Iris: enlace de conexión, configuración a mano, tokens y envíos.', icono: 'i-lucide-clipboard-list', ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' },
                 ],
             },
