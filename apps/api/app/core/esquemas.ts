@@ -356,6 +356,20 @@ export const Cliente = definirEsquema(
                 ...nulable(texto),
                 description: 'Nombre del responsable de pago (solo lectura)',
             },
+            nit_verificado_en: {
+                ...nulable(instante),
+                description:
+                    'Cuándo una persona del panel confirmó el NIT (`POST /clientes/:id/verificar-nit`, Iris ' +
+                    '0.14.1); null sin verificar. Se borra sola al cambiar `nit_cui`',
+            },
+            nit_verificado_por: {
+                ...nulable(id),
+                description: 'Usuario de Argos que verificó el NIT; null sin verificar',
+            },
+            nit_verificado_por_nombre: {
+                ...nulable(texto),
+                description: 'Nombre de quien verificó el NIT (solo lectura)',
+            },
             referido_por_id: {
                 ...nulable(id),
                 description:

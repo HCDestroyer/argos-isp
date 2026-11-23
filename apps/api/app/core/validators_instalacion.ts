@@ -108,7 +108,7 @@ export const cambiarTitularPartesValidator = vine.compile(
     vine.object({
         datos: vine.string().minLength(2).maxLength(10_000).meta({
             description:
-                'JSON: { cliente: { nombre, documento_tipo, documento_numero, mayor_de_edad, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id }',
+                'JSON: { cliente: { tipo?, nombre, documento_tipo?, documento_numero?, mayor_de_edad?, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, representante?: { nombre, documento_tipo, documento_numero, mayor_de_edad }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id }. Con cliente.tipo empresa (0.14.1): NIT y representante obligatorios, sin documento de persona en cliente',
         }),
     }),
 )
@@ -117,10 +117,22 @@ export const cambiarTitularPartesValidator = vine.compile(
 export const cambiarTitularDatosValidator = vine.compile(
     vine.object({
         cliente: vine.object({
+            tipo: vine
+                .enum(['persona', 'empresa'] as const)
+                .optional()
+                .meta({
+                    description:
+                        '`persona` (por defecto) o `empresa` (contrato Iris 0.14.1): con empresa, `nombre` es la razón social, ' +
+                        '`tipo_documento_fiscal: nit` y `nit_cui` obligatorio, sin `documento_tipo`, `documento_numero` ni ' +
+                        '`mayor_de_edad` (`422 validacion`), y `representante` obligatorio',
+                }),
             nombre: vine.string().trim().minLength(2).maxLength(200),
-            documento_tipo: vine.enum(['dpi', 'pasaporte'] as const),
-            documento_numero: vine.string().trim().minLength(5).maxLength(25),
-            mayor_de_edad: vine.boolean(),
+            documento_tipo: vine
+                .enum(['dpi', 'pasaporte'] as const)
+                .optional()
+                .meta({ description: 'Obligatorio con persona; prohibido con empresa' }),
+            documento_numero: vine.string().trim().minLength(5).maxLength(25).optional(),
+            mayor_de_edad: vine.boolean().optional(),
             telefono: vine.string().trim().minLength(8).maxLength(30),
             whatsapp: vine.boolean().optional(),
             email: vine.string().trim().email().nullable().optional(),
@@ -131,6 +143,20 @@ export const cambiarTitularDatosValidator = vine.compile(
                 .nullable()
                 .optional(),
         }),
+        representante: vine
+            .object({
+                nombre: vine.string().trim().minLength(2).maxLength(200),
+                documento_tipo: vine.enum(['dpi', 'pasaporte'] as const),
+                documento_numero: vine.string().trim().minLength(5).maxLength(25),
+                mayor_de_edad: vine.boolean(),
+            })
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Contrato Iris 0.14.1: obligatorio con `cliente.tipo: empresa` (`422 representante_requerido`) y prohibido ' +
+                    'con persona (`422 representante_no_permitido`). Las fotos y `identidad.coincide` son de su documento',
+            }),
         identidad: vine.object({
             coincide: vine.boolean(),
             verificado_en: instanteIso(),
@@ -152,5 +178,45 @@ export const listarCambiosTitularValidator = vine.compile(
             .optional()
             .meta({ description: 'true: los asignados a un cliente que ya existía' }),
         posible_duplicado: vine.boolean().optional(),
+    }),
+)
+
+// ── Titular empresa (contrato Iris 0.14.1 §3.4.4) ────────────────────────────────────────────
+
+/** `POST /clientes/:id/verificar-nit`: la persona del panel confirma el NIT del cliente. */
+export const verificarNitValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        metodo: vine.enum(['documento', 'consulta_sat'] as const).meta({
+            description: 'Cómo lo confirmó: con el documento (RTU, patente) o con la consulta SAT/FEL',
+        }),
+    }),
+)
+
+export const listarRevisionesTitularEmpresaValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        estado: vine
+            .enum(['pendiente', 'aprobada', 'rechazada', 'reemplazada'] as const)
+            .optional()
+            .meta({ description: 'Por defecto, todas' }),
+    }),
+)
+
+export const aprobarTitularEmpresaValidator = vine.compile(
+    vine.object({
+        cliente_id: idEntidad().optional().meta({
+            description:
+                'Con varios candidatos, el cliente empresa al que se asigna (uno de `candidatos`); con uno, opcional',
+        }),
+        motivo: vine.string().trim().minLength(10).maxLength(500),
+        version: versionEsperada(),
+    }),
+)
+
+export const rechazarTitularEmpresaValidator = vine.compile(
+    vine.object({
+        motivo: vine.string().trim().minLength(10).maxLength(500),
+        version: versionEsperada(),
     }),
 )
