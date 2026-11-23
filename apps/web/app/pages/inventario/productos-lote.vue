@@ -157,11 +157,11 @@ function enviarLote() {
         <template #acciones>
             <UButton
                 v-if="puedeVer"
-                label="Productos"
-                icon="i-lucide-arrow-left"
+                label="Atrás"
+                :icon="ICONOS.volver"
                 color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
+                variant="outline"
+                class="boton-flotante rounded-full"
                 to="/inventario/productos"
             />
         </template>
@@ -178,7 +178,7 @@ function enviarLote() {
             :schema="esquemaLote"
             :state="estado"
             :validate-on="['change']"
-            class="flex flex-col gap-4"
+            class="surface-card flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-auto rounded-2xl p-3 sm:p-4"
             @submit="crear"
         >
             <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -203,6 +203,7 @@ function enviarLote() {
                         icon="i-lucide-clipboard-paste"
                         color="neutral"
                         variant="outline"
+                        class="rounded-full"
                         data-prueba="lote-pegar"
                         @click="pegarAbierto = true"
                     />
@@ -212,6 +213,7 @@ function enviarLote() {
                         color="neutral"
                         variant="outline"
                         :disabled="estado.filas.length >= MAXIMO_FILAS_LOTE"
+                        class="rounded-full"
                         data-prueba="lote-agregar"
                         @click="agregarFila"
                     />
@@ -221,8 +223,8 @@ function enviarLote() {
             <UTable
                 :data="filasTabla"
                 :columns="columnas"
-                :ui="{ td: 'py-2 align-top', th: 'whitespace-nowrap' }"
-                class="rounded-md border border-default"
+                :ui="{ thead: 'bg-(--ax-cabecera-tabla)', td: 'py-2 align-top', th: 'whitespace-nowrap text-xs' }"
+                class="rounded-xl border border-(--ax-borde)"
                 data-prueba="tabla-lote"
             >
                 <template #n-cell="{ row }">
@@ -398,11 +400,13 @@ function enviarLote() {
                 data-prueba="lote-creados"
             />
 
-            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <div class="sticky bottom-0 -mx-3 -mb-3 flex flex-col-reverse gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta) p-3 sm:-mx-4 sm:-mb-4 sm:flex-row sm:items-center sm:justify-end sm:p-4">
                 <span class="text-xs text-muted sm:mr-auto">{{ estado.filas.filter(f => !filaLoteEnBlanco(f)).length }} de {{ MAXIMO_FILAS_LOTE }} filas · todo o nada</span>
                 <UButton
                     label="Crear productos"
                     icon="i-lucide-check"
+                    size="lg"
+                    class="glow-brand justify-center rounded-full px-5"
                     :loading="enviando"
                     data-prueba="lote-crear"
                     @click="enviarLote"
