@@ -5,6 +5,7 @@ import type { Problem } from '@argosisp/contracts'
  * Vista previa del archivo de un comprobante (foto JPG/PNG/WebP o PDF). El archivo se pide con el
  * token (`GET /comprobantes/:id/archivo` como `Blob`) y se muestra con una URL de objeto que se
  * libera al salir. Con error muestra el Problem y "Reintentar", nunca una imagen vacía.
+ * Visor oscuro con ampliar, girar y descargar a la derecha (tablero OperComprobantes).
  */
 const props = defineProps<{
     comprobante: Comprobante
@@ -14,6 +15,13 @@ const url = ref<string | null>(null)
 const cargando = ref(false)
 const problema = ref<Problem | null>(null)
 const pdf = computed(() => esPdf(props.comprobante))
+/** Lupa y giro del visor (tablero OperComprobantes): solo cambian cómo se ve, nunca el archivo. */
+const ampliado = ref(false)
+const giro = ref(0)
+
+function girar() {
+    giro.value = (giro.value + 90) % 360
+}
 
 function liberar() {
     if (url.value) {
@@ -37,61 +45,100 @@ async function cargar() {
     url.value = URL.createObjectURL(blob)
 }
 
-watch(() => props.comprobante.id, cargar)
+watch(() => props.comprobante.id, () => {
+    ampliado.value = false
+    giro.value = 0
+    void cargar()
+})
 onMounted(cargar)
 onBeforeUnmount(liberar)
 </script>
 
 <template>
-    <div class="flex flex-col gap-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-            <p class="min-w-0 truncate text-xs text-muted">
-                <UIcon
-                    :name="pdf ? 'i-lucide-file-text' : 'i-lucide-image'"
-                    class="mr-1 size-3.5 align-[-2px]"
-                />
-                {{ comprobante.archivo_nombre ?? (pdf ? 'Documento PDF' : 'Foto') }} · {{ formatearTamano(comprobante.archivo_tamano) }}
-            </p>
+    <div
+        class="relative flex min-h-56 flex-col overflow-hidden rounded-2xl bg-slate-900 text-white sm:min-h-64"
+        data-prueba="visor-comprobante"
+    >
+        <p class="pointer-events-none absolute start-3 top-3 z-10 max-w-40 text-xs leading-snug text-white/80">
+            Compara la referencia, la fecha y el monto con la banca en línea
+        </p>
+
+        <div
+            v-if="url"
+            class="absolute end-3 top-3 z-10 flex flex-col gap-2"
+        >
             <UButton
-                v-if="url"
+                v-if="!pdf"
+                :icon="ampliado ? 'i-lucide-zoom-out' : 'i-lucide-zoom-in'"
+                color="neutral"
+                variant="soft"
+                size="sm"
+                class="rounded-lg bg-white/10 text-white hover:bg-white/20"
+                :aria-label="ampliado ? 'Reducir la foto' : 'Ampliar la foto'"
+                :title="ampliado ? 'Reducir' : 'Ampliar'"
+                @click="ampliado = !ampliado"
+            />
+            <UButton
+                v-if="!pdf"
+                icon="i-lucide-rotate-cw"
+                color="neutral"
+                variant="soft"
+                size="sm"
+                class="rounded-lg bg-white/10 text-white hover:bg-white/20"
+                aria-label="Girar la foto"
+                title="Girar"
+                @click="girar"
+            />
+            <UButton
                 :to="url"
                 target="_blank"
-                label="Abrir en otra pestaña"
-                icon="i-lucide-external-link"
+                :download="comprobante.archivo_nombre ?? `comprobante-${comprobante.id}`"
+                icon="i-lucide-download"
                 color="neutral"
-                variant="ghost"
-                size="xs"
+                variant="soft"
+                size="sm"
+                class="rounded-lg bg-white/10 text-white hover:bg-white/20"
+                :aria-label="`Descargar ${comprobante.archivo_nombre ?? 'el archivo'} (${formatearTamano(comprobante.archivo_tamano)})`"
+                title="Descargar"
             />
         </div>
 
-        <ProblemaAlerta
+        <div
             v-if="problema"
-            :problema="problema"
-            :reintentar="cargar"
-            :reintentando="cargando"
-        />
+            class="m-auto w-full max-w-md p-4 pt-14"
+        >
+            <ProblemaAlerta
+                :problema="problema"
+                :reintentar="cargar"
+                :reintentando="cargando"
+            />
+        </div>
 
         <USkeleton
             v-else-if="cargando || !url"
-            class="aspect-[4/3] w-full"
+            class="m-4 mt-14 h-48 flex-1 bg-white/10"
         />
 
         <iframe
             v-else-if="pdf"
             :src="url"
             :title="`Comprobante #${comprobante.id} (PDF)`"
-            class="h-[28rem] w-full rounded-md border border-default bg-elevated lg:h-[36rem]"
+            class="h-[28rem] w-full bg-white lg:h-[32rem]"
             data-prueba="comprobante-pdf"
         />
 
         <div
             v-else
-            class="flex justify-center rounded-md border border-default bg-elevated p-2"
+            class="flex flex-1 items-center justify-center p-4 pt-16"
+            :class="ampliado ? 'overflow-auto' : 'overflow-hidden'"
+            data-ampliar
         >
             <img
                 :src="url"
                 :alt="`Foto del comprobante #${comprobante.id}, referencia ${comprobante.referencia}`"
-                class="max-h-[36rem] w-auto max-w-full rounded object-contain"
+                class="rounded object-contain shadow-2xl transition-transform"
+                :class="ampliado ? 'max-h-none max-w-none' : 'max-h-72 max-w-full lg:max-h-80'"
+                :style="{ transform: `rotate(${giro}deg)` }"
                 data-prueba="comprobante-imagen"
             >
         </div>

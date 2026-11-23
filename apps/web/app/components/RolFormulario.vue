@@ -9,10 +9,13 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  */
 const props = withDefaults(defineProps<{
     rol?: Rol | null
+    /** «Duplicar rol»: un rol nuevo que empieza con los permisos de este. */
+    copiaDe?: Rol | null
     catalogo: readonly PermisoCatalogo[]
     soloLectura?: boolean
 }>(), {
     rol: null,
+    copiaDe: null,
     soloLectura: false,
 })
 
@@ -29,6 +32,9 @@ const base = computed(() => props.rol?.base === true)
 watch(abierto, (valor) => {
     if (valor) {
         Object.assign(estado, entradaDesdeRol(props.rol))
+        if (!props.rol && props.copiaDe) {
+            Object.assign(estado, { nombre: `${props.copiaDe.nombre}_copia`.slice(0, 50), descripcion: props.copiaDe.descripcion ?? '', permisos: [...props.copiaDe.permisos] })
+        }
         problema.value = null
     }
 }, { immediate: true })
@@ -66,7 +72,7 @@ async function enviar(evento: FormSubmitEvent<SalidaRol>) {
 <template>
     <USlideover
         v-model:open="abierto"
-        :title="rol ? (soloLectura ? `Rol ${rol.nombre}` : `Editar rol ${rol.nombre}`) : 'Nuevo rol'"
+        :title="rol ? (soloLectura ? `Rol ${rol.nombre}` : `Editar rol ${rol.nombre}`) : (copiaDe ? `Duplicar el rol ${copiaDe.nombre}` : 'Nuevo rol')"
         description="Un permiso es el nombre de la acción (servicios.suspender). El alcance por router, zona o caja se da al asignar el rol a un usuario."
         :dismissible="!enviando"
         :ui="{ content: 'sm:max-w-3xl' }"

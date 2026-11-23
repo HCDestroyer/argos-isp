@@ -111,10 +111,10 @@ describe('ACL · composables y pantallas', () => {
         const usuarios = await mountSuspended(conApp(PaginaUsuarios))
         await esperar(() => expect(usuarios.find('[data-usuario="3"]').exists()).toBe(true))
         expect(usuarios.find('[data-prueba="nuevo-usuario"]').exists()).toBe(true)
-        expect(usuarios.find('[data-prueba="activo-usuario-3"]').exists()).toBe(true)
-        // A uno mismo no se le ofrece desactivarse.
-        expect(usuarios.find(`[data-prueba="activo-usuario-${meAdmin.id}"]`).exists()).toBe(false)
-        expect(usuarios.find('[data-prueba="usuarios-navegacion"]').exists()).toBe(true)
+        // Rediseño (OperUsuarios): cada fila con su «⋯»; roles y tokens en botones del encabezado.
+        expect(usuarios.find('[aria-label^="Más acciones:"]').exists()).toBe(true)
+        expect(usuarios.text()).toContain('Roles y permisos')
+        expect(usuarios.text()).toContain('Tokens de API')
 
         const roles = await mountSuspended(conApp(PaginaRoles))
         await esperar(() => expect(roles.find('[data-rol="cobrador_zona"]').exists()).toBe(true))

@@ -46,6 +46,8 @@ test('cola de DTE: un rechazado se reintenta y se certifica; la factura muestra 
     await ir(page, 'Facturación electrónica', /\/dte/)
     await abrirFacturaRechazada(page)
 
+    // Rediseño (OperFacturaDetalle): la factura electrónica va en su pestaña.
+    await page.getByRole('tab', { name: 'Factura electrónica' }).click()
     const fel = page.locator('[data-prueba="factura-fel"]')
     await expect(fel.locator('[data-prueba="dte-estado"]')).toHaveText('Rechazado')
     await expect(fel.locator('[data-prueba="dte-error"]')).toContainText('SAT')
@@ -62,12 +64,15 @@ test('anular una factura certificada en dos pasos: anulación pendiente y luego 
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Facturación electrónica', /\/dte/)
     await abrirFacturaRechazada(page)
+    // Rediseño (OperFacturaDetalle): la factura electrónica va en su pestaña.
+    await page.getByRole('tab', { name: 'Factura electrónica' }).click()
     const fel = page.locator('[data-prueba="factura-fel"]')
     await expect(fel.locator('[data-prueba="dte-estado"]')).toHaveText('Rechazado')
     await fel.locator('[data-prueba="dte-reintentar"]').click()
     await expect(fel.locator('[data-prueba="dte-estado"]')).toHaveText('Certificado', { timeout: 15_000 })
 
-    await page.locator('[data-prueba="abrir-anular"]').click()
+    await page.locator('[data-prueba="mas-acciones-factura"]').click()
+    await page.getByRole('menuitem', { name: 'Anular factura' }).click()
     const modal = page.getByRole('dialog')
     await modal.locator('[data-prueba="anular-motivo"]').fill('El servicio se dio de baja antes del periodo')
     await modal.locator('[data-prueba="anular-continuar"]').click()
