@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.24.0](https://github.com/HCDestroyer/argos-isp/compare/v1.23.0...v1.24.0) (2026-11-23)
+
+
+### Funcionalidades
+
+* **billing:** decisiones del PM de cobro y caja (gestiones, asiento con aprobación, abono, reconexión, pausa, impresión, gracia, bancos) ([#305](https://github.com/HCDestroyer/argos-isp/issues/305)) ([9e0831c](https://github.com/HCDestroyer/argos-isp/commit/9e0831c5392615f9d80b444c9b98b4133aa0cdad))
+* **billing:** panel financiero, inicio por rol, PDF y envíos programados de reportes ([#304](https://github.com/HCDestroyer/argos-isp/issues/304)) ([9ec1d94](https://github.com/HCDestroyer/argos-isp/commit/9ec1d9445f05b158737e821067541df880d3f9b8))
+* **core,network:** decisiones del PM 17, 18, 19, 22, 28, 30, 31 y 34 ([#297](https://github.com/HCDestroyer/argos-isp/issues/297)) ([4ce01d2](https://github.com/HCDestroyer/argos-isp/commit/4ce01d2729e7ec244e0349ad14e79af8977dc851))
+* **core,network:** promociones por vigencia y servicios afectados de una falla general con sus datos ([#315](https://github.com/HCDestroyer/argos-isp/issues/315)) ([ea91629](https://github.com/HCDestroyer/argos-isp/commit/ea916290b1096ddb1ca239e7e022af18368999d0))
+* **core:** cambio de titular a una empresa (contrato Iris 0.14.1) ([#309](https://github.com/HCDestroyer/argos-isp/issues/309)) ([cf15014](https://github.com/HCDestroyer/argos-isp/commit/cf150145929b6440f6c2210b51a8d7eaa85ea487))
+* **core:** contrato Iris 0.10.x en núcleo: A38 a A46 ([#281](https://github.com/HCDestroyer/argos-isp/issues/281)) ([b04e6d8](https://github.com/HCDestroyer/argos-isp/commit/b04e6d8795a9d88d45e2eb2f66a4ccac6eeb779b))
+* **importacion:** estados de cuenta del banco, webhooks a Iris, prospectos A44 y avisos a contactos ([#278](https://github.com/HCDestroyer/argos-isp/issues/278)) ([7f60f17](https://github.com/HCDestroyer/argos-isp/commit/7f60f174b9189ba7948c4453544e3fe05d09eb4c))
+* **integraciones:** actor «sistema» de Iris y lectura de capacidades (contrato Iris 0.14.2) ([#311](https://github.com/HCDestroyer/argos-isp/issues/311)) ([cca3b4f](https://github.com/HCDestroyer/argos-isp/commit/cca3b4fb4091c9bfeab3399d9b4b4d3da885bbdc))
+* **integraciones:** contrato Iris 0.14.3 en equipos, activación y cobro de instalación ([#313](https://github.com/HCDestroyer/argos-isp/issues/313)) ([1b16fe9](https://github.com/HCDestroyer/argos-isp/commit/1b16fe9db68966c38c41f5767b7be66c1fc49b15))
+* **integraciones:** SmartOLT y GenieACS reales para A32/A33/A35, con GenieACS en servidor aparte ([#296](https://github.com/HCDestroyer/argos-isp/issues/296)) ([71aa2ab](https://github.com/HCDestroyer/argos-isp/commit/71aa2ab477a73841f6e19f649e033e08a0b55eb3))
+* **integraciones:** token_portal cifrado y webhooks de soporte de Iris (contrato 0.9.0 §11) ([#286](https://github.com/HCDestroyer/argos-isp/issues/286)) ([3b55d05](https://github.com/HCDestroyer/argos-isp/commit/3b55d05e0d73738592b5dc4087c4b136c1c87cab))
+* **inventario:** contrato Iris 0.14.0 en inventario y equipos ([#306](https://github.com/HCDestroyer/argos-isp/issues/306)) ([aae1519](https://github.com/HCDestroyer/argos-isp/commit/aae1519b903ca88b74977786e3be8663533758d2))
+* **inventario:** resumen del turno de caja, estado de cuenta por servicio, A47 bodega de cuadrilla, A48 equipos y A36 ([#279](https://github.com/HCDestroyer/argos-isp/issues/279)) ([5047d9e](https://github.com/HCDestroyer/argos-isp/commit/5047d9e842646e0d878fa3c1256056d8da4f1f96))
+* **monitoreo,core:** salud del sistema, registro, almacenamiento, apariencia y accesos rápidos (API) ([#271](https://github.com/HCDestroyer/argos-isp/issues/271)) ([462dd1c](https://github.com/HCDestroyer/argos-isp/commit/462dd1cf5665cbd1062b6f44c3f798e26e8de7a5))
+* **monitoreo:** tareas programadas con catálogo, corridas, «Ejecutar ahora» y pantalla ([#303](https://github.com/HCDestroyer/argos-isp/issues/303)) ([36a23b1](https://github.com/HCDestroyer/argos-isp/commit/36a23b1f5622295f463435c577123c8c1933ff18))
+* **notify,integraciones:** contrato Iris 0.9.0 completo y CONTRATO_IRIS 0.12.0 ([#288](https://github.com/HCDestroyer/argos-isp/issues/288)) ([13daebe](https://github.com/HCDestroyer/argos-isp/commit/13daebe82b6d523cbfc178e031a11de3786c89fa))
+* **portal:** A30/A31 tickets y solicitudes con Iris, «Mis contactos» y servicios a cargo ([#283](https://github.com/HCDestroyer/argos-isp/issues/283)) ([efd6e23](https://github.com/HCDestroyer/argos-isp/commit/efd6e23f5b667c589aa29395b55a1339d23205bb))
+* **portal:** fotos convertidas a JPEG antes de subir (contrato Iris 0.14.2 §11.6) ([#310](https://github.com/HCDestroyer/argos-isp/issues/310)) ([0a0b1ee](https://github.com/HCDestroyer/argos-isp/commit/0a0b1eeb628b696c0e68f13e6e99583ae0adcf84))
+* **portal:** rediseño aprobado en todo el portal del cliente, con el mismo menú isla del panel ([#270](https://github.com/HCDestroyer/argos-isp/issues/270)) ([b8f30c7](https://github.com/HCDestroyer/argos-isp/commit/b8f30c72f8b149651db848e6b79f32b468430c41))
+* **web:** ficha del cliente con saldo único y acciones en una fila; alta con router buscable y elección de IP ([#295](https://github.com/HCDestroyer/argos-isp/issues/295)) ([25374bc](https://github.com/HCDestroyer/argos-isp/commit/25374bc27ee494d0cb883b66ca2d3a4d5e87fd24))
+* **web:** isla de navegación abajo en el teléfono y acción fija encima ([#302](https://github.com/HCDestroyer/argos-isp/issues/302)) ([f6b5835](https://github.com/HCDestroyer/argos-isp/commit/f6b58351453e8723d5b043ea0ba143d43876afc1))
+* **web:** rediseño de Configuración y Sistema ([#294](https://github.com/HCDestroyer/argos-isp/issues/294)) ([2125ba8](https://github.com/HCDestroyer/argos-isp/commit/2125ba8c228927c39d7837828fabef9d0ca0c1eb))
+* **web:** rediseño de inventario y bodegas con equipos del cliente (A47/A48) ([#299](https://github.com/HCDestroyer/argos-isp/issues/299)) ([aae4a14](https://github.com/HCDestroyer/argos-isp/commit/aae4a14099771dd9c01aff44fbe3bd36f3744752))
+* **web:** rediseño fase 1, marco del panel con menú flotante y encabezado de botones sueltos ([#280](https://github.com/HCDestroyer/argos-isp/issues/280)) ([d1f2517](https://github.com/HCDestroyer/argos-isp/commit/d1f25176d8b00562f2865b0aeaacfaca6eb1c29a))
+* **web:** rediseño fase 2, Clientes con lista, ficha, contactos y alta en 3 pasos ([#287](https://github.com/HCDestroyer/argos-isp/issues/287)) ([f6f288d](https://github.com/HCDestroyer/argos-isp/commit/f6f288db548b501121c7b55f6b723f9cb8818c85))
+
+
+### Correcciones
+
+* **notify:** huella HMAC del número en la clave del consentimiento (contrato Iris 0.12.1) ([#285](https://github.com/HCDestroyer/argos-isp/issues/285)) ([82dc4a3](https://github.com/HCDestroyer/argos-isp/commit/82dc4a392ec794fbd2fd2c530ab7ff9cfac74fe7))
+
 ## [1.23.0](https://github.com/HCDestroyer/argos-isp/compare/v1.22.2...v1.23.0) (2026-11-21)
 
 

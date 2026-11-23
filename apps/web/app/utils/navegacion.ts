@@ -218,7 +218,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         corta: 'Ajustes',
         secciones: [
             // Índice de la configuración: basta con poder abrir alguna de sus secciones.
-            { id: 'configuracion', etiqueta: 'Toda la configuración', descripcion: 'Todas las opciones de configuración por categoría, con buscador.', icono: 'i-lucide-layout-grid', ruta: '/configuracion', permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'portal_corte.ver', 'nodos_portal.administrar', 'inventario.configurar', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'notificaciones.ver', 'horus.ver', 'iris.ver', 'sistema.ver_salud', 'sistema.ver_registro', 'sistema.ver_almacenamiento', 'apariencia.ver'] },
+            { id: 'configuracion', etiqueta: 'Toda la configuración', descripcion: 'Todas las opciones de configuración por categoría, con buscador.', icono: 'i-lucide-layout-grid', ruta: '/configuracion', permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'portal_corte.ver', 'nodos_portal.administrar', 'inventario.configurar', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'notificaciones.ver', 'horus.ver', 'iris.ver', 'sistema.ver_salud', 'sistema.ver_registro', 'sistema.ver_almacenamiento', 'sistema.ver_crons', 'apariencia.ver'] },
         ],
         subgrupos: [
             {
@@ -275,11 +275,12 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                 id: 'config-sistema',
                 etiqueta: 'Sistema y apariencia',
                 icono: 'i-lucide-activity',
-                descripcion: 'Salud del servidor, registro de fallos, espacio en disco y colores y marca del panel.',
+                descripcion: 'Salud del servidor, registro de fallos, espacio en disco, tareas programadas y colores y marca del panel.',
                 secciones: [
                     { id: 'salud', etiqueta: 'Salud del sistema', descripcion: 'Estado del servidor, la base, Redis, colas, RADIUS, routers, respaldos y recursos.', icono: 'i-lucide-heart-pulse', ruta: '/sistema/salud', permiso: 'sistema.ver_salud' },
                     { id: 'registro', etiqueta: 'Registro del sistema', descripcion: 'Errores y avisos recientes de la API, la red, RADIUS, CoA, colas y contabilidad.', icono: 'i-lucide-scroll', ruta: '/sistema/registro', permiso: 'sistema.ver_registro' },
                     { id: 'almacenamiento', etiqueta: 'Almacenamiento', descripcion: 'Qué ocupa espacio: disco, archivos por tipo, base de datos y Redis.', icono: 'i-lucide-hard-drive', ruta: '/sistema/almacenamiento', permiso: 'sistema.ver_almacenamiento' },
+                    { id: 'tareas', etiqueta: 'Tareas programadas', descripcion: 'Las tareas automáticas: cuándo corrieron, cuándo corren, cuáles se atrasaron y ejecutarlas ahora.', icono: 'i-lucide-calendar-clock', ruta: '/sistema/tareas', permiso: 'sistema.ver_crons' },
                     { id: 'config-reportes', etiqueta: 'Ajustes de reportes', descripcion: 'Cuándo un servicio cuenta como baja y a qué correos externos van los envíos programados.', icono: 'i-lucide-chart-pie', ruta: '/configuracion/reportes', permiso: 'reportes.ver' },
                     { id: 'apariencia', etiqueta: 'Apariencia', descripcion: 'Color del panel y del portal, modo claro u oscuro, marca y logo y fondo del inicio de sesión.', icono: 'i-lucide-palette', ruta: '/configuracion/apariencia', permiso: 'apariencia.ver' },
                 ],

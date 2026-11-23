@@ -32089,6 +32089,122 @@
         "x-implementado": true
       }
     },
+    "/api/v1/incidentes-red/{incidenteId}/afectados": {
+      "get": {
+        "operationId": "incidentesRedAfectados",
+        "summary": "Servicios afectados por el incidente, con cliente, plan y conexión (tablero)",
+        "description": "Por cursor (`servicio_id` ascendente, `limit` hasta 200): código, cliente, plan, empresa y si está conectado ahora (`conectado_desde`) o desde cuándo está caído (`desconectado_desde`). Filtra por la empresa activa (o `empresas=todas` con alcance global) y por el alcance del usuario (router o zona). `total` cuenta con el mismo filtro que las filas. 404 si el incidente no tiene servicios de esas empresas. Para Iris sigue `GET …/servicios` (solo ids).",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incidenteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de afectados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaAfectadosIncidente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso incidentes_red.leer",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "incidentes_red.leer",
+        "x-implementado": true
+      }
+    },
     "/api/v1/incidentes-red/{incidenteId}/cerrar": {
       "post": {
         "operationId": "incidentesRedCerrar",
@@ -32218,7 +32334,7 @@
       "get": {
         "operationId": "incidentesRedServicios",
         "summary": "Servicios afectados por el incidente (solo ids, por páginas)",
-        "description": "Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera del alcance.",
+        "description": "Contrato Iris 0.13.0: los eventos traen hasta 5000 ids; el resto se pide aquí. `{ data: [servicio_id…], nextCursor }`, `limit` hasta 1000, `empresa_id` opcional. 404 si el incidente o la empresa están fuera del alcance. Cada lectura queda auditada (`incidentes_red.leer`), también el 404.",
         "tags": [
           "red"
         ],
@@ -71140,7 +71256,7 @@
       "post": {
         "operationId": "portalSoporteAbrirTicket",
         "summary": "El cliente abre un ticket de soporte en Iris",
-        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. `multipart/form-data`: los campos y hasta 3 `archivos` (JPEG, PNG, WebP, HEIC o PDF por el contenido, 10 MB cada uno; 413 `tamano_excedido`, 422 `mime_no_permitido` o `demasiados_adjuntos`). Con sesión `ip`, sin adjuntos (422 `adjuntos_no_permitidos`) y solo con el servicio de la sesión. Acción `portal.abrir_ticket` (actor cliente, canal portal). Con `contacto_id` (A46) reporta la falla de un servicio que tiene a cargo: exige sesión `documento`, `servicio_id` y el permiso `reportar` (403 `permiso_de_contacto`; 404 si no está a su cargo).",
+        "description": "Requiere la sesión del portal (401 sin ella). Argos llama a Iris servidor a servidor con su `token_portal`; `cliente_id` y `X-Iris-Empresa` salen de la sesión (la empresa pedida solo vale si es la de un servicio del cliente). Con Iris apagado, anterior a 0.9.0, sin token o sin respuesta: 503 `soporte_no_disponible`. Los errores de Iris salen con su código (§4.3) y un texto para el cliente; los 429 llevan `Retry-After`. `Idempotency-Key` obligatoria: un UUID que el portal genera por envío del formulario y repite en cada reintento (Argos lo manda a Iris como `argos:portal:<operacion>:<uuid>`); otro formato: 400. `multipart/form-data`: los campos y hasta 3 `archivos` (JPEG, PNG o PDF por el contenido, 10 MB cada uno; WebP y HEIC no, contrato 0.14.2; 413 `tamano_excedido`, 422 `mime_no_permitido` o `demasiados_adjuntos`). Con sesión `ip`, sin adjuntos (422 `adjuntos_no_permitidos`) y solo con el servicio de la sesión. Acción `portal.abrir_ticket` (actor cliente, canal portal). Con `contacto_id` (A46) reporta la falla de un servicio que tiene a cargo: exige sesión `documento`, `servicio_id` y el permiso `reportar` (403 `permiso_de_contacto`; 404 si no está a su cargo).",
         "tags": [
           "portal"
         ],
@@ -74867,6 +74983,7 @@
       "get": {
         "operationId": "promocionesVelocidadListar",
         "summary": "Promociones de velocidad (decisión del PM 18)",
+        "description": "Por cursor (`id` descendente). `vigencia` filtra por pestaña: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), `terminada` (fin ≤ ahora), las tres solo activas, o `cancelada`; `inicio` y `fin` son instantes y se comparan en UTC. Cada fila trae `vigencia`, `tramo_actual` y `proximo_tramo` (la franja diaria en hora de Guatemala). `conteos` trae las cuatro pestañas con los mismos filtros de empresa y `q`, sin `estado` ni `vigencia`.",
         "tags": [
           "promociones"
         ],
@@ -74913,6 +75030,32 @@
             }
           },
           {
+            "name": "vigencia",
+            "in": "query",
+            "required": false,
+            "description": "Pestaña del tablero: `vigente` (inicio ≤ ahora < fin), `programada` (inicio > ahora), `terminada` (fin ≤ ahora) o `cancelada`; las tres primeras solo de las activas",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vigente",
+                "programada",
+                "terminada",
+                "cancelada"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Busca en nombre y descripción",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
             "name": "empresas",
             "in": "query",
             "required": false,
@@ -74931,25 +75074,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "data",
-                    "nextCursor"
-                  ],
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/PromocionVelocidad"
-                      }
-                    },
-                    "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  }
+                  "$ref": "#/components/schemas/PaginaPromocionesVelocidad"
                 }
               }
             }
@@ -82986,8 +83111,10 @@
                         "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sistema.ejecutar_cron",
                         "sistema.recalcular_almacenamiento",
                         "sistema.ver_almacenamiento",
+                        "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
                         "sorteos.ejecutar",
@@ -83454,8 +83581,10 @@
                         "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sistema.ejecutar_cron",
                         "sistema.recalcular_almacenamiento",
                         "sistema.ver_almacenamiento",
+                        "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
                         "sorteos.ejecutar",
@@ -98068,6 +98197,268 @@
         "x-implementado": true
       }
     },
+    "/api/v1/sistema/crons": {
+      "get": {
+        "operationId": "sistemaCrons",
+        "summary": "Tareas programadas: horario, última y próxima corrida, atrasos y quién las corre",
+        "description": "Todas las tareas del catálogo (`app/monitoreo/crons/catalogo.ts`) con su última corrida (`core.cron_corridas`, o `audit.acciones` antes de esta versión), la próxima (agenda de BullMQ o calculada del horario), si está atrasada (regla de `notificaciones.vigilar_crons`) y qué instancia tiene el lock. Solo lee; sin caché. Si Redis no responde, `avisos` lo dice y la próxima se calcula.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tareas programadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TareasProgramadas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_crons",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_crons",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/crons/{clave}/corridas": {
+      "get": {
+        "operationId": "sistemaCronCorridas",
+        "summary": "Historial de corridas de una tarea programada",
+        "description": "De la más nueva a la más vieja, paginado por cursor. Las corridas programadas seguidas sin cambios van agrupadas en una fila (`repeticiones`). Se guardan 90 días. 404 si la clave no existe.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z_]+\\.[a-z_:]+$",
+              "description": "Clave del cron (`billing.generar`)"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de corridas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorridasCronPagina"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_crons",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_crons",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/crons/{clave}/ejecutar": {
+      "post": {
+        "operationId": "sistemaEjecutarCron",
+        "summary": "Ejecutar ahora una tarea programada",
+        "description": "Encola el job en la cola del cron; lo corre el worker de su módulo con el mismo lock que la corrida programada. Responde 202 en cuanto queda encolada; la corrida aparece en su historial. 409 `en_curso` si ya se está ejecutando o hay otra ejecución esperando; 422 `no_manual` en los procesos continuos y `cron_apagado` si está apagada; 403 si faltan los permisos propios del cron.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z_]+\\.[a-z_:]+$",
+              "description": "Clave del cron (`billing.generar`)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Ejecución encolada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EjecucionCron"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ejecutar_cron; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ejecutar_cron",
+        "x-implementado": true
+      }
+    },
     "/api/v1/sistema/registro": {
       "get": {
         "operationId": "sistemaRegistro",
@@ -99450,8 +99841,10 @@
                             "servidores_pppoe.eliminar",
                             "sesiones.desconectar",
                             "sesiones.ver",
+                            "sistema.ejecutar_cron",
                             "sistema.recalcular_almacenamiento",
                             "sistema.ver_almacenamiento",
+                            "sistema.ver_crons",
                             "sistema.ver_registro",
                             "sistema.ver_salud",
                             "sorteos.ejecutar",
@@ -114491,6 +114884,117 @@
           }
         }
       },
+      "CorridaCron": {
+        "type": "object",
+        "required": [
+          "id",
+          "clave",
+          "origen",
+          "estado",
+          "inicio",
+          "primera",
+          "fin",
+          "duracion_ms",
+          "repeticiones",
+          "resumen",
+          "error",
+          "instancia",
+          "usuario_id",
+          "fuente"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null si sale de la auditoría o del outbox"
+          },
+          "clave": {
+            "type": "string"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "programado",
+              "manual"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "ok",
+              "sin_cambios",
+              "error",
+              "omitido"
+            ],
+            "description": "`omitido`: no corrió porque otra instancia tenía el lock (o no aplicaba). Una corrida que quedó `en_curso` en una instancia que se detuvo sale `error`"
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inicio de la corrida (la última si se agruparon varias)"
+          },
+          "primera": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inicio de la primera corrida agrupada"
+          },
+          "fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "duracion_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "repeticiones": {
+            "type": "integer",
+            "description": "Corridas programadas seguidas sin cambios agrupadas en esta fila"
+          },
+          "resumen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Frase corta: «24 facturas emitidas»"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Mensaje del error, sin secretos"
+          },
+          "instancia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Instancia que la corrió (`ARGOSISP_INSTANCIA` o host:pid)"
+          },
+          "usuario_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Quién pidió «Ejecutar ahora»"
+          },
+          "fuente": {
+            "type": "string",
+            "enum": [
+              "corridas",
+              "auditoria"
+            ]
+          }
+        }
+      },
       "CorridaEnvioReporte": {
         "type": "object",
         "required": [
@@ -114591,6 +115095,27 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CorridasCronPagina": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorridaCron"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -118121,6 +118646,33 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EjecucionCron": {
+        "type": "object",
+        "required": [
+          "clave",
+          "job_id",
+          "estado",
+          "encolada_en"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "encolada"
+            ]
+          },
+          "encolada_en": {
             "type": "string",
             "format": "date-time"
           }
@@ -128278,8 +128830,10 @@
           "servidores_pppoe.eliminar",
           "sesiones.desconectar",
           "sesiones.ver",
+          "sistema.ejecutar_cron",
           "sistema.recalcular_almacenamiento",
           "sistema.ver_almacenamiento",
+          "sistema.ver_crons",
           "sistema.ver_registro",
           "sistema.ver_salud",
           "sorteos.ejecutar",
@@ -128638,8 +129192,10 @@
           "Eliminar servidores PPPoE sin servicios",
           "Desconectar sesiones PPPoE",
           "Ver sesiones PPPoE",
+          "Ejecutar ahora una tarea programada (respeta su lock; algunas piden además el permiso de lo que hacen)",
           "Recalcular el almacenamiento a pedido (solo lee y suma; no borra nada)",
           "Ver qué se almacena y cuánto espacio ocupa: carpetas de archivos, base de datos, Redis y discos",
+          "Ver las tareas programadas: horario, última y próxima corrida, atrasos, quién las corre e historial",
           "Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos",
           "Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor",
           "Ejecutar un sorteo y cerrar su acta (con checklist legal completo)",
@@ -129767,6 +130323,32 @@
           }
         }
       },
+      "PaginaAfectadosIncidente": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor",
+          "total"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicioAfectadoIncidente"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "description": "Afectados con el mismo filtro que las filas (empresa activa y alcance del usuario)"
+          }
+        }
+      },
       "PaginaCanjesLealtad": {
         "type": "object",
         "required": [
@@ -129853,6 +130435,52 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "PaginaPromocionesVelocidad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor",
+          "conteos"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromocionVelocidad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "conteos": {
+            "type": "object",
+            "required": [
+              "vigente",
+              "programada",
+              "terminada",
+              "cancelada"
+            ],
+            "properties": {
+              "vigente": {
+                "type": "integer"
+              },
+              "programada": {
+                "type": "integer"
+              },
+              "terminada": {
+                "type": "integer"
+              },
+              "cancelada": {
+                "type": "integer"
+              }
+            },
+            "description": "Promociones por pestaña con los mismos filtros de empresa y `q` (sin `estado` ni `vigencia`)"
           }
         }
       },
@@ -136609,6 +137237,9 @@
           "dias_semana",
           "precio",
           "estado",
+          "vigencia",
+          "tramo_actual",
+          "proximo_tramo",
           "motivo_cancelacion",
           "cancelada_en",
           "creado_por",
@@ -136720,6 +137351,58 @@
               "activa",
               "cancelada"
             ]
+          },
+          "vigencia": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "programada",
+              "terminada",
+              "cancelada"
+            ],
+            "description": "Pestaña del tablero, con `inicio` y `fin` comparados con ahora (UTC)"
+          },
+          "tramo_actual": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "inicio",
+              "fin"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "fin": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Tramo en curso según el horario (hora de Guatemala); null fuera de horario"
+          },
+          "proximo_tramo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "inicio",
+              "fin"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "fin": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Siguiente tramo que empieza después de ahora; null si no hay otro"
           },
           "motivo_cancelacion": {
             "type": [
@@ -145748,8 +146431,10 @@
               "servidores_pppoe.eliminar",
               "sesiones.desconectar",
               "sesiones.ver",
+              "sistema.ejecutar_cron",
               "sistema.recalcular_almacenamiento",
               "sistema.ver_almacenamiento",
+              "sistema.ver_crons",
               "sistema.ver_registro",
               "sistema.ver_salud",
               "sorteos.ejecutar",
@@ -147120,6 +147805,98 @@
               "$ref": "#/components/schemas/Advertencia"
             },
             "description": "Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)"
+          }
+        }
+      },
+      "ServicioAfectadoIncidente": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "codigo",
+          "nombre",
+          "estado",
+          "empresa_id",
+          "empresa_nombre",
+          "cliente_id",
+          "cliente_nombre",
+          "plan_id",
+          "plan_nombre",
+          "router_id",
+          "conectado",
+          "conectado_desde",
+          "desconectado_desde"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "codigo": {
+            "type": "string",
+            "description": "S-000412"
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoServicio"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_nombre": {
+            "type": "string"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "router_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "conectado": {
+            "type": "boolean",
+            "description": "Tiene una sesión abierta ahora"
+          },
+          "conectado_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Inicio de la sesión abierta («Volvió 06:01»)"
+          },
+          "desconectado_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Fin de su última sesión si no está conectado («Caído desde 05:12»); null sin sesiones"
           }
         }
       },
@@ -149224,6 +150001,270 @@
                 }
               }
             }
+          }
+        }
+      },
+      "TareaProgramada": {
+        "type": "object",
+        "required": [
+          "clave",
+          "nombre",
+          "modulo",
+          "modulo_nombre",
+          "descripcion",
+          "proceso",
+          "horario",
+          "activo",
+          "manual",
+          "permisos",
+          "estado",
+          "ultima",
+          "ultima_correcta",
+          "proxima",
+          "proxima_fuente",
+          "atrasada",
+          "en_curso",
+          "lock",
+          "nota"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "modulo": {
+            "type": "string"
+          },
+          "modulo_nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "proceso": {
+            "type": "string",
+            "description": "Proceso que la corre (`node ace <proceso>`)"
+          },
+          "horario": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "cada_segundos",
+              "hora",
+              "dia",
+              "zona",
+              "texto"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "cada",
+                  "diario",
+                  "mensual",
+                  "continuo"
+                ]
+              },
+              "cada_segundos": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "hora": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "HH:mm en la zona de `zona`"
+              },
+              "dia": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Día del mes (mensual)"
+              },
+              "zona": {
+                "type": "string"
+              },
+              "texto": {
+                "type": "string",
+                "description": "Para mostrar tal cual: «Cada 5 min», «Todos los días a las 02:15»"
+              }
+            }
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false si está apagada por configuración"
+          },
+          "manual": {
+            "type": "boolean",
+            "description": "Se puede ejecutar a mano"
+          },
+          "permisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permisos para ejecutarla a mano"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "error",
+              "atrasada",
+              "ok",
+              "sin_cambios",
+              "sin_datos",
+              "apagada"
+            ]
+          },
+          "ultima": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorridaCron"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ultima_correcta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "proxima": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "proxima_fuente": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "bullmq",
+              "calculada",
+              null
+            ],
+            "description": "`bullmq`: la agenda real del job scheduler; `calculada`: del horario (Redis no respondió o no está agendada)"
+          },
+          "atrasada": {
+            "type": "boolean"
+          },
+          "en_curso": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "corrida_id",
+              "desde",
+              "instancia",
+              "origen"
+            ],
+            "properties": {
+              "corrida_id": {
+                "type": "integer"
+              },
+              "desde": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "instancia": {
+                "type": "string"
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "programado",
+                  "manual"
+                ]
+              }
+            }
+          },
+          "lock": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "tomado",
+              "dueno",
+              "instancia"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "postgres",
+                  "redis",
+                  "cola"
+                ]
+              },
+              "tomado": {
+                "type": "boolean"
+              },
+              "dueno": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "instancia": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TareasProgramadas": {
+        "type": "object",
+        "required": [
+          "data",
+          "avisos",
+          "generado_en"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TareaProgramada"
+            }
+          },
+          "avisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Fuentes que no se pudieron leer (Redis, locks)"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -17,6 +17,19 @@ import { clasificarIp, identificarOrigen } from '#portal/identificacion'
 
 const QUIEN_SOY = '/api/v1/portal/quien-soy'
 
+let secuenciaIp = 0
+
+/**
+ * IP de cliente única y exclusiva de esta suite (100.127.x.y). Otras suites del portal abren
+ * sesiones en 198.51.100.x con un contador propio; si una deja abierta la misma IP, la IP queda
+ * en dos servicios y la identificación por IP falla según el orden de las suites.
+ */
+function ipPropia(): string {
+    secuenciaIp += 1
+    const n = (process.pid * 97 + secuenciaIp) % (256 * 254)
+    return `100.127.${Math.floor(n / 254)}.${(n % 254) + 1}`
+}
+
 async function conCodigo(servicioId: number, datos: { cerrado_hace_min?: number } = {}) {
     const codigo = generarCodigoCorte()
     const servicio = await db
@@ -161,9 +174,10 @@ test.group('Portal: identificación por código o IP (corte)', (group) => {
         assert.containsSubset(r2.body(), { identificado: false, motivo: 'codigo_vencido' })
 
         // Código vencido pero la IP sí es del cliente (sin NAT): identifica por la IP
-        await crearSesion(otro, { ipv4: '198.51.100.31' })
+        const ipOtro = ipPropia()
+        await crearSesion(otro, { ipv4: ipOtro })
         const r3 = await estado(
-            client.get(QUIEN_SOY).header('X-Forwarded-For', '198.51.100.31').header('X-Argos-Corte', viejo),
+            client.get(QUIEN_SOY).header('X-Forwarded-For', ipOtro).header('X-Argos-Corte', viejo),
             200,
         )
         assert.containsSubset(r3.body(), { identificado: true, identificado_por: 'ip' })

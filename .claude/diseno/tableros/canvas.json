@@ -839,6 +839,14 @@
       "x": 1520,
       "y": 8900
     },
+    "SistemaCrons.dc.html": {
+      "h": 1000,
+      "page": "novedades",
+      "title": "Sistema · Tareas programadas (escritorio y teléfono)",
+      "w": 2300,
+      "x": 3040,
+      "y": 1760
+    },
     "PortalFacturas.dc.html": {
       "x": 0,
       "y": 0,
@@ -1155,6 +1163,7 @@
     "OperBitacora.dc.html",
     "OperLealtad.dc.html",
     "OperSorteo.dc.html",
+    "SistemaCrons.dc.html",
     "PortalFacturas.dc.html",
     "PortalSoporte.dc.html",
     "PortalContactos.dc.html",
