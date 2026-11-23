@@ -8,6 +8,14 @@ import { alertasPanel } from '#billing/panel/panel'
 import { instalarPaquete, paqueteDePais } from '#fiscal/instalador'
 import { hoyFiscal } from '#fiscal/comun'
 import { datosFiscales, resolver } from '#fiscal/parametros'
+import EditarParametro from '#fiscal/actions/editar_parametro'
+import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
+import EmitirAlertasFiscales from '#fiscal/actions/emitir_alertas_fiscales'
+import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { eventos } from '#tests/fiscal/ayudas_fiscal'
 import type { ContextoAccion } from '#shared/contexto'
 
 /**
@@ -18,6 +26,51 @@ import type { ContextoAccion } from '#shared/contexto'
 
 function ctxEmpresa(empresaId: number): ContextoAccion {
     return { ...contextoPrueba(null), empresaId, empresasPermitidas: null, requestId: unico('req') }
+}
+
+/** Empresa en pequeño contribuyente con límite Q250 en 2026 y ventas por `precio` al `hoy` fijo. */
+async function pequenoContribuyente(ctx: ContextoAccion, empresaId: number, hoy: string, precio: string) {
+    await new CambiarRegimen().execute(
+        {
+            empresa_id: empresaId,
+            regimen: 'pequeno_contribuyente',
+            vigente_desde: '2014-01-01',
+            motivo: 'Inscripción (prueba)',
+        },
+        ctx,
+    )
+    await new EditarParametro().execute(
+        {
+            empresa_id: empresaId,
+            clave: 'pc_limite_anual',
+            valor: '250.00',
+            vigente_desde: '2026-01-01',
+            motivo: 'Límite bajo para la prueba',
+        },
+        ctx,
+    )
+    await vender(empresaId, hoy, precio)
+}
+
+async function vender(empresaId: number, hoy: string, precio: string) {
+    const s = await servicioFacturado(empresaId, '2026-10-01', { precio, instalacion: '2026-10-01' })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        hoy,
+    )
+}
+
+async function alertaPc(empresaId: number, hoy: string) {
+    const r = await alertasPanel({
+        empresas: [empresaId],
+        permisos: new Set(['fiscal.ver']),
+        ahora: new Date(`${hoy}T18:00:00Z`),
+    })
+    const fila = r.empresas[0]!
+    return {
+        fila,
+        alerta: fila.alertas.find((a) => a.tipo === 'limite_pequeno_contribuyente') ?? null,
+    }
 }
 
 async function empresaGt() {
@@ -65,10 +118,11 @@ test.group('billing · aviso de pequeño contribuyente (decisión 12)', (group) 
         assert.equal(err.codigo, 'localizacion_no_instalada')
     })
 
-    test('apagar el aviso: diff, evento y la alerta deja de revisarse (ni alerta ni error)', async ({
+    test('apagar el aviso: diff, evento; la revisión del límite que falla sigue en errores', async ({
         assert,
     }) => {
-        // sin localización fiscal la revisión del límite va como error: apagada, ya no
+        // sin localización fiscal la revisión del límite va como error: apagado también (el 100 % es
+        // obligatorio y no se sabe si llegó)
         const E = await crearEmpresaFila()
         const antes = await alertasPanel({ empresas: [E], permisos: new Set(['fiscal.ver']) })
         assert.include(
@@ -97,10 +151,12 @@ test.group('billing · aviso de pequeño contribuyente (decisión 12)', (group) 
         const despues = await alertasPanel({ empresas: [E], permisos: new Set(['fiscal.ver']) })
         const fila = despues.empresas[0]!
         assert.deepEqual(fila.apagadas, ['limite_pequeno_contribuyente'])
-        assert.notInclude(
+        assert.include(
             fila.errores.map((x) => x.tipo),
             'limite_pequeno_contribuyente',
+            'errores visibles: apagado no calla que no se pudo revisar',
         )
+        assert.lengthOf(fila.alertas, 0)
         assert.include(
             fila.errores.map((x) => x.tipo),
             'vencimientos_fiscales',
@@ -252,5 +308,91 @@ test.group('billing · aviso de pequeño contribuyente (decisión 12)', (group) 
             aviso_pc_umbrales_nivel: 'empresa',
             version: 1,
         })
+    })
+
+    test('apagado: 80 y 95 % no salen (ni evento ni alerta); el 100 % sale siempre (evento y alerta)', async ({
+        assert,
+    }) => {
+        // día fijo, no el real: las ventas se fechan con el reloj real y en enero ya serían de otro año
+        const hoy = '2026-10-20'
+        const anio = 2026
+        const e = await prepararEmpresasGt()
+        await pequenoContribuyente(e.ctx, e.B, hoy, '240.00')
+        await new ConfigurarPanelFinanciero().execute({ aviso_pc_activo: false }, ctxEmpresa(e.B))
+
+        // 96 % con el aviso apagado: ni fiscal.limite_pc ni alerta en el panel
+        await new EmitirAlertasFiscales().execute({ empresa_id: e.B, hoy }, e.ctx)
+        assert.lengthOf(await eventos('fiscal.limite_pc', 'empresa_id', e.B), 0)
+        assert.lengthOf(await db.from('fiscal.alertas').where({ empresa_id: e.B, tipo: 'limite_pc' }), 0)
+        const antes = await alertaPc(e.B, hoy)
+        assert.deepEqual(antes.fila.apagadas, ['limite_pequeno_contribuyente'])
+        assert.isNull(antes.alerta)
+        assert.notInclude(
+            antes.fila.errores.map((x) => x.tipo),
+            'limite_pequeno_contribuyente',
+        )
+
+        // 104 %: superó el límite, sale aunque esté apagado (una sola vez)
+        await vender(e.B, hoy, '20.00')
+        const r = await new EmitirAlertasFiscales().execute({ empresa_id: e.B, hoy }, e.ctx)
+        assert.equal(r.limite_pc, 1)
+        assert.deepEqual(await eventos('fiscal.limite_pc', 'empresa_id', e.B), [
+            { empresa_id: e.B, umbral_pct: '100.00', acumulado: '260.00', limite: '250.00', anio },
+        ])
+        const repetida = await new EmitirAlertasFiscales().execute({ empresa_id: e.B, hoy }, e.ctx)
+        assert.equal(repetida.limite_pc, 0)
+        const despues = await alertaPc(e.B, hoy)
+        assert.deepEqual(despues.fila.apagadas, ['limite_pequeno_contribuyente'])
+        assert.isNotNull(despues.alerta)
+        assert.equal(despues.alerta!.nivel, 'critico')
+        assert.equal(despues.alerta!.titulo, 'Superó el límite anual del pequeño contribuyente')
+        assert.deepInclude(despues.alerta!.datos, { aviso_apagado: true, supera_limite: true })
+
+        // volver a encenderlo no repite el 100 % ni emite los umbrales menores ya superados
+        await new ConfigurarPanelFinanciero().execute({ aviso_pc_activo: true }, ctxEmpresa(e.B))
+        await new EmitirAlertasFiscales().execute({ empresa_id: e.B, hoy }, e.ctx)
+        assert.lengthOf(await eventos('fiscal.limite_pc', 'empresa_id', e.B), 1)
+        await afirmarLibro(assert, [e.B])
+    })
+
+    test('encendido: sin cambios; el 100 % sale aunque pc_alertas no lo tenga', async ({ assert }) => {
+        const hoy = '2026-10-20'
+        const anio = 2026
+        const e = await prepararEmpresasGt()
+        await pequenoContribuyente(e.ctx, e.C, hoy, '240.00')
+        await new EditarParametro().execute(
+            {
+                empresa_id: e.C,
+                clave: 'pc_alertas',
+                valor: ['80.00', '95.00'],
+                vigente_desde: '2026-01-01',
+                motivo: 'Sin el 100 % (prueba)',
+            },
+            e.ctx,
+        )
+
+        await new EmitirAlertasFiscales().execute({ empresa_id: e.C, hoy }, e.ctx)
+        assert.deepEqual(await eventos('fiscal.limite_pc', 'empresa_id', e.C), [
+            { empresa_id: e.C, umbral_pct: '95.00', acumulado: '240.00', limite: '250.00', anio },
+        ])
+        const al96 = await alertaPc(e.C, hoy)
+        assert.deepEqual(al96.fila.apagadas, [])
+        assert.equal(al96.alerta?.nivel, 'critico')
+        assert.equal(al96.alerta?.titulo, 'Lleva el 96.00 % del límite anual del pequeño contribuyente')
+        assert.deepInclude(al96.alerta!.datos, { aviso_apagado: false, umbral_alcanzado: '95.00' })
+
+        await vender(e.C, hoy, '20.00')
+        await new EmitirAlertasFiscales().execute({ empresa_id: e.C, hoy }, e.ctx)
+        const limites = await eventos('fiscal.limite_pc', 'empresa_id', e.C)
+        assert.deepEqual(
+            limites.map((p) => [p.umbral_pct, p.acumulado]),
+            [
+                ['95.00', '240.00'],
+                ['100.00', '260.00'],
+            ],
+        )
+        const al104 = await alertaPc(e.C, hoy)
+        assert.equal(al104.alerta?.titulo, 'Superó el límite anual del pequeño contribuyente')
+        await afirmarLibro(assert, [e.C])
     })
 })
