@@ -677,12 +677,15 @@ defineExpose({ comprobante })
                 </template>
             </div>
 
-            <!-- Decisión: en escritorio al pie de la tarjeta; en el teléfono fija abajo. -->
+            <!--
+                Decisión: en escritorio al pie de la tarjeta; en el teléfono es la acción fija, en su isla
+                justo encima de la navegación (`.panel-barra-accion`, tablero MarcoMovil).
+            -->
             <footer
                 v-if="pendiente && (puede('comprobantes.aprobar') || puede('comprobantes.rechazar'))"
                 class="flex items-center gap-3"
                 :class="movil
-                    ? 'fixed inset-x-0 bottom-0 z-20 border-t border-(--ax-borde) bg-(--ax-tarjeta) p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:static lg:rounded-2xl lg:border'
+                    ? 'panel-barra-accion lg:rounded-2xl lg:border lg:border-(--ax-borde) lg:p-3'
                     : 'border-t border-(--ax-borde) p-4'"
                 data-prueba="decision-comprobante"
             >
