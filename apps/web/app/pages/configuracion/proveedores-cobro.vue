@@ -30,6 +30,10 @@ const columnas: TableColumn<ProveedorCobro>[] = [
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
 ]
 
+const menuFila = useMenuFila<ProveedorCobro>(proveedor => (puede('cobros.configurar')
+    ? [{ etiqueta: 'Editar proveedor', icono: ICONOS.editar, alElegir: () => editar(proveedor) }]
+    : []))
+
 async function cargar() {
     cargando.value = true
     const resultado = await useProveedoresCobro().listar()
@@ -62,33 +66,33 @@ onMounted(cargar)
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="proveedores-cobro"
-        titulo="Proveedores de cobro"
-        icono="i-lucide-credit-card"
+        titulo="Facturación y cobro"
+        descripcion="Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos"
+        empresas
     >
-        <template #acciones>
-            <UButton
-                v-if="puede('cobros.configurar')"
-                label="Nuevo proveedor"
-                icon="i-lucide-plus"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nuevo proveedor"
-                data-prueba="nuevo-proveedor"
-                @click="nuevo"
-            />
-        </template>
-
         <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Los pagos por pasarela, agente o débito de un proveedor activo, desde su fecha de corte, entran a su cuenta puente por el bruto
-                y salen con la
-                <ULink
-                    :to="enlace('/cobros/por-liquidar')"
-                    class="underline"
-                >liquidación</ULink>
-                (banco por el neto y la comisión). Sin proveedor, el pago sigue contra el banco como antes.
-            </p>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <p class="text-sm text-muted">
+                    Los pagos por pasarela, agente o débito de un proveedor activo, desde su fecha de corte, entran a su cuenta puente por el bruto
+                    y salen con la
+                    <ULink
+                        :to="enlace('/cobros/por-liquidar')"
+                        class="underline"
+                    >liquidación</ULink>
+                    (banco por el neto y la comisión). Sin proveedor, el pago sigue contra el banco como antes.
+                </p>
+                <UButton
+                    v-if="puede('cobros.configurar')"
+                    label="Agregar proveedor"
+                    icon="i-lucide-plus"
+                    class="glow-brand shrink-0 self-start"
+                    aria-label="Nuevo proveedor"
+                    data-prueba="nuevo-proveedor"
+                    @click="nuevo"
+                />
+            </div>
 
             <ProblemaAlerta
                 v-if="problema"
@@ -96,64 +100,73 @@ onMounted(cargar)
                 :reintentar="cargar"
                 :reintentando="cargando"
             />
-            <UTable
+            <UContextMenu
                 v-else
-                :data="proveedores"
-                :columns="columnas"
-                :loading="cargando"
-                data-prueba="tabla-proveedores"
+                :items="menuFila.items.value"
             >
-                <template #nombre-cell="{ row }">
-                    <div class="flex min-w-0 items-center gap-2">
-                        <UIcon
-                            :name="METODOS_PROVEEDOR[row.original.metodo].icono"
-                            class="size-4 shrink-0 text-muted"
-                        />
-                        <div class="flex min-w-0 flex-col">
-                            <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
-                            <span class="text-xs text-muted">{{ METODOS_PROVEEDOR[row.original.metodo].etiqueta }} · {{ row.original.codigo }}</span>
-                            <span class="text-xs text-muted sm:hidden">{{ row.original.cuenta_codigo }} · desde {{ formatearFecha(row.original.desde) }}</span>
+                <UTable
+                    :data="proveedores"
+                    :columns="columnas"
+                    :loading="cargando"
+                    data-prueba="tabla-proveedores"
+                    class="-mx-4"
+                    @contextmenu="menuFila.alContextmenu"
+                >
+                    <template #nombre-cell="{ row }">
+                        <div class="flex min-w-0 items-center gap-2">
+                            <UIcon
+                                :name="METODOS_PROVEEDOR[row.original.metodo].icono"
+                                class="size-4 shrink-0 text-muted"
+                            />
+                            <div class="flex min-w-0 flex-col">
+                                <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
+                                <span class="text-xs text-muted">{{ METODOS_PROVEEDOR[row.original.metodo].etiqueta }} · {{ row.original.codigo }}</span>
+                                <span class="text-xs text-muted sm:hidden">{{ row.original.cuenta_codigo }} · desde {{ formatearFecha(row.original.desde) }}</span>
+                            </div>
                         </div>
-                    </div>
-                </template>
-                <template #cuenta_codigo-cell="{ row }">
-                    <span class="font-mono text-sm">{{ row.original.cuenta_codigo }}</span>
-                </template>
-                <template #cuenta_liquidacion_nombre-cell="{ row }">
-                    <span class="text-sm">{{ row.original.cuenta_liquidacion_nombre }}</span>
-                </template>
-                <template #desde-cell="{ row }">
-                    <span class="text-sm">{{ formatearFecha(row.original.desde) }}</span>
-                </template>
-                <template #activo-cell="{ row }">
-                    <UBadge
-                        :label="row.original.activo ? 'Activo' : 'Inactivo'"
-                        :color="row.original.activo ? 'success' : 'neutral'"
-                        :icon="row.original.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-pause'"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </template>
-                <template #acciones-cell="{ row }">
-                    <UButton
-                        v-if="puede('cobros.configurar')"
-                        icon="i-lucide-pencil"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        :aria-label="`Editar ${row.original.nombre}`"
-                        @click="editar(row.original)"
-                    />
-                </template>
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-credit-card"
-                        title="Sin proveedores de cobro"
-                        description="Mientras no haya uno, los pagos por pasarela, agente o débito se registran directo contra el banco."
-                        variant="naked"
-                    />
-                </template>
-            </UTable>
+                    </template>
+                    <template #cuenta_codigo-cell="{ row }">
+                        <span class="font-mono text-sm">{{ row.original.cuenta_codigo }}</span>
+                    </template>
+                    <template #cuenta_liquidacion_nombre-cell="{ row }">
+                        <span class="text-sm">{{ row.original.cuenta_liquidacion_nombre }}</span>
+                    </template>
+                    <template #desde-cell="{ row }">
+                        <span class="text-sm">{{ formatearFecha(row.original.desde) }}</span>
+                    </template>
+                    <template #activo-cell="{ row }">
+                        <UBadge
+                            :label="row.original.activo ? 'Activo' : 'Inactivo'"
+                            :color="row.original.activo ? 'success' : 'neutral'"
+                            :icon="row.original.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-pause'"
+                            variant="subtle"
+                            size="sm"
+                        />
+                    </template>
+                    <template #acciones-cell="{ row }">
+                        <UDropdownMenu
+                            v-if="puede('cobros.configurar')"
+                            :items="menuFila.itemsDe(row.original)"
+                        >
+                            <UButton
+                                icon="i-lucide-ellipsis"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                :aria-label="`Acciones de ${row.original.nombre}`"
+                            />
+                        </UDropdownMenu>
+                    </template>
+                    <template #empty>
+                        <UEmpty
+                            icon="i-lucide-credit-card"
+                            title="Sin proveedores de cobro"
+                            description="Mientras no haya uno, los pagos por pasarela, agente o débito se registran directo contra el banco."
+                            variant="naked"
+                        />
+                    </template>
+                </UTable>
+            </UContextMenu>
         </div>
 
         <ProveedorCobroModal
@@ -162,5 +175,5 @@ onMounted(cargar)
             :proveedor="editado"
             @hecho="alGuardar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
