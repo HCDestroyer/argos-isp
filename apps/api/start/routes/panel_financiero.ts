@@ -18,6 +18,7 @@ import {
     AjustesPanel,
     AlertasPanel,
     CorreoExterno,
+    CorreoExternoListado,
     CorridaEnvio,
     EnvioReporte,
     InicioRol,
@@ -132,6 +133,8 @@ const panel: Ruta[] = [
         ruta: '/panel-financiero/ajustes',
         operacion: 'panelFinancieroAjustes',
         resumen: 'Ajustes del panel financiero de la empresa activa',
+        descripcion:
+            'Días para contar una baja y el aviso de pequeño contribuyente (encendido, umbrales vigentes de pc_alertas, desde cuándo y si aplica al régimen).',
         etiqueta: 'reportes',
         permiso: 'panel_financiero.ver',
         respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesPanel },
@@ -145,15 +148,22 @@ const panel: Ruta[] = [
         metodo: 'put',
         ruta: '/panel-financiero/ajustes',
         operacion: 'panelFinancieroConfigurar',
-        resumen: 'Cambiar los ajustes del panel financiero (días de suspensión para contar una baja)',
+        resumen:
+            'Cambiar los ajustes del panel financiero (días para contar una baja y aviso de pequeño contribuyente)',
         etiqueta: 'reportes',
         permiso: 'panel_financiero.configurar',
         cuerpo: v.ajustesPanelValidator,
         versionada: true,
         idempotente: true,
-        descripcion: 'De la empresa activa (422 empresa_requerida sin ella). 409 si version cambió.',
+        descripcion:
+            'De la empresa activa (422 empresa_requerida sin ella). 409 si version cambió. Cada campo ausente queda igual. `aviso_pc_activo` apaga o enciende la alerta limite_pequeno_contribuyente del panel (decisión 12). `aviso_pc_umbrales` distintos de los vigentes agregan un valor del parámetro fiscal pc_alertas de la empresa vigente desde hoy (fiscal.editar_parametros anidada): 403 sin ese permiso, 422 localizacion_no_instalada, 409 vigencia_duplicada si ya se cambiaron hoy.',
         respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesPanel },
-        handler: (ctx, { cuerpo }) => new ConfigurarPanelFinanciero().execute(cuerpo, ctx.contextoAccion()),
+        handler: async (ctx, { cuerpo }) => {
+            const permisos = await permisosPeticion(ctx)
+            return new ConfigurarPanelFinanciero({
+                puedeEditarUmbrales: permisos.has('fiscal.editar_parametros'),
+            }).execute(cuerpo, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -435,9 +445,20 @@ const envios: Ruta[] = [
         respuesta: {
             status: 200,
             descripcion: 'Correos',
-            esquema: { type: 'object', properties: { data: lista(CorreoExterno) }, required: ['data'] },
+            esquema: {
+                type: 'object',
+                properties: { data: lista(CorreoExternoListado) },
+                required: ['data'],
+            },
         },
-        handler: (_ctx, { query }) => listarCorreosExternos(query.activo),
+        descripcion:
+            'Toda la lista aprobada (es de la instalación). Por correo, quién lo aprobó o retiró y cuántos envíos programados lo usan (`envios_programados`, activos y en pausa; `envios_activos`), contando solo los envíos de las empresas de la petición; los consolidados, solo con alcance global.',
+        handler: (ctx, { query }) =>
+            listarCorreosExternos(
+                query.activo,
+                empresasDeLaLista(ctx.empresa),
+                Boolean(ctx.empresa?.alcanceGlobal),
+            ),
     }),
     definirRuta({
         metodo: 'post',

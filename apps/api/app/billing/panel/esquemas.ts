@@ -159,6 +159,11 @@ export const AlertasPanel = definirEsquema(
                     description:
                         'Revisiones que no se pudieron hacer: su alerta no se sabe (nunca se da por buena)',
                 },
+                apagadas: {
+                    ...lista(enumerado(TIPOS_ALERTA)),
+                    description:
+                        'Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no se revisan, ni alerta ni error',
+                },
             }),
         ),
     }),
@@ -169,6 +174,26 @@ export const AjustesPanel = definirEsquema(
     objeto({
         empresa_id: id,
         dias_baja: { ...entero, description: 'Días de suspensión para contar una baja (60 de fábrica)' },
+        aviso_pc_activo: {
+            ...booleano,
+            description:
+                'Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica)',
+        },
+        aviso_pc_umbrales: {
+            ...nulable(lista({ type: 'string', pattern: '^\\d{1,3}\\.\\d{2}$' })),
+            description:
+                'Umbrales vigentes hoy (% del límite anual): el parámetro fiscal pc_alertas de la empresa (80, 95 y 100 de fábrica). null sin localización fiscal instalada',
+        },
+        aviso_pc_umbrales_desde: { ...nulable(fecha), description: 'Desde cuándo rigen esos umbrales' },
+        aviso_pc_umbrales_nivel: {
+            ...nulable(enumerado(['empresa', 'instalacion', 'global', 'paquete', 'derivado'])),
+            description: 'empresa = los cambió la empresa; paquete = valor de fábrica del país',
+        },
+        aviso_pc_aplica: {
+            ...booleano,
+            description:
+                'true si el régimen vigente hoy es pequeño contribuyente (con otro régimen el aviso no sale)',
+        },
         fabrica: { ...booleano, description: 'true si la empresa nunca los cambió' },
         version: entero,
     }),
@@ -250,6 +275,29 @@ export const CorreoExterno = definirEsquema(
         aprobado_en: instante,
         retirado_por: nulable(id),
         retirado_en: nulable(instante),
+        version: entero,
+    }),
+)
+
+export const CorreoExternoListado = definirEsquema(
+    'CorreoExternoReportesListado',
+    objeto({
+        id,
+        correo: texto,
+        nombre: texto,
+        activo: booleano,
+        aprobado_por: nulable(id),
+        aprobado_por_nombre: { ...nulable(texto), description: 'Nombre de quien lo aprobó' },
+        aprobado_en: instante,
+        retirado_por: nulable(id),
+        retirado_por_nombre: { ...nulable(texto), description: 'Nombre de quien lo retiró' },
+        retirado_en: nulable(instante),
+        envios_programados: {
+            ...entero,
+            description:
+                'Envíos programados (activos y en pausa) que lo tienen como destinatario, de las empresas de la petición (consolidados solo con alcance global)',
+        },
+        envios_activos: { ...entero, description: 'De esos, los activos (no en pausa)' },
         version: entero,
     }),
 )

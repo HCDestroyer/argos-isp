@@ -40,9 +40,36 @@ export const reporteIndicadoresValidator = vine.compile(
 
 export const ajustesPanelValidator = vine.compile(
     vine.object({
-        dias_baja: vine.number().withoutDecimals().range([1, 365]).meta({
-            description: 'Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica)',
+        dias_baja: vine.number().withoutDecimals().range([1, 365]).optional().meta({
+            description:
+                'Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica). Ausente = sin cambio',
         }),
+        aviso_pc_activo: vine.boolean().optional().meta({
+            description:
+                'Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Ausente = sin cambio',
+        }),
+        aviso_pc_umbrales: vine
+            .array(
+                vine
+                    .string()
+                    .trim()
+                    .regex(/^\d{1,3}(\.\d{1,2})?$/)
+                    .meta({ description: 'Porcentaje del límite anual, p. ej. "80.00"' }),
+            )
+            .minLength(1)
+            .maxLength(5)
+            .optional()
+            .meta({
+                description:
+                    'Umbrales del aviso (80 y 95 % de fábrica, más 100 %). Se guardan como valor nuevo del parámetro fiscal pc_alertas de la empresa, vigente desde hoy: exige además fiscal.editar_parametros si cambian (403). Ausente = sin cambio',
+            }),
+        motivo: vine
+            .string()
+            .trim()
+            .minLength(3)
+            .maxLength(500)
+            .optional()
+            .meta({ description: 'Motivo del cambio de umbrales en el historial del parámetro' }),
         version: versionEsperada(),
     }),
 )

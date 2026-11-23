@@ -23,6 +23,7 @@ import {
     EquipoServicio,
     Existencia,
     MovimientoInventario,
+    OrdenRetiroSolicitada,
     Producto,
     ProductosLote,
     TrasladoInventario,
@@ -37,6 +38,7 @@ import { equiposDelServicio, equiposPorRecuperar, unidadParaComodato } from '#in
 import AsignarComodato from '#inventario/actions/asignar_comodato'
 import DevolverComodato from '#inventario/actions/devolver_comodato'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
+import SolicitarOrdenRetiro from '#inventario/actions/solicitar_orden_retiro'
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
 import { alcanceGlobal, listarBodegas, verBodega } from '#inventario/bodegas'
 import { NoEncontrado, Prohibido, ValidacionFallida } from '#shared/errores'
@@ -627,6 +629,26 @@ const comodato: Ruta[] = [
                     iris_actor: irisActorDe(ctx),
                     idempotency_key: idempotenciaDe(ctx),
                 },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/equipos/:unidadId/orden-retiro',
+        operacion: 'serviciosSolicitarOrdenRetiro',
+        resumen: 'Pedir a Iris, a mano, la orden de retiro de un equipo por recuperar',
+        etiqueta: 'inventario',
+        permiso: 'inventario.solicitar_orden_retiro',
+        idempotente: true,
+        descripcion:
+            'Vuelve a emitir inventario.equipo_por_recuperar para la unidad (el webhook con que Argos pide la orden de retiro a Iris, contratos/iris.md §2.3; decisión 17). Iris no crea otra si ya hay una abierta para esa unidad. No cambia la unidad ni el libro. 409 unidad_no_por_recuperar; 422 iris_no_conectado (conector apagado, sin receptor o empresa fuera del alcance del usuario técnico Iris).',
+        respuesta: { status: 202, descripcion: 'Orden pedida a Iris', esquema: OrdenRetiroSolicitada },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new SolicitarOrdenRetiro().execute(
+                { servicio_id: id, unidad_id: Number(params.unidadId) },
                 ctx.contextoAccion(),
             )
         },

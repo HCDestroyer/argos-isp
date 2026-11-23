@@ -62018,6 +62018,7 @@
       "get": {
         "operationId": "panelFinancieroAjustes",
         "summary": "Ajustes del panel financiero de la empresa activa",
+        "description": "Días para contar una baja y el aviso de pequeño contribuyente (encendido, umbrales vigentes de pc_alertas, desde cuándo y si aplica al régimen).",
         "tags": [
           "reportes"
         ],
@@ -62066,8 +62067,8 @@
       },
       "put": {
         "operationId": "panelFinancieroConfigurar",
-        "summary": "Cambiar los ajustes del panel financiero (días de suspensión para contar una baja)",
-        "description": "De la empresa activa (422 empresa_requerida sin ella). 409 si version cambió.",
+        "summary": "Cambiar los ajustes del panel financiero (días para contar una baja y aviso de pequeño contribuyente)",
+        "description": "De la empresa activa (422 empresa_requerida sin ella). 409 si version cambió. Cada campo ausente queda igual. `aviso_pc_activo` apaga o enciende la alerta limite_pequeno_contribuyente del panel (decisión 12). `aviso_pc_umbrales` distintos de los vigentes agregan un valor del parámetro fiscal pc_alertas de la empresa vigente desde hoy (fiscal.editar_parametros anidada): 403 sin ese permiso, 422 localizacion_no_instalada, 409 vigencia_duplicada si ya se cambiaron hoy.",
         "tags": [
           "reportes"
         ],
@@ -62103,7 +62104,28 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 365,
-                    "description": "Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica)"
+                    "description": "Días de suspensión tras los que un servicio cuenta como baja (60 de fábrica). Ausente = sin cambio"
+                  },
+                  "aviso_pc_activo": {
+                    "description": "Aviso de pequeño contribuyente en el panel del dueño (decisión 12, encendido de fábrica). Ausente = sin cambio",
+                    "type": "boolean"
+                  },
+                  "aviso_pc_umbrales": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^\\d{1,3}(\\.\\d{1,2})?$",
+                      "description": "Porcentaje del límite anual, p. ej. \"80.00\""
+                    },
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "description": "Umbrales del aviso (80 y 95 % de fábrica, más 100 %). Se guardan como valor nuevo del parámetro fiscal pc_alertas de la empresa, vigente desde hoy: exige además fiscal.editar_parametros si cambian (403). Ausente = sin cambio"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500,
+                    "description": "Motivo del cambio de umbrales en el historial del parámetro"
                   },
                   "version": {
                     "type": "integer",
@@ -62112,7 +62134,6 @@
                   }
                 },
                 "required": [
-                  "dias_baja",
                   "version"
                 ],
                 "additionalProperties": false
@@ -79607,6 +79628,7 @@
       "get": {
         "operationId": "reportesCorreosExternos",
         "summary": "Correos externos aprobados por el admin para recibir reportes contables",
+        "description": "Toda la lista aprobada (es de la instalación). Por correo, quién lo aprobó o retiró y cuántos envíos programados lo usan (`envios_programados`, activos y en pausa; `envios_activos`), contando solo los envíos de las empresas de la petición; los consolidados, solo con alcance global.",
         "tags": [
           "reportes"
         ],
@@ -79649,7 +79671,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/CorreoExternoReportes"
+                        "$ref": "#/components/schemas/CorreoExternoReportesListado"
                       }
                     }
                   },
@@ -82956,6 +82978,7 @@
                         "inventario.resolver_garantia",
                         "inventario.sincronizar_cuadrilla",
                         "inventario.sincronizar_vinculo_tecnico",
+                        "inventario.solicitar_orden_retiro",
                         "inventario.trasladar",
                         "inventario.ver",
                         "inventario.ver_unidad",
@@ -83426,6 +83449,7 @@
                         "inventario.resolver_garantia",
                         "inventario.sincronizar_cuadrilla",
                         "inventario.sincronizar_vinculo_tecnico",
+                        "inventario.solicitar_orden_retiro",
                         "inventario.trasladar",
                         "inventario.ver",
                         "inventario.ver_unidad",
@@ -94331,6 +94355,119 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/equipos/{unidadId}/orden-retiro": {
+      "post": {
+        "operationId": "serviciosSolicitarOrdenRetiro",
+        "summary": "Pedir a Iris, a mano, la orden de retiro de un equipo por recuperar",
+        "description": "Vuelve a emitir inventario.equipo_por_recuperar para la unidad (el webhook con que Argos pide la orden de retiro a Iris, contratos/iris.md §2.3; decisión 17). Iris no crea otra si ya hay una abierta para esa unidad. No cambia la unidad ni el libro. 409 unidad_no_por_recuperar; 422 iris_no_conectado (conector apagado, sin receptor o empresa fuera del alcance del usuario técnico Iris).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "unidadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Orden pedida a Iris",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrdenRetiroSolicitada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.solicitar_orden_retiro; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.solicitar_orden_retiro",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/equipos/{unidadId}/perdida": {
       "post": {
         "operationId": "serviciosPerdidaEquipo",
@@ -99686,6 +99823,7 @@
                             "inventario.resolver_garantia",
                             "inventario.sincronizar_cuadrilla",
                             "inventario.sincronizar_vinculo_tecnico",
+                            "inventario.solicitar_orden_retiro",
                             "inventario.trasladar",
                             "inventario.ver",
                             "inventario.ver_unidad",
@@ -102747,6 +102885,11 @@
         "required": [
           "empresa_id",
           "dias_baja",
+          "aviso_pc_activo",
+          "aviso_pc_umbrales",
+          "aviso_pc_umbrales_desde",
+          "aviso_pc_umbrales_nivel",
+          "aviso_pc_aplica",
           "fabrica",
           "version"
         ],
@@ -102758,6 +102901,47 @@
           "dias_baja": {
             "type": "integer",
             "description": "Días de suspensión para contar una baja (60 de fábrica)"
+          },
+          "aviso_pc_activo": {
+            "type": "boolean",
+            "description": "Aviso de pequeño contribuyente en el panel del dueño (decisión 12; encendido de fábrica)"
+          },
+          "aviso_pc_umbrales": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{1,3}\\.\\d{2}$"
+            },
+            "description": "Umbrales vigentes hoy (% del límite anual): el parámetro fiscal pc_alertas de la empresa (80, 95 y 100 de fábrica). null sin localización fiscal instalada"
+          },
+          "aviso_pc_umbrales_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Desde cuándo rigen esos umbrales"
+          },
+          "aviso_pc_umbrales_nivel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "empresa",
+              "instalacion",
+              "global",
+              "paquete",
+              "derivado"
+            ],
+            "description": "empresa = los cambió la empresa; paquete = valor de fábrica del país"
+          },
+          "aviso_pc_aplica": {
+            "type": "boolean",
+            "description": "true si el régimen vigente hoy es pequeño contribuyente (con otro régimen el aviso no sale)"
           },
           "fabrica": {
             "type": "boolean",
@@ -102846,7 +103030,8 @@
                 "empresa_id",
                 "empresa",
                 "alertas",
-                "errores"
+                "errores",
+                "apagadas"
               ],
               "properties": {
                 "empresa_id": {
@@ -102925,6 +103110,21 @@
                     }
                   },
                   "description": "Revisiones que no se pudieron hacer: su alerta no se sabe (nunca se da por buena)"
+                },
+                "apagadas": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "integridad_libro",
+                      "cierres_pendientes",
+                      "contingencia_fel",
+                      "fel_desactivada",
+                      "vencimientos_fiscales",
+                      "limite_pequeno_contribuyente"
+                    ]
+                  },
+                  "description": "Avisos que la empresa apagó en sus ajustes (hoy limite_pequeno_contribuyente, aviso_pc_activo): no se revisan, ni alerta ni error"
                 }
               }
             }
@@ -114878,6 +115078,89 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
+      "CorreoExternoReportesListado": {
+        "type": "object",
+        "required": [
+          "id",
+          "correo",
+          "nombre",
+          "activo",
+          "aprobado_por",
+          "aprobado_por_nombre",
+          "aprobado_en",
+          "retirado_por",
+          "retirado_por_nombre",
+          "retirado_en",
+          "envios_programados",
+          "envios_activos",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "correo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "aprobado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "aprobado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien lo aprobó"
+          },
+          "aprobado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retirado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "retirado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien lo retiró"
+          },
+          "retirado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "envios_programados": {
+            "type": "integer",
+            "description": "Envíos programados (activos y en pausa) que lo tienen como destinatario, de las empresas de la petición (consolidados solo con alcance global)"
+          },
+          "envios_activos": {
+            "type": "integer",
+            "description": "De esos, los activos (no en pausa)"
           },
           "version": {
             "type": "integer"
@@ -128675,6 +128958,7 @@
           "inventario.resolver_garantia",
           "inventario.sincronizar_cuadrilla",
           "inventario.sincronizar_vinculo_tecnico",
+          "inventario.solicitar_orden_retiro",
           "inventario.trasladar",
           "inventario.ver",
           "inventario.ver_unidad",
@@ -129037,6 +129321,7 @@
           "Resolver la garantía de una unidad: volvió reparada, reemplazada o rechazada",
           "Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)",
           "Aplicar o conciliar con Iris el vínculo de un técnico con su usuario de Argos (solo inventario)",
+          "Pedir a Iris, a mano, la orden de retiro de un equipo por recuperar",
           "Trasladar existencias entre bodegas o técnicos",
           "Ver productos, bodegas, existencias y el kardex",
           "Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor",
@@ -129088,7 +129373,7 @@
           "Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)",
           "Registrar pagos",
           "Ver pagos",
-          "Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja)",
+          "Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja y aviso de pequeño contribuyente)",
           "Ver el panel financiero: ingreso mensual recurrente, bajas, ingreso promedio, efectivo (con libro.ver) y alertas",
           "Crear planes",
           "Editar planes e implementaciones por router",
@@ -129695,6 +129980,41 @@
           "horus": {
             "type": "boolean",
             "description": "Horus conectado: mostrar «Entrar con Horus»"
+          }
+        }
+      },
+      "OrdenRetiroSolicitada": {
+        "type": "object",
+        "required": [
+          "unidad_id",
+          "servicio_id",
+          "empresa_id",
+          "cliente_id",
+          "evento"
+        ],
+        "properties": {
+          "unidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evento": {
+            "type": "string",
+            "enum": [
+              "inventario.equipo_por_recuperar"
+            ],
+            "description": "Webhook que pide la orden a Iris (contratos/iris.md §2.3); Iris no crea otra si ya hay una abierta para la unidad"
           }
         }
       },
@@ -146276,6 +146596,7 @@
               "inventario.resolver_garantia",
               "inventario.sincronizar_cuadrilla",
               "inventario.sincronizar_vinculo_tecnico",
+              "inventario.solicitar_orden_retiro",
               "inventario.trasladar",
               "inventario.ver",
               "inventario.ver_unidad",
@@ -146606,6 +146927,7 @@
               "inventario.devolver_comodato",
               "inventario.marcar_reparada",
               "inventario.recibir_traslado",
+              "inventario.solicitar_orden_retiro",
               "inventario.trasladar",
               "inventario.ver",
               "inventario.ver_unidad",

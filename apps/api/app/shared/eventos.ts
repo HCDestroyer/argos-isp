@@ -1730,12 +1730,14 @@ export interface CatalogoEventos {
     }
     /**
      * Panel financiero y reportes (A3, `contratos/reportes.md`). `panel_financiero.ajustes_cambiados`:
-     * ajustes del panel de una empresa (hoy `dias_baja`, decisión 4 del PM).
+     * ajustes del panel de una empresa: `dias_baja` (decisión 4 del PM) y `aviso_pc_activo` (decisión
+     * 12). Los umbrales del aviso viajan en `fiscal.parametros_cambiados` (`pc_alertas`).
      */
     'panel_financiero.ajustes_cambiados': {
         empresa_id: number
         campos: string[]
         dias_baja: number
+        aviso_pc_activo: boolean
     }
     /** Pantalla de inicio de un rol o de un usuario (decisión 2 del PM); null = la de fábrica o la del rol. */
     'inicio.cambiado': {

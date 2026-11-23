@@ -243,13 +243,67 @@ export function serializarCorreo(f: Record<string, unknown>): CorreoExterno {
     }
 }
 
-export async function listarCorreosExternos(activo?: boolean): Promise<{ data: CorreoExterno[] }> {
+export interface CorreoExternoListado extends CorreoExterno {
+    aprobado_por_nombre: string | null
+    retirado_por_nombre: string | null
+    envios_programados: number
+    envios_activos: number
+}
+
+/**
+ * Lista aprobada con su uso (columna «Envíos» del tablero PendEnviosReportes): cuántos envíos
+ * programados lo tienen como destinatario (activos y en pausa) y cuántos siguen activos. Solo cuentan
+ * los envíos que la petición puede ver (mismo filtro que `listarEnvios`): de las empresas pedidas
+ * (null = todas) y los consolidados solo con `consolidados`.
+ */
+export async function listarCorreosExternos(
+    activo: boolean | undefined,
+    empresas: number[] | null,
+    consolidados: boolean,
+): Promise<{ data: CorreoExternoListado[] }> {
     const filas = (await db
-        .from('billing.reportes_correos_externos')
-        .if(activo !== undefined, (q) => q.where('activo', activo!))
-        .orderBy('correo', 'asc')
-        .select('*')) as Array<Record<string, unknown>>
-    return { data: filas.map(serializarCorreo) }
+        .from('billing.reportes_correos_externos as x')
+        .leftJoin('core.usuarios as ua', 'ua.id', 'x.aprobado_por')
+        .leftJoin('core.usuarios as ur', 'ur.id', 'x.retirado_por')
+        .if(activo !== undefined, (q) => q.where('x.activo', activo!))
+        .orderBy('x.correo', 'asc')
+        .select('x.*', 'ua.nombre as aprobado_por_nombre', 'ur.nombre as retirado_por_nombre')) as Array<
+        Record<string, unknown>
+    >
+    const ids = filas.map((f) => Number(f.id))
+    const usos = new Map<number, { total: number; activos: number }>()
+    if (ids.length > 0) {
+        const conteos = (await db
+            .from('billing.reportes_envios_destinatarios as d')
+            .join('billing.reportes_envios as e', 'e.id', 'd.envio_id')
+            .whereIn('d.correo_externo_id', ids)
+            .where((w) => {
+                if (empresas === null) w.whereNotNull('e.empresa_id')
+                else w.whereIn('e.empresa_id', empresas)
+                if (consolidados) w.orWhereNull('e.empresa_id')
+            })
+            .groupBy('d.correo_externo_id')
+            .select(
+                'd.correo_externo_id',
+                db.raw('count(*)::int as total'),
+                db.raw('count(*) FILTER (WHERE e.activo)::int as activos'),
+            )) as Array<{ correo_externo_id: number; total: number; activos: number }>
+        for (const c of conteos) {
+            usos.set(Number(c.correo_externo_id), { total: Number(c.total), activos: Number(c.activos) })
+        }
+    }
+    return {
+        data: filas.map((f) => {
+            const uso = usos.get(Number(f.id))
+            return {
+                ...serializarCorreo(f),
+                aprobado_por_nombre: (f.aprobado_por_nombre as string | null) ?? null,
+                retirado_por_nombre: (f.retirado_por_nombre as string | null) ?? null,
+                envios_programados: uso?.total ?? 0,
+                envios_activos: uso?.activos ?? 0,
+            }
+        }),
+    }
 }
 
 export async function empresaDeEnvio(id: number): Promise<number | null> {

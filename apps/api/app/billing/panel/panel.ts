@@ -7,6 +7,7 @@ import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import type { Bloque } from '#fiscal/bloques'
 import { bloquesDelTablero } from '#fiscal/tablero'
 import { configuracionFel } from '#fiscal/fel/configuracion'
+import { avisoPcActivo } from '#billing/actions/configurar_panel_financiero'
 import {
     bajasPorMes,
     efectivoDisponible,
@@ -268,6 +269,8 @@ export interface EmpresaAlertas {
     alertas: Alerta[]
     /** revisiones que no se pudieron hacer (su alerta no se sabe: nunca se da por buena) */
     errores: Array<{ tipo: TipoAlerta; error: ReturnType<Problema['toJSON']> }>
+    /** avisos que la empresa apagó en sus ajustes (no se revisan: ni alerta ni error) */
+    apagadas: TipoAlerta[]
 }
 
 export interface AlertasPanel {
@@ -320,9 +323,22 @@ export async function alertasPanel(opciones: {
     const salida: EmpresaAlertas[] = []
 
     for (const e of empresas) {
-        const fila: EmpresaAlertas = { empresa_id: e.id, empresa: e.nombre, alertas: [], errores: [] }
+        const fila: EmpresaAlertas = {
+            empresa_id: e.id,
+            empresa: e.nombre,
+            alertas: [],
+            errores: [],
+            apagadas: [],
+        }
+        // decisión 12: la empresa puede apagar el aviso de pequeño contribuyente (Configuración › Fiscal)
+        if (
+            revisados.includes('limite_pequeno_contribuyente') &&
+            !(await avisoPcActivo(db.connection(), e.id))
+        ) {
+            fila.apagadas.push('limite_pequeno_contribuyente')
+        }
         const revisar = async (tipos: TipoAlerta[], fn: () => Promise<void>) => {
-            const propios = tipos.filter((t) => revisados.includes(t))
+            const propios = tipos.filter((t) => revisados.includes(t) && !fila.apagadas.includes(t))
             if (propios.length === 0) return
             try {
                 await fn()
@@ -382,10 +398,11 @@ export async function alertasPanel(opciones: {
         await revisar(
             ['fel_desactivada', 'vencimientos_fiscales', 'limite_pequeno_contribuyente'],
             async () => {
+                const propios = revisados.filter((t) => !fila.apagadas.includes(t))
                 const nombres = [
-                    ...(revisados.includes('fel_desactivada') ? (['fel'] as const) : []),
-                    ...(revisados.includes('vencimientos_fiscales') ? (['vencimientos'] as const) : []),
-                    ...(revisados.includes('limite_pequeno_contribuyente')
+                    ...(propios.includes('fel_desactivada') ? (['fel'] as const) : []),
+                    ...(propios.includes('vencimientos_fiscales') ? (['vencimientos'] as const) : []),
+                    ...(propios.includes('limite_pequeno_contribuyente')
                         ? (['pequeno_contribuyente'] as const)
                         : []),
                 ]
