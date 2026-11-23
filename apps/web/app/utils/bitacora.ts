@@ -396,6 +396,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'inventario.aprobar_cobro_equipo': 'Cobro de equipo aprobado',
     'inventario.rechazar_cobro_equipo': 'Cobro de equipo rechazado',
     'inventario.declarar_no_recuperada': 'Equipo declarado no recuperado',
+    'inventario.solicitar_orden_retiro': 'Orden de retiro pedida a Iris',
     'inventario.enviar_garantia': 'Equipo enviado a garantía',
     'inventario.resolver_garantia': 'Garantía de equipo resuelta',
     'inventario.registrar_contacto_recuperacion': 'Contacto para recuperar equipo registrado',
