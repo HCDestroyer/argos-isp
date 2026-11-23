@@ -203,10 +203,11 @@ async function aprobar() {
     }
     comprobante.value = resultado.data
     pagoRegistrado.value = resultado.data.pago ?? null
-    const cuantos = reactivados.value.length
+    // Al decidir la pantalla pasa al siguiente (decisión 13): el cambio de estado va en el aviso.
+    const cambios = reactivados.value.map(r => `Servicio ${r.servicio_id}: ${ESTADOS_SERVICIO[r.de].etiqueta} → ${ESTADOS_SERVICIO[r.estado].etiqueta}`)
     toast.add({
         title: 'Comprobante aprobado',
-        description: `Pago${resultado.data.pago_id ? ` #${resultado.data.pago_id}` : ''} de ${formatearQuetzales(resultado.data.monto)} registrado${cuantos ? ` · ${cuantos === 1 ? 'servicio reactivado' : `${cuantos} servicios reactivados`}` : ''}`,
+        description: [`Pago${resultado.data.pago_id ? ` #${resultado.data.pago_id}` : ''} de ${formatearQuetzales(resultado.data.monto)} registrado`, ...cambios].join(' · '),
         icon: 'i-lucide-badge-check',
         color: 'success',
     })
