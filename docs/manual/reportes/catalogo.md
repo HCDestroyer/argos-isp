@@ -3,13 +3,15 @@ orden: 1
 pantallas:
     - /reportes
     - /reportes/[reporte]#como-se-usa-un-reporte
+    - /reportes/balance
+    - /reportes/resultados
 ---
 
 # Reportes del panel
 
 Los reportes de cartera, ingresos, cobranza, cajas, IVA, promesas, altas y bajas, egresos, bonificaciones y cuentas por pagar. Cada uno se filtra, muestra sus totales y se descarga en CSV o Excel con los mismos filtros.
 
-Está en **Reportes → Reportes**. La página muestra una tarjeta por reporte; pulsa una para abrirlo. La tarjeta **Lealtad** abre el reporte del programa de puntos, que tiene su propia página.
+Está en **Reportes → Reportes**. A la izquierda eliges la categoría (Cobranza y cartera, Ingresos y clientes, Caja y bancos, Contabilidad y Fiscal), en medio buscas el reporte («morosos», «IVA», «caja») y lo abres con un toque. **Contabilidad** trae además el **Balance general** y el **Estado de resultados**; **Lealtad** abre el reporte del programa de puntos. A la derecha verás los envíos programados y las descargas recientes cuando la API los dé.
 
 ## Quién la usa
 
@@ -26,11 +28,11 @@ Todos los reportes piden `reportes.ver` (**admin**, **contabilidad** y **lectura
 
 ## Cómo se usa un reporte
 
-1. Abre el reporte desde su tarjeta.
-2. Pulsa «Filtros» (muestra cuántos tienes puestos) y elige los que necesites. Sin fechas, el reporte usa los últimos 12 meses; los reportes de antigüedad usan el corte de hoy. Arriba de la tabla se ve el rango que se aplicó.
+1. Abre el reporte desde la lista.
+2. Los filtros van arriba de la tarjeta (en el teléfono, en «Filtros», que muestra cuántos tienes puestos). Sin fechas, el reporte usa los últimos 12 meses; los reportes de antigüedad usan el corte de hoy. Arriba de la tabla se ve el rango que se aplicó.
 3. La tabla se actualiza sola. La fila de abajo trae los totales.
-4. «CSV» o «Excel» descargan el reporte con los mismos filtros.
-5. «Limpiar filtros» los quita. Los filtros quedan en la dirección de la página: puedes guardarla o compartirla.
+4. «Excel» descarga el reporte con los mismos filtros; el CSV está en «⋯». «PDF» y «Programar envío» se activan cuando la API los dé.
+5. «Limpiar» quita los filtros. Los filtros quedan en la dirección de la página: puedes guardarla o compartirla.
 
 Las fechas son días de Guatemala. Si un reporte no trae filas verás «Sin datos en el periodo» o «Sin datos para estos filtros». Si la descarga falla, verás «No se pudo descargar el reporte»; si la consulta falla, el error con «Reintentar».
 

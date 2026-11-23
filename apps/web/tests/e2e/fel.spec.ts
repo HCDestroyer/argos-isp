@@ -43,7 +43,7 @@ test('Configuración → FEL: credenciales sin secretos, desactivar con avisos v
 
 test('cola de DTE: un rechazado se reintenta y se certifica; la factura muestra autorización, serie y número', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Cola de DTE', /\/dte/)
+    await ir(page, 'Facturación electrónica', /\/dte/)
     await abrirFacturaRechazada(page)
 
     // Rediseño (OperFacturaDetalle): la factura electrónica va en su pestaña.
@@ -62,7 +62,7 @@ test('cola de DTE: un rechazado se reintenta y se certifica; la factura muestra 
 
 test('anular una factura certificada en dos pasos: anulación pendiente y luego anulada', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Cola de DTE', /\/dte/)
+    await ir(page, 'Facturación electrónica', /\/dte/)
     await abrirFacturaRechazada(page)
     // Rediseño (OperFacturaDetalle): la factura electrónica va en su pestaña.
     await page.getByRole('tab', { name: 'Factura electrónica' }).click()
@@ -89,9 +89,8 @@ test('integridad del libro: con la cadena rota, el cierre del mes lo explica y l
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
     await page.evaluate(() => localStorage.setItem('argos_fixtures_cadena_rota', JSON.stringify({ 1: 'hash_distinto' })))
-    await ir(page, 'Libro', /\/libro/)
+    await ir(page, 'Periodos y cierres', /\/libro\/cierres/)
     await elegirEmpresa(page, /ArgosNet/)
-    await page.getByRole('tab', { name: 'Cierres' }).click()
     await page.locator('[data-prueba="abrir-cerrar-periodo"]').click()
     const modal = page.getByRole('dialog')
     await modal.locator('[data-prueba="confirmar-cierre"]').click()

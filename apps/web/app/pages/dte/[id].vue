@@ -83,7 +83,7 @@ onMounted(() => {
             <UButton
                 to="/dte"
                 icon="i-lucide-arrow-left"
-                label="Cola de DTE"
+                label="Facturación electrónica"
                 color="neutral"
                 variant="ghost"
                 class="hidden sm:inline-flex"
@@ -111,16 +111,16 @@ onMounted(() => {
             v-else-if="dte"
             class="flex flex-col gap-6"
         >
-            <UPageCard variant="subtle">
+            <section class="surface-card rounded-[1.375rem] p-4 sm:p-5">
                 <DteFicha
                     :dte="dte"
                     con-documento
                     @actualizado="alActualizar"
                 />
-            </UPageCard>
+            </section>
 
             <section
-                class="flex flex-col gap-2"
+                class="surface-card flex flex-col gap-2 rounded-[1.375rem] p-4 sm:p-5"
                 data-prueba="dte-intentos-lista"
             >
                 <h3 class="text-sm font-semibold text-highlighted">

@@ -14,6 +14,13 @@ definePageMeta({ permiso: 'libros.ver' })
 
 useHead({ title: 'Libros legales · ArgosIsp' })
 
+/** Pestañas de la pantalla (tablero ContaFel): documentos y libros legales, cada una su página. */
+const vistaFel = ref('libros')
+const VISTAS_FEL = computed<PestanaConta[]>(() => [
+    ...(puede('fel.ver') ? [{ label: 'Documentos electrónicos', value: 'documentos', icon: 'i-lucide-zap', to: '/dte' }] : []),
+    { label: 'Libros legales', value: 'libros', icon: 'i-lucide-book', to: '/libros' },
+])
+
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
@@ -213,266 +220,295 @@ onBeforeUnmount(liberarPdf)
 <template>
     <PanelPagina
         id="libros-legales"
-        titulo="Libros legales"
+        titulo="Facturación electrónica y libros legales"
         icono="i-lucide-book-marked"
+        descripcion="Lo que la SAT y el Registro Mercantil pueden pedirte: cada libro con su folio, de un mes cerrado y bloqueado."
     >
-        <div class="flex flex-col gap-6">
-            <LibrosNavegacion />
-
-            <UAlert
-                v-if="sinEmpresa"
-                color="warning"
-                variant="subtle"
-                icon="i-lucide-building-2"
-                title="Elija una empresa"
-                description="Cada libro es de una empresa (NIT): con «Todas» no hay libro que mostrar ni emitir. Elija la empresa en el selector de arriba."
-                data-prueba="libros-sin-empresa"
+        <template #acciones>
+            <ContaSelectorEmpresa />
+            <UButton
+                v-if="puede('libros.habilitar')"
+                to="/libros/habilitaciones"
+                label="Registrar folios habilitados"
+                icon="i-lucide-plus"
+                color="neutral"
+                variant="ghost"
+                class="boton-flotante boton-pastilla"
             />
+        </template>
 
-            <template v-else>
-                <section
-                    class="flex flex-col gap-3"
-                    aria-label="Folios por libro"
-                >
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="text-base font-semibold text-highlighted">
-                            Folios
-                        </h3>
-                        <UButton
-                            v-if="puede('libros.habilitar')"
-                            to="/libros/habilitaciones"
-                            label="Habilitaciones"
-                            icon="i-lucide-book-plus"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                        />
-                    </div>
-                    <ProblemaAlerta
-                        v-if="problemaFolios"
-                        :problema="problemaFolios"
-                        :reintentar="cargarFolios"
-                        :reintentando="cargandoFolios"
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <template #cabecera>
+                    <ContaPestanas
+                        v-model="vistaFel"
+                        :items="VISTAS_FEL"
+                        etiqueta="Facturación electrónica y libros"
                     />
-                    <USkeleton
-                        v-else-if="cargandoFolios && !folios.length"
-                        class="h-24 w-full"
-                    />
-                    <ul
-                        v-else
-                        class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-                    >
-                        <li
-                            v-for="f in foliosEmitibles"
-                            :key="f.libro"
-                            class="flex flex-col gap-1 rounded-lg border p-3"
-                            :class="f.libro === libro ? 'border-primary/50 bg-primary/5' : 'border-default'"
-                            :data-libro="f.libro"
-                            data-prueba="folios-libro"
-                        >
-                            <span class="flex items-center justify-between gap-2">
-                                <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
-                                    <UIcon
-                                        :name="LIBROS[f.libro].icono"
-                                        class="size-4 shrink-0"
-                                    />
-                                    {{ LIBROS[f.libro].etiqueta }}
-                                </span>
-                                <UBadge
-                                    :label="estadoFolios(f).etiqueta"
-                                    :color="estadoFolios(f).color"
-                                    variant="subtle"
-                                    size="sm"
-                                    data-prueba="folios-estado"
-                                />
-                            </span>
-                            <span
-                                class="text-base font-semibold tabular-nums"
-                                :class="f.siguiente === null ? 'text-muted' : 'text-highlighted'"
-                                data-prueba="folios-siguiente"
-                            >{{ f.siguiente === null ? 'Sin folios habilitados' : `Siguiente folio: ${f.siguiente}` }}</span>
-                            <span
-                                v-if="f.ultimo_habilitado !== null"
-                                class="text-xs text-muted"
-                            >Habilitados {{ f.primero }}–{{ f.ultimo_habilitado }} · usados hasta {{ f.ultimo_usado ?? '—' }}</span>
-                        </li>
-                    </ul>
-                </section>
-
-                <section
-                    class="flex flex-col gap-3"
-                    aria-label="Vista previa"
-                >
-                    <UTabs
-                        v-model="libro"
-                        :items="itemsLibro"
-                        :content="false"
-                        size="sm"
-                        class="w-full"
-                        :ui="{ list: 'overflow-x-auto' }"
-                        data-prueba="libros-libro"
-                    />
-                    <p class="text-sm text-muted">
-                        {{ LIBROS[libro].descripcion }}
-                    </p>
-
-                    <div class="grid gap-3 sm:grid-cols-3">
-                        <UFormField label="Mes">
-                            <USelect
-                                v-model="mes"
-                                :items="itemsMes"
-                                class="w-full"
-                                data-prueba="libros-mes"
-                            />
-                        </UFormField>
-                        <UFormField label="Desde">
-                            <UInput
-                                v-model="desde"
-                                type="date"
-                                class="w-full"
-                                data-prueba="libros-desde"
-                            />
-                        </UFormField>
-                        <UFormField
-                            label="Hasta"
-                            :error="errorRango ?? undefined"
-                        >
-                            <UInput
-                                v-model="hasta"
-                                type="date"
-                                class="w-full"
-                                data-prueba="libros-hasta"
-                            />
-                        </UFormField>
-                    </div>
-
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <UBadge
-                                label="Borrador sin folio"
-                                color="warning"
-                                variant="subtle"
-                                icon="i-lucide-file-pen-line"
-                                data-prueba="libros-borrador"
-                            />
-                            <span
-                                v-if="rangoAplicado"
-                                class="text-sm text-muted"
-                                data-prueba="libros-rango"
-                            >{{ rangoAplicado }}</span>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <UButton
-                                label="CSV"
-                                icon="i-lucide-file-down"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :loading="descargando === 'csv'"
-                                :disabled="!!errorRango"
-                                data-prueba="borrador-csv"
-                                @click="descargar('csv')"
-                            />
-                            <UButton
-                                label="Excel"
-                                icon="i-lucide-file-spreadsheet"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :loading="descargando === 'xlsx'"
-                                :disabled="!!errorRango"
-                                data-prueba="borrador-xlsx"
-                                @click="descargar('xlsx')"
-                            />
-                            <UButton
-                                label="PDF"
-                                icon="i-lucide-file-text"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :loading="descargando === 'pdf'"
-                                :disabled="!!errorRango"
-                                data-prueba="borrador-pdf"
-                                @click="descargar('pdf')"
-                            />
-                            <UButton
-                                v-if="puede('libros.emitir')"
-                                label="Emitir con folio"
-                                icon="i-lucide-stamp"
-                                size="sm"
-                                data-prueba="abrir-emitir"
-                                @click="emitiendo = true"
-                            />
-                        </div>
-                    </div>
-
+                </template>
+                <template #herramientas>
+                    <LibrosNavegacion />
+                </template>
+                <div class="flex flex-col gap-6 p-3 sm:p-4">
                     <UAlert
-                        v-if="ultimaEmision"
-                        color="success"
+                        v-if="sinEmpresa"
+                        color="warning"
                         variant="subtle"
-                        icon="i-lucide-stamp"
-                        :title="`${ultimaEmision.reimpresion ? 'Reimpresión' : 'Emisión'} ${ultimaEmision.id} · ${rangoFolios(ultimaEmision.folio_inicial, ultimaEmision.folio_final)}`"
-                        :description="`${LIBROS[ultimaEmision.libro].legal} · ${periodoEmision(ultimaEmision.desde, ultimaEmision.hasta)} · ${ultimaEmision.paginas} ${ultimaEmision.paginas === 1 ? 'página' : 'páginas'} en ${FORMATOS_EMISION[ultimaEmision.formato].etiqueta}${ultimaEmision.reimpresion_de ? ` · sustituye la emisión ${ultimaEmision.reimpresion_de}` : ''}`"
-                        :actions="[
-                            { label: 'Descargar', icon: 'i-lucide-download', color: 'success', variant: 'outline', loading: descargandoEmision, onClick: () => descargarEmision(ultimaEmision!) },
-                            { label: 'Ver en emisiones', icon: 'i-lucide-arrow-right', color: 'neutral', variant: 'ghost', to: `/libros/emisiones?emision=${ultimaEmision.id}` },
-                        ]"
-                        data-prueba="libros-emitido"
-                    />
-                    <ProblemaLibro
-                        v-if="problemaDescarga"
-                        :problema="problemaDescarga"
+                        icon="i-lucide-building-2"
+                        title="Elija una empresa"
+                        description="Cada libro es de una empresa (NIT): con «Todas» no hay libro que mostrar ni emitir. Elija la empresa en el selector de arriba."
+                        data-prueba="libros-sin-empresa"
                     />
 
-                    <UTabs
-                        v-model="vista"
-                        :items="itemsVista"
-                        :content="false"
-                        variant="link"
-                        size="sm"
-                        data-prueba="libros-vista"
-                    />
-
-                    <template v-if="vista === 'tabla'">
-                        <ProblemaAlerta
-                            v-if="problema"
-                            :problema="problema"
-                            :reintentar="cargar"
-                            :reintentando="cargando"
-                        />
-                        <USkeleton
-                            v-else-if="!reporte"
-                            class="h-64 w-full"
-                        />
-                        <LibroTabla
-                            v-else
-                            :reporte="reporte"
-                            :cargando="cargando"
-                            :titulo="LIBROS[libro].legal"
-                        />
-                    </template>
                     <template v-else>
-                        <ProblemaAlerta
-                            v-if="problemaPdf"
-                            :problema="problemaPdf"
-                            :reintentar="cargarPdf"
-                            :reintentando="cargandoPdf"
-                        />
-                        <USkeleton
-                            v-else-if="cargandoPdf || !urlPdf"
-                            class="aspect-[11/8.5] w-full"
-                        />
-                        <iframe
-                            v-else
-                            :src="urlPdf"
-                            :title="`${LIBROS[libro].legal}, borrador sin folio (PDF)`"
-                            class="h-[32rem] w-full rounded-md border border-default bg-elevated lg:h-[40rem]"
-                            data-prueba="libros-pdf"
-                        />
+                        <section
+                            class="flex flex-col gap-3"
+                            aria-label="Folios por libro"
+                        >
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="text-base font-semibold text-highlighted">
+                                    Folios
+                                </h3>
+                                <UButton
+                                    v-if="puede('libros.habilitar')"
+                                    to="/libros/habilitaciones"
+                                    label="Habilitaciones"
+                                    icon="i-lucide-book-plus"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                />
+                            </div>
+                            <ProblemaAlerta
+                                v-if="problemaFolios"
+                                :problema="problemaFolios"
+                                :reintentar="cargarFolios"
+                                :reintentando="cargandoFolios"
+                            />
+                            <USkeleton
+                                v-else-if="cargandoFolios && !folios.length"
+                                class="h-24 w-full"
+                            />
+                            <ul
+                                v-else
+                                class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                            >
+                                <li
+                                    v-for="f in foliosEmitibles"
+                                    :key="f.libro"
+                                    class="flex flex-col gap-2 rounded-2xl border p-4"
+                                    :class="f.libro === libro ? 'border-primary/50 bg-primary/5' : 'border-(--ax-borde)'"
+                                    :data-libro="f.libro"
+                                    data-prueba="folios-libro"
+                                >
+                                    <span class="flex items-center justify-between gap-2">
+                                        <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
+                                            <UIcon
+                                                :name="LIBROS[f.libro].icono"
+                                                class="size-4 shrink-0"
+                                            />
+                                            {{ LIBROS[f.libro].etiqueta }}
+                                        </span>
+                                        <UBadge
+                                            :label="estadoFolios(f).etiqueta"
+                                            :color="estadoFolios(f).color"
+                                            variant="subtle"
+                                            size="sm"
+                                            data-prueba="folios-estado"
+                                        />
+                                    </span>
+                                    <span
+                                        class="text-base font-semibold tabular-nums"
+                                        :class="f.siguiente === null ? 'text-muted' : 'text-highlighted'"
+                                        data-prueba="folios-siguiente"
+                                    >{{ f.siguiente === null ? 'Sin folios habilitados' : `Siguiente folio: ${f.siguiente}` }}</span>
+                                    <span
+                                        v-if="f.ultimo_habilitado !== null"
+                                        class="text-xs text-muted"
+                                    >Habilitados {{ f.primero }}–{{ f.ultimo_habilitado }} · usados hasta {{ f.ultimo_usado ?? '—' }}</span>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section
+                            class="flex flex-col gap-3"
+                            aria-label="Vista previa"
+                        >
+                            <UTabs
+                                v-model="libro"
+                                :items="itemsLibro"
+                                :content="false"
+                                size="sm"
+                                class="w-full"
+                                :ui="{ list: 'overflow-x-auto' }"
+                                data-prueba="libros-libro"
+                            />
+                            <p class="text-sm text-muted">
+                                {{ LIBROS[libro].descripcion }}
+                            </p>
+
+                            <div class="grid gap-3 sm:grid-cols-3">
+                                <UFormField label="Mes">
+                                    <USelect
+                                        v-model="mes"
+                                        :items="itemsMes"
+                                        class="w-full"
+                                        data-prueba="libros-mes"
+                                    />
+                                </UFormField>
+                                <UFormField label="Desde">
+                                    <UInput
+                                        v-model="desde"
+                                        type="date"
+                                        class="w-full"
+                                        data-prueba="libros-desde"
+                                    />
+                                </UFormField>
+                                <UFormField
+                                    label="Hasta"
+                                    :error="errorRango ?? undefined"
+                                >
+                                    <UInput
+                                        v-model="hasta"
+                                        type="date"
+                                        class="w-full"
+                                        data-prueba="libros-hasta"
+                                    />
+                                </UFormField>
+                            </div>
+
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <UBadge
+                                        label="Borrador sin folio"
+                                        color="warning"
+                                        variant="subtle"
+                                        icon="i-lucide-file-pen-line"
+                                        data-prueba="libros-borrador"
+                                    />
+                                    <span
+                                        v-if="rangoAplicado"
+                                        class="text-sm text-muted"
+                                        data-prueba="libros-rango"
+                                    >{{ rangoAplicado }}</span>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <UButton
+                                        label="CSV"
+                                        icon="i-lucide-file-down"
+                                        color="neutral"
+                                        variant="outline"
+                                        size="sm"
+                                        :loading="descargando === 'csv'"
+                                        :disabled="!!errorRango"
+                                        data-prueba="borrador-csv"
+                                        @click="descargar('csv')"
+                                    />
+                                    <UButton
+                                        label="Excel"
+                                        icon="i-lucide-file-spreadsheet"
+                                        color="neutral"
+                                        variant="outline"
+                                        size="sm"
+                                        :loading="descargando === 'xlsx'"
+                                        :disabled="!!errorRango"
+                                        data-prueba="borrador-xlsx"
+                                        @click="descargar('xlsx')"
+                                    />
+                                    <UButton
+                                        label="PDF"
+                                        icon="i-lucide-file-text"
+                                        color="neutral"
+                                        variant="outline"
+                                        size="sm"
+                                        :loading="descargando === 'pdf'"
+                                        :disabled="!!errorRango"
+                                        data-prueba="borrador-pdf"
+                                        @click="descargar('pdf')"
+                                    />
+                                    <UButton
+                                        v-if="puede('libros.emitir')"
+                                        label="Emitir con folio"
+                                        icon="i-lucide-stamp"
+                                        size="sm"
+                                        data-prueba="abrir-emitir"
+                                        @click="emitiendo = true"
+                                    />
+                                </div>
+                            </div>
+
+                            <UAlert
+                                v-if="ultimaEmision"
+                                color="success"
+                                variant="subtle"
+                                icon="i-lucide-stamp"
+                                :title="`${ultimaEmision.reimpresion ? 'Reimpresión' : 'Emisión'} ${ultimaEmision.id} · ${rangoFolios(ultimaEmision.folio_inicial, ultimaEmision.folio_final)}`"
+                                :description="`${LIBROS[ultimaEmision.libro].legal} · ${periodoEmision(ultimaEmision.desde, ultimaEmision.hasta)} · ${ultimaEmision.paginas} ${ultimaEmision.paginas === 1 ? 'página' : 'páginas'} en ${FORMATOS_EMISION[ultimaEmision.formato].etiqueta}${ultimaEmision.reimpresion_de ? ` · sustituye la emisión ${ultimaEmision.reimpresion_de}` : ''}`"
+                                :actions="[
+                                    { label: 'Descargar', icon: 'i-lucide-download', color: 'success', variant: 'outline', loading: descargandoEmision, onClick: () => descargarEmision(ultimaEmision!) },
+                                    { label: 'Ver en emisiones', icon: 'i-lucide-arrow-right', color: 'neutral', variant: 'ghost', to: `/libros/emisiones?emision=${ultimaEmision.id}` },
+                                ]"
+                                data-prueba="libros-emitido"
+                            />
+                            <ProblemaLibro
+                                v-if="problemaDescarga"
+                                :problema="problemaDescarga"
+                            />
+
+                            <UTabs
+                                v-model="vista"
+                                :items="itemsVista"
+                                :content="false"
+                                variant="link"
+                                size="sm"
+                                data-prueba="libros-vista"
+                            />
+
+                            <template v-if="vista === 'tabla'">
+                                <ProblemaAlerta
+                                    v-if="problema"
+                                    :problema="problema"
+                                    :reintentar="cargar"
+                                    :reintentando="cargando"
+                                />
+                                <USkeleton
+                                    v-else-if="!reporte"
+                                    class="h-64 w-full"
+                                />
+                                <LibroTabla
+                                    v-else
+                                    :reporte="reporte"
+                                    :cargando="cargando"
+                                    :titulo="LIBROS[libro].legal"
+                                />
+                            </template>
+                            <template v-else>
+                                <ProblemaAlerta
+                                    v-if="problemaPdf"
+                                    :problema="problemaPdf"
+                                    :reintentar="cargarPdf"
+                                    :reintentando="cargandoPdf"
+                                />
+                                <USkeleton
+                                    v-else-if="cargandoPdf || !urlPdf"
+                                    class="aspect-[11/8.5] w-full"
+                                />
+                                <iframe
+                                    v-else
+                                    :src="urlPdf"
+                                    :title="`${LIBROS[libro].legal}, borrador sin folio (PDF)`"
+                                    class="h-[32rem] w-full rounded-md border border-default bg-elevated lg:h-[40rem]"
+                                    data-prueba="libros-pdf"
+                                />
+                            </template>
+                        </section>
                     </template>
-                </section>
-            </template>
-        </div>
+                </div>
+                <template #pie>
+                    Un libro solo se emite con folio de un mes cerrado y bloqueado; mientras tanto puedes ver el borrador sin folio.
+                </template>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <EmitirLibroModal
             v-if="puede('libros.emitir') && empresa !== null"

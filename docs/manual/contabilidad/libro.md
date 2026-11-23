@@ -2,13 +2,14 @@
 orden: 1
 pantallas:
     - /libro
+    - /libro/integridad#verificar-la-integridad-del-libro
 ---
 
 # Libro
 
-El libro contable de la empresa: cada factura, pago, egreso, compra o cierre de caja deja aquí su asiento de doble partida. Desde esta pantalla consultas el diario y el mayor, ves el balance y el estado de resultados, cierras los meses y el ejercicio, y compruebas que nadie alteró el libro.
+El libro contable de la empresa: cada factura, pago, egreso, compra o cierre de caja deja aquí su asiento de doble partida. En **Libro contable** consultas el diario, el mayor, el auxiliar de cada cliente y el plan de cuentas; en **Periodos y cierres** cierras los meses y el ejercicio; el balance y el estado de resultados están en **Reportes → Contabilidad**.
 
-Está en **Contabilidad y fiscal → Libro**.
+Están en **Finanzas → Libro contable** y **Finanzas → Periodos y cierres**.
 
 ::: tip El libro no se edita
 Ningún asiento se modifica ni se borra. Todo error se corrige con un asiento nuevo (un reverso o la anulación del documento que lo generó), y el original queda como estaba.
@@ -23,31 +24,26 @@ Ningún asiento se modifica ni se borra. Todo error se corrige con un asiento nu
 
 ## Qué ves
 
-La pantalla tiene ocho pestañas. Las fechas son fechas contables, en día de Guatemala.
+**Libro contable** es una sola tarjeta con cuatro pestañas. Arriba eliges la empresa y el periodo (los últimos 12 meses o «Todo el libro»). Las fechas son fechas contables, en día de Guatemala.
 
-| Pestaña        | Qué muestra                                                                |
-| -------------- | -------------------------------------------------------------------------- |
-| **Diario**     | Los asientos en orden, con sus movimientos y el total debe/haber           |
-| **Mayor**      | Los movimientos de una cuenta con su saldo acumulado                       |
-| **Balance**    | Balance de saldos de cada cuenta a una fecha                               |
-| **Resultados** | Estado de resultados: ingresos, gastos y resultado de un rango             |
-| **Cierres**    | La lista de verificación del mes y los meses cerrados                      |
-| **Integridad** | La verificación de la cadena de sellos del libro                           |
-| **Diarios**    | Los diarios de la empresa (ventas, compras, caja…) y su numeración por año |
-| **Ejercicios** | Los cierres anuales                                                        |
+| Pestaña                 | Qué muestra                                                                 |
+| ----------------------- | --------------------------------------------------------------------------- |
+| **Diario**              | Un asiento por fila; al tocarlo, su detalle se abre a la derecha            |
+| **Mayor**               | Los movimientos de una cuenta con su saldo acumulado                        |
+| **Auxiliar de cliente** | Cada factura, pago y nota de crédito de un cliente con el saldo que le queda |
+| **Plan de cuentas**     | Las cuentas del libro y los diarios con su numeración por año                |
+
+**Periodos y cierres** muestra los doce meses del año con su estado (bloqueo duro, cerrado, por cerrar, abierto), la lista de verificación del mes, el cierre del ejercicio, los bloqueos del libro y las excepciones vigentes. La **integridad** de la cadena se abre desde el pie del diario.
 
 ### Diario
 
-Filtros: **Periodo** (los últimos 12 meses, «Todo el libro» o «Fechas personalizadas»), **Desde**, **Hasta** y **Origen** (factura, pago, mora, nota de crédito, egreso, cierre de caja, ajuste, compra, pago a proveedor, depreciación y los demás tipos de asiento). «Limpiar filtros» los quita.
+Filtros: el **periodo** de arriba, **Fechas** (desde y hasta) y **Origen** (factura, pago, mora, nota de crédito, egreso, cierre de caja, ajuste, compra, pago a proveedor, depreciación y los demás tipos de asiento). «Limpiar» los quita.
 
-Cada asiento se ve como una tarjeta con:
+Cada fila trae la fecha, el número del asiento en su diario y año (por ejemplo `COB-2026-009341`), la descripción con el ícono de su origen, el documento de origen y el monto (debe = haber) con un escudo verde si cuadra.
 
-- Número de asiento y fecha; el diario y su número en el año (por ejemplo `VEN 2026-000123`) y, si el mes ya se cerró, su número de partida.
-- La descripción y una etiqueta con el origen. Si el origen tiene documento (una factura, un pago, una compra), la etiqueta es un enlace a él.
-- Las etiquetas «Revertido por #…» o «Reverso del #…» cuando el asiento tiene reverso.
-- Las líneas con cuenta, cliente (si aplica), debe y haber, y el total al pie. Si no cuadrara, verías la etiqueta roja «No cuadra».
+Al tocar una fila se abre a la derecha su **detalle**: el documento de origen con «Abrir», los movimientos con «Cuadra», quién lo registró y cuándo, y la partida del Libro Diario (se asigna al cerrar el mes). Abajo está **Revertir**.
 
-Arriba de la lista ves los **Totales de la página** con la etiqueta **Cuadra** (verde) o **No cuadra** (roja).
+En el pie ves hasta qué sello está verificada la cadena del libro y los totales de la página con **Cuadra** o **No cuadra**.
 
 ### Mayor
 
@@ -57,13 +53,21 @@ Arriba de la lista ves los **Totales de la página** con la etiqueta **Cuadra** 
 
 Arriba ves la cuenta, el **Saldo inicial**, el debe y haber de la página y el **Saldo final**. La tabla trae fecha, concepto (con el número de asiento y el cliente), debe, haber y saldo.
 
-### Balance y Resultados
+### Auxiliar de cliente
 
-- **Balance**: elige la fecha de **Saldos al**. Sin fecha, son los saldos a hoy. Cada empresa muestra sus cuentas con debe, haber y saldo, los totales de activo, pasivo, ingresos, gastos y resultado, y la etiqueta **Cuadra** o **No cuadra**.
-- **Resultados**: elige **Desde** y **Hasta**. Sin fechas, muestra el mes en curso.
+Busca al cliente. Ves cada movimiento de su cuenta por cobrar (1.1.03) con cargo, abono y el saldo que va quedando, y arriba el **Saldo (suma de su auxiliar)**: el saldo no es un campo, es la suma de esos movimientos. Un cliente con servicios en dos empresas tiene un auxiliar por empresa.
+
+### Balance y estado de resultados
+
+Están en **Reportes → Contabilidad**:
+
+- **Balance general**: elige la fecha de **Saldos al**. Sin fecha, son los saldos a hoy. Cada empresa muestra sus cuentas con debe, haber y saldo, los totales y la etiqueta **Cuadra** o **No cuadra**.
+- **Estado de resultados**: elige **Desde** y **Hasta**. Sin fechas, muestra el mes en curso.
 - Si ves varias empresas, arriba aparece el **Total del grupo**: es la suma de los libros de cada empresa, pero cada NIT declara solo el suyo.
 
 ### Diarios
+
+Están en la pestaña **Plan de cuentas**, debajo de las cuentas.
 
 La tabla muestra cada diario con su código, tipo, empresa, cuenta por defecto, numeración (año y último número) y si está activo. Pulsa el código para abrir el detalle con la numeración por año («último» y «siguiente»).
 
@@ -74,7 +78,7 @@ Cada asiento recibe el siguiente número de su diario en el año al registrarse,
 ### Revertir un asiento
 
 - **Permiso:** `libro.revertir_asiento`
-- **Dónde:** botón «Revertir» en la tarjeta del asiento (pestaña Diario).
+- **Dónde:** botón «Revertir» al pie del detalle del asiento (pestaña Diario).
 - **Qué pasa:** se registra un asiento espejo (debe y haber invertidos) con la fecha de hoy. El original no cambia y queda marcado «Revertido por #…». Pide un motivo.
 - **Cuándo no aparece:** solo se revierten aquí los asientos sin documento, como un cierre de caja o un ajuste. Los que vienen de una factura, un pago, un egreso, una compra o una nota de crédito muestran «No se revierte aquí: …» con el enlace «Ir al documento»: se corrigen anulando ese documento.
 - **Se puede deshacer:** no. Un asiento se revierte una sola vez y un reverso no se revierte.
@@ -82,7 +86,7 @@ Cada asiento recibe el siguiente número de su diario en el año al registrarse,
 ### Verificar la lista de cierre del mes
 
 - **Permiso:** `cierres.verificar`
-- **Dónde:** pestaña **Cierres**, sección «Lista de verificación»: elige el mes y pulsa «Verificar».
+- **Dónde:** **Periodos y cierres**, pestaña **Cierre del mes**, sección «Lista de verificación»: elige el mes y pulsa «Verificar».
 - **Qué pasa:** se corren los controles del mes y se muestra cada uno con su valor esperado, el obtenido y su estado: **En orden** (verde), **Anomalía** (rojo) o **Supervisado** (ámbar). Una etiqueta arriba dice «El mes pasa la lista» o cuántos quedan «por resolver». Los checks marcados «Aviso» nunca bloquean.
 
 Algunos de los controles: antigüedad de cartera igual al saldo de cuentas por cobrar, ningún turno de caja abierto del periodo, depósitos y traslados en tránsito, líneas de extracto conciliadas, ningún DTE pendiente o en contingencia del periodo, compras sin mes del IVA, numeración de los diarios sin huecos, cadena de sellos verificada, cuotas de activos y diferidos contabilizadas.
@@ -97,7 +101,7 @@ Algunos de los controles: antigüedad de cartera igual al saldo de cuentas por c
 ### Cerrar un mes
 
 - **Permiso:** `libro.cerrar_periodo`
-- **Dónde:** pestaña **Cierres**, botón «Cerrar un mes». Elige el **Mes** (solo meses terminados) y pulsa «Cerrar …».
+- **Dónde:** **Periodos y cierres**, pestaña **Cierre del mes**, botón «Cerrar un mes». Elige el **Mes** (solo meses terminados) y pulsa «Cerrar …».
 - **Qué pasa:** desde ese momento ningún asiento puede tener fecha en ese mes: ni facturas, pagos, egresos, compras ni reversos. Lo que se corrija se registra en el mes abierto. Antes de cerrar se sellan los asientos pendientes, se verifica la cadena y se exige que la lista de verificación pase. Se guarda el resumen del mes (asientos, debe y haber) y se asignan los números de partida.
 - **Se puede deshacer:** solo un admin, reabriendo el mes con motivo.
 
@@ -112,14 +116,14 @@ El paso a paso completo, con lo que revisar antes, está en el [runbook de cierr
 ### Reabrir un mes
 
 - **Permiso:** `libro.reabrir_periodo` (solo admin)
-- **Dónde:** botón «Reabrir» en la fila del mes cerrado, pestaña **Cierres**.
+- **Dónde:** botón «Reabrir un mes» arriba de **Periodos y cierres** (elige el mes y escribe el motivo; solo en la computadora), o «Reabrir» en la fila del mes cerrado.
 - **Qué pasa:** el mes vuelve a admitir asientos con fecha en él. El cierre anterior queda en el historial como **Reabierto**, con quién, cuándo y tu motivo. Las partidas ya asignadas no cambian.
 - **Cuándo no se puede:** bajo el bloqueo duro, con el ejercicio del año cerrado, o si un mes posterior ya cerrado del mismo año tiene partidas (se reabren primero los más recientes).
 
 ### Verificar la integridad del libro
 
 - **Permiso:** `libro.ver`
-- **Dónde:** pestaña **Integridad**. Puedes acotar por fecha contable (**Desde**, **Hasta**) o por número de sello (**Desde el sello**, **Hasta el sello**) y pulsar «Verificar». «Todo el libro» quita el rango.
+- **Dónde:** **Integridad del libro**, desde el enlace «Ver integridad» del pie del diario. Puedes acotar por fecha contable (**Desde**, **Hasta**) o por número de sello (**Desde el sello**, **Hasta el sello**) y pulsar «Verificar». «Todo el libro» quita el rango.
 - **Qué pasa:** cada asiento confirmado recibe un sello con la huella del anterior; si alguien alterara el libro en la base de datos, la cadena dejaría de verificar. Por empresa ves **Cadena verificada** (verde) o **Cadena rota** (roja), los sellos de la cadena, los recalculados, los asientos aún sin sellar y la primera y última huella.
 - Los asientos sin sellar reciben su sello en el próximo minuto; el cierre del mes los sella antes de cerrar.
 
@@ -130,7 +134,7 @@ Si ves «Ruptura en el sello …», no cierres ni bloquees periodos. Pulsa «Ver
 ### Cerrar el ejercicio
 
 - **Permiso:** `libro.cerrar_ejercicio`
-- **Dónde:** pestaña **Ejercicios**, botón «Cerrar ejercicio». Necesitas tener una empresa elegida en el selector de empresa (con «Todas» solo se ven).
+- **Dónde:** **Periodos y cierres**, pestaña **Cierre del ejercicio**, botón «Cerrar ejercicio». Necesitas tener una empresa elegida en el selector de empresa (con «Todas» solo se ven).
 - **Qué pasa:** con fecha 31 de diciembre se provisiona el ISR, se cancelan ingresos y gastos contra resultados, se traslada el resultado, se registra la reserva legal y se cierra diciembre.
 - **El ISR:** si el año tiene declaración ISR anual revisada, el ISR y lo acreditado salen de ella y no se escriben a mano. Si la declaración existe pero no está revisada, el diálogo te pide revisarla primero. Si el año no tiene declaración en ArgosIsp, escribes el **ISR del ejercicio** (0.00 si no hay), los **Pagos trimestrales** y el **ISO acreditado**, con una nota de dónde salen.
 - Marca «Entiendo que el cierre de … registra sus asientos con fecha 31/12 y cierra diciembre» y pulsa «Cerrar …».

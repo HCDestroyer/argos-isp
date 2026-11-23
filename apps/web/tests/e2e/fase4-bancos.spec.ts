@@ -84,8 +84,23 @@ test('depositar desde la caja y conciliarlo con el extracto', async ({ page }) =
 test('castigar una factura con la frase escrita', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Cartera', /\/cartera/)
-    await page.getByRole('button', { name: 'Castigar cartera' }).click()
+    // Tablero ContaCartera: «Castigar…» va al pie de la lista en escritorio; en el teléfono, en el
+    // menú de cada cliente (decisión 9: el teléfono de finanzas también castiga, con confirmación).
+    const abrirCastigo = page.locator('[data-prueba="abrir-castigo"]:visible')
+    const menuCliente = page.locator('[data-prueba="menu-fila"]').first()
+    await expect(abrirCastigo.or(menuCliente).first()).toBeVisible()
+    if (await abrirCastigo.isVisible()) {
+        await abrirCastigo.click()
+    }
+    else {
+        await menuCliente.click()
+        await page.getByRole('menuitem', { name: 'Castigar…' }).click()
+        // El menú devuelve el foco a su botón al cerrarse: se escribe cuando ya cerró, para que ese
+        // foco no borre la búsqueda del cliente.
+        await expect(page.getByRole('menu')).toHaveCount(0)
+    }
     const modal = page.getByRole('dialog', { name: 'Castigar cartera' })
+    await expect(modal).toBeVisible()
     await modal.getByPlaceholder('Nombre, NIT, teléfono, usuario PPP o IP').fill('Juan Carlos')
     await page.getByRole('option', { name: /Juan Carlos Ramírez/ }).click()
     const facturas = modal.locator('[data-prueba="castigo-facturas"]')
@@ -101,5 +116,7 @@ test('castigar una factura con la frase escrita', async ({ page }) => {
     const resultado = page.locator('[data-prueba="resultado-castigo"]')
     await expect(resultado).toContainText('Juan Carlos Ramírez')
     await expect(resultado.locator('[data-estado-factura]').first()).toHaveText('Castigada')
+    // Tablero ContaCartera: los castigos registrados van en su pestaña.
+    await page.getByRole('tab', { name: /^Castigos/ }).click()
     await expect(page.locator('[data-prueba="tabla-castigos"]')).toContainText('Cliente se mudó del país')
 })

@@ -120,131 +120,139 @@ onMounted(async () => {
         titulo="Emisiones de libros"
         icono="i-lucide-stamp"
     >
-        <div class="flex flex-col gap-6">
-            <LibrosNavegacion />
-
-            <section
-                class="flex flex-col gap-3"
-                aria-label="Emisiones"
-            >
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-sm text-muted">
-                        Cada emisión gasta un folio por página y guarda su archivo con la huella SHA-256.
-                    </p>
-                    <USelect
-                        v-model="libro"
-                        :items="itemsLibro"
-                        aria-label="Libro"
-                        class="w-48"
-                        data-prueba="emisiones-libro"
-                    />
-                </div>
-
-                <ProblemaLibro
-                    v-if="problemaDescarga && !viendoDetalle"
-                    :problema="problemaDescarga"
-                    data-prueba="emisiones-problema-descarga"
-                />
-
-                <ProblemaAlerta
-                    v-if="lista.problema.value"
-                    :problema="lista.problema.value"
-                    :reintentar="lista.recargar"
-                    :reintentando="lista.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="lista.filas.value"
-                        :columns="columnas"
-                        :loading="lista.cargando.value"
-                        data-prueba="tabla-emisiones"
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <template #cabecera>
+                    <LibrosNavegacion />
+                </template>
+                <div class="flex flex-col gap-6 p-3 sm:p-4">
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-label="Emisiones"
                     >
-                        <template #id-cell="{ row }">
-                            <div class="flex min-w-0 flex-col gap-1">
-                                <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-highlighted">
-                                    <UIcon
-                                        :name="LIBROS[row.original.libro].icono"
-                                        class="size-4 shrink-0"
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-sm text-muted">
+                                Cada emisión gasta un folio por página y guarda su archivo con la huella SHA-256.
+                            </p>
+                            <USelect
+                                v-model="libro"
+                                :items="itemsLibro"
+                                aria-label="Libro"
+                                class="w-48"
+                                data-prueba="emisiones-libro"
+                            />
+                        </div>
+
+                        <ProblemaLibro
+                            v-if="problemaDescarga && !viendoDetalle"
+                            :problema="problemaDescarga"
+                            data-prueba="emisiones-problema-descarga"
+                        />
+
+                        <ProblemaAlerta
+                            v-if="lista.problema.value"
+                            :problema="lista.problema.value"
+                            :reintentar="lista.recargar"
+                            :reintentando="lista.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="lista.filas.value"
+                                :columns="columnas"
+                                :loading="lista.cargando.value"
+                                data-prueba="tabla-emisiones"
+                            >
+                                <template #id-cell="{ row }">
+                                    <div class="flex min-w-0 flex-col gap-1">
+                                        <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-highlighted">
+                                            <UIcon
+                                                :name="LIBROS[row.original.libro].icono"
+                                                class="size-4 shrink-0"
+                                            />
+                                            {{ LIBROS[row.original.libro].etiqueta }} · #{{ row.original.id }}
+                                            <UBadge
+                                                v-if="row.original.reimpresion"
+                                                :label="row.original.reimpresion_de ? `Reimpresión de #${row.original.reimpresion_de}` : 'Reimpresión'"
+                                                color="warning"
+                                                variant="subtle"
+                                                size="sm"
+                                                data-prueba="emision-reimpresion"
+                                            />
+                                        </span>
+                                        <span class="text-xs text-muted sm:hidden">{{ periodoEmision(row.original.desde, row.original.hasta) }}</span>
+                                        <span
+                                            v-if="consolidado"
+                                            class="text-xs text-muted"
+                                        >{{ nombreEmpresa(row.original.empresa_id) }}</span>
+                                    </div>
+                                </template>
+                                <template #desde-cell="{ row }">
+                                    <span class="text-sm">{{ periodoEmision(row.original.desde, row.original.hasta) }}</span>
+                                </template>
+                                <template #folio_inicial-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span
+                                            class="text-sm tabular-nums"
+                                            data-prueba="emision-folios"
+                                        >{{ rangoFolios(row.original.folio_inicial, row.original.folio_final) }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.paginas }} {{ row.original.paginas === 1 ? 'página' : 'páginas' }} · {{ FORMATOS_EMISION[row.original.formato].etiqueta }}</span>
+                                    </div>
+                                </template>
+                                <template #generado_en-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm tabular-nums">{{ formatearFechaHora(row.original.generado_en) }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.generado_por_nombre ?? 'Sistema' }}</span>
+                                    </div>
+                                </template>
+                                <template #acciones-cell="{ row }">
+                                    <div class="flex justify-end gap-1">
+                                        <UButton
+                                            icon="i-lucide-download"
+                                            color="neutral"
+                                            variant="ghost"
+                                            size="xs"
+                                            :loading="descargando === row.original.id"
+                                            :aria-label="`Descargar la emisión ${row.original.id}`"
+                                            data-prueba="descargar-emision"
+                                            @click="descargar(row.original)"
+                                        />
+                                        <UButton
+                                            icon="i-lucide-panel-right-open"
+                                            color="neutral"
+                                            variant="ghost"
+                                            size="xs"
+                                            :aria-label="`Ver la emisión ${row.original.id}`"
+                                            data-prueba="ver-emision"
+                                            @click="abrirDetalle(row.original.id)"
+                                        />
+                                    </div>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-stamp"
+                                        title="Sin emisiones"
+                                        description="Los libros emitidos con folio aparecen aquí."
+                                        variant="naked"
                                     />
-                                    {{ LIBROS[row.original.libro].etiqueta }} · #{{ row.original.id }}
-                                    <UBadge
-                                        v-if="row.original.reimpresion"
-                                        :label="row.original.reimpresion_de ? `Reimpresión de #${row.original.reimpresion_de}` : 'Reimpresión'"
-                                        color="warning"
-                                        variant="subtle"
-                                        size="sm"
-                                        data-prueba="emision-reimpresion"
-                                    />
-                                </span>
-                                <span class="text-xs text-muted sm:hidden">{{ periodoEmision(row.original.desde, row.original.hasta) }}</span>
-                                <span
-                                    v-if="consolidado"
-                                    class="text-xs text-muted"
-                                >{{ nombreEmpresa(row.original.empresa_id) }}</span>
-                            </div>
-                        </template>
-                        <template #desde-cell="{ row }">
-                            <span class="text-sm">{{ periodoEmision(row.original.desde, row.original.hasta) }}</span>
-                        </template>
-                        <template #folio_inicial-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span
-                                    class="text-sm tabular-nums"
-                                    data-prueba="emision-folios"
-                                >{{ rangoFolios(row.original.folio_inicial, row.original.folio_final) }}</span>
-                                <span class="text-xs text-muted">{{ row.original.paginas }} {{ row.original.paginas === 1 ? 'página' : 'páginas' }} · {{ FORMATOS_EMISION[row.original.formato].etiqueta }}</span>
-                            </div>
-                        </template>
-                        <template #generado_en-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm tabular-nums">{{ formatearFechaHora(row.original.generado_en) }}</span>
-                                <span class="text-xs text-muted">{{ row.original.generado_por_nombre ?? 'Sistema' }}</span>
-                            </div>
-                        </template>
-                        <template #acciones-cell="{ row }">
-                            <div class="flex justify-end gap-1">
-                                <UButton
-                                    icon="i-lucide-download"
-                                    color="neutral"
-                                    variant="ghost"
-                                    size="xs"
-                                    :loading="descargando === row.original.id"
-                                    :aria-label="`Descargar la emisión ${row.original.id}`"
-                                    data-prueba="descargar-emision"
-                                    @click="descargar(row.original)"
-                                />
-                                <UButton
-                                    icon="i-lucide-panel-right-open"
-                                    color="neutral"
-                                    variant="ghost"
-                                    size="xs"
-                                    :aria-label="`Ver la emisión ${row.original.id}`"
-                                    data-prueba="ver-emision"
-                                    @click="abrirDetalle(row.original.id)"
-                                />
-                            </div>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-stamp"
-                                title="Sin emisiones"
-                                description="Los libros emitidos con folio aparecen aquí."
-                                variant="naked"
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="lista.pagina.value"
+                                :hay-anterior="lista.hayAnterior.value"
+                                :hay-siguiente="lista.haySiguiente.value"
+                                :cargando="lista.cargando.value"
+                                :filas="lista.filas.value.length"
+                                @anterior="lista.anterior"
+                                @siguiente="lista.siguiente"
                             />
                         </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="lista.pagina.value"
-                        :hay-anterior="lista.hayAnterior.value"
-                        :hay-siguiente="lista.haySiguiente.value"
-                        :cargando="lista.cargando.value"
-                        :filas="lista.filas.value.length"
-                        @anterior="lista.anterior"
-                        @siguiente="lista.siguiente"
-                    />
+                    </section>
+                </div>
+                <template #pie>
+                    Cada emisión guarda la huella del archivo: si alguien lo cambia, ya no coincide.
                 </template>
-            </section>
-        </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <USlideover
             v-model:open="viendoDetalle"

@@ -166,294 +166,298 @@ onMounted(() => {
             </div>
         </template>
 
-        <div class="flex flex-col gap-6">
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
-            <UCard
-                v-else-if="proveedor"
-                :ui="{ body: 'p-4 sm:p-4' }"
-            >
-                <div class="flex flex-col gap-4">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <UBadge
-                            :label="TIPOS_PROVEEDOR[proveedor.tipo]"
-                            color="neutral"
-                            variant="subtle"
-                        />
-                        <UBadge
-                            v-if="!proveedor.activo"
-                            label="Inactivo"
-                            color="neutral"
-                            variant="outline"
-                        />
-                        <UBadge
-                            v-if="proveedor.regimen_isr === 'opcional_simplificado'"
-                            label="Se le retiene ISR (régimen opcional)"
-                            color="info"
-                            variant="subtle"
-                        />
-                        <UButton
-                            v-if="puede('proveedores.editar')"
-                            label="Editar"
-                            icon="i-lucide-pencil"
-                            color="neutral"
-                            variant="ghost"
-                            size="sm"
-                            class="ml-auto"
-                            data-prueba="editar-proveedor"
-                            @click="editando = true"
-                        />
-                    </div>
-                    <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                        <DatoFicha
-                            :etiqueta="DOCUMENTOS_PROVEEDOR[proveedor.tipo_documento]"
-                            :valor="proveedor.nit"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Le debemos"
-                            data-prueba="proveedor-saldo"
-                        >
-                            <span class="font-semibold tabular-nums">{{ formatearQuetzales(proveedor.saldo) }}</span>
-                        </DatoFicha>
-                        <DatoFicha
-                            etiqueta="Crédito"
-                            :valor="proveedor.dias_credito ? `${proveedor.dias_credito} días` : 'Contado'"
-                        />
-                        <DatoFicha
-                            etiqueta="Agente de retención de IVA"
-                            :valor="proveedor.agente_retencion_iva ? 'Sí' : 'No'"
-                        />
-                        <DatoFicha
-                            etiqueta="Teléfono"
-                            :valor="proveedor.telefono"
-                        />
-                        <DatoFicha
-                            etiqueta="Correo"
-                            :valor="proveedor.correo"
-                        />
-                        <DatoFicha
-                            etiqueta="Dirección"
-                            :valor="proveedor.direccion"
-                            class="col-span-2"
-                        />
-                    </dl>
-                </div>
-            </UCard>
-
-            <UTabs
-                v-model="pestana"
-                :items="pestanas"
-                :content="false"
-                class="w-full"
-            />
-
-            <template v-if="pestana === 'cuenta'">
-                <ProblemaAlerta
-                    v-if="problemaCuenta"
-                    :problema="problemaCuenta"
-                    :reintentar="cargarCuenta"
-                    :reintentando="cargandoCuenta"
-                />
-                <template v-else-if="cuenta">
-                    <div
-                        v-if="cuenta.pendientes.length"
-                        class="flex flex-col gap-2"
-                        data-prueba="pendientes-proveedor"
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-6 p-4 sm:p-5">
+                    <ProblemaAlerta
+                        v-if="problema"
+                        :problema="problema"
+                        :reintentar="cargar"
+                        :reintentando="cargando"
+                    />
+                    <UCard
+                        v-else-if="proveedor"
+                        :ui="{ body: 'p-4 sm:p-4' }"
                     >
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Por pagar
-                        </h2>
-                        <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
-                            <li
-                                v-for="p in cuenta.pendientes"
-                                :key="p.compra_id"
-                                class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                                :data-pendiente="p.compra_id"
-                            >
-                                <ULink
-                                    :to="puede('compras.ver') ? `/compras/${p.compra_id}` : undefined"
-                                    class="text-sm font-medium text-highlighted"
-                                >
-                                    {{ p.documento }}
-                                </ULink>
+                        <div class="flex flex-col gap-4">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <UBadge
-                                    :label="p.dias_vencida ? `Vencida hace ${p.dias_vencida} días` : `Vence el ${formatearFecha(p.vence_en)}`"
-                                    :color="p.dias_vencida ? 'error' : 'neutral'"
+                                    :label="TIPOS_PROVEEDOR[proveedor.tipo]"
+                                    color="neutral"
                                     variant="subtle"
-                                    size="sm"
                                 />
-                                <span class="text-sm font-semibold tabular-nums">{{ formatearQuetzales(p.saldo) }}</span>
-                            </li>
-                        </ul>
-                    </div>
-                    <UTable
-                        :data="cuenta.movimientos"
-                        :columns="columnasMovimientos"
-                        :loading="cargandoCuenta"
-                        data-prueba="tabla-cuenta-proveedor"
-                    >
-                        <template #fecha-cell="{ row }">
-                            <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
-                        </template>
-                        <template #documento-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm font-medium text-highlighted">{{ TIPOS_MOVIMIENTO[row.original.tipo] }} · {{ row.original.documento }}</span>
-                                <span class="text-xs text-muted">{{ row.original.descripcion }}</span>
-                                <span class="text-xs text-muted sm:hidden">{{ formatearFecha(row.original.fecha) }} · {{ new Decimal(row.original.debe).gt(0) ? `Debe ${formatearQuetzales(row.original.debe)}` : `Haber ${formatearQuetzales(row.original.haber)}` }}</span>
+                                <UBadge
+                                    v-if="!proveedor.activo"
+                                    label="Inactivo"
+                                    color="neutral"
+                                    variant="outline"
+                                />
+                                <UBadge
+                                    v-if="proveedor.regimen_isr === 'opcional_simplificado'"
+                                    label="Se le retiene ISR (régimen opcional)"
+                                    color="info"
+                                    variant="subtle"
+                                />
+                                <UButton
+                                    v-if="puede('proveedores.editar')"
+                                    label="Editar"
+                                    icon="i-lucide-pencil"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="ml-auto"
+                                    data-prueba="editar-proveedor"
+                                    @click="editando = true"
+                                />
                             </div>
-                        </template>
-                        <template #debe-cell="{ row }">
-                            <span class="tabular-nums">{{ new Decimal(row.original.debe).isZero() ? '' : formatearQuetzales(row.original.debe) }}</span>
-                        </template>
-                        <template #haber-cell="{ row }">
-                            <span class="tabular-nums">{{ new Decimal(row.original.haber).isZero() ? '' : formatearQuetzales(row.original.haber) }}</span>
-                        </template>
-                        <template #saldo-cell="{ row }">
-                            <span class="font-medium tabular-nums">{{ formatearQuetzales(row.original.saldo) }}</span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-scroll-text"
-                                title="Sin movimientos al crédito"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <p class="text-right text-sm">
-                        Saldo al {{ formatearFecha(cuenta.hasta) }}: <strong
-                            class="tabular-nums"
-                            data-prueba="saldo-final-proveedor"
-                        >{{ formatearQuetzales(cuenta.saldo_final) }}</strong>
-                    </p>
-                </template>
-            </template>
-
-            <template v-else-if="pestana === 'compras'">
-                <ProblemaAlerta
-                    v-if="compras.problema.value"
-                    :problema="compras.problema.value"
-                    :reintentar="compras.recargar"
-                    :reintentando="compras.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="compras.filas.value"
-                        :columns="columnasCompras"
-                        :loading="compras.cargando.value"
-                    >
-                        <template #fecha_documento-cell="{ row }">
-                            <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha_documento) }}</span>
-                        </template>
-                        <template #numero-cell="{ row }">
-                            <div class="flex flex-col">
-                                <ULink
-                                    :to="puede('compras.ver') ? `/compras/${row.original.id}` : undefined"
-                                    class="text-sm font-medium text-highlighted"
+                            <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                <DatoFicha
+                                    :etiqueta="DOCUMENTOS_PROVEEDOR[proveedor.tipo_documento]"
+                                    :valor="proveedor.nit"
+                                    mono
+                                />
+                                <DatoFicha
+                                    etiqueta="Le debemos"
+                                    data-prueba="proveedor-saldo"
                                 >
-                                    {{ documentoCompra(row.original) }}
-                                </ULink>
-                                <span class="text-xs text-muted">{{ row.original.condicion === 'credito' ? 'Al crédito' : 'Al contado' }} · {{ ESTADOS_COMPRA[row.original.estado].etiqueta }}</span>
-                            </div>
-                        </template>
-                        <template #total-cell="{ row }">
-                            <span
-                                class="tabular-nums"
-                                :class="row.original.estado === 'anulada' ? 'text-muted line-through' : ''"
-                            >{{ formatearQuetzales(row.original.total) }}</span>
-                        </template>
-                        <template #saldo-cell="{ row }">
-                            <span class="tabular-nums">{{ formatearQuetzales(row.original.saldo) }}</span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-shopping-cart"
-                                title="Sin compras de este proveedor"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="compras.pagina.value"
-                        :hay-anterior="compras.hayAnterior.value"
-                        :hay-siguiente="compras.haySiguiente.value"
-                        :cargando="compras.cargando.value"
-                        :filas="compras.filas.value.length"
-                        @anterior="compras.anterior"
-                        @siguiente="compras.siguiente"
-                    />
-                </template>
-            </template>
+                                    <span class="font-semibold tabular-nums">{{ formatearQuetzales(proveedor.saldo) }}</span>
+                                </DatoFicha>
+                                <DatoFicha
+                                    etiqueta="Crédito"
+                                    :valor="proveedor.dias_credito ? `${proveedor.dias_credito} días` : 'Contado'"
+                                />
+                                <DatoFicha
+                                    etiqueta="Agente de retención de IVA"
+                                    :valor="proveedor.agente_retencion_iva ? 'Sí' : 'No'"
+                                />
+                                <DatoFicha
+                                    etiqueta="Teléfono"
+                                    :valor="proveedor.telefono"
+                                />
+                                <DatoFicha
+                                    etiqueta="Correo"
+                                    :valor="proveedor.correo"
+                                />
+                                <DatoFicha
+                                    etiqueta="Dirección"
+                                    :valor="proveedor.direccion"
+                                    class="col-span-2"
+                                />
+                            </dl>
+                        </div>
+                    </UCard>
 
-            <template v-else>
-                <ProblemaAlerta
-                    v-if="pagos.problema.value"
-                    :problema="pagos.problema.value"
-                    :reintentar="pagos.recargar"
-                    :reintentando="pagos.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="pagos.filas.value"
-                        :columns="columnasPagos"
-                        :loading="pagos.cargando.value"
-                        data-prueba="tabla-pagos-proveedor"
-                    >
-                        <template #fecha-cell="{ row }">
-                            <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
-                        </template>
-                        <template #id-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm font-medium text-highlighted">#{{ row.original.id }} · {{ METODOS_PAGO_COMPRA[row.original.metodo] }}</span>
-                                <span class="text-xs text-muted">{{ row.original.aplicaciones.map(a => `${a.documento} (${formatearQuetzales(a.monto)})`).join(', ') }}</span>
-                                <span
-                                    v-if="row.original.estado === 'anulado'"
-                                    class="text-xs text-muted"
-                                >Anulado: {{ row.original.motivo_anulacion }}</span>
-                            </div>
-                        </template>
-                        <template #monto-cell="{ row }">
-                            <span
-                                class="tabular-nums"
-                                :class="row.original.estado === 'anulado' ? 'text-muted line-through' : 'font-medium'"
-                            >{{ formatearQuetzales(row.original.monto) }}</span>
-                        </template>
-                        <template #acciones-cell="{ row }">
-                            <UButton
-                                v-if="puede('compras.pagar') && row.original.estado === 'registrado'"
-                                icon="i-lucide-ban"
-                                color="error"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Anular el pago ${row.original.id}`"
-                                data-prueba="anular-pago-proveedor"
-                                @click="aAnular = row.original"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-banknote"
-                                title="Sin pagos a este proveedor"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="pagos.pagina.value"
-                        :hay-anterior="pagos.hayAnterior.value"
-                        :hay-siguiente="pagos.haySiguiente.value"
-                        :cargando="pagos.cargando.value"
-                        :filas="pagos.filas.value.length"
-                        @anterior="pagos.anterior"
-                        @siguiente="pagos.siguiente"
+                    <UTabs
+                        v-model="pestana"
+                        :items="pestanas"
+                        :content="false"
+                        class="w-full"
                     />
-                </template>
-            </template>
-        </div>
+
+                    <template v-if="pestana === 'cuenta'">
+                        <ProblemaAlerta
+                            v-if="problemaCuenta"
+                            :problema="problemaCuenta"
+                            :reintentar="cargarCuenta"
+                            :reintentando="cargandoCuenta"
+                        />
+                        <template v-else-if="cuenta">
+                            <div
+                                v-if="cuenta.pendientes.length"
+                                class="flex flex-col gap-2"
+                                data-prueba="pendientes-proveedor"
+                            >
+                                <h2 class="text-sm font-semibold text-highlighted">
+                                    Por pagar
+                                </h2>
+                                <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
+                                    <li
+                                        v-for="p in cuenta.pendientes"
+                                        :key="p.compra_id"
+                                        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                                        :data-pendiente="p.compra_id"
+                                    >
+                                        <ULink
+                                            :to="puede('compras.ver') ? `/compras/${p.compra_id}` : undefined"
+                                            class="text-sm font-medium text-highlighted"
+                                        >
+                                            {{ p.documento }}
+                                        </ULink>
+                                        <UBadge
+                                            :label="p.dias_vencida ? `Vencida hace ${p.dias_vencida} días` : `Vence el ${formatearFecha(p.vence_en)}`"
+                                            :color="p.dias_vencida ? 'error' : 'neutral'"
+                                            variant="subtle"
+                                            size="sm"
+                                        />
+                                        <span class="text-sm font-semibold tabular-nums">{{ formatearQuetzales(p.saldo) }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <UTable
+                                :data="cuenta.movimientos"
+                                :columns="columnasMovimientos"
+                                :loading="cargandoCuenta"
+                                data-prueba="tabla-cuenta-proveedor"
+                            >
+                                <template #fecha-cell="{ row }">
+                                    <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
+                                </template>
+                                <template #documento-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium text-highlighted">{{ TIPOS_MOVIMIENTO[row.original.tipo] }} · {{ row.original.documento }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.descripcion }}</span>
+                                        <span class="text-xs text-muted sm:hidden">{{ formatearFecha(row.original.fecha) }} · {{ new Decimal(row.original.debe).gt(0) ? `Debe ${formatearQuetzales(row.original.debe)}` : `Haber ${formatearQuetzales(row.original.haber)}` }}</span>
+                                    </div>
+                                </template>
+                                <template #debe-cell="{ row }">
+                                    <span class="tabular-nums">{{ new Decimal(row.original.debe).isZero() ? '' : formatearQuetzales(row.original.debe) }}</span>
+                                </template>
+                                <template #haber-cell="{ row }">
+                                    <span class="tabular-nums">{{ new Decimal(row.original.haber).isZero() ? '' : formatearQuetzales(row.original.haber) }}</span>
+                                </template>
+                                <template #saldo-cell="{ row }">
+                                    <span class="font-medium tabular-nums">{{ formatearQuetzales(row.original.saldo) }}</span>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-scroll-text"
+                                        title="Sin movimientos al crédito"
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <p class="text-right text-sm">
+                                Saldo al {{ formatearFecha(cuenta.hasta) }}: <strong
+                                    class="tabular-nums"
+                                    data-prueba="saldo-final-proveedor"
+                                >{{ formatearQuetzales(cuenta.saldo_final) }}</strong>
+                            </p>
+                        </template>
+                    </template>
+
+                    <template v-else-if="pestana === 'compras'">
+                        <ProblemaAlerta
+                            v-if="compras.problema.value"
+                            :problema="compras.problema.value"
+                            :reintentar="compras.recargar"
+                            :reintentando="compras.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="compras.filas.value"
+                                :columns="columnasCompras"
+                                :loading="compras.cargando.value"
+                            >
+                                <template #fecha_documento-cell="{ row }">
+                                    <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha_documento) }}</span>
+                                </template>
+                                <template #numero-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <ULink
+                                            :to="puede('compras.ver') ? `/compras/${row.original.id}` : undefined"
+                                            class="text-sm font-medium text-highlighted"
+                                        >
+                                            {{ documentoCompra(row.original) }}
+                                        </ULink>
+                                        <span class="text-xs text-muted">{{ row.original.condicion === 'credito' ? 'Al crédito' : 'Al contado' }} · {{ ESTADOS_COMPRA[row.original.estado].etiqueta }}</span>
+                                    </div>
+                                </template>
+                                <template #total-cell="{ row }">
+                                    <span
+                                        class="tabular-nums"
+                                        :class="row.original.estado === 'anulada' ? 'text-muted line-through' : ''"
+                                    >{{ formatearQuetzales(row.original.total) }}</span>
+                                </template>
+                                <template #saldo-cell="{ row }">
+                                    <span class="tabular-nums">{{ formatearQuetzales(row.original.saldo) }}</span>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-shopping-cart"
+                                        title="Sin compras de este proveedor"
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="compras.pagina.value"
+                                :hay-anterior="compras.hayAnterior.value"
+                                :hay-siguiente="compras.haySiguiente.value"
+                                :cargando="compras.cargando.value"
+                                :filas="compras.filas.value.length"
+                                @anterior="compras.anterior"
+                                @siguiente="compras.siguiente"
+                            />
+                        </template>
+                    </template>
+
+                    <template v-else>
+                        <ProblemaAlerta
+                            v-if="pagos.problema.value"
+                            :problema="pagos.problema.value"
+                            :reintentar="pagos.recargar"
+                            :reintentando="pagos.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="pagos.filas.value"
+                                :columns="columnasPagos"
+                                :loading="pagos.cargando.value"
+                                data-prueba="tabla-pagos-proveedor"
+                            >
+                                <template #fecha-cell="{ row }">
+                                    <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
+                                </template>
+                                <template #id-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium text-highlighted">#{{ row.original.id }} · {{ METODOS_PAGO_COMPRA[row.original.metodo] }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.aplicaciones.map(a => `${a.documento} (${formatearQuetzales(a.monto)})`).join(', ') }}</span>
+                                        <span
+                                            v-if="row.original.estado === 'anulado'"
+                                            class="text-xs text-muted"
+                                        >Anulado: {{ row.original.motivo_anulacion }}</span>
+                                    </div>
+                                </template>
+                                <template #monto-cell="{ row }">
+                                    <span
+                                        class="tabular-nums"
+                                        :class="row.original.estado === 'anulado' ? 'text-muted line-through' : 'font-medium'"
+                                    >{{ formatearQuetzales(row.original.monto) }}</span>
+                                </template>
+                                <template #acciones-cell="{ row }">
+                                    <UButton
+                                        v-if="puede('compras.pagar') && row.original.estado === 'registrado'"
+                                        icon="i-lucide-ban"
+                                        color="error"
+                                        variant="ghost"
+                                        size="sm"
+                                        :aria-label="`Anular el pago ${row.original.id}`"
+                                        data-prueba="anular-pago-proveedor"
+                                        @click="aAnular = row.original"
+                                    />
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-banknote"
+                                        title="Sin pagos a este proveedor"
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="pagos.pagina.value"
+                                :hay-anterior="pagos.hayAnterior.value"
+                                :hay-siguiente="pagos.haySiguiente.value"
+                                :cargando="pagos.cargando.value"
+                                :filas="pagos.filas.value.length"
+                                @anterior="pagos.anterior"
+                                @siguiente="pagos.siguiente"
+                            />
+                        </template>
+                    </template>
+                </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <ProveedorModal
             v-if="proveedor"

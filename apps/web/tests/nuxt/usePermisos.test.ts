@@ -36,10 +36,11 @@ describe('usePermisos', () => {
         const { puede } = usePermisos()
         const visibles = SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)
         // Igual que ROLES_BASE.cajero de apps/api/app/core/permisos.ts (documentos.ver para elegir con qué
-        // plantilla imprimir: ve las plantillas en solo lectura), en el orden del menú del rediseño.
+        // plantilla imprimir: ve las plantillas en solo lectura), en el orden del menú del rediseño. Decisión 1
+        // del PM: Facturación electrónica (`dte`) va en Finanzas › Impuestos, después de Lealtad.
         // «Revisión y garantía» (tablero NuevoInventario) se lee con `inventario.ver`; sus acciones piden cada una la suya.
         // Bancos de origen (cuentas_bancarias.ver) y Plantillas y conceptos (documentos.ver) son pantallas nuevas de
         // Configuración que el cajero puede leer.
-        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'dte', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'revision-garantia', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'tecnicos-iris', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'configuracion', 'fel', 'aviso-cobro', 'cuentas-bancarias', 'bancos-origen', 'plantillas-conceptos'])
+        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'revision-garantia', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'tecnicos-iris', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'dte', 'configuracion', 'fel', 'aviso-cobro', 'cuentas-bancarias', 'bancos-origen', 'plantillas-conceptos'])
     })
 })

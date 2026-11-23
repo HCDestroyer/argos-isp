@@ -6,7 +6,7 @@ import { bd } from '~~/fixtures/bd'
 import PaginaDeclaracion from '~/pages/declaraciones/[id].vue'
 import PaginaAjustes from '~/pages/declaraciones/ajustes.vue'
 import PaginaDeclaraciones from '~/pages/declaraciones/index.vue'
-import PaginaLibro from '~/pages/libro/index.vue'
+import PaginaCierres from '~/pages/libro/cierres.vue'
 import PaginaCalendario from '~/pages/fiscal/calendario.vue'
 import { esperar } from '../ayudas/esperar'
 import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
@@ -217,7 +217,7 @@ describe('declaraciones de ISR, ISO y retenciones', () => {
         await esperar(() => expect(ajustes.findAll('[data-ajuste]').length).toBe(4))
         ajustes.unmount()
 
-        const libro = await mountSuspended(PaginaLibro, { route: '/libro?tab=ejercicios' })
+        const libro = await mountSuspended(PaginaCierres, { route: '/libro/cierres?tab=ejercicio' })
         await esperar(() => expect(libro.find('[data-ejercicio="2024"]').exists()).toBe(true))
         await libro.find('[data-prueba="abrir-cerrar-ejercicio"]').trigger('click')
         await esperar(() => expect(document.querySelector('[data-prueba="cerrar-isr-declaracion"]')?.textContent).toContain('El ISR sale de la declaración ISR anual 2025'))

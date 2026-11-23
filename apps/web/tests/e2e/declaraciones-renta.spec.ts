@@ -56,8 +56,8 @@ test('ISR trimestral por trimestre, anular un pago y registrar otro, ajustes y e
     await expect(page.locator('[data-ajuste]')).toHaveCount(4)
 
     // Cierre anual de 2025: el ISR sale de la declaración ISR anual, no se escribe.
-    await ir(page, 'Libro', /\/libro/)
-    await page.getByRole('tab', { name: 'Ejercicios' }).click()
+    await ir(page, 'Periodos y cierres', /\/libro\/cierres/)
+    await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: /^Cierre del ejercicio/ }).click()
     await expect(page.locator('[data-ejercicio="2024"]')).toBeVisible()
     await page.locator('[data-prueba="abrir-cerrar-ejercicio"]').click()
     const cerrar = page.getByRole('dialog', { name: 'Cerrar ejercicio' })

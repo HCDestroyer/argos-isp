@@ -9,7 +9,7 @@ import { entrar, fijarHoyFixtures } from './ayudas'
 test('cerrar julio pide sus checks: se verifican, la anomalía se supervisa con nota y el mes cierra', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await page.goto('/libro?tab=cierres&mes=2026-07')
+    await page.goto('/libro/cierres?mes=2026-07')
 
     const lista = page.locator('[data-prueba="checklist-cierre"]')
     // `page.goto` recarga la app: en el servidor de desarrollo la primera visita a /libro compila la

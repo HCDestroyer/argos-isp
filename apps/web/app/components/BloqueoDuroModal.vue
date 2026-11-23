@@ -155,14 +155,14 @@ async function enviar(evento: FormSubmitEvent<Entrada>) {
                     </li>
                 </ul>
                 <UButton
-                    v-if="checksFaltantes.length && mesEnviado && enlace(`/libro?tab=cierres&mes=${mesEnviado}`)"
+                    v-if="checksFaltantes.length && mesEnviado && enlace(`/libro/cierres?mes=${mesEnviado}`)"
                     :label="`Lista de verificación de ${etiquetaPeriodo(mesEnviado)}`"
                     icon="i-lucide-list-checks"
                     color="neutral"
                     variant="outline"
                     size="sm"
                     class="self-start"
-                    :to="enlace(`/libro?tab=cierres&mes=${mesEnviado}`)"
+                    :to="enlace(`/libro/cierres?mes=${mesEnviado}`)"
                     data-prueba="duro-a-checklist"
                 />
             </UForm>

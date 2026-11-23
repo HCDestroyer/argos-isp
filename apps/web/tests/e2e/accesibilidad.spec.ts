@@ -34,8 +34,8 @@ const PANTALLAS = [
     ['servicio de otra empresa', '/servicios/4'],
     ['cliente con dos empresas', '/clientes/3?tab=cuenta'],
     ['cobro con dos empresas', '/cobro?cliente=3'],
-    ['balance por empresa', '/libro?tab=balance'],
-    ['estado de resultados', '/libro?tab=resultados'],
+    ['balance por empresa', '/reportes/balance'],
+    ['estado de resultados', '/reportes/resultados'],
     ['bitácora con empresas', '/bitacora'],
     // Fase 4 (cobros y bancos).
     ['cobros por liquidar', '/cobros/por-liquidar'],
@@ -83,7 +83,7 @@ const PANTALLAS = [
     ['declaración de ISR anual', '/declaraciones/5'],
     ['declaración de retenciones', '/declaraciones/6'],
     ['ajustes fiscales', '/declaraciones/ajustes?anio=2026'],
-    ['ejercicios anuales', '/libro?tab=ejercicios'],
+    ['ejercicios anuales', '/libro/cierres?tab=ejercicio'],
     // Fase 5 (compras, proveedores, activos y diferidos).
     ['proveedores', '/proveedores'],
     ['ficha de proveedor', '/proveedores/4'],

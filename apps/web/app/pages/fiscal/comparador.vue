@@ -85,104 +85,111 @@ onMounted(reintentar)
         titulo="Comparador de regímenes"
         icono="i-lucide-scale"
     >
-        <div class="flex flex-col gap-6">
-            <UAlert
-                color="warning"
-                variant="subtle"
-                icon="i-lucide-flask-conical"
-                title="Simulación"
-                :description="comparador?.aviso ?? AVISO_SIN_DATOS"
-                data-prueba="comparador-aviso"
-            />
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-6 p-3 sm:p-4">
+                    <UAlert
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-flask-conical"
+                        title="Simulación"
+                        :description="comparador?.aviso ?? AVISO_SIN_DATOS"
+                        data-prueba="comparador-aviso"
+                    />
 
-            <UForm
-                ref="formulario"
-                :schema="esquemaCrecimiento"
-                :state="estado"
-                class="flex flex-col gap-3 sm:flex-row sm:items-end"
-                data-prueba="form-crecimiento"
-                @submit="recalcular"
-            >
-                <UFormField
-                    label="Crecimiento mensual de las ventas"
-                    name="crecimiento"
-                    description="Por ciento con hasta 2 decimales; vacío usa la tendencia de los meses leídos."
-                    class="sm:max-w-sm sm:flex-1"
-                >
-                    <UInput
-                        v-model="estado.crecimiento"
-                        placeholder="Tendencia"
-                        inputmode="decimal"
-                        class="w-full"
-                        data-prueba="campo-crecimiento"
+                    <UForm
+                        ref="formulario"
+                        :schema="esquemaCrecimiento"
+                        :state="estado"
+                        class="flex flex-col gap-3 sm:flex-row sm:items-end"
+                        data-prueba="form-crecimiento"
+                        @submit="recalcular"
                     >
-                        <template #trailing>
-                            <span class="text-xs text-muted">% al mes</span>
-                        </template>
-                    </UInput>
-                </UFormField>
-                <div class="flex gap-2">
-                    <UButton
-                        type="submit"
-                        label="Recalcular proyección"
-                        icon="i-lucide-refresh-cw"
-                        :loading="cargando"
-                    />
-                    <UButton
-                        label="Usar tendencia"
-                        color="neutral"
-                        variant="outline"
-                        :disabled="aplicado === '' && estado.crecimiento === ''"
-                        @click="usarTendencia"
-                    />
-                </div>
-            </UForm>
+                        <UFormField
+                            label="Crecimiento mensual de las ventas"
+                            name="crecimiento"
+                            description="Por ciento con hasta 2 decimales; vacío usa la tendencia de los meses leídos."
+                            class="sm:max-w-sm sm:flex-1"
+                        >
+                            <UInput
+                                v-model="estado.crecimiento"
+                                placeholder="Tendencia"
+                                inputmode="decimal"
+                                class="w-full"
+                                data-prueba="campo-crecimiento"
+                            >
+                                <template #trailing>
+                                    <span class="text-xs text-muted">% al mes</span>
+                                </template>
+                            </UInput>
+                        </UFormField>
+                        <div class="flex gap-2">
+                            <UButton
+                                type="submit"
+                                label="Recalcular proyección"
+                                icon="i-lucide-refresh-cw"
+                                :loading="cargando"
+                            />
+                            <UButton
+                                label="Usar tendencia"
+                                color="neutral"
+                                variant="outline"
+                                :disabled="aplicado === '' && estado.crecimiento === ''"
+                                @click="usarTendencia"
+                            />
+                        </div>
+                    </UForm>
 
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="reintentar"
-                :reintentando="cargando"
-                data-prueba="comparador-problema"
-            />
-
-            <div
-                v-else-if="!comparador"
-                class="flex flex-col gap-4"
-                aria-busy="true"
-                aria-label="Cargando el comparador"
-            >
-                <USkeleton class="h-48 w-full" />
-                <USkeleton class="h-32 w-full" />
-            </div>
-
-            <template v-else>
-                <p class="text-xs text-muted">
-                    Calculado al {{ formatearFecha(comparador.hoy) }}<template v-if="comparador.empresas.length > 1">
-                        · una sección por empresa, sin totales consolidados
-                    </template>
-                </p>
-                <UAlert
-                    v-if="!comparador.empresas.length"
-                    color="neutral"
-                    variant="subtle"
-                    icon="i-lucide-building-2"
-                    title="Sin empresas activas"
-                    description="No hay empresas activas para comparar."
-                />
-                <template
-                    v-for="(empresa, indice) in comparador.empresas"
-                    :key="empresa.empresa_id"
-                >
-                    <USeparator v-if="indice > 0" />
-                    <ComparadorRegimenesEmpresa
-                        :empresa="empresa"
-                        :nombre="nombreEmpresa(empresa.empresa_id)"
+                    <ProblemaAlerta
+                        v-if="problema"
+                        :problema="problema"
                         :reintentar="reintentar"
                         :reintentando="cargando"
+                        data-prueba="comparador-problema"
                     />
+
+                    <div
+                        v-else-if="!comparador"
+                        class="flex flex-col gap-4"
+                        aria-busy="true"
+                        aria-label="Cargando el comparador"
+                    >
+                        <USkeleton class="h-48 w-full" />
+                        <USkeleton class="h-32 w-full" />
+                    </div>
+
+                    <template v-else>
+                        <p class="text-xs text-muted">
+                            Calculado al {{ formatearFecha(comparador.hoy) }}<template v-if="comparador.empresas.length > 1">
+                                · una sección por empresa, sin totales consolidados
+                            </template>
+                        </p>
+                        <UAlert
+                            v-if="!comparador.empresas.length"
+                            color="neutral"
+                            variant="subtle"
+                            icon="i-lucide-building-2"
+                            title="Sin empresas activas"
+                            description="No hay empresas activas para comparar."
+                        />
+                        <template
+                            v-for="(empresa, indice) in comparador.empresas"
+                            :key="empresa.empresa_id"
+                        >
+                            <USeparator v-if="indice > 0" />
+                            <ComparadorRegimenesEmpresa
+                                :empresa="empresa"
+                                :nombre="nombreEmpresa(empresa.empresa_id)"
+                                :reintentar="reintentar"
+                                :reintentando="cargando"
+                            />
+                        </template>
+                    </template>
+                </div>
+                <template #pie>
+                    Es una simulación con los datos del libro: el cambio de régimen lo decides con tu contador y se avisa a la SAT.
                 </template>
-            </template>
-        </div>
+            </ContaIsla>
+        </ContaCuerpo>
     </PanelPagina>
 </template>
