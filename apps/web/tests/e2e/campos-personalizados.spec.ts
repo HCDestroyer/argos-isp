@@ -57,12 +57,15 @@ test('cajero no ve el catálogo de campos personalizados', async ({ page }) => {
 })
 
 test('routers: estado en línea desconocido y último contacto en la lista y la ficha', async ({ page }) => {
+    // Tableros RedRouters y RedRouterFicha: el router que nunca respondió (en línea desconocido, sin
+    // último contacto) sale «Por conectar», con «nunca respondió» debajo.
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
-    await expect(page.locator('[data-prueba="en-linea-1"]:visible').first()).toHaveText('Desconocido', { timeout: 15_000 })
-    await expect(page.locator('[data-prueba="ultimo-contacto-1"]:visible').first()).toHaveText('Nunca respondió')
+    await expect(page.locator('[data-prueba="en-linea-1"]:visible').first()).toHaveText('Por conectar', { timeout: 15_000 })
+    await expect(page.locator('[data-prueba="ultimo-contacto-1"]:visible').first()).toHaveText('nunca respondió')
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
-    await expect(page.locator('[data-prueba="en-linea-1"]')).toHaveText('Desconocido')
-    await expect(page.getByText('Nunca respondió')).toBeVisible()
+    await expect(page.locator('[data-prueba="router-estado-cabecera"]')).toHaveText('Por conectar')
+    await expect(page.locator('[data-prueba="router-estado"]')).toHaveText('Por conectar')
+    await expect(page.locator('[data-prueba="router-ultimo-contacto"]')).toHaveText('nunca respondió')
 })

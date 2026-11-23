@@ -43,6 +43,6 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     await expect(servicio).toBeVisible()
     await servicio.click()
     await expect(page).toHaveURL(/\/servicios\/\d+$/)
-    const encabezado = page.getByRole('heading', { level: 2, name: /^lucia\./ })
-    await expect(encabezado.locator('..')).toContainText('Activo')
+    const encabezado = page.locator('[data-prueba="franja-servicio"]')
+    await expect(encabezado).toContainText('Activo')
 })

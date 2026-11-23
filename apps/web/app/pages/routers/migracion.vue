@@ -192,7 +192,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                 icon="i-lucide-arrow-left"
                 color="neutral"
                 variant="ghost"
-                class="hidden sm:inline-flex"
+                class="hidden sm:inline-flex rounded-full"
             />
         </template>
 
@@ -441,49 +441,51 @@ function plural(cantidad: number, singular: string, varios: string): string {
                         :reintentando="eventos.cargando.value"
                     />
                     <template v-else>
-                        <UTable
-                            :data="eventos.filas.value"
-                            :columns="columnasEventos"
-                            :loading="eventos.cargando.value"
-                            :ui="{ td: 'py-2.5 align-top' }"
-                            data-prueba="migracion-lista-eventos"
-                        >
-                            <template #created_at-cell="{ row }">
-                                <div class="flex flex-col gap-1">
-                                    <UBadge
-                                        :label="TIPOS_EVENTO_RED[row.original.tipo].etiqueta"
-                                        :icon="TIPOS_EVENTO_RED[row.original.tipo].icono"
-                                        :color="colorEventoRed(row.original)"
-                                        variant="subtle"
-                                        size="sm"
-                                        class="self-start"
+                        <div class="surface-card overflow-hidden rounded-2xl">
+                            <UTable
+                                :data="eventos.filas.value"
+                                :columns="columnasEventos"
+                                :loading="eventos.cargando.value"
+                                :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5 align-top' }"
+                                data-prueba="migracion-lista-eventos"
+                            >
+                                <template #created_at-cell="{ row }">
+                                    <div class="flex flex-col gap-1">
+                                        <UBadge
+                                            :label="TIPOS_EVENTO_RED[row.original.tipo].etiqueta"
+                                            :icon="TIPOS_EVENTO_RED[row.original.tipo].icono"
+                                            :color="colorEventoRed(row.original)"
+                                            variant="subtle"
+                                            size="sm"
+                                            class="self-start"
+                                        />
+                                        <span class="whitespace-nowrap text-xs text-muted">{{ formatearFechaHora(row.original.created_at) }}</span>
+                                    </div>
+                                </template>
+                                <template #comando-cell="{ row }">
+                                    <div class="flex min-w-0 flex-col">
+                                        <span class="font-mono text-xs break-all">{{ resumenComando(row.original) }}</span>
+                                        <ULink
+                                            v-if="row.original.servicio_id"
+                                            :to="enlace(`/servicios/${row.original.servicio_id}`)"
+                                            class="text-xs text-muted hover:text-primary"
+                                        >
+                                            Servicio #{{ row.original.servicio_id }}
+                                        </ULink>
+                                    </div>
+                                </template>
+                                <template #respuesta-cell="{ row }">
+                                    <span class="text-xs break-words text-error">{{ resumenRespuesta(row.original) }}</span>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-shield-check"
+                                        title="Sin fallos de red"
+                                        variant="naked"
                                     />
-                                    <span class="whitespace-nowrap text-xs text-muted">{{ formatearFechaHora(row.original.created_at) }}</span>
-                                </div>
-                            </template>
-                            <template #comando-cell="{ row }">
-                                <div class="flex min-w-0 flex-col">
-                                    <span class="font-mono text-xs break-all">{{ resumenComando(row.original) }}</span>
-                                    <ULink
-                                        v-if="row.original.servicio_id"
-                                        :to="enlace(`/servicios/${row.original.servicio_id}`)"
-                                        class="text-xs text-muted hover:text-primary"
-                                    >
-                                        Servicio #{{ row.original.servicio_id }}
-                                    </ULink>
-                                </div>
-                            </template>
-                            <template #respuesta-cell="{ row }">
-                                <span class="text-xs break-words text-error">{{ resumenRespuesta(row.original) }}</span>
-                            </template>
-                            <template #empty>
-                                <UEmpty
-                                    icon="i-lucide-shield-check"
-                                    title="Sin fallos de red"
-                                    variant="naked"
-                                />
-                            </template>
-                        </UTable>
+                                </template>
+                            </UTable>
+                        </div>
                         <PaginacionCursor
                             :pagina="eventos.pagina.value"
                             :hay-anterior="eventos.hayAnterior.value"

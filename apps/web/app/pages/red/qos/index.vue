@@ -71,6 +71,7 @@ onMounted(() => void lista.recargar())
         <template #acciones>
             <UButton
                 v-if="puede('qos.gestionar')"
+                class="rounded-full"
                 label="Nuevo perfil"
                 icon="i-lucide-copy-plus"
                 :ui="{ label: 'hidden sm:inline' }"
@@ -94,117 +95,119 @@ onMounted(() => void lista.recargar())
                 :reintentando="lista.cargando.value"
             />
             <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    :ui="{ td: 'py-2.5' }"
-                    data-prueba="tabla-perfiles-qos"
-                >
-                    <template #nombre-cell="{ row }">
-                        <div class="flex min-w-0 flex-col gap-0.5">
-                            <ULink
-                                :to="`/red/qos/${row.original.id}`"
-                                class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted"
-                                :data-prueba="`perfil-qos-${row.original.id}`"
+                <div class="surface-card overflow-hidden rounded-2xl">
+                    <UTable
+                        :data="lista.filas.value"
+                        :columns="columnas"
+                        :loading="lista.cargando.value"
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5' }"
+                        data-prueba="tabla-perfiles-qos"
+                    >
+                        <template #nombre-cell="{ row }">
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <ULink
+                                    :to="`/red/qos/${row.original.id}`"
+                                    class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted"
+                                    :data-prueba="`perfil-qos-${row.original.id}`"
+                                >
+                                    {{ row.original.nombre }}
+                                    <UBadge
+                                        v-if="row.original.predeterminado"
+                                        label="Predeterminado"
+                                        icon="i-lucide-star"
+                                        color="primary"
+                                        variant="subtle"
+                                        size="sm"
+                                    />
+                                </ULink>
+                                <span class="text-xs text-muted">{{ row.original.empresa_id === null ? 'Común a todas las empresas' : nombreEmpresa(row.original.empresa_id) }}</span>
+                                <span
+                                    v-if="row.original.advertencias.length"
+                                    class="flex items-center gap-1 text-xs text-warning"
+                                >
+                                    <UIcon
+                                        name="i-lucide-triangle-alert"
+                                        class="size-3.5 shrink-0"
+                                    />
+                                    {{ row.original.advertencias.length === 1 ? '1 advertencia' : `${row.original.advertencias.length} advertencias` }}
+                                </span>
+                            </div>
+                        </template>
+                        <template #clases-cell="{ row }">
+                            <span class="tabular-nums">{{ row.original.clases.filter(c => c.activa).length }}</span>
+                        </template>
+                        <template #routers-cell="{ row }">
+                            <ProblemaAlerta
+                                v-if="detalles[row.original.id]?.problema"
+                                :problema="detalles[row.original.id]!.problema!"
+                                :reintentar="() => cargarDetalle(row.original.id)"
+                                :reintentando="detalles[row.original.id]?.cargando"
+                            />
+                            <USkeleton
+                                v-else-if="!detalles[row.original.id]?.detalle"
+                                class="h-4 w-28"
+                            />
+                            <span
+                                v-else-if="!detalles[row.original.id]!.detalle!.routers.length"
+                                class="text-sm text-muted"
+                            >Ninguno</span>
+                            <div
+                                v-else
+                                class="flex flex-wrap gap-1"
+                                :data-prueba="`routers-perfil-${row.original.id}`"
                             >
-                                {{ row.original.nombre }}
                                 <UBadge
-                                    v-if="row.original.predeterminado"
-                                    label="Predeterminado"
-                                    icon="i-lucide-star"
-                                    color="primary"
-                                    variant="subtle"
+                                    v-for="uso in detalles[row.original.id]!.detalle!.routers"
+                                    :key="uso.router_id"
+                                    :label="uso.planes_qos ? `${uso.nombre} · ${uso.planes_qos} con QoS` : uso.nombre"
+                                    color="neutral"
+                                    variant="outline"
                                     size="sm"
                                 />
-                            </ULink>
-                            <span class="text-xs text-muted">{{ row.original.empresa_id === null ? 'Común a todas las empresas' : nombreEmpresa(row.original.empresa_id) }}</span>
+                            </div>
+                        </template>
+                        <template #costo-cell="{ row }">
+                            <QosCosto
+                                v-if="detalles[row.original.id]?.detalle && mayorUso(detalles[row.original.id]!.detalle!)"
+                                :uso="mayorUso(detalles[row.original.id]!.detalle!)!"
+                                corto
+                            />
                             <span
-                                v-if="row.original.advertencias.length"
-                                class="flex items-center gap-1 text-xs text-warning"
-                            >
-                                <UIcon
-                                    name="i-lucide-triangle-alert"
-                                    class="size-3.5 shrink-0"
+                                v-else-if="detalles[row.original.id]?.detalle"
+                                class="text-sm text-muted"
+                            >—</span>
+                        </template>
+                        <template #acciones-cell="{ row }">
+                            <div class="flex justify-end gap-1">
+                                <UButton
+                                    v-if="puede('qos.gestionar')"
+                                    icon="i-lucide-copy"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Copiar ${row.original.nombre}`"
+                                    :data-prueba="`copiar-perfil-${row.original.id}`"
+                                    @click="abrirCrear(row.original.id)"
                                 />
-                                {{ row.original.advertencias.length === 1 ? '1 advertencia' : `${row.original.advertencias.length} advertencias` }}
-                            </span>
-                        </div>
-                    </template>
-                    <template #clases-cell="{ row }">
-                        <span class="tabular-nums">{{ row.original.clases.filter(c => c.activa).length }}</span>
-                    </template>
-                    <template #routers-cell="{ row }">
-                        <ProblemaAlerta
-                            v-if="detalles[row.original.id]?.problema"
-                            :problema="detalles[row.original.id]!.problema!"
-                            :reintentar="() => cargarDetalle(row.original.id)"
-                            :reintentando="detalles[row.original.id]?.cargando"
-                        />
-                        <USkeleton
-                            v-else-if="!detalles[row.original.id]?.detalle"
-                            class="h-4 w-28"
-                        />
-                        <span
-                            v-else-if="!detalles[row.original.id]!.detalle!.routers.length"
-                            class="text-sm text-muted"
-                        >Ninguno</span>
-                        <div
-                            v-else
-                            class="flex flex-wrap gap-1"
-                            :data-prueba="`routers-perfil-${row.original.id}`"
-                        >
-                            <UBadge
-                                v-for="uso in detalles[row.original.id]!.detalle!.routers"
-                                :key="uso.router_id"
-                                :label="uso.planes_qos ? `${uso.nombre} · ${uso.planes_qos} con QoS` : uso.nombre"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
+                                <UButton
+                                    :to="`/red/qos/${row.original.id}`"
+                                    icon="i-lucide-chevron-right"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Ver ${row.original.nombre}`"
+                                />
+                            </div>
+                        </template>
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-list-ordered"
+                                title="Todavía no hay perfiles de QoS"
+                                variant="naked"
                             />
-                        </div>
-                    </template>
-                    <template #costo-cell="{ row }">
-                        <QosCosto
-                            v-if="detalles[row.original.id]?.detalle && mayorUso(detalles[row.original.id]!.detalle!)"
-                            :uso="mayorUso(detalles[row.original.id]!.detalle!)!"
-                            corto
-                        />
-                        <span
-                            v-else-if="detalles[row.original.id]?.detalle"
-                            class="text-sm text-muted"
-                        >—</span>
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <div class="flex justify-end gap-1">
-                            <UButton
-                                v-if="puede('qos.gestionar')"
-                                icon="i-lucide-copy"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Copiar ${row.original.nombre}`"
-                                :data-prueba="`copiar-perfil-${row.original.id}`"
-                                @click="abrirCrear(row.original.id)"
-                            />
-                            <UButton
-                                :to="`/red/qos/${row.original.id}`"
-                                icon="i-lucide-chevron-right"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Ver ${row.original.nombre}`"
-                            />
-                        </div>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-list-ordered"
-                            title="Todavía no hay perfiles de QoS"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                        </template>
+                    </UTable>
+                </div>
 
                 <PaginacionCursor
                     :pagina="lista.pagina.value"

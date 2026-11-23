@@ -7,6 +7,7 @@ import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import PaginaFacturasPeriodo from '~/pages/servicios/[id]/facturas-periodo.vue'
 import PaginaServicio from '~/pages/servicios/[id]/index.vue'
+import { opcionesMasServicio } from '../ayudas/fichaServicio'
 import { esperar } from '../ayudas/esperar'
 import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
@@ -456,14 +457,16 @@ describe('facturas de periodos', () => {
 
     it('ficha del servicio: el botón lleva a la pantalla propia; no en un retirado', async () => {
         const ficha = await mountSuspended(PaginaServicio, { route: '/servicios/1' })
-        await esperar(() => expect(ficha.find('[data-prueba="abrir-facturas-periodo"]').exists()).toBe(true))
-        expect(ficha.find('[data-prueba="abrir-facturas-periodo"]').attributes('href')).toBe('/servicios/1/facturas-periodo')
+        await esperar(() => expect(ficha.find('[data-prueba="mas-acciones-servicio"]').exists()).toBe(true))
+        expect(await opcionesMasServicio(ficha)).toContain('Emitir facturas de periodos')
+        const enlace = [...document.querySelectorAll<HTMLAnchorElement>('a[role="menuitem"]')].find(e => e.textContent?.includes('Emitir facturas de periodos'))
+        expect(enlace?.getAttribute('href')).toBe('/servicios/1/facturas-periodo')
         ficha.unmount()
 
         const retirado = bd.servicios.find(s => s.estado === 'retirado')
         const otra = await mountSuspended(PaginaServicio, { route: `/servicios/${retirado?.id ?? 0}` })
         await esperar(() => expect(otra.text()).toContain('Servicio retirado'))
-        expect(otra.find('[data-prueba="abrir-facturas-periodo"]').exists()).toBe(false)
+        expect(otra.find('[data-prueba="mas-acciones-servicio"]').exists()).toBe(false)
         otra.unmount()
     })
 })
