@@ -15,7 +15,10 @@ useHead({ title: 'Panel financiero · ArgosIsp' })
  * - efectivo en cajas y bancos (cuentas 1.1.01 y 1.1.02 del balance, `GET /libro/balance`);
  * - integridad de la cadena y el último mes cerrado (`GET /libro/integridad`, `/libro/periodos`);
  * - los avisos que cada empresa apagó (`apagadas` de `GET /panel-financiero/alertas`, decisión 12):
- *   con el del pequeño contribuyente apagado, su aviso no sale aunque el tablero llegue al umbral.
+ *   con el del pequeño contribuyente apagado no salen el 80 % ni el 95 %; el 100 % (límite
+ *   superado) sale siempre, porque obliga a cambiar de régimen. Una alerta de ese tipo que venga en
+ *   la lista se muestra siempre (con el aviso apagado la API solo la manda si superó el límite,
+ *   con `datos.aviso_apagado`), y si la revisión del límite falló su error sale con «Reintentar».
  * Lo que la API del panel financiero aún no da (ingreso recurrente con IVA, bajas a 60 días, ingreso
  * por servicio, efectivo por semana y la comparación por empresa) se dice sin cifra inventada; lo
  * construye A3 en `agente/a3-reportes-pm` (`.claude/integration/a4.md`).
@@ -41,8 +44,14 @@ const efectivo = shallowRef<{ total: string, bancos: number, cajas: number } | n
 const problemaEfectivo = ref<Problem | null>(null)
 const integridad = shallowRef<Schema<'IntegridadLibro'>[] | null>(null)
 const cierres = shallowRef<Schema<'CierrePeriodo'>[] | null>(null)
-/** Empresas que apagaron el aviso de pequeño contribuyente en Configuración › Reportes. */
-const pcApagado = shallowRef<ReadonlySet<number>>(new Set())
+/**
+ * Empresas que apagaron el aviso de pequeño contribuyente (Configuración › Fiscal) y cuya lista de
+ * alertas no trae una de ese tipo: solo en ellas se calla el 80 % y el 95 %.
+ */
+const pcSilenciado = shallowRef<ReadonlySet<number>>(new Set())
+/** Empresas cuya revisión del límite de pequeño contribuyente falló (`errores` de las alertas). */
+const erroresPc = shallowRef<{ empresaId: number, problema: Problem }[]>([])
+const cargandoAlertas = ref(false)
 
 const hoy = hoyGuatemala()
 
@@ -110,14 +119,26 @@ async function cargarLibro() {
 
 /**
  * Solo para respetar lo apagado: si no se pudo leer, el aviso se muestra (un aviso de más nunca
- * esconde un límite real).
+ * esconde un límite real). Con el aviso apagado, el límite superado sale igual.
  */
 async function cargarApagadas() {
     if (!puede('panel_financiero.ver') || !verFiscal.value) {
         return
     }
+    cargandoAlertas.value = true
     const r = await usePanelFinancieroAjustes().alertas()
-    pcApagado.value = new Set(r.ok ? r.data.empresas.filter(e => e.apagadas.includes('limite_pequeno_contribuyente')).map(e => e.empresa_id) : [])
+    cargandoAlertas.value = false
+    const empresas = r.ok ? r.data.empresas : []
+    // Aunque el aviso esté apagado: el 100 % se avisa siempre, así que su error tampoco se calla.
+    erroresPc.value = empresas.flatMap(e => e.errores
+        .filter(x => x.tipo === 'limite_pequeno_contribuyente')
+        .map(x => ({
+            empresaId: e.empresa_id,
+            problema: { ...x.error, title: `${e.empresa}: no se pudo revisar el límite de pequeño contribuyente`, detail: x.error.detail ?? x.error.title },
+        })))
+    pcSilenciado.value = new Set(empresas
+        .filter(e => e.apagadas.includes('limite_pequeno_contribuyente') && !e.alertas.some(a => a.tipo === 'limite_pequeno_contribuyente'))
+        .map(e => e.empresa_id))
 }
 
 function cargar() {
@@ -201,10 +222,13 @@ const totalImpuestos = computed(() => (impuestos.value.some(o => o.a_pagar)
     ? impuestos.value.reduce((suma, o) => suma.plus(o.a_pagar ?? 0), new Decimal(0)).toFixed(2)
     : null))
 
-/** Decisión 12 del PM: el aviso aparece al 80 % y al 95 % del límite (umbrales del parámetro), salvo que la empresa lo apagó. */
+/**
+ * Decisión 12 del PM: el aviso aparece al 80 % y al 95 % del límite (umbrales del parámetro), salvo
+ * que la empresa lo apagó; el límite superado (100 %) se avisa siempre.
+ */
 const pequenos = computed(() => (tablero.value?.empresas ?? []).flatMap((e) => {
     const datos = e.bloques.pequeno_contribuyente.datos
-    if (!datos || (!datos.umbral_alcanzado && !datos.supera_limite) || pcApagado.value.has(e.empresa_id)) {
+    if (!datos || (!datos.umbral_alcanzado && !datos.supera_limite) || (!datos.supera_limite && pcSilenciado.value.has(e.empresa_id))) {
         return []
     }
     return [{
@@ -312,6 +336,23 @@ const TONO_AVISO = {
                         class="shrink-0 px-0"
                     />
                 </div>
+            </div>
+
+            <!-- Revisiones del límite de pequeño contribuyente que fallaron (nunca se dan por buenas). -->
+            <div
+                v-if="erroresPc.length"
+                class="flex flex-col gap-2"
+                :class="vistaMovil === 'resumen' ? '' : 'max-lg:hidden'"
+                data-prueba="errores-pc"
+            >
+                <ProblemaAlerta
+                    v-for="error in erroresPc"
+                    :key="error.empresaId"
+                    :problema="error.problema"
+                    :reintentar="cargarApagadas"
+                    :reintentando="cargandoAlertas"
+                    :data-empresa="error.empresaId"
+                />
             </div>
 
             <!-- Indicadores. -->

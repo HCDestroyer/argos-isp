@@ -545,7 +545,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/configuracion/fiscal': {
         titulo: 'Configuración fiscal',
-        resumen: 'La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia e impuestos. También los feriados, que valen para todas las empresas.',
+        resumen: 'La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia, el aviso de pequeño contribuyente e impuestos. También los feriados, que valen para todas las empresas.',
         pagina: 'fiscal/configuracion-fiscal',
         ancla: null,
         temas: [
@@ -555,8 +555,8 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Establecimientos',
             'Frases',
             'Parámetros',
+            'Aviso de pequeño contribuyente',
             'Impuestos',
-            'Feriados',
         ],
     },
     '/configuracion/importar': {
@@ -741,7 +741,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/configuracion/reportes': {
         titulo: 'Ajustes de reportes',
-        resumen: 'Cómo se cuentan las bajas en los reportes y en el panel del dueño, y cuándo avisa el panel que la empresa se acerca al límite anual del pequeño contribuyente.',
+        resumen: 'Cómo se cuentan las bajas en los reportes y en el panel del dueño.',
         pagina: 'configuracion/ajustes-de-reportes',
         ancla: null,
         temas: [
