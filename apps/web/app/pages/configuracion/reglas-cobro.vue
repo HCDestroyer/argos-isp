@@ -190,7 +190,10 @@ onMounted(recargar)
                             <span class="text-sm font-semibold text-highlighted">Tope de días</span>
                             <span class="text-xs text-muted">Lo más que puede durar una pausa sin cobro (1 a 365)</span>
                         </div>
-                        <UFormField name="pausa_tope_dias">
+                        <UFormField
+                            name="pausa_tope_dias"
+                            required
+                        >
                             <div class="flex items-center gap-2">
                                 <UInputNumber
                                     v-model="estado.pausa_tope_dias"
@@ -266,37 +269,31 @@ onMounted(recargar)
                     <div
                         v-for="caja in cajas"
                         :key="caja.id"
-                        class="flex min-w-0 flex-col gap-2 border-(--ax-borde) py-2.5 sm:flex-row sm:items-center sm:justify-between [&:not(:first-child)]:border-t"
+                        class="flex min-w-0 flex-col gap-2 border-(--ax-borde) py-2.5 [&:not(:first-child)]:border-t"
                         :data-caja="caja.id"
                     >
                         <span class="truncate text-sm font-semibold text-highlighted">{{ caja.nombre }}</span>
-                        <div class="flex flex-wrap items-center gap-2">
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-xs text-muted sm:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
+                            <span>Recibo</span>
                             <USelect
                                 :model-value="caja.formato_recibo ?? 'pos_80'"
                                 :items="FORMATOS_IMPRESION_CAJA"
                                 :disabled="!editaImpresion || guardandoCaja === caja.id"
                                 :aria-label="`Recibo de ${caja.nombre}`"
-                                class="w-44"
+                                class="w-full"
                                 data-prueba="formato-recibo"
                                 @update:model-value="v => cambiarImpresion(caja, { formato_recibo: v })"
-                            >
-                                <template #leading>
-                                    <span class="text-xs text-muted">Recibo</span>
-                                </template>
-                            </USelect>
+                            />
+                            <span>Factura</span>
                             <USelect
                                 :model-value="caja.formato_factura ?? 'carta'"
                                 :items="FORMATOS_IMPRESION_CAJA"
                                 :disabled="!editaImpresion || guardandoCaja === caja.id"
                                 :aria-label="`Factura de ${caja.nombre}`"
-                                class="w-44"
+                                class="w-full"
                                 data-prueba="formato-factura"
                                 @update:model-value="v => cambiarImpresion(caja, { formato_factura: v })"
-                            >
-                                <template #leading>
-                                    <span class="text-xs text-muted">Factura</span>
-                                </template>
-                            </USelect>
+                            />
                         </div>
                     </div>
                     <template #pie>

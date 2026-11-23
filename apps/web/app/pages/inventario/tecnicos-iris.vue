@@ -55,7 +55,7 @@ const visibles = computed(() => {
 const columnas: TableColumn<VinculoTecnicoIris>[] = [
     { accessorKey: 'iris_usuario_id', header: 'Técnico en Iris' },
     { accessorKey: 'usuario_nombre', header: 'Usuario de Argos', meta: SOLO_ANCHO },
-    { accessorKey: 'estado', header: 'Estado' },
+    { accessorKey: 'estado', header: 'Estado', meta: SOLO_ANCHO },
     { accessorKey: 'motivo', header: 'Por qué', meta: SOLO_ESCRITORIO },
     { accessorKey: 'origen', header: 'Origen', meta: SOLO_ESCRITORIO },
     { id: 'acciones', header: '', meta: { class: { th: 'w-0', td: 'text-right' } } },
@@ -200,6 +200,8 @@ async function conciliar(vinculo: VinculoTecnicoIris) {
                             variant="outline"
                             size="sm"
                             :loading="conciliando === row.original.id"
+                            :aria-label="`Conciliar ${row.original.iris_usuario_id}`"
+                            :ui="{ label: 'hidden sm:inline' }"
                             :data-conciliar="row.original.iris_usuario_id"
                             @click="conciliar(row.original)"
                         />

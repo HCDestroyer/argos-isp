@@ -40,6 +40,6 @@ describe('usePermisos', () => {
         // «Revisión y garantía» (tablero NuevoInventario) se lee con `inventario.ver`; sus acciones piden cada una la suya.
         // Bancos de origen (cuentas_bancarias.ver) y Plantillas y conceptos (documentos.ver) son pantallas nuevas de
         // Configuración que el cajero puede leer.
-        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'dte', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'revision-garantia', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'configuracion', 'fel', 'aviso-cobro', 'cuentas-bancarias', 'bancos-origen', 'plantillas-conceptos'])
+        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'dte', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'revision-garantia', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'tecnicos-iris', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'configuracion', 'fel', 'aviso-cobro', 'cuentas-bancarias', 'bancos-origen', 'plantillas-conceptos'])
     })
 })

@@ -184,7 +184,10 @@ onMounted(() => {
                     />
                 </div>
                 <div class="flex shrink-0 items-start gap-2">
-                    <UFormField name="dias_baja">
+                    <UFormField
+                        name="dias_baja"
+                        required
+                    >
                         <div class="flex items-center gap-2">
                             <UInputNumber
                                 v-model="estadoPanel.dias_baja"

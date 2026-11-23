@@ -43,7 +43,7 @@ test('login: «¿La olvidaste?» manda el enlace y la nueva contraseña cierra l
 test('red y portal: la vigencia del código y las caídas se guardan para todas o para una empresa', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/configuracion/portal-corte')
-    const vigencia = page.locator('[data-ajuste="codigo_corte.vigencia_min"] input')
+    const vigencia = page.locator('[data-ajuste="codigo_corte.vigencia_min"] input[role="spinbutton"]')
     await expect(vigencia).toHaveValue('15')
     await vigencia.fill('20')
     await vigencia.blur()
@@ -53,7 +53,7 @@ test('red y portal: la vigencia del código y las caídas se guardan para todas 
     await page.getByRole('tab', { name: 'Caídas y fallas generales' }).click()
     await expect(page).toHaveURL(/pestana=caidas/)
     await page.locator('[data-ambito="1"]').click()
-    const umbral = page.locator('[data-ajuste="caidas.umbral"] input')
+    const umbral = page.locator('[data-ajuste="caidas.umbral"] input[role="spinbutton"]')
     await expect(page.locator('[data-ajuste="caidas.umbral"]')).toContainText('Igual que «Todas»')
     await umbral.fill('60')
     await umbral.blur()
@@ -64,11 +64,11 @@ test('red y portal: la vigencia del código y las caídas se guardan para todas 
     await page.locator('[data-prueba="portal-corte-guardar"]').click()
     await expect(page.locator('[data-ajuste="caidas.umbral"]')).toContainText('Propio de esta empresa')
     // La falla general es solo global: en una empresa se ve bloqueada.
-    await expect(page.locator('[data-ajuste="falla_general.umbral"] input')).toBeDisabled()
+    await expect(page.locator('[data-ajuste="falla_general.umbral"] input[role="spinbutton"]')).toBeDisabled()
 
     await page.getByRole('tab', { name: 'Retiro, historial de IP y acceso' }).click()
     await page.locator('[data-ambito="todas"]').click()
-    await expect(page.locator('[data-ajuste="ip_historial.retencion_dias"] input')).toHaveValue('730')
+    await expect(page.locator('[data-ajuste="ip_historial.retencion_dias"] input[role="spinbutton"]')).toHaveValue('730')
 })
 
 test('facturación y cobro: reglas por empresa, impresión por caja y bancos de origen', async ({ page }) => {
@@ -151,7 +151,7 @@ test('inventario: decidir el intento anterior habilita «Declarar no recuperado�
 
     await page.goto('/inventario/tecnicos-iris')
     await expect(page.locator('[data-vinculo="iris-u-118"]')).toBeVisible()
-    await expect(page.getByText('Ese id ya lo usa otro técnico')).toBeVisible()
+    await expect(page.locator('[data-vinculo="iris-u-118"]').locator('xpath=ancestor::tr')).toContainText('Ese id ya lo usa otro técnico')
     await page.locator('[data-conciliar="iris-u-118"]').click()
     await expect(page.locator('[data-prueba="resultado-conciliar"]')).toContainText('Iris no está conectado')
 })

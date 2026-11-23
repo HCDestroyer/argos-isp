@@ -14,7 +14,7 @@ export type SalidaAjustesCobro = z.output<typeof esquemaAjustesCobro>
 
 /** Formatos de impresión de una caja (decisión 20): `Caja.formato_recibo` y `formato_factura`. */
 export const FORMATOS_IMPRESION_CAJA: { label: string, value: 'pos_80' | 'carta' }[] = [
-    { label: 'Ticket de 80 mm', value: 'pos_80' },
+    { label: 'Ticket 80 mm', value: 'pos_80' },
     { label: 'Hoja carta', value: 'carta' },
 ]
 

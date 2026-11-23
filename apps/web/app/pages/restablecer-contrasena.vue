@@ -15,19 +15,33 @@ definePageMeta({
 
 useHead({ title: 'Nueva contraseña · ArgosIsp' })
 
-const token = ref<string | null>(null)
-onMounted(() => {
-    const valor = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token')
-    token.value = valor && valor.length >= 20 ? valor : ''
-    // Fuera de la barra de direcciones (y del historial) en cuanto se leyó.
-    history.replaceState(history.state, '', window.location.pathname)
-})
-
 type Vista = 'nueva' | 'listo' | 'invalido'
 const vista = ref<Vista>('nueva')
+
+const token = ref<string | null>(null)
+
+/** Lee el token del fragmento y lo saca de la barra de direcciones (y del historial). */
+function leerToken() {
+    if (!window.location.hash) {
+        return
+    }
+    const valor = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token')
+    token.value = valor && valor.length >= 20 ? valor : ''
+    vista.value = 'nueva'
+    history.replaceState(history.state, '', window.location.pathname)
+}
+
+onMounted(() => {
+    leerToken()
+    token.value ??= ''
+    // Otro enlace abierto en la misma pestaña solo cambia el fragmento: no recarga la página.
+    window.addEventListener('hashchange', leerToken)
+})
+onBeforeUnmount(() => window.removeEventListener('hashchange', leerToken))
 const enlaceInvalido = computed(() => vista.value === 'invalido' || token.value === '')
 
 const estado = reactive<Partial<DatosRestablecerContrasena>>({ password: '', repetir: '' })
+watch(token, () => Object.assign(estado, { password: '', repetir: '' }))
 const verClave = ref(false)
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
