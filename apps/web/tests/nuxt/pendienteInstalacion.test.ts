@@ -182,7 +182,8 @@ describe('servicio pendiente de instalación', () => {
     it('/servicios filtra por pendiente de instalación y muestra la insignia', async () => {
         const servicio = await crearPendiente()
         const filtrados = await useServicios().listar({ estado: 'pendiente_instalacion' })
-        expect(filtrados.ok && filtrados.data.data.map(s => s.id)).toEqual([servicio.id])
+        // Además del recién creado, el de Edgar Leonel Batz (28), cuyo cambio de titular a empresa está en revisión (Iris 0.14.1).
+        expect(filtrados.ok && filtrados.data.data.map(s => [s.id, s.cliente_id])).toEqual([[servicio.id, servicio.cliente_id], [servicio.id - 1, 28]])
         const vista = await mountSuspended(PaginaServicios, { route: '/servicios?estado=pendiente_instalacion' })
         await esperar(() => expect(vista.text()).toContain('ana.pendiente4'))
         expect(vista.text()).toContain('Pendiente de instalación')

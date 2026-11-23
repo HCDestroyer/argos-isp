@@ -105,6 +105,16 @@ Arriba, en una sola fila: el nombre con el estado (el de su servicio más atrasa
 
 Con «Más › Ver datos del cliente»: contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión; el estado de WhatsApp (con `notificaciones.ver`), el **portal del cliente** y el **responsable de pago**; y los **datos fiscales**: documento, país, retención, nombre y dirección fiscal. Si el NIT o CUI no pasó la validación, verás «NIT o CUI por corregir»: corrígelo en «Editar», porque la factura FEL lo exige válido. Sin NIT, los avisos salen a nombre de Consumidor Final (CF).
 
+### Verificar el NIT de una empresa
+
+En los datos fiscales de una empresa con NIT verás «Verificado el … por …» o «Sin verificar». Solo un NIT verificado cuenta cuando un técnico de Iris pasa un servicio a esa empresa: si no está verificado, el cambio de titular queda en [Revisión de titulares](titulares-empresa.md).
+
+- **Permiso:** `clientes.verificar_nit` (`admin`, `soporte`).
+- **Dónde:** botón «Verificar NIT» junto al estado, solo si el cliente tiene NIT.
+- **Qué eliges:** cómo lo confirmaste, con el documento a la vista (RTU o patente) o con la consulta en la SAT.
+- **Qué pasa:** queda a tu nombre y con la fecha. Si después alguien cambia el NIT en «Editar», la marca se borra sola y hay que verificarlo otra vez.
+- Si alguien editó el cliente mientras lo veías, el diálogo lo avisa y ofrece «Recargar la ficha».
+
 ### Pestañas
 
 Las pestañas van dentro de la misma tarjeta que su contenido:
@@ -179,3 +189,4 @@ El teléfono y el móvil solo se validan si los cambiaste: un número viejo con 
 - [Alta de un servicio](alta-de-servicio.md)
 - [Servicios](servicios.md)
 - [Campos personalizados](campos-personalizados.md)
+- [Revisión de titulares](titulares-empresa.md)

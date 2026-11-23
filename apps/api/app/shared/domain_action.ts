@@ -61,6 +61,14 @@ export abstract class DomainAction<Entrada, Salida> {
      */
     protected readonly camposEntradaOcultos: readonly string[] = []
 
+    /**
+     * Último ajuste de la entrada ya enmascarada antes de auditarla, para ocultar campos anidados
+     * (p. ej. `representante.*` salvo `documento_tipo` en `servicios.cambiar_titular`, Iris 0.14.1).
+     */
+    protected ajustarEntradaAuditada(entrada: unknown): unknown {
+        return entrada
+    }
+
     async execute(
         input: Entrada,
         ctx: ContextoAccion,
@@ -73,7 +81,9 @@ export abstract class DomainAction<Entrada, Salida> {
                 `${this.nombre}: la actuación vinculada de esta petición solo sirve para ${ctx.via.permiso}`,
             )
         }
-        const entrada = ocultarCampos(enmascarar(input), this.camposEntradaOcultos)
+        const entrada = this.ajustarEntradaAuditada(
+            ocultarCampos(enmascarar(input), this.camposEntradaOcultos),
+        )
         let t: Transaccion | undefined
 
         const anidada = Boolean(opciones.trx)
