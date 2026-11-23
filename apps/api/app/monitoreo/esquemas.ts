@@ -1,4 +1,5 @@
 import {
+    booleano,
     definirEsquema,
     entero,
     enumerado,
@@ -165,5 +166,115 @@ export const Almacenamiento = definirEsquema(
             ...nulable(MedicionAlmacenamiento),
             description: 'Último cálculo guardado (null si nunca)',
         },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Tareas programadas (`app/monitoreo/crons`)
+|--------------------------------------------------------------------------
+*/
+
+export const CorridaCron = definirEsquema(
+    'CorridaCron',
+    objeto({
+        id: { type: ['integer', 'null'], description: 'null si sale de la auditoría o del outbox' },
+        clave: texto,
+        origen: enumerado(['programado', 'manual']),
+        estado: {
+            ...enumerado(['en_curso', 'ok', 'sin_cambios', 'error', 'omitido']),
+            description:
+                '`omitido`: no corrió porque otra instancia tenía el lock (o no aplicaba). Una corrida que quedó `en_curso` en una instancia que se detuvo sale `error`',
+        },
+        inicio: { ...instante, description: 'Inicio de la corrida (la última si se agruparon varias)' },
+        primera: { ...instante, description: 'Inicio de la primera corrida agrupada' },
+        fin: nulable(instante),
+        duracion_ms: { type: ['integer', 'null'] },
+        repeticiones: {
+            ...entero,
+            description: 'Corridas programadas seguidas sin cambios agrupadas en esta fila',
+        },
+        resumen: { ...nulable(texto), description: 'Frase corta: «24 facturas emitidas»' },
+        error: { ...nulable(texto), description: 'Mensaje del error, sin secretos' },
+        instancia: {
+            ...nulable(texto),
+            description: 'Instancia que la corrió (`ARGOSISP_INSTANCIA` o host:pid)',
+        },
+        usuario_id: { type: ['integer', 'null'], description: 'Quién pidió «Ejecutar ahora»' },
+        fuente: enumerado(['corridas', 'auditoria']),
+    }),
+)
+
+export const CorridasCronPagina = definirEsquema('CorridasCronPagina', pagina(CorridaCron))
+
+const HorarioCron = objeto({
+    tipo: enumerado(['cada', 'diario', 'mensual', 'continuo']),
+    cada_segundos: { type: ['integer', 'null'] },
+    hora: { ...nulable(texto), description: 'HH:mm en la zona de `zona`' },
+    dia: { type: ['integer', 'null'], description: 'Día del mes (mensual)' },
+    zona: texto,
+    texto: { ...texto, description: 'Para mostrar tal cual: «Cada 5 min», «Todos los días a las 02:15»' },
+})
+
+export const TareaProgramada = definirEsquema(
+    'TareaProgramada',
+    objeto({
+        clave: texto,
+        nombre: texto,
+        modulo: texto,
+        modulo_nombre: texto,
+        descripcion: texto,
+        proceso: { ...texto, description: 'Proceso que la corre (`node ace <proceso>`)' },
+        horario: nulable(HorarioCron),
+        activo: { ...booleano, description: 'false si está apagada por configuración' },
+        manual: { ...booleano, description: 'Se puede ejecutar a mano' },
+        permisos: { ...lista(texto), description: 'Permisos para ejecutarla a mano' },
+        estado: enumerado(['en_curso', 'error', 'atrasada', 'ok', 'sin_cambios', 'sin_datos', 'apagada']),
+        ultima: nulable(CorridaCron),
+        ultima_correcta: nulable(instante),
+        proxima: nulable(instante),
+        proxima_fuente: {
+            type: ['string', 'null'],
+            enum: ['bullmq', 'calculada', null],
+            description:
+                '`bullmq`: la agenda real del job scheduler; `calculada`: del horario (Redis no respondió o no está agendada)',
+        },
+        atrasada: booleano,
+        en_curso: nulable(
+            objeto({
+                corrida_id: entero,
+                desde: instante,
+                instancia: texto,
+                origen: enumerado(['programado', 'manual']),
+            }),
+        ),
+        lock: nulable(
+            objeto({
+                tipo: enumerado(['postgres', 'redis', 'cola']),
+                tomado: booleano,
+                dueno: nulable(texto),
+                instancia: nulable(texto),
+            }),
+        ),
+        nota: nulable(texto),
+    }),
+)
+
+export const TareasProgramadas = definirEsquema(
+    'TareasProgramadas',
+    objeto({
+        data: lista(TareaProgramada),
+        avisos: { ...lista(texto), description: 'Fuentes que no se pudieron leer (Redis, locks)' },
+        generado_en: instante,
+    }),
+)
+
+export const EjecucionCron = definirEsquema(
+    'EjecucionCron',
+    objeto({
+        clave: texto,
+        job_id: texto,
+        estado: enumerado(['encolada']),
+        encolada_en: instante,
     }),
 )

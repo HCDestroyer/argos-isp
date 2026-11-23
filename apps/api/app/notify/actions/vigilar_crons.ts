@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import {
@@ -23,6 +23,7 @@ import { horasDeCorte } from '#billing/cortes'
 export type CronVigilado =
     | { accion: string; descripcion: string; cadaMin: number }
     | { accion: string; descripcion: string; diario: string }
+    | { accion: string; descripcion: string; mensual: { dia: number; hora: string } }
 
 /**
  * Crons de billing (A3) que se vigilan por su corrida en `audit.acciones` (las registra
@@ -43,21 +44,59 @@ export const CRONS_VIGILADOS: readonly CronVigilado[] = [
 /**
  * Último instante en que el cron debió correr (hasta `ahora`) y el siguiente después de una
  * corrida. Periódico: `ultima + cadaMin`. Diario: la hora de hoy en Guatemala si ya pasó; si no,
- * la de ayer.
+ * la de ayer. Mensual (pantalla de tareas programadas): el día y hora de este mes si ya pasó; si no,
+ * los del mes anterior.
  */
-function horario(cron: CronVigilado, ahora: DateTime, ultima: DateTime | null) {
+export function horario(cron: CronVigilado, ahora: DateTime, ultima: DateTime | null) {
     if ('cadaMin' in cron) {
         return {
-            // atrasado si la última corrida es anterior a `debio - tolerancia` (ver handle)
+            // atrasado si la última corrida es anterior a `debio - tolerancia` (ver evaluarAtraso)
             debio: ahora.minus({ minutes: cron.cadaMin }),
             siguiente: ultima ? ultima.plus({ minutes: cron.cadaMin }) : null,
         }
     }
-    const [hora, minuto] = cron.diario.split(':').map(Number) as [number, number]
     const local = ahora.setZone(ZONA)
+    if ('mensual' in cron) {
+        const [hora, minuto] = cron.mensual.hora.split(':').map(Number) as [number, number]
+        let debio = local.set({
+            day: cron.mensual.dia,
+            hour: hora,
+            minute: minuto,
+            second: 0,
+            millisecond: 0,
+        })
+        if (debio > local) debio = debio.minus({ months: 1 })
+        return { debio: debio.toUTC(), siguiente: debio.toUTC() }
+    }
+    const [hora, minuto] = cron.diario.split(':').map(Number) as [number, number]
     let debio = local.set({ hour: hora, minute: minuto, second: 0, millisecond: 0 })
     if (debio > local) debio = debio.minus({ days: 1 })
     return { debio: debio.toUTC(), siguiente: debio.toUTC() }
+}
+
+/**
+ * ¿Está atrasado? `atrasado`: no corrió en su periodo más la tolerancia (o desde su hora). `al_dia`:
+ * corrió. `en_espera`: nunca corrió pero el sistema se desplegó hace poco, o es diario y aún está en
+ * la tolerancia desde su hora: ni se avisa ni se resuelve. La usan este cron y la pantalla de tareas
+ * programadas (`#monitoreo/crons/estado`).
+ */
+export function evaluarAtraso(
+    cron: CronVigilado,
+    ahora: DateTime,
+    ultima: DateTime | null,
+    despliegue: DateTime | null,
+    tolerancia: number,
+): { estado: 'atrasado' | 'al_dia' | 'en_espera'; debio: DateTime; siguiente: DateTime | null } {
+    const { debio, siguiente } = horario(cron, ahora, ultima)
+    // Periódico: atrasado si no corrió en `periodo + tolerancia`. Diario: si ya pasó la
+    // tolerancia desde la hora de hoy (o de ayer) y no hay corrida desde esa hora.
+    const periodico = 'cadaMin' in cron
+    const limite = periodico ? debio.minus({ minutes: tolerancia }) : debio
+    const enGracia = !periodico && ahora < debio.plus({ minutes: tolerancia })
+    const referencia = ultima ?? despliegue
+    if (!ultima && referencia && referencia >= limite) return { estado: 'en_espera', debio, siguiente }
+    if (enGracia && (!ultima || ultima < limite)) return { estado: 'en_espera', debio, siguiente }
+    return { estado: !ultima || ultima < limite ? 'atrasado' : 'al_dia', debio, siguiente }
 }
 
 export const ACCION_CORTE = 'servicios.corte'
@@ -125,16 +164,9 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
         for (const cron of CRONS_VIGILADOS) {
             const clave = `cron:${cron.accion}`
             const ultima = await ultimaCorrida(t.trx, cron.accion, ahora)
-            const { debio, siguiente } = horario(cron, ahora, ultima)
-            // Periódico: atrasado si no corrió en `periodo + tolerancia`. Diario: si ya pasó la
-            // tolerancia desde la hora de hoy (o de ayer) y no hay corrida desde esa hora.
-            const diario = !('cadaMin' in cron)
-            const limite = diario ? debio : debio.minus({ minutes: tolerancia })
-            const enGracia = diario && ahora < debio.plus({ minutes: tolerancia })
-            const referencia = ultima ?? despliegue
-            if (!ultima && referencia && referencia >= limite) continue
-            if (enGracia && (!ultima || ultima < limite)) continue
-            if (!ultima || ultima < limite) {
+            const { estado, siguiente } = evaluarAtraso(cron, ahora, ultima, despliegue, tolerancia)
+            if (estado === 'en_espera') continue
+            if (estado === 'atrasado') {
                 resultado.atrasados.push(clave)
                 const { incidente, nuevo } = await abrirIncidente(t.trx, {
                     clave,
@@ -324,7 +356,7 @@ export async function ultimaCorridaDeEmpresa(
 }
 
 /** Instante de la última migración aplicada (`adonis_schema.migration_time`). */
-async function ultimoDespliegue(trx: TransactionClientContract): Promise<DateTime | null> {
+export async function ultimoDespliegue(trx: QueryClientContract): Promise<DateTime | null> {
     const fila = (await trx.from('adonis_schema').max('migration_time as ultima').first()) as {
         ultima: Date | null
     } | null

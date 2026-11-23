@@ -33,9 +33,17 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
 // 0.12.0 (A6, 21 nov): con la 0.9.0 completa del lado de Argos (bienvenida con seguimiento, avisos de
 // soporte, `capacidades`, y A32, A33 y A35 con su error de «sin capacidad» porque Argos no tiene SmartOLT
 // ni ACS: `capacidades.aprovisionamiento` en false) y 0.10.0 a 0.12.0 ya en main (A38–A48, `X-Iris-Contacto`).
-// No 0.12.1: la clave del consentimiento por número todavía usa sha256 (0.12.1 pide HMAC con el secreto
-// del receptor) y el portal no manda `X-Iris-Contacto` en §11.
-export const CONTRATO_IRIS = '0.12.0'
+// Entonces no 0.12.1: la clave del consentimiento por número todavía usaba sha256 (0.12.1 pide HMAC con el secreto
+// del receptor) y el portal no mandaba `X-Iris-Contacto` en §11.
+// 0.14.3 (A6, 23 nov): verificado contra el contrato pieza por pieza (README, «Contrato 0.14.3 anunciado»).
+// 0.12.1: huella HMAC del número (#285) y `X-Iris-Contacto` del portal (#283). 0.13.0: caídas 3 en 60 min
+// por empresa, `red.falla_general_*` a Iris (`EVENTOS_DESDE_0130`), `GET /incidentes-red/:id/servicios`
+// auditada y gestiones de cobro. 0.14.0: inventario y vínculos de técnicos (#306), sin retroceso y
+// `contrato_no_soportado`. 0.14.1: titular empresa (#309). 0.14.2: actor `sistema`, capacidades de Iris
+// y adjuntos del portal sin HEIC ni WebP (#311, #310). 0.14.3: bloque E, cobro de instalación y
+// `GET /facturas/origen-iris` (#313), `numero` null en `factura.*` sin DTE. Queda fuera A52 (Argos lee
+// las plantillas de WhatsApp de Iris para mostrarlas): es una lectura de Argos que Iris no espera.
+export const CONTRATO_IRIS = '0.14.3'
 
 /**
  * Contrato que habla este Argos ahora: `CONTRATO_IRIS`, salvo en las pruebas, que pueden hablar otro

@@ -103,6 +103,9 @@ export const EVENTOS_A_IRIS = [
     // 0.12.0 (A48)
     'inventario.equipo_cambiado',
     'inventario.unidad_estado_cambiado',
+    // 0.13.0 (A50): falla general de red
+    'red.falla_general_abierta',
+    'red.falla_general_cerrada',
 ] as const
 
 /** Eventos que nacieron con el contrato Iris 0.5.0: solo a conectores con contrato ≥ 0.5.0. */
@@ -175,16 +178,34 @@ export const EVENTOS_DESDE_0120 = [
 
 export const CONTRATO_EVENTOS_0120 = '0.12.0'
 
+/**
+ * Falla general de red (A50), contrato 0.13.0 §2.3 y §3.11: uno por empresa afectada con el mismo
+ * `incidente_id`, solo ids de servicios. Solo a conectores con contrato ≥ 0.13.0.
+ */
+export const EVENTOS_DESDE_0130 = [
+    'red.falla_general_abierta',
+    'red.falla_general_cerrada',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+export const CONTRATO_EVENTOS_0130 = '0.13.0'
+
 /** Contrato 0.14.1 (§3.4.4): `tipo_titular` en `servicio.titular_cambiado`; a un conector anterior no sale. */
 export const CONTRATO_TITULAR_EMPRESA = '0.14.1'
 
-/** Versión mínima propia de este módulo (0.5.0, 0.8.0, 0.9.0, 0.10.0, 0.12.0); la de 0.6.0 la decide A1. */
+/**
+ * Contrato 0.14.3 (§2.3): `numero` de `factura.*` es el del DTE o null si no está certificada. A un
+ * conector anterior sale, como antes, el id de la factura en texto.
+ */
+export const CONTRATO_NUMERO_FACTURA_DTE = '0.14.3'
+
+/** Versión mínima propia de este módulo (0.5.0, 0.8.0, 0.9.0, 0.10.0, 0.12.0, 0.13.0); la de 0.6.0 la decide A1. */
 function contratoMinimoEnvio(evento: string): string | null {
     if ((EVENTOS_DESDE_050 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_050
     if ((EVENTOS_DESDE_080 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_080
     if ((EVENTOS_DESDE_090 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_090
     if ((EVENTOS_DESDE_0100 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_0100
     if ((EVENTOS_DESDE_0120 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_0120
+    if ((EVENTOS_DESDE_0130 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_0130
     return contratoMinimoEventoIris(evento)
 }
 
@@ -387,6 +408,9 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         return payloadInstalacion(evento, p)
     }
     if (evento === 'equipo.wifi_resuelto') return payloadWifiResuelto(p)
+    if (evento === 'red.falla_general_abierta' || evento === 'red.falla_general_cerrada') {
+        return payloadFallaGeneral(p)
+    }
 
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
@@ -842,7 +866,8 @@ interface FacturaIris {
     total: string
     saldo: string
     origen_externo_id: string
-    numero: string
+    /** serie-número del DTE; null si la factura no está certificada (0.14.3 §2.3) */
+    numero: string | null
 }
 
 /**
@@ -868,13 +893,13 @@ async function facturaIris(facturaId: number): Promise<FacturaIris | null> {
         total: new Decimal(f.total).toFixed(2),
         saldo: f.estado === 'anulada' || pendiente.isNegative() ? '0.00' : pendiente.toFixed(2),
         origen_externo_id: existe.origen_externo_id,
-        numero: f.fel_serie && f.fel_numero ? `${f.fel_serie}-${f.fel_numero}` : String(f.id),
+        numero: f.fel_serie && f.fel_numero ? `${f.fel_serie}-${f.fel_numero}` : null,
     }
 }
 
 /**
- * `factura.emitida` / `factura.anulada` (0.9.0, A36): factura_id, numero (serie-número del DTE o el
- * id), empresa_id, cliente_id, servicio_id, origen_tipo, origen_id, estado, total, saldo y moneda.
+ * `factura.emitida` / `factura.anulada` (0.9.0, A36): factura_id, numero (serie-número del DTE, o
+ * null si no está certificada: aclarado en 0.14.3; a un conector anterior sale el id como antes), empresa_id, cliente_id, servicio_id, origen_tipo, origen_id, estado, total, saldo y moneda.
  * Solo facturas `iris_orden`; las demás no salen (null).
  */
 async function payloadFacturaIris(evento: string, p: Payload): Promise<WebhookIris | null> {
@@ -1082,6 +1107,47 @@ function payloadWifiResuelto(p: Payload): WebhookIris | null {
 // ── 0.10.0 (A42, A39) y 0.12.0 (A48) ─────────────────────────────────────────────────────────
 
 const MOTIVOS_TITULAR = ['menor_de_edad', 'otro'] as const
+
+const ALCANCES_FALLA = ['router', 'olt', 'pon', 'zona'] as const
+
+/** Tope de ids de servicios por evento (§3.11); el resto, `GET /incidentes-red/:id/servicios`. */
+export const MAXIMO_IDS_FALLA_IRIS = 5000
+
+/**
+ * `red.falla_general_abierta` / `red.falla_general_cerrada` (0.13.0, A50, §2.3 y §3.11): incidente_id,
+ * empresa_id, alcance, alcance_id, servicios_afectados `{ cantidad, ids[] }` (hasta 5000 ids), desde y
+ * hasta. Ya viene uno por empresa afectada (A1); la empresa del evento es el alcance. Lista cerrada:
+ * nunca nombres ni direcciones, y tampoco `origen` (quién lo abrió a mano queda en la auditoría de
+ * Argos).
+ */
+function payloadFallaGeneral(p: Payload): WebhookIris | null {
+    const incidenteId = entero(p.incidente_id)
+    const empresaId = entero(p.empresa_id)
+    const alcance = unoDe(p.alcance, ALCANCES_FALLA)
+    const alcanceId = entero(p.alcance_id)
+    const desde = instanteIso(p.desde)
+    if (!incidenteId || !empresaId || !alcance || !alcanceId || !desde) return null
+    const afectados =
+        p.servicios_afectados && typeof p.servicios_afectados === 'object'
+            ? (p.servicios_afectados as Record<string, unknown>)
+            : {}
+    const ids = (Array.isArray(afectados.ids) ? afectados.ids : [])
+        .map((v) => entero(v))
+        .filter((v): v is number => v !== null)
+        .slice(0, MAXIMO_IDS_FALLA_IRIS)
+    return {
+        payload: {
+            incidente_id: incidenteId,
+            empresa_id: empresaId,
+            alcance,
+            alcance_id: alcanceId,
+            servicios_afectados: { cantidad: enteroONulo(afectados.cantidad) ?? ids.length, ids },
+            desde,
+            hasta: instanteIso(p.hasta),
+        },
+        empresas: [empresaId],
+    }
+}
 const MOTIVOS_CAMBIO_EQUIPO = ['danado', 'actualizacion', 'garantia', 'otro'] as const
 const DESTINOS_SALE = ['funciona', 'revision', 'garantia', 'danado'] as const
 const ESTADOS_UNIDAD = [
@@ -1166,6 +1232,13 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
     }
     if (evento.evento === 'servicio.titular_cambiado' && !(await conectorAdmite(CONTRATO_TITULAR_EMPRESA))) {
         delete payload.tipo_titular
+    }
+    if (
+        (evento.evento === 'factura.emitida' || evento.evento === 'factura.anulada') &&
+        payload.numero === null &&
+        !(await conectorAdmite(CONTRATO_NUMERO_FACTURA_DTE))
+    ) {
+        payload.numero = String(payload.factura_id)
     }
     if (evento.evento === 'cliente.actualizado' && !alcance.global) {
         // Iris solo ve las empresas de su alcance

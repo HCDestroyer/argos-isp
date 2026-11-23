@@ -224,6 +224,12 @@ export interface PromocionVelocidadVista {
     dias_semana: number[] | null
     precio: string | null
     estado: 'activa' | 'cancelada'
+    /** pestaña del tablero, calculada con las fechas en UTC (`vigenciaPromocion`) */
+    vigencia: VigenciaPromocion
+    /** tramo en curso según el horario (hora de Guatemala); null fuera de horario o si no está vigente */
+    tramo_actual: { inicio: string; fin: string } | null
+    /** siguiente tramo que empieza después de ahora; null si no hay otro */
+    proximo_tramo: { inicio: string; fin: string } | null
     motivo_cancelacion: string | null
     cancelada_en: string | null
     creado_por: number | null
@@ -232,6 +238,40 @@ export interface PromocionVelocidadVista {
     created_at: string
     updated_at: string
 }
+
+/**
+ * Pestañas del tablero de promociones: `cancelada` (estado), y de las activas `programada`
+ * (`inicio` > ahora), `vigente` (`inicio` ≤ ahora < `fin`) o `terminada` (`fin` ≤ ahora). `inicio` y `fin`
+ * son instantes (timestamptz), así que se comparan en UTC; la hora de Guatemala solo cuenta para la
+ * franja diaria (`tramo_actual`, `proximo_tramo`).
+ */
+export const VIGENCIAS_PROMOCION = ['vigente', 'programada', 'terminada', 'cancelada'] as const
+export type VigenciaPromocion = (typeof VIGENCIAS_PROMOCION)[number]
+
+export function vigenciaPromocion(
+    p: { estado: 'activa' | 'cancelada'; inicio: Date; fin: Date },
+    ahora: Date,
+): VigenciaPromocion {
+    if (p.estado === 'cancelada') return 'cancelada'
+    if (ahora < p.inicio) return 'programada'
+    if (ahora >= p.fin) return 'terminada'
+    return 'vigente'
+}
+
+/** Condición SQL de cada vigencia sobre `p` (con `?` = ahora, timestamptz). */
+const SQL_VIGENCIA: Record<VigenciaPromocion, string> = {
+    cancelada: `p.estado = 'cancelada'`,
+    programada: `p.estado = 'activa' AND p.inicio > ?::timestamptz`,
+    vigente: `p.estado = 'activa' AND p.inicio <= ?::timestamptz AND p.fin > ?::timestamptz`,
+    terminada: `p.estado = 'activa' AND p.fin <= ?::timestamptz`,
+}
+
+function valoresVigencia(vigencia: VigenciaPromocion, ahora: Date): string[] {
+    const n = (SQL_VIGENCIA[vigencia].match(/\?/g) ?? []).length
+    return Array.from({ length: n }, () => ahora.toISOString())
+}
+
+export type ConteosVigencia = Record<VigenciaPromocion, number>
 
 const instante = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null))
 const hora = (v: unknown) => (typeof v === 'string' ? v.slice(0, 5) : null)
@@ -269,9 +309,24 @@ function columnas(cliente: QueryClientContract) {
     ]
 }
 
-function normalizar(f: Record<string, unknown>): PromocionVelocidadVista {
+function normalizar(f: Record<string, unknown>, ahora: Date = new Date()): PromocionVelocidadVista {
+    const estado = f.estado as 'activa' | 'cancelada'
+    const def: DefinicionTiempo = {
+        modo: f.modo as ModoPromocion,
+        inicio: new Date(f.inicio as Date | string),
+        fin: new Date(f.fin as Date | string),
+        franja_inicio: hora(f.franja_inicio),
+        franja_fin: hora(f.franja_fin),
+        dias_semana: Array.isArray(f.dias_semana) ? (f.dias_semana as unknown[]).map(Number) : null,
+    }
+    const vigencia = vigenciaPromocion({ estado, inicio: def.inicio, fin: def.fin }, ahora)
+    const iso = (t: Tramo | null) => (t ? { inicio: t.inicio.toISOString(), fin: t.fin.toISOString() } : null)
+    const activa = vigencia === 'vigente' || vigencia === 'programada'
     return {
         ...(f as unknown as PromocionVelocidadVista),
+        vigencia,
+        tramo_actual: vigencia === 'vigente' ? iso(tramoEn(def, ahora)) : null,
+        proximo_tramo: activa ? iso(proximoTramo(def, ahora)) : null,
         id: Number(f.id),
         empresa_id: Number(f.empresa_id),
         plan_destino_id: f.plan_destino_id === null ? null : Number(f.plan_destino_id),
@@ -302,18 +357,49 @@ export async function verPromocion(
     return normalizar(fila)
 }
 
+/**
+ * `GET /promociones-velocidad`: página por cursor (`p.id` descendente) filtrable por `estado` y por
+ * `vigencia` (pestaña del tablero), con `conteos` por pestaña en la misma respuesta. Los conteos respetan
+ * las empresas y la búsqueda `q`, no `estado` ni `vigencia` (son los números de las cuatro pestañas).
+ */
 export async function listarPromociones(
-    filtro: { empresas: number[] | null; estado?: 'activa' | 'cancelada' },
+    filtro: {
+        empresas: number[] | null
+        estado?: 'activa' | 'cancelada'
+        vigencia?: VigenciaPromocion
+        q?: string
+    },
     opciones: OpcionesPaginacion,
-): Promise<Pagina<PromocionVelocidadVista>> {
-    const consulta = db.from('core.promociones_velocidad as p').select(columnas(db.connection()))
-    if (filtro.empresas) consulta.whereIn('p.empresa_id', filtro.empresas)
+    ahora: Date = new Date(),
+): Promise<Pagina<PromocionVelocidadVista> & { conteos: ConteosVigencia }> {
+    const base = () => {
+        const q = db.from('core.promociones_velocidad as p')
+        if (filtro.empresas) q.whereIn('p.empresa_id', filtro.empresas)
+        if (filtro.q) {
+            const patron = `%${filtro.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+            q.where((w) => w.whereILike('p.nombre', patron).orWhereILike('p.descripcion', patron))
+        }
+        return q
+    }
+    const consulta = base().select(columnas(db.connection()))
     if (filtro.estado) consulta.where('p.estado', filtro.estado)
-    const pagina = await paginar<Record<string, unknown>>(consulta, opciones, {
-        columna: 'p.id',
-        clave: (f) => Number(f.id),
-    })
-    return { ...pagina, data: pagina.data.map(normalizar) }
+    if (filtro.vigencia) {
+        consulta.whereRaw(SQL_VIGENCIA[filtro.vigencia], valoresVigencia(filtro.vigencia, ahora))
+    }
+
+    const conteo = base().select(
+        ...VIGENCIAS_PROMOCION.map((v) =>
+            db.raw(`count(*) FILTER (WHERE ${SQL_VIGENCIA[v]})::int AS ${v}`, valoresVigencia(v, ahora)),
+        ),
+    )
+    const [pagina, filaConteo] = await Promise.all([
+        paginar<Record<string, unknown>>(consulta, opciones, { columna: 'p.id', clave: (f) => Number(f.id) }),
+        conteo.first() as Promise<Record<VigenciaPromocion, number> | null>,
+    ])
+    const conteos = Object.fromEntries(
+        VIGENCIAS_PROMOCION.map((v) => [v, Number(filaConteo?.[v] ?? 0)]),
+    ) as ConteosVigencia
+    return { ...pagina, data: pagina.data.map((f) => normalizar(f, ahora)), conteos }
 }
 
 export interface PromocionServicioVista {

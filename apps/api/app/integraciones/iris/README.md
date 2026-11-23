@@ -91,7 +91,7 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.12.0"`: la versión del contrato que habla este Argos). Desde 0.9.0 (§4.3) también
+  `"0.14.3"`: la versión del contrato que habla este Argos). Desde 0.9.0 (§4.3) también
   `capacidades: { aprovisionamiento: [{ empresa_id, ftth, wireless, tr069 }] }` (una fila por empresa
   activa; hoy todo `false`: Argos no tiene SmartOLT ni ACS, ver `#integraciones/equipos`). Una repetición del canje sale con los
   valores actuales.
@@ -268,7 +268,7 @@ el nuevo. Reglas:
   `GET <iris>/api/v1/integraciones/argosisp/capacidades` (`{ contrato_iris, capacidades }`) con el token
   del panel cuando el conector informa contrato ≥ 0.14.2; antes, de `…/estado`. `403` y `404` son
   error visible (`sin_respuesta`), nunca capacidades supuestas.
-- `CONTRATO_IRIS` sigue en `0.8.1`: se sube cuando estén todas las piezas hasta la 0.14.2.
+- `CONTRATO_IRIS` se subió a `0.14.3` con todas las piezas (ver «Contrato 0.14.3 anunciado»).
 
 ## Aprobar y rechazar desde la conversación (contrato 0.7.0 §7.7, A23)
 
@@ -434,7 +434,7 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 
 ## Contrato 0.9.0 completo y versión anunciada (A6)
 
-`CONTRATO_IRIS = '0.12.0'`. De la 0.9.0, además de lo de arriba: bienvenida con seguimiento (§12.5,
+Entonces `CONTRATO_IRIS = '0.12.0'` (hoy `0.14.3`, abajo). De la 0.9.0, además de lo de arriba: bienvenida con seguimiento (§12.5,
 `#notify/bienvenida`; webhook `servicio.bienvenida_cambiada` solo a conectores ≥ 0.9.0), avisos de
 tickets y solicitudes (`#notify/soporte`), `capacidades` en el canje y el estado, y A32, A33 y A35 en
 `#integraciones/equipos` (rutas con la forma del contrato que responden su error de «sin capacidad»:
@@ -469,3 +469,32 @@ al conciliar un «cobro por confirmar».
   `429 demasiadas_peticiones` con `Retry-After`.
 - Auditada siempre (también el `404`) con canal `api`, `iris_actor` y solo los parámetros como
   entrada. No emite eventos.
+
+## Contrato 0.14.3 anunciado (A6)
+
+`CONTRATO_IRIS = '0.14.3'` (antes `0.12.0`). Desde aquí Iris puede informar hasta 0.14.3 con
+`PUT /integraciones/iris/contrato`; una versión mayor sigue en `422 contrato_no_soportado`. Revisado
+contra el contrato versión por versión:
+
+- **0.12.1**: huella HMAC del número en la clave del consentimiento (`#notify/consentimientos`) y
+  `X-Iris-Contacto` en todo §11 desde el portal (`#portal/soporte/iris_portal`).
+- **0.13.0**: caídas repetidas con 3 en 60 min por empresa (`#network/sesiones/caidas`, ajustes
+  `caidas.*`); **`red.falla_general_abierta` / `_cerrada` a Iris** (`EVENTOS_DESDE_0130`, solo a
+  conectores ≥ 0.13.0, uno por empresa del alcance, lista cerrada sin `origen`, hasta 5000 ids);
+  `GET /incidentes-red/:id/servicios` con `incidentes_red.leer`, ahora **auditada** como acción
+  (`#network/actions/leer_servicios_incidente_red`, también el `404`); gestiones de cobro
+  (`POST /clientes/:id/gestiones-cobro`, permiso `gestiones_cobro.registrar`, el que el contrato llama
+  `clientes.registrar_gestion_cobro`).
+- **0.14.0**: inventario, intentos verificados con Iris, vínculos de técnicos y su carga inicial
+  (`#inventario`, PR #306); sin retroceso (`409 contrato_regresivo`) y `422 contrato_no_soportado`.
+- **0.14.1**: titular empresa y `tipo_titular` solo a conectores ≥ 0.14.1 (PR #309).
+- **0.14.2**: actor `sistema` y capacidades de Iris (arriba); adjuntos del portal solo JPEG, PNG y PDF:
+  el navegador convierte HEIC y WebP a JPEG y el servidor responde `422 mime_no_permitido` sin llamar a
+  Iris si llega uno (`#portal/soporte/adjuntos`).
+- **0.14.3**: bloque E (`#integraciones/equipos`, PR #313), `GET /facturas/origen-iris` y, en
+  `factura.emitida` / `factura.anulada`, `numero` = serie-número del DTE o `null` sin certificar; a un
+  conector anterior sale el id como antes (`CONTRATO_NUMERO_FACTURA_DTE`).
+- **Fuera**: A52 (Argos lee las plantillas de WhatsApp de Iris para mostrarlas en su panel). Es una
+  lectura de Argos que Iris no espera; como A7, queda pendiente sin bloquear la versión.
+
+Prueba: `tests/integraciones/iris_contrato_0143.spec.ts`.
