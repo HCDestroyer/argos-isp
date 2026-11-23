@@ -9,7 +9,7 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  */
 definePageMeta({ permiso: 'empresa.ver' })
 
-useHead({ title: 'Empresa · ArgosIsp' })
+useHead({ title: 'Contacto y pagos · ArgosIsp' })
 
 const { puede } = usePermisos()
 const toast = useToast()
@@ -19,6 +19,7 @@ const cargando = ref(false)
 const problema = ref<Problem | null>(null)
 
 const formulario = useTemplateRef('formulario')
+const idFormulario = useId()
 const estado = reactive<EntradaEmpresa>({
     nombre: '', nit: '', direccion: '', telefono: '', telefono_alterno: '', whatsapp: '', correo: '', horario: '', instrucciones_pago: '',
 })
@@ -69,12 +70,12 @@ onMounted(cargar)
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="empresa"
-        titulo="Contacto y pagos"
-        icono="i-lucide-building-2"
+        titulo="Empresa y fiscal"
+        descripcion="Los datos legales con los que se factura y se declara"
     >
-        <div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        <div class="flex w-full max-w-4xl flex-col gap-4">
             <ProblemaAlerta
                 v-if="problema"
                 :problema="problema"
@@ -98,6 +99,7 @@ onMounted(cargar)
                     description="Se muestran los valores por defecto. Complétalos para que el aviso de cobro y el portal muestren tus datos de contacto."
                 />
                 <UForm
+                    :id="idFormulario"
                     ref="formulario"
                     :schema="esquemaEmpresa"
                     :state="estado"
@@ -105,12 +107,11 @@ onMounted(cargar)
                     class="flex flex-col gap-6"
                     @submit="guardar"
                 >
-                    <UPageCard
-                        title="Datos generales"
-                        variant="subtle"
-                        :ui="{ container: 'gap-4 sm:p-5' }"
+                    <ConfiguracionBloque
+                        titulo="Lo que ve el cliente en avisos y portal"
+                        icono="i-lucide-contact"
                     >
-                        <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="grid gap-4 py-2 sm:grid-cols-2">
                             <UFormField
                                 label="Nombre comercial"
                                 name="nombre"
@@ -154,14 +155,13 @@ onMounted(cargar)
                                 />
                             </UFormField>
                         </div>
-                    </UPageCard>
+                    </ConfiguracionBloque>
 
-                    <UPageCard
-                        title="Atención al cliente"
-                        variant="subtle"
-                        :ui="{ container: 'gap-4 sm:p-5' }"
+                    <ConfiguracionBloque
+                        titulo="Atención al cliente"
+                        icono="i-lucide-headset"
                     >
-                        <div class="grid gap-4 sm:grid-cols-3">
+                        <div class="grid gap-4 py-2 sm:grid-cols-3">
                             <UFormField
                                 label="Teléfono"
                                 name="telefono"
@@ -206,13 +206,12 @@ onMounted(cargar)
                                 />
                             </UFormField>
                         </div>
-                    </UPageCard>
+                    </ConfiguracionBloque>
 
-                    <UPageCard
-                        title="Instrucciones de pago"
-                        description="Acompañan las cuentas para depósito en el aviso de cobro y en el portal."
-                        variant="subtle"
-                        :ui="{ container: 'gap-4 sm:p-5' }"
+                    <ConfiguracionBloque
+                        titulo="Instrucciones de pago"
+                        icono="i-lucide-wallet"
+                        descripcion="Acompañan las cuentas para depósito en el aviso de cobro y en el portal."
                     >
                         <UFormField
                             name="instrucciones_pago"
@@ -226,7 +225,7 @@ onMounted(cargar)
                                 class="w-full"
                             />
                         </UFormField>
-                    </UPageCard>
+                    </ConfiguracionBloque>
 
                     <UAlert
                         v-if="conflicto"
@@ -242,35 +241,30 @@ onMounted(cargar)
                         v-else-if="problemaGuardar && problemaGuardar.status !== 422"
                         :problema="problemaGuardar"
                     />
-
-                    <div
-                        v-if="editable"
-                        class="flex flex-wrap items-center gap-2"
-                    >
-                        <UButton
-                            type="submit"
-                            label="Guardar"
-                            icon="i-lucide-check"
-                            :loading="enviando"
-                            :disabled="sinCambios"
-                        />
-                        <UButton
-                            label="Descartar cambios"
-                            color="neutral"
-                            variant="ghost"
-                            :disabled="sinCambios || enviando"
-                            @click="empresa && rellenar(empresa)"
-                        />
-                        <span class="text-xs text-muted">Versión {{ empresa.version }}</span>
-                    </div>
-                    <p
-                        v-else
-                        class="text-sm text-muted"
-                    >
-                        Solo lectura: editar requiere el permiso empresa.editar.
-                    </p>
                 </UForm>
             </template>
         </div>
-    </PanelPagina>
+
+        <template #pie>
+            <span class="me-auto text-sm text-muted">{{ editable ? `Versión ${empresa?.version ?? '—'} · Sale en el aviso de cobro, el portal y las notificaciones.` : 'Solo lectura: editar requiere el permiso empresa.editar.' }}</span>
+            <template v-if="editable && empresa">
+                <UButton
+                    label="Descartar"
+                    color="neutral"
+                    variant="ghost"
+                    :disabled="sinCambios || enviando"
+                    @click="empresa && rellenar(empresa)"
+                />
+                <UButton
+                    type="submit"
+                    :form="idFormulario"
+                    label="Guardar"
+                    icon="i-lucide-check"
+                    :loading="enviando"
+                    :disabled="sinCambios"
+                    class="glow-brand"
+                />
+            </template>
+        </template>
+    </ConfiguracionMarco>
 </template>

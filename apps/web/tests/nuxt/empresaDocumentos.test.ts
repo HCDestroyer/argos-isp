@@ -77,7 +77,8 @@ describe('empresa y plantilla del aviso de cobro', () => {
     it('la pantalla de empresa muestra el aviso de versión 0 y carga los datos', async () => {
         const vista = await mountSuspended(PaginaEmpresa)
         await esperar(() => expect(vista.text()).toContain('Aún no se ha guardado'))
-        expect(vista.get<HTMLInputElement>('input').element.value).toBe('ArgosIsp')
+        // El marco de Configuración trae el buscador de ajustes del submenú antes del formulario.
+        expect(vista.get<HTMLInputElement>('input[name="nombre"]').element.value).toBe('ArgosIsp')
     })
 
     it('la factura tiene el botón "Aviso de cobro (PDF)" y el PDF llega como Blob', async () => {

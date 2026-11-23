@@ -346,10 +346,11 @@ onMounted(() => {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="integracion-iris"
         titulo="Iris"
-        icono="i-lucide-clipboard-list"
+        descripcion="Soporte, órdenes, chat y avisos: conexión, permisos, tokens y envíos"
+        volver="/configuracion/integraciones?ver=iris"
     >
         <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
             <ProblemaAlerta
@@ -1181,5 +1182,5 @@ onMounted(() => {
             :ejecutar="revocarToken"
             @hecho="alRevocarToken"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
