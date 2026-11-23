@@ -4,14 +4,15 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 /**
- * Nueva orden de traslado (`POST /inventario/traslados/enviar`, `inventario.crear_traslado`): origen y
+ * Nuevo traslado (tablero NuevoBodegas; el panel «Nuevo traslado» va en su tarjeta propia porque es
+ * un formulario largo con «Atrás»). `POST /inventario/traslados/enviar`, `inventario.crear_traslado`: origen y
  * destino (bodega o técnico) y líneas con productos por cantidad y equipos por serie. Los equipos se
  * buscan o se escanean por serie o MAC (un lector de código de barras «teclea» y manda Enter). Todo o
  * nada: 409 `existencia_insuficiente` o `unidad_*` de la primera línea que falle, y no sale nada.
  */
 definePageMeta({ permiso: 'inventario.crear_traslado' })
 
-useHead({ title: 'Nueva orden de traslado · ArgosIsp' })
+useHead({ title: 'Nuevo traslado · ArgosIsp' })
 
 const toast = useToast()
 const { puede } = usePermisos()
@@ -37,7 +38,14 @@ async function cargarCatalogos() {
     bodegas.value = rBodegas.ok ? rBodegas.data : []
     productos.value = rProductos.ok ? rProductos.data : []
 }
-onMounted(cargarCatalogos)
+const route = useRoute()
+onMounted(async () => {
+    await cargarCatalogos()
+    const origen = Number(route.query.origen)
+    if (Number.isInteger(origen) && bodegas.value.some(b => b.id === origen)) {
+        estado.bodega_origen_id = origen
+    }
+})
 
 type OpcionBodega = { label: string, value: number, icon: string, description?: string }
 const itemsBodega = computed<OpcionBodega[]>(() => bodegas.value.map(b => ({
@@ -134,6 +142,24 @@ async function agregarPorCodigo() {
     codigo.value = ''
 }
 
+/** Lo que quedará en el origen después de enviar: aviso si baja del mínimo. */
+function quedaBajoMinimo(productoId: number, cantidad: string): boolean {
+    const e = existenciaDe(productoId)
+    if (!e?.existencia_minima || !/^\d+(\.\d+)?$/.test(cantidad)) {
+        return false
+    }
+    return new Decimal(e.cantidad).minus(cantidad).lessThan(e.existencia_minima)
+}
+
+/** Valor aproximado de lo que va (costo promedio del origen o costo de cada equipo). */
+const valorTotal = computed(() => estado.lineas.reduce((total, l) => {
+    if (l.seguimiento === 'serie') {
+        return l.unidad_ids.reduce((t, id) => t.plus(unidades.value.find(u => u.id === id)?.costo ?? 0), total)
+    }
+    const promedio = existenciaDe(l.producto_id)?.costo_promedio
+    return /^\d+(\.\d+)?$/.test(l.cantidad) && promedio ? total.plus(new Decimal(l.cantidad).times(promedio)) : total
+}, new Decimal(0)))
+
 const resumen = computed(() => estado.lineas.reduce((total, l) => total + (l.seguimiento === 'serie' ? l.unidad_ids.length : 0), 0))
 
 async function enviar(evento: FormSubmitEvent<SalidaNuevaOrden>) {
@@ -157,17 +183,18 @@ async function enviar(evento: FormSubmitEvent<SalidaNuevaOrden>) {
 <template>
     <PanelPagina
         id="inventario-traslado-nuevo"
-        titulo="Nueva orden de traslado"
+        titulo="Nuevo traslado"
         icono="i-lucide-truck"
     >
         <template #acciones>
             <UButton
                 v-if="puedeVer"
-                label="Órdenes"
-                icon="i-lucide-arrow-left"
+                label="Atrás"
+                :icon="ICONOS.volver"
                 color="neutral"
-                variant="ghost"
-                to="/inventario/traslados"
+                variant="outline"
+                class="boton-flotante rounded-full"
+                to="/inventario/bodegas"
             />
         </template>
 
@@ -183,201 +210,219 @@ async function enviar(evento: FormSubmitEvent<SalidaNuevaOrden>) {
             ref="formulario"
             :schema="esquemaNuevaOrden"
             :state="estado"
-            class="mx-auto flex w-full max-w-4xl flex-col gap-5"
+            class="surface-card mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl"
             @submit="enviar"
         >
-            <div class="grid gap-4 sm:grid-cols-2">
-                <UFormField
-                    label="Desde"
-                    name="bodega_origen_id"
-                    required
-                >
-                    <USelectMenu
-                        :model-value="estado.bodega_origen_id || undefined"
-                        :items="itemsBodega"
-                        value-key="value"
-                        placeholder="Bodega o técnico que envía"
-                        class="w-full"
-                        data-prueba="orden-origen"
-                        @update:model-value="v => estado.bodega_origen_id = typeof v === 'number' ? v : 0"
+            <div class="flex items-center gap-3 border-b border-(--ax-borde) p-4">
+                <span class="pastilla-icono pastilla-tono tono-2 size-10 shrink-0 rounded-xl">
+                    <UIcon
+                        name="i-lucide-truck"
+                        class="size-5"
                     />
-                </UFormField>
-                <UFormField
-                    label="Hacia"
-                    name="bodega_destino_id"
-                    required
-                >
-                    <USelectMenu
-                        :model-value="estado.bodega_destino_id || undefined"
-                        :items="itemsDestino"
-                        value-key="value"
-                        placeholder="Bodega o técnico que recibe"
-                        class="w-full"
-                        data-prueba="orden-destino"
-                        @update:model-value="v => estado.bodega_destino_id = typeof v === 'number' ? v : 0"
-                    />
-                </UFormField>
+                </span>
+                <div class="flex min-w-0 flex-col">
+                    <span class="font-semibold text-highlighted">Nuevo traslado</span>
+                    <span class="text-xs text-muted">Sale ahora; queda «en tránsito» hasta que lo reciban</span>
+                </div>
             </div>
-            <UFormField
-                label="Motivo"
-                name="motivo"
-                help="Opcional: sale en el PDF y en el kardex."
-            >
-                <UInput
-                    v-model="estado.motivo"
-                    placeholder="Para las instalaciones de la semana"
-                    class="w-full"
-                    data-prueba="orden-motivo"
-                />
-            </UFormField>
 
-            <ProblemaAlerta
-                v-if="problemaOrigen"
-                :problema="problemaOrigen"
-                :reintentar="leerOrigen"
-                :reintentando="cargandoOrigen"
-            />
-            <UCard
-                v-else-if="estado.bodega_origen_id"
-                :ui="{ body: 'flex flex-col gap-4' }"
-            >
-                <template #header>
-                    <div class="flex flex-col gap-1">
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Líneas
-                        </h2>
-                        <p class="text-xs text-muted">
-                            Un producto por línea. Los equipos por serie se agregan escaneando o escribiendo su serie o MAC.
-                        </p>
-                    </div>
-                </template>
-                <div class="grid gap-3 sm:grid-cols-2">
+            <div class="flex flex-col gap-4 p-4">
+                <div class="grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
                     <UFormField
-                        label="Agregar producto"
-                        name="agregar"
+                        label="Desde"
+                        name="bodega_origen_id"
+                        required
                     >
+                        <USelectMenu
+                            :model-value="estado.bodega_origen_id || undefined"
+                            :items="itemsBodega"
+                            value-key="value"
+                            placeholder="Bodega o técnico que envía"
+                            class="w-full"
+                            data-prueba="orden-origen"
+                            @update:model-value="v => estado.bodega_origen_id = typeof v === 'number' ? v : 0"
+                        />
+                    </UFormField>
+                    <UIcon
+                        name="i-lucide-arrow-right"
+                        class="mx-auto mb-2 hidden size-5 text-primary sm:block"
+                    />
+                    <UFormField
+                        label="Hacia"
+                        name="bodega_destino_id"
+                        required
+                    >
+                        <USelectMenu
+                            :model-value="estado.bodega_destino_id || undefined"
+                            :items="itemsDestino"
+                            value-key="value"
+                            placeholder="Bodega o técnico que recibe"
+                            class="w-full"
+                            data-prueba="orden-destino"
+                            @update:model-value="v => estado.bodega_destino_id = typeof v === 'number' ? v : 0"
+                        />
+                    </UFormField>
+                </div>
+
+                <ProblemaAlerta
+                    v-if="problemaOrigen"
+                    :problema="problemaOrigen"
+                    :reintentar="leerOrigen"
+                    :reintentando="cargandoOrigen"
+                />
+                <section
+                    v-else-if="estado.bodega_origen_id"
+                    class="flex flex-col gap-2"
+                >
+                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                        <span class="text-sm font-semibold text-highlighted">Qué va</span>
+                        <span class="text-xs text-muted">Existencia en el origen al lado de cada uno</span>
+                    </div>
+                    <div class="grid gap-2 sm:grid-cols-2">
                         <USelectMenu
                             :items="itemsProducto"
                             value-key="value"
                             :loading="cargandoOrigen"
-                            placeholder="Busca por nombre o SKU"
+                            icon="i-lucide-search"
+                            placeholder="Buscar producto"
                             class="w-full"
+                            aria-label="Agregar producto"
                             data-prueba="orden-agregar-producto"
                             @update:model-value="agregarLinea"
                         />
-                    </UFormField>
-                    <UFormField
-                        label="Escanear serie o MAC"
-                        name="codigo"
-                        :error="avisoCodigo ?? undefined"
-                    >
-                        <UInput
-                            v-model="codigo"
-                            icon="i-lucide-scan-barcode"
-                            placeholder="Escanea o escribe y pulsa Enter"
-                            autocomplete="off"
-                            :loading="buscando"
-                            class="w-full font-mono"
-                            data-prueba="orden-escanear"
-                            @keydown.enter.prevent="agregarPorCodigo"
-                        />
-                    </UFormField>
-                </div>
-
-                <UEmpty
-                    v-if="!estado.lineas.length"
-                    icon="i-lucide-package"
-                    title="Sin líneas"
-                    description="Agrega un producto o escanea un equipo."
-                    variant="naked"
-                />
-                <div
-                    v-for="(linea, i) in estado.lineas"
-                    :key="linea.producto_id"
-                    class="flex flex-col gap-3 rounded-md border border-default p-3"
-                    :data-linea-orden="productoDe(linea.producto_id)?.sku"
-                >
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex min-w-0 flex-col">
-                            <span class="text-sm font-medium text-highlighted">{{ productoDe(linea.producto_id)?.nombre }}</span>
-                            <span class="font-mono text-xs text-muted">
-                                {{ productoDe(linea.producto_id)?.sku }} · Hay {{ formatearCantidad(existenciaDe(linea.producto_id)?.cantidad, productoDe(linea.producto_id)?.unidad) }}
-                            </span>
-                        </div>
-                        <UButton
-                            icon="i-lucide-trash-2"
-                            color="neutral"
-                            variant="ghost"
-                            size="sm"
-                            :aria-label="`Quitar ${productoDe(linea.producto_id)?.nombre ?? 'línea'}`"
-                            @click="quitarLinea(i)"
-                        />
-                    </div>
-                    <UFormField
-                        :name="`lineas.${i}.producto_id`"
-                        class="hidden"
-                    />
-                    <UFormField
-                        v-if="linea.seguimiento === 'cantidad'"
-                        label="Cantidad"
-                        :name="`lineas.${i}.cantidad`"
-                        required
-                    >
-                        <UInput
-                            v-model="linea.cantidad"
-                            inputmode="decimal"
-                            class="w-full sm:w-48"
-                            data-prueba="orden-cantidad"
+                        <UFormField
+                            name="codigo"
+                            :error="avisoCodigo ?? undefined"
                         >
-                            <template #trailing>
-                                <span class="text-xs text-muted">{{ productoDe(linea.producto_id)?.unidad }}</span>
-                            </template>
-                        </UInput>
-                    </UFormField>
-                    <UFormField
-                        v-else
-                        label="Equipos"
-                        :name="`lineas.${i}.unidad_ids`"
-                        required
-                    >
-                        <USelectMenu
-                            v-model="linea.unidad_ids"
-                            :items="unidadesDe(linea.producto_id).map(u => ({ label: identificacionUnidad(u), value: u.id, description: `${ESTADOS_UNIDAD[u.estado].etiqueta} · ${CONDICIONES_UNIDAD[u.condicion]}` }))"
-                            value-key="value"
-                            multiple
-                            placeholder="Elige o escanea los equipos"
-                            class="w-full"
-                            data-prueba="orden-unidades"
-                        />
-                    </UFormField>
-                </div>
-                <UFormField name="lineas" />
-            </UCard>
+                            <UInput
+                                v-model="codigo"
+                                icon="i-lucide-scan-barcode"
+                                placeholder="Escanear serie/MAC y Enter"
+                                aria-label="Escanear serie o MAC"
+                                autocomplete="off"
+                                :loading="buscando"
+                                class="w-full font-mono"
+                                data-prueba="orden-escanear"
+                                @keydown.enter.prevent="agregarPorCodigo"
+                            />
+                        </UFormField>
+                    </div>
 
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                con-errores
-            />
-            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <span
-                    v-if="estado.lineas.length"
-                    class="text-xs text-muted sm:mr-auto"
-                >{{ estado.lineas.length }} {{ estado.lineas.length === 1 ? 'línea' : 'líneas' }}{{ resumen ? ` · ${resumen} ${resumen === 1 ? 'equipo' : 'equipos'}` : '' }}</span>
-                <UButton
-                    v-if="puedeVer"
-                    label="Cancelar"
-                    :icon="ICONOS.cancelar"
-                    color="neutral"
-                    variant="ghost"
-                    to="/inventario/traslados"
-                    :disabled="enviando"
+                    <UEmpty
+                        v-if="!estado.lineas.length"
+                        icon="i-lucide-package"
+                        title="Nada todavía"
+                        description="Busca un producto o escanea un equipo."
+                        variant="naked"
+                    />
+                    <ul
+                        v-else
+                        class="divide-y divide-(--ax-borde) rounded-xl border border-(--ax-borde)"
+                    >
+                        <li
+                            v-for="(linea, i) in estado.lineas"
+                            :key="linea.producto_id"
+                            class="flex flex-col gap-2 p-3"
+                            :data-linea-orden="productoDe(linea.producto_id)?.sku"
+                        >
+                            <div class="flex items-center gap-3">
+                                <span class="pastilla-icono pastilla-tono tono-marca size-9 shrink-0 rounded-xl">
+                                    <UIcon
+                                        :name="linea.seguimiento === 'serie' ? 'i-lucide-barcode' : 'i-lucide-package'"
+                                        class="size-4"
+                                    />
+                                </span>
+                                <div class="flex min-w-0 flex-1 flex-col">
+                                    <span class="font-semibold text-highlighted">{{ productoDe(linea.producto_id)?.nombre }}</span>
+                                    <span
+                                        class="text-xs"
+                                        :class="linea.seguimiento === 'cantidad' && quedaBajoMinimo(linea.producto_id, linea.cantidad) ? 'text-warning' : 'text-muted'"
+                                    >
+                                        Hay {{ formatearCantidad(existenciaDe(linea.producto_id)?.cantidad, productoDe(linea.producto_id)?.unidad) }}{{ linea.seguimiento === 'cantidad' && quedaBajoMinimo(linea.producto_id, linea.cantidad) ? ' · quedará bajo el mínimo' : '' }}
+                                    </span>
+                                </div>
+                                <UFormField
+                                    v-if="linea.seguimiento === 'cantidad'"
+                                    :name="`lineas.${i}.cantidad`"
+                                    required
+                                >
+                                    <UInput
+                                        v-model="linea.cantidad"
+                                        inputmode="decimal"
+                                        class="w-24 text-center"
+                                        :aria-label="`Cantidad de ${productoDe(linea.producto_id)?.nombre ?? 'producto'}`"
+                                        data-prueba="orden-cantidad"
+                                    />
+                                </UFormField>
+                                <UButton
+                                    icon="i-lucide-x"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Quitar ${productoDe(linea.producto_id)?.nombre ?? 'línea'}`"
+                                    @click="quitarLinea(i)"
+                                />
+                            </div>
+                            <UFormField
+                                :name="`lineas.${i}.producto_id`"
+                                class="hidden"
+                            />
+                            <UFormField
+                                v-if="linea.seguimiento === 'serie'"
+                                :name="`lineas.${i}.unidad_ids`"
+                                required
+                            >
+                                <USelectMenu
+                                    v-model="linea.unidad_ids"
+                                    :items="unidadesDe(linea.producto_id).map(u => ({ label: identificacionUnidad(u), value: u.id, description: `${ESTADOS_UNIDAD[u.estado].etiqueta} · ${CONDICIONES_UNIDAD[u.condicion]}` }))"
+                                    value-key="value"
+                                    multiple
+                                    placeholder="Elige o escanea los equipos"
+                                    class="w-full"
+                                    :aria-label="`Equipos de ${productoDe(linea.producto_id)?.nombre ?? 'producto'}`"
+                                    data-prueba="orden-unidades"
+                                />
+                            </UFormField>
+                        </li>
+                    </ul>
+                    <UFormField name="lineas" />
+                </section>
+
+                <UFormField
+                    label="Motivo"
+                    name="motivo"
+                >
+                    <UInput
+                        v-model="estado.motivo"
+                        placeholder="Reposición semanal"
+                        class="w-full"
+                        data-prueba="orden-motivo"
+                    />
+                </UFormField>
+                <p class="flex items-start gap-1.5 text-xs text-muted">
+                    <UIcon
+                        name="i-lucide-circle-help"
+                        class="mt-0.5 size-3.5 shrink-0"
+                    />
+                    El técnico confirma en Iris con su firma, aunque no tenga señal. Si falta algo al recibir, regresa a la bodega de origen.
+                </p>
+                <ProblemaAlerta
+                    v-if="problema"
+                    :problema="problema"
+                    con-errores
                 />
+            </div>
+
+            <div class="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta) p-4 sm:flex-row sm:items-center sm:justify-between">
+                <span class="text-sm text-muted">
+                    {{ estado.lineas.length }} {{ estado.lineas.length === 1 ? 'producto' : 'productos' }}{{ resumen ? ` · ${resumen} ${resumen === 1 ? 'equipo' : 'equipos'}` : '' }} · {{ formatearQuetzales(valorTotal.toFixed(2)) }}
+                </span>
                 <UButton
                     type="submit"
-                    label="Enviar orden"
-                    icon="i-lucide-send"
+                    label="Enviar traslado"
+                    icon="i-lucide-truck"
                     :loading="enviando"
+                    class="justify-center rounded-full"
                     data-prueba="orden-enviar"
                 />
             </div>

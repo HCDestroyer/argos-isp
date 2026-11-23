@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 import type { SelectItem, TableColumn } from '@nuxt/ui'
+import { h } from 'vue'
 
 /**
  * Tipos de producto (A3, `contratos/inventario.md` D.2): globales (las semillas `equipo`, `material`,
@@ -18,7 +19,12 @@ const alcanceGlobal = computed(() => usuario.value?.alcance_global === true)
 
 const TODOS = 'todos'
 const activo = ref<'si' | 'no' | typeof TODOS>('si')
-const itemsActivo: SelectItem[] = [{ label: 'Activos', value: 'si' }, { label: 'Desactivados', value: 'no' }, { label: 'Todos', value: TODOS }]
+const itemsActivo: SelectItem[] = [{ label: 'Estado: activos', value: 'si' }, { label: 'Desactivados', value: 'no' }, { label: 'Estado: todos', value: TODOS }]
+const busqueda = ref('')
+const visibles = computed(() => {
+    const q = busqueda.value.trim().toLowerCase()
+    return tipos.value.filter(t => !q || t.nombre.toLowerCase().includes(q) || t.codigo.toLowerCase().includes(q))
+})
 
 const tipos = shallowRef<TipoProducto[]>([])
 const problema = ref<Problem | null>(null)
@@ -42,7 +48,7 @@ const columnas: TableColumn<TipoProducto>[] = [
     { accessorKey: 'nombre', header: 'Tipo', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'seguimiento_defecto', header: 'Seguimiento', meta: SOLO_ANCHO },
     { accessorKey: 'modalidad_defecto', header: 'Modalidad', meta: SOLO_ANCHO },
-    { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
+    { id: 'acciones', header: () => h('span', { class: 'sr-only' }, 'Acciones'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } },
 ]
 
 const formularioAbierto = ref(false)
@@ -72,6 +78,18 @@ function desactivar(motivo: string): Promise<Resultado<TipoProducto>> {
     return tipo ? useTiposProducto().desactivar(tipo, motivo) : Promise.resolve({ ok: false, problema: { type: 'about:blank', title: 'Elige un tipo', status: 400 } })
 }
 
+function accionesTipo(tipo: TipoProducto): AccionFila[] {
+    if (!tipo.activo || !editable(tipo)) {
+        return []
+    }
+    return [
+        ...(puede('tipos_producto.editar') ? [{ etiqueta: 'Editar tipo', icono: ICONOS.editar, alElegir: () => abrir(tipo) }] : []),
+        ...(puede('tipos_producto.desactivar') ? [{ etiqueta: 'Desactivar', icono: 'i-lucide-circle-pause', color: 'error' as const, alElegir: () => pedirDesactivar(tipo) }] : []),
+    ]
+}
+
+const menuFila = useMenuFila(accionesTipo)
+
 function alDesactivar(tipo: TipoProducto) {
     tipos.value = activo.value === 'si' ? tipos.value.filter(t => t.id !== tipo.id) : tipos.value.map(t => (t.id === tipo.id ? tipo : t))
     toast.add({ title: `${tipo.nombre} desactivado`, icon: 'i-lucide-circle-check', color: 'success' })
@@ -89,111 +107,125 @@ function alDesactivar(tipo: TipoProducto) {
                 v-if="puede('tipos_producto.crear')"
                 label="Nuevo tipo"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand rounded-full px-5"
                 data-prueba="nuevo-tipo-producto"
                 @click="abrir(null)"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <USelect
-                v-model="activo"
-                :items="itemsActivo"
-                class="w-full sm:w-44"
-                aria-label="Estado"
-            />
-            <ProblemaAlerta
+        <div class="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-auto rounded-2xl">
+            <div class="flex flex-wrap items-center gap-2 p-3 sm:px-4">
+                <UInput
+                    v-model="busqueda"
+                    icon="i-lucide-search"
+                    placeholder="Nombre o código"
+                    aria-label="Buscar tipo de producto"
+                    class="w-full sm:w-72"
+                    :ui="{ base: 'rounded-full' }"
+                />
+                <USelect
+                    v-model="activo"
+                    :items="itemsActivo"
+                    icon="i-lucide-filter"
+                    class="w-full sm:ms-auto sm:w-44"
+                    aria-label="Estado"
+                />
+            </div>
+            <div
                 v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
-            <UTable
-                v-else
-                :data="tipos"
-                :columns="columnas"
-                :loading="cargando"
-                :ui="{ td: 'py-3' }"
-                data-prueba="tabla-tipos-producto"
+                class="p-3 sm:p-4"
             >
-                <template #nombre-cell="{ row }">
-                    <div
-                        class="flex min-w-0 flex-col gap-0.5"
-                        :data-tipo-producto="row.original.codigo"
-                    >
-                        <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                            {{ row.original.nombre }}
-                            <UBadge
-                                v-if="row.original.empresa_id === null"
-                                label="Global"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                            />
-                            <UBadge
-                                v-if="!row.original.activo"
-                                label="Desactivado"
-                                color="neutral"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </span>
-                        <span class="font-mono text-xs text-muted">{{ row.original.codigo }}</span>
-                        <div class="flex flex-wrap gap-1 sm:hidden">
-                            <UBadge
-                                :label="SEGUIMIENTOS[row.original.seguimiento_defecto].etiqueta"
-                                color="neutral"
-                                variant="subtle"
-                                size="sm"
-                            />
-                            <ModalidadBadge :modalidad="row.original.modalidad_defecto" />
+                <ProblemaAlerta
+                    :problema="problema"
+                    :reintentar="cargar"
+                    :reintentando="cargando"
+                />
+            </div>
+            <UContextMenu
+                v-else
+                :items="menuFila.items.value"
+            >
+                <UTable
+                    :data="visibles"
+                    :columns="columnas"
+                    :loading="cargando"
+                    sticky
+                    :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                    data-menu-contextual
+                    data-prueba="tabla-tipos-producto"
+                    @contextmenu="menuFila.alContextmenu"
+                >
+                    <template #nombre-cell="{ row }">
+                        <div
+                            class="flex min-w-0 flex-col gap-0.5"
+                            :data-tipo-producto="row.original.codigo"
+                        >
+                            <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
+                                {{ row.original.nombre }}
+                                <UBadge
+                                    v-if="row.original.empresa_id === null"
+                                    label="Global"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                />
+                                <UBadge
+                                    v-if="!row.original.activo"
+                                    label="Desactivado"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                />
+                            </span>
+                            <span class="font-mono text-xs text-muted">{{ row.original.codigo }}</span>
+                            <div class="flex flex-wrap gap-1 sm:hidden">
+                                <UBadge
+                                    :label="SEGUIMIENTOS[row.original.seguimiento_defecto].etiqueta"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                />
+                                <ModalidadBadge :modalidad="row.original.modalidad_defecto" />
+                            </div>
                         </div>
-                    </div>
-                </template>
-                <template #seguimiento_defecto-cell="{ row }">
-                    <UBadge
-                        :label="SEGUIMIENTOS[row.original.seguimiento_defecto].etiqueta"
-                        :icon="SEGUIMIENTOS[row.original.seguimiento_defecto].icono"
-                        color="neutral"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </template>
-                <template #modalidad_defecto-cell="{ row }">
-                    <ModalidadBadge :modalidad="row.original.modalidad_defecto" />
-                </template>
-                <template #acciones-cell="{ row }">
-                    <div
-                        v-if="row.original.activo && editable(row.original)"
-                        class="flex justify-end gap-1"
-                    >
-                        <UButton
-                            v-if="puede('tipos_producto.editar')"
-                            icon="i-lucide-pencil"
+                    </template>
+                    <template #seguimiento_defecto-cell="{ row }">
+                        <UBadge
+                            :label="SEGUIMIENTOS[row.original.seguimiento_defecto].etiqueta"
+                            :icon="SEGUIMIENTOS[row.original.seguimiento_defecto].icono"
                             color="neutral"
-                            variant="ghost"
+                            variant="subtle"
                             size="sm"
-                            :aria-label="`Editar ${row.original.nombre}`"
-                            @click="abrir(row.original)"
                         />
-                        <UButton
-                            v-if="puede('tipos_producto.desactivar')"
-                            icon="i-lucide-circle-pause"
-                            color="error"
-                            variant="ghost"
-                            size="sm"
-                            :aria-label="`Desactivar ${row.original.nombre}`"
-                            @click="pedirDesactivar(row.original)"
+                    </template>
+                    <template #modalidad_defecto-cell="{ row }">
+                        <ModalidadBadge :modalidad="row.original.modalidad_defecto" />
+                    </template>
+                    <template #acciones-cell="{ row }">
+                        <UDropdownMenu
+                            v-if="menuFila.itemsDe(row.original).length"
+                            :items="menuFila.itemsDe(row.original)"
+                            :content="{ align: 'end' }"
+                        >
+                            <UButton
+                                icon="i-lucide-ellipsis"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                :aria-label="`Más acciones: ${row.original.nombre}`"
+                            />
+                        </UDropdownMenu>
+                    </template>
+                    <template #empty>
+                        <UEmpty
+                            icon="i-lucide-tags"
+                            title="Sin tipos de producto"
+                            variant="naked"
                         />
-                    </div>
-                </template>
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-tags"
-                        title="Sin tipos de producto"
-                        variant="naked"
-                    />
-                </template>
-            </UTable>
+                    </template>
+                </UTable>
+            </UContextMenu>
         </div>
 
         <TipoProductoFormulario

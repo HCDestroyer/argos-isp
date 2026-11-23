@@ -18,11 +18,11 @@ Menú: **Inventario → Catálogos y kardex → Bodegas** y **Inventario → Mov
 
 ## Qué ves
 
-Una fila por bodega con su nombre, su tipo («Bodega» o «Técnico») y su estado («Activa» o «Desactivada»). En una bodega de técnico aparece con un candado quién la mueve. Un clic en el nombre abre sus [existencias](./existencias.md).
+Una tarjeta por bodega con su valor, sus artículos y equipos y, si algo viene en camino hacia ella, «1 traslado en camino». La bodega «En tránsito» es virtual: guarda lo que viaja en una orden y no se opera a mano. Cada tarjeta tiene su menú «⋯»: ver existencias y kardex, trasladar desde ahí, contarla, editar y desactivar.
 
-::: tip La bodega del técnico es solo suya
-Solo la mueve su técnico o quien tenga el permiso con alcance global. Para que un técnico opere únicamente su propia bodega, asígnale su rol con alcance de zona o de router en **Usuarios**.
-:::
+Una **bodega de cuadrilla** llega de Iris con su jefe y sus miembros; «Jefe y miembros» los muestra (también los que Iris mandó y no se pudieron aplicar, con el motivo). No se edita en Argos.
+
+Abajo están los **traslados** con «Todos», «En camino» y «Con faltante»; cada fila abre su orden.
 
 ## Acciones
 
@@ -40,16 +40,9 @@ Solo la mueve su técnico o quien tenga el permiso con alcance global. Para que 
 
 ## Mi bodega
 
-Menú: **Inventario → Movimientos → Mi bodega**. Permiso `inventario.ver`.
+Pensada para el teléfono del técnico: arriba, cada traslado por recibir con «Recibir»; luego sus **equipos** (los tres primeros y «Ver los …») y sus **materiales** con la cantidad (en rojo si está bajo el mínimo), y los movimientos recientes plegados. El botón de código de barras busca un equipo por serie o MAC.
 
-Es la pantalla del técnico: lo que tiene en su vehículo y lo que le están enviando.
-
-- **Por recibir:** las órdenes de traslado que vienen hacia él, con el origen y la fecha de envío. El botón «Recibir y firmar» abre la recepción (ver [recibir una orden](./traslados.md#recibir-una-orden)). Necesita `inventario.recibir_traslado`, que trae el rol `tecnico`.
-- **Existencias:** cada producto con su modalidad, cantidad y valor.
-- **Equipos por serie:** los equipos disponibles o en reparación que tiene, con su serie o MAC.
-- **Kardex:** sus últimos 50 movimientos, el más reciente primero. «Ver más» trae los anteriores.
-
-Si tienes alcance global (un encargado), arriba puedes elegir un técnico para ver su bodega. Si el técnico tiene bodegas en varias empresas, la pantalla te pide elegir una.
+Abajo, fijos: «Devolver a central» (abre un traslado desde su bodega) y «Pedir material», que aparece deshabilitado hasta que exista en la API. Con alcance global se elige el técnico; si su bodega es de cuadrilla se ve su jefe.
 
 ## Preguntas frecuentes y errores
 
