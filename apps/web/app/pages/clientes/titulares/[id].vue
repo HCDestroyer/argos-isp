@@ -547,9 +547,9 @@ onBeforeUnmount(liberarFotos)
             </section>
 
             <!-- Teléfono: las acciones fijas abajo. -->
-            <div
+            <PanelBarraAccion
                 v-if="puedeAprobar || puedeRechazar"
-                class="fixed inset-x-0 bottom-0 z-20 flex gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta) p-3 sm:hidden"
+                class="sm:hidden"
                 data-prueba="barra-revision"
             >
                 <UButton
@@ -572,7 +572,7 @@ onBeforeUnmount(liberarFotos)
                     class="flex-1 rounded-full"
                     @click="abrirAprobar"
                 />
-            </div>
+            </PanelBarraAccion>
         </div>
 
         <UModal
