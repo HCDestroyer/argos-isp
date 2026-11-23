@@ -11,20 +11,39 @@ const props = defineProps<{
     nombre: string
 }>()
 
+/**
+ * Una acción que abre una ventana (por ejemplo «Castigar…») no debe recibir de vuelta el foco del
+ * menú al cerrarse: el botón ⋯ se lo quitaría a la ventana y borraría lo que se empieza a escribir
+ * (pasaba en el teléfono con el buscador de cliente). Al cerrar con Esc o fuera, el foco sí vuelve.
+ */
+let accionElegida = false
+
 const items = computed<DropdownMenuItem[][]>(() => agruparAcciones(props.acciones, accion => ({
     label: accion.etiqueta,
     icon: accion.icono,
     to: accion.to,
     color: accion.color,
-    onSelect: accion.alElegir,
+    onSelect: accion.alElegir
+        ? () => {
+                accionElegida = true
+                accion.alElegir?.()
+            }
+        : undefined,
 })))
+
+function alCerrarFoco(evento: Event) {
+    if (accionElegida) {
+        evento.preventDefault()
+        accionElegida = false
+    }
+}
 </script>
 
 <template>
     <UDropdownMenu
         v-if="acciones.length"
         :items="items"
-        :content="{ align: 'end' }"
+        :content="{ align: 'end', onCloseAutoFocus: alCerrarFoco }"
     >
         <UButton
             icon="i-lucide-ellipsis"
