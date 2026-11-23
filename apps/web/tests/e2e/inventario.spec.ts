@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { accionServicio, entrar, ir } from './ayudas'
+import { accionServicio, entrar, ir, pestanaServicio } from './ayudas'
 
 /**
  * Inventario interno (modo fixtures, escritorio y teléfono): consumo desde existencias, alta de
@@ -82,6 +82,8 @@ test('conteo físico: capturar con faltante y cerrar con la diferencia valorizad
 test('servicio: asignar un equipo en comodato y devolverlo a reparación', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
+    // Tablero OperServicioFicha: los equipos van en la pestaña «Red y equipo».
+    await pestanaServicio(page, 'Red y equipo')
     const equipos = page.locator('[data-prueba="servicio-equipos"]')
     await expect(equipos).toContainText('HWTC1A2B3C01', { timeout: 15_000 })
     await equipos.locator('[data-prueba="asignar-equipo"]').click()
@@ -111,6 +113,7 @@ test('cajero: ve el inventario pero no registra movimientos', async ({ page }) =
 test('cargo único: elegir un producto sugiere su precio de venta y pide el equipo', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
+    await pestanaServicio(page, 'Red y equipo')
     await expect(page.locator('[data-prueba="servicio-equipos"]')).toBeVisible({ timeout: 15_000 })
     await accionServicio(page, 'Cargo único')
     const modal = page.getByRole('dialog', { name: 'Cargo único' })

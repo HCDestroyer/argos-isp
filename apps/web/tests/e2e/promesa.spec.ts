@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { accionServicio, entrar, fijarHoyFixtures, ir } from './ayudas'
+import { accionServicio, entrar, fijarHoyFixtures, ir, pestanaServicio } from './ayudas'
 
 /**
  * Prueba obligatoria 4 del brief de A4: "Crear promesa y ver el resultado de evaluación".
@@ -47,6 +47,8 @@ test('crear promesa y ver la regla que aplicó', async ({ page }) => {
     await expect(encabezado).toContainText('Activo')
     await expect(encabezado).toContainText(/Promesa/)
 
+    // Tablero OperServicioFicha: las promesas del servicio van en la pestaña «Facturas».
+    await pestanaServicio(page, 'Facturas')
     const promesas = page.getByLabel('Promesas del servicio')
     await expect(promesas).toContainText('Cumple todas las reglas de promesa de la plantilla')
     await expect(promesas.locator('[data-prueba="regla-cumplimiento"]').first()).toHaveText('Cumplimiento: por facturas')

@@ -114,7 +114,7 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
     }
 }
 
-/** Abre una pestaña de la ficha del router («Control de velocidad», «Pools e IPs», «Conexión»…). */
+/** Abre una pestaña de la ficha del router («Resumen», «Conexión», «Red e IPs», «Velocidad»…). */
 export async function pestanaRouter(page: Page, nombre: string): Promise<void> {
     await page.locator('[data-prueba="pestanas-router"]').getByRole('tab', { name: nombre }).click()
 }

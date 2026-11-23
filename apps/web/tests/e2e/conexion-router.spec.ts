@@ -55,7 +55,16 @@ test('probar conexión, reconciliar, script de conexión y zona del router', asy
     await expect(modal).toBeHidden()
 
     // Editar: la zona del router, con el aviso del túnel.
-    await page.locator('[data-prueba="editar-router"]').click()
+    // Tableros RedRouterFicha y RedRouterFichaMovil: «Editar» a la vista en escritorio; en el
+    // teléfono va en el menú de acciones del router.
+    const editar = page.locator('[data-prueba="editar-router"]')
+    if (await editar.isVisible()) {
+        await editar.click()
+    }
+    else {
+        await page.locator('[data-prueba="acciones-router-1"]').click()
+        await page.getByRole('menuitem', { name: 'Editar', exact: true }).click()
+    }
     modal = page.getByRole('dialog', { name: /Editar RB-Centro/ })
     await expect(modal.locator('[data-prueba="aviso-tunel"]')).toContainText('10.255.0.2')
     await modal.locator('[data-prueba="router-zona"]').click()

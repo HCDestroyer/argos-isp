@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { accionServicio, entrar, ir } from './ayudas'
+import { accionServicio, entrar, ir, pestanaServicio } from './ayudas'
 
 /**
  * Decisión del PM (A3): nunca una factura de Q0. Un cargo único con descuento del 100 % se registra
@@ -10,6 +10,8 @@ test('cargo único sin costo: queda como bonificación con su motivo', async ({ 
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Servicios', /\/servicios/)
     await page.goto('/servicios/1')
+    // Tablero OperServicioFicha: los periodos bonificados van en la pestaña «Facturas».
+    await pestanaServicio(page, 'Facturas')
 
     // La ficha carga en serie (servicio, sesión, asignaciones…): se espera la sección, no un tiempo fijo.
     const periodos = page.locator('[data-prueba="periodos-bonificados"]')

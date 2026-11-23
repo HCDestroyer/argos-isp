@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { conectarRouter, entrar, irAFichaDesdeAlta } from './ayudas'
+import { conectarRouter, entrar, irAFichaDesdeAlta, pestanaServicio } from './ayudas'
 
 /**
  * Identificación del cliente cortado (`contratos/corte-identificacion.md` §5 y §5 bis), en escritorio y
@@ -58,6 +58,8 @@ test('ficha del servicio: estado del código de corte sin el código, en claro y
     await entrar(page, 'admin@argos.test')
     // Andrea Paola Gómez: suspendida en CCR-Mixco, que identifica por código.
     await page.goto('/servicios/14')
+    // Tablero OperServicioFicha: el código de corte vive en la pestaña «Portal de corte».
+    await pestanaServicio(page, 'Portal de corte')
     const tarjeta = page.locator('[data-prueba="codigo-corte-servicio"]')
     for (const tema of ['light', 'dark'] as const) {
         await page.emulateMedia({ colorScheme: tema })
@@ -88,7 +90,7 @@ test('fase 2: el corte por el túnel sin la regla dice qué hacer y queda en ver
     await expect(ip).toContainText('Falla', { timeout: 30_000 })
     await expect(ip).toContainText('El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT»')
     await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('«Reconciliar ahora» pone la regla')
-    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('pestaña Pools e IPs')
+    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('pestaña Red e IPs')
     await expect(ip.locator('[data-prueba="corte-editar-router"]')).toHaveCount(0)
     await expect(ip.locator('[data-prueba="comandos-routeros"]')).toContainText('http://10.255.0.1:8088/api/v1/portal/eco-ip')
 
@@ -124,6 +126,7 @@ test('fase 2: ficha del router con «Corte por el túnel» y código activo en u
 
         // Juan Carlos Ramírez: suspendido en RB-Centro (por IP, por el túnel); el primer salto le dio su código.
         await page.goto('/servicios/2')
+        await pestanaServicio(page, 'Portal de corte')
         const tarjeta = page.locator('[data-prueba="codigo-corte-servicio"]')
         await expect(tarjeta.locator('[data-prueba="codigo-corte-estado"]')).toHaveText('Activo', { timeout: 30_000 })
         await expect(tarjeta).toContainText('Router: por ip')
