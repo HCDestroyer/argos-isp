@@ -18,13 +18,13 @@ test('el admin guarda la dirección del portal de corte y el modo de suspensión
 
     await expect(page.getByRole('button', { name: 'Guardar estos valores' })).toBeVisible()
     await page.getByLabel('IPv4 del portal').fill('190.56.10')
-    await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+    await page.locator('[data-prueba="portal-corte-guardar"]').click()
     await expect(page.getByText('Escribe una IPv4, p. ej. 190.56.10.20, o déjala vacía')).toBeVisible()
 
     await page.getByLabel('IPv4 del portal').fill('190.56.10.20')
     await page.getByLabel('Puerto').fill('8088')
     await page.getByLabel('Puerto').blur()
-    await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+    await page.locator('[data-prueba="portal-corte-guardar"]').click()
     const dialogo = page.getByRole('dialog')
     await expect(dialogo.getByText('190.56.10.20:8088')).toBeVisible()
     await dialogo.getByRole('button', { name: 'Guardar y actualizar routers' }).click()
@@ -33,11 +33,11 @@ test('el admin guarda la dirección del portal de corte y el modo de suspensión
     await expect(page.getByText('Valores iniciales del servidor, todavía no guardados')).toHaveCount(0)
 
     await page.getByText('Mantener la sesión y cambiar velocidad (CoA)').click()
-    await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+    await page.locator('[data-prueba="portal-corte-guardar"]').click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByRole('listitem').getByText('El cambio aplica desde la siguiente suspensión.')).toBeVisible()
 
-    await page.getByRole('link', { name: 'Ver la URL de corte de cada empresa' }).click()
+    await page.locator('[data-prueba="portal-corte-empresas"]').click()
     await expect(page).toHaveURL(/\/configuracion\/empresas/)
 })
 

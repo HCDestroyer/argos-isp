@@ -28,7 +28,8 @@ test('Horus: conectar con enlace, activar, ver la seguridad del servicio y abrir
     await entrar(page, 'admin@argos.test')
 
     await ir(page, 'Integraciones', /\/configuracion\/integraciones$/)
-    await page.locator('[data-prueba="configurar-horus"]').click()
+    // Rediseño: la lista de la izquierda abre la integración elegida (Iris va primero y se ve a la derecha).
+    await page.locator('[data-prueba="lista-integraciones"] [data-integracion="horus"]').click()
     await expect(page).toHaveURL(/\/configuracion\/integraciones\/horus$/)
     await expect(page.locator('[data-prueba="estado-conector"]')).toHaveText('Apagada')
 

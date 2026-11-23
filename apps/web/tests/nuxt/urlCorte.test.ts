@@ -108,13 +108,14 @@ describe('url de corte · pantallas', () => {
         vista.unmount()
     })
 
-    it('lista de empresas: muestra la URL de corte, o que se usa la de Argos', async () => {
-        bd.empresas[1]!.url_corte = 'https://fibradelsur.gt/corte'
+    it('datos de la empresa: la URL de corte va en «Más datos» con su ayuda', async () => {
+        bd.empresas[0]!.url_corte = 'https://argosnet.gt/corte'
         const vista = await mountSuspended(PaginaEmpresas, { route: '/configuracion/empresas' })
-        await esperar(() => expect(vista.text()).toContain('Fibra del Sur'))
-        expect(vista.text()).toContain('Página de corte')
-        expect(vista.find('[data-prueba="url-corte-empresa"]').attributes('href')).toBe('https://fibradelsur.gt/corte')
-        expect(vista.text()).toContain('Corte: https://fibradelsur.gt/corte')
-        expect(vista.text()).toContain('La de Argos')
+        await esperar(() => expect(vista.find('[data-prueba="empresa-mas-datos"]').exists()).toBe(true))
+        await vista.get('[data-prueba="empresa-mas-datos"]').trigger('click')
+        await esperar(() => expect(vista.find('input[data-prueba="url-corte-empresa"], [data-prueba="url-corte-empresa"] input').exists()).toBe(true))
+        const campo = vista.get('input[data-prueba="url-corte-empresa"], [data-prueba="url-corte-empresa"] input').element as HTMLInputElement
+        expect(campo.value).toBe('https://argosnet.gt/corte')
+        expect(vista.text()).toContain(AYUDA_URL_CORTE)
     })
 })

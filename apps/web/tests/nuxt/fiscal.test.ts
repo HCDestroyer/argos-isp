@@ -268,7 +268,8 @@ describe('configuración fiscal · pantalla', () => {
         const vista = await montar('impuestos')
         await esperar(() => expect(vista.text()).toContain('Reintentar'))
         expect(vista.findAll('[data-impuesto]')).toHaveLength(0)
-        expect(vista.text()).not.toContain('%')
+        // Todos los bloques van en la misma tarjeta: el de impuestos no muestra ninguna tasa.
+        expect(vista.get('#fiscal-impuestos').text()).not.toContain('%')
     })
 
     it('con el rol lectura no hay botones de acción en ninguna pestaña', async () => {

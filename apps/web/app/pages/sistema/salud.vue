@@ -5,11 +5,11 @@ useHead({ title: 'Salud del sistema · ArgosIsp' })
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="salud-sistema"
-        titulo="Salud del sistema"
-        icono="i-lucide-heart-pulse"
+        titulo="Sistema"
+        descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
-        <SaludSistemaTarjeta />
-    </PanelPagina>
+        <SaludSistemaTarjeta class="bg-transparent! p-0! shadow-none! sm:p-0!" />
+    </ConfiguracionMarco>
 </template>
