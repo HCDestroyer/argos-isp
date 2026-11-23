@@ -1363,10 +1363,13 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                     />
                 </template>
 
-                <!-- Teléfono: total marcado y «Continuar» fijos abajo. -->
-                <div
+                <!--
+                    Teléfono: total marcado y «Continuar» como acción fija, en su isla justo encima de
+                    la navegación (tablero MarcoMovil), sin taparla ni quedar tapada.
+                -->
+                <PanelBarraAccion
                     v-if="cliente"
-                    class="fixed inset-x-0 bottom-0 z-20 flex items-center gap-3 border-t border-(--ax-borde) bg-(--ax-tarjeta) px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
+                    class="gap-3 ps-4 lg:hidden"
                 >
                     <div class="flex min-w-0 flex-1 flex-col">
                         <span class="text-xs text-muted">{{ marcadas.length }} {{ marcadas.length === 1 ? 'factura' : 'facturas' }}</span>
@@ -1380,12 +1383,15 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                         data-prueba="continuar-cobro"
                         @click="pantalla = 'cobro'"
                     />
-                </div>
+                </PanelBarraAccion>
             </div>
 
-            <!-- Pantalla 2: el cobro (panel derecho en escritorio). -->
+            <!--
+                Pantalla 2: el cobro (panel derecho en escritorio). En el teléfono ocupa la pantalla y
+                termina encima de la isla de navegación (tablero MarcoMovil), así «Cobrar» queda a la vista.
+            -->
             <section
-                class="surface-card min-h-0 flex-col overflow-hidden rounded-[1.375rem] max-lg:fixed max-lg:inset-0 max-lg:z-30 max-lg:rounded-none lg:flex"
+                class="surface-card min-h-0 flex-col overflow-hidden rounded-[1.375rem] max-lg:fixed max-lg:inset-x-0 max-lg:top-0 max-lg:bottom-(--ax-isla-reserva) max-lg:z-30 max-lg:rounded-none lg:flex"
                 :class="pantalla === 'cobro' ? 'flex' : 'hidden'"
                 aria-label="Registrar pago"
                 data-prueba="panel-cobro"
