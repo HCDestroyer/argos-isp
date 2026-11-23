@@ -181,8 +181,10 @@ test('bitácora: las acciones de una conversación de Iris', async ({ page }) =>
     await page.getByRole('button', { name: 'Más filtros' }).click()
     await page.locator('[data-prueba="filtro-conversacion-iris"] input, input[data-prueba="filtro-conversacion-iris"]').first().fill('wa:conv-7731')
     await expect(page).toHaveURL(/conversacion=wa%3Aconv-7731|conversacion=wa:conv-7731/)
-    await expect(page.getByText('Reconexión temporal mientras se revisa el comprobante')).toBeVisible()
-    await expect(page.getByText('Identidad del cliente verificada por Iris')).toBeVisible()
+    // Tablero OperBitacora: en escritorio la entrada elegida se abre al lado de la lista, con el
+    // mismo título; basta con que se vea en la lista.
+    await expect(page.getByText('Reconexión temporal mientras se revisa el comprobante').first()).toBeVisible()
+    await expect(page.getByText('Identidad del cliente verificada por Iris').first()).toBeVisible()
     await sinDesborde(page)
     await capturar(page, 'bitacora')
 })
