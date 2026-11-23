@@ -156,6 +156,15 @@ async function devolver(evento: FormSubmitEvent<z.output<typeof esquemaDevolver>
     terminar(`${identificacionUnidad(resultado.data)} devuelto a ${resultado.data.bodega_nombre ?? 'la bodega'}`)
 }
 
+/* Cambiar equipo en un paso (A48): sale este y entra otro disponible */
+const cambioAbierto = ref(false)
+const aCambiar = shallowRef<EquipoServicio | null>(null)
+
+function pedirCambio(equipo: EquipoServicio) {
+    aCambiar.value = equipo
+    cambioAbierto.value = true
+}
+
 /* Pérdida */
 const perdidaAbierto = ref(false)
 const aPerder = shallowRef<EquipoServicio | null>(null)
@@ -238,6 +247,17 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
             </template>
             <template #acciones-cell="{ row }">
                 <div class="flex justify-end gap-1">
+                    <UButton
+                        v-if="row.original.estado === 'en_comodato' && puede('servicios.cambiar_equipo')"
+                        label="Cambiar"
+                        icon="i-lucide-repeat"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="`Cambiar ${identificacionUnidad(row.original)}`"
+                        data-prueba="cambiar-equipo"
+                        @click="pedirCambio(row.original)"
+                    />
                     <UButton
                         v-if="puede('inventario.devolver_comodato')"
                         label="Devolver"
@@ -439,6 +459,12 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
             </template>
         </UModal>
 
+        <EquipoCambiarModal
+            v-model:open="cambioAbierto"
+            :unidad="aCambiar"
+            :contexto="`Servicio #${servicio.id}`"
+            @hecho="c => terminar(c.cobro_propuesto_id ? 'Equipo cambiado; el cobro quedó propuesto' : 'Equipo cambiado')"
+        />
         <AccionMotivoModal
             v-model:open="perdidaAbierto"
             titulo="Declarar pérdida"

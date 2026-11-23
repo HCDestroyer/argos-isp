@@ -13,6 +13,7 @@ import PaginaExistencias from '~/pages/inventario/index.vue'
 import PaginaKardex from '~/pages/inventario/kardex.vue'
 import PaginaPorRecuperar from '~/pages/inventario/por-recuperar.vue'
 import PaginaProductos from '~/pages/inventario/productos.vue'
+import PaginaRevision from '~/pages/inventario/revision.vue'
 import PaginaUnidades from '~/pages/inventario/unidades.vue'
 import PaginaValorizado from '~/pages/inventario/valorizado.vue'
 import { esperar } from '../ayudas/esperar'
@@ -170,8 +171,8 @@ describe('fixtures del inventario (como la API)', () => {
 
     it('valorizado a una fecha con el cuadre contra 1.1.14', async () => {
         const antes = await useReportesInventario().valorizado({ fecha: '2026-09-01' })
-        // Incluye la ONU que viaja en la orden N.º 3 (bodega de tránsito, D.1).
-        expect(antes.ok && antes.data.total).toBe('2987.50')
+        // Incluye la ONU que viaja en la orden N.º 3 (bodega de tránsito, D.1) y los tres equipos de A48 (revisión, garantía y el no recuperado).
+        expect(antes.ok && antes.data.total).toBe('4010.50')
         const hoy = await useReportesInventario().valorizado({ fecha: '2026-12-31' })
         expect(hoy.ok && hoy.data.cuadre).toEqual([{ empresa_id: 1, valor_kardex: hoy.ok ? hoy.data.total : '', saldo_libro: hoy.ok ? hoy.data.total : '', diferencia: '0.00' }])
     })
@@ -180,10 +181,12 @@ describe('fixtures del inventario (como la API)', () => {
 describe('pantallas', () => {
     it('existencias con bajo mínimo y su total; el kardex con saldo corrido', async () => {
         const pagina = await mountSuspended(conApp(PaginaExistencias), { route: '/inventario' })
-        await esperar(() => expect(pagina.find('[data-existencia="1/1"]').exists()).toBe(true))
-        expect(pagina.find('[data-existencia="2/1"]').text()).toContain('Bajo mínimo')
+        // Una fila por producto (tablero NuevoInventario) con una pastilla por bodega en «Dónde está».
+        await esperar(() => expect(pagina.find('[data-existencia="1"]').exists()).toBe(true))
+        expect(pagina.find('[data-existencia="2"]').text()).toContain('Bajo el mínimo')
+        expect(pagina.find('[data-bodega-existencia="1/1"]').text()).toContain('Central 280')
         expect(pagina.find('[data-prueba="tabla-existencias"]').text()).toContain('280 metro')
-        expect(pagina.find('[data-prueba="existencias-total"]').exists()).toBe(true)
+        await esperar(() => expect(pagina.find('[data-contador="valor"]').text()).toContain('Q'))
         pagina.unmount()
         const kardex = await mountSuspended(conApp(PaginaKardex), { route: '/inventario/kardex?producto=1' })
         // Saldo inicial, consumo y los cuatro tramos de la orden N.º 2 (cancelada) en la central.
@@ -214,7 +217,7 @@ describe('pantallas', () => {
         await esperar(() => expect(recuperar.find('[data-prueba="tabla-por-recuperar"]').text()).toContain('HWTC1A2B3C05'))
         recuperar.unmount()
         const valorizado = await mountSuspended(conApp(PaginaValorizado), { route: '/inventario/valorizado?fecha=2026-09-01' })
-        await esperar(() => expect(valorizado.find('[data-prueba="valorizado-total"]').text()).toContain('2,987.50'))
+        await esperar(() => expect(valorizado.find('[data-prueba="valorizado-total"]').text()).toContain('4,010.50'))
         expect(valorizado.find('[data-prueba="valorizado-cuadre"]').text()).toContain('cuadra')
         valorizado.unmount()
         const servicio = bd.servicios.find(s => s.cliente_id === 1)!
@@ -233,7 +236,62 @@ describe('pantallas', () => {
         useUsuarioActual().value = meCajero
         sesionFixture('fixture-cajero')
         const soloVer = await mountSuspended(conApp(PaginaExistencias), { route: '/inventario' })
-        await esperar(() => expect(soloVer.find('[data-existencia="1/1"]').exists()).toBe(true))
+        await esperar(() => expect(soloVer.find('[data-existencia="1"]').exists()).toBe(true))
         expect(soloVer.find('[data-prueba="inventario-registrar"]').exists()).toBe(false)
+    })
+})
+
+describe('equipos del cliente (A48): revisión, garantía, no recuperado y cobros', () => {
+    it('estado del equipo, acciones por permiso y la regla de «funciona»', () => {
+        expect(estadoEquipoDe({ estado: 'en_reparacion', estado_equipo: undefined })).toBe('revision')
+        expect(estadoEquipoDe({ estado: 'en_reparacion', estado_equipo: 'garantia' })).toBe('garantia')
+        expect(estadoVisibleDe({ estado: 'disponible', estado_equipo: 'disponible', bodega_id: 2 }, [{ id: 2, tipo: 'tecnico' }]).etiqueta).toBe('Con técnico')
+        const todos = () => true
+        expect(accionesEquipo({ estado: 'en_comodato', estado_equipo: 'en_comodato', servicio_id: 1, bodega_id: null }, todos)).toEqual(['cambiar', 'recibir', 'contacto'])
+        expect(accionesEquipo({ estado: 'por_recuperar', estado_equipo: 'por_recuperar', servicio_id: 1, bodega_id: null }, p => p !== 'inventario.cobrar_equipo')).not.toContain('no_recuperado')
+        expect(destinoPermitido('danado', 'funciona')).toBe(false)
+        expect(esquemaCambioEquipo.safeParse({ motivo: 'garantia', entra: 2, destino: 'funciona', cobrar: false }).success).toBe(false)
+        expect(faltaParaDeclarar({ tecnicos_distintos: 1, contactos: 0 })).toContain('otro técnico')
+        expect(faltaParaDeclarar({ tecnicos_distintos: 1, contactos: 1 })).toBeNull()
+    })
+
+    it('cambiar equipo en un paso: el que sale queda en revisión y el cobro solo se propone', async () => {
+        const servicio = bd.servicios.find(s => s.cliente_id === 1)!
+        const r = await useEquiposServicio().cambiar(servicio.id, cuerpoCambioEquipo(1, { motivo: 'danado', entra: 2, destino: 'revision', cobrar: true, nota: 'Carcasa quebrada' }), clave())
+        expect(r.ok && r.data.sale.estado).toBe('revision')
+        expect(r.ok && r.data.entra.estado).toBe('en_comodato')
+        const cobro = bd.equipos.cobros.find(c => c.id === (r.ok ? r.data.cobro_propuesto_id : 0))
+        expect(cobro?.estado).toBe('propuesto')
+        const detalle = await useUnidadesInventario().ver(1)
+        expect(detalle.ok && lineaTiempoUnidad(detalle.data)[0]?.titulo).toContain('En revisión')
+    })
+
+    it('no recuperado exige intentos de técnicos distintos o un contacto; aprobar un cobro lo decide una persona', async () => {
+        const declarada = await useUnidadesInventario().declararNoRecuperada(5, { motivo: 'No lo entrega', monto: null, concepto_id: null, fecha: null }, clave())
+        expect(declarada.ok).toBe(true)
+        expect(bd.unidadesInventario.find(u => u.id === 5)?.estado).toBe('no_recuperada')
+        const propuesto = bd.equipos.cobros.find(c => c.estado === 'propuesto')!
+        const aprobado = await useCobrosEquipo().aprobar(propuesto, { monto: '310.00', concepto_id: null, motivo: null }, clave())
+        expect(aprobado.ok && aprobado.data.estado).toBe('aprobado')
+        const otraVez = await useCobrosEquipo().rechazar(aprobado.ok ? aprobado.data : propuesto, 'Ya no', clave())
+        expect(otraVez.ok).toBe(false)
+    })
+
+    it('revisión y garantía: tres columnas y la garantía se envía y se resuelve', async () => {
+        const pagina = await mountSuspended(conApp(PaginaRevision), { route: '/inventario/revision' })
+        await esperar(() => expect(pagina.find('[data-prueba="columna-revision"]').text()).toContain('HWTC1A2B3C07'))
+        expect(pagina.find('[data-prueba="columna-garantia"]').text()).toContain('RMA 7781')
+        pagina.unmount()
+        const enviada = await useUnidadesInventario().enviarGarantia(7, { proveedor_id: null, proveedor_nombre: 'Distribuidora Red', rma: '9001', vence_en: '2026-12-31', nota: null })
+        expect(enviada.ok && enviada.data.estado_equipo).toBe('garantia')
+        const resuelta = await useUnidadesInventario().resolverGarantia(7, { resultado: 'reparada', serie: null, mac: null, nota: null })
+        expect(resuelta.ok && resuelta.data.estado).toBe('disponible')
+    })
+
+    it('por recuperar muestra los intentos, la cola de cobros y los no recuperados del año', async () => {
+        const pagina = await mountSuspended(conApp(PaginaPorRecuperar), { route: '/inventario/por-recuperar' })
+        await esperar(() => expect(pagina.find('[data-prueba="tabla-por-recuperar"]').text()).toContain('2 intentos'))
+        await esperar(() => expect(pagina.find('[data-prueba="cobros-equipo"]').text()).toContain('Daño en un cambio de equipo'))
+        expect(pagina.find('[data-prueba="cobro-aprobar"]').exists()).toBe(true)
     })
 })

@@ -8,8 +8,16 @@ import type { ContextoAccion } from '#shared/contexto'
  * Utilidades de prueba. Los datos llevan sufijos únicos porque ledger y audit no se truncan.
  */
 
+let contadorUnico = 0
+
+/**
+ * Sufijo de 8 caracteres que no se repite en una corrida: 4 al azar (distinguen corridas sobre la
+ * misma base) y 4 de un contador en base 36. Con 8 caracteres al azar, dos de los miles de planes,
+ * clientes o routers de una corrida llegaban a coincidir y chocaban con su índice único.
+ */
 export function unico(prefijo: string): string {
-    return `${prefijo}-${randomUUID().slice(0, 8)}`
+    contadorUnico += 1
+    return `${prefijo}-${randomUUID().slice(0, 4)}${contadorUnico.toString(36).padStart(4, '0')}`
 }
 
 export function contextoPrueba(actorId: number | null = null): ContextoAccion {

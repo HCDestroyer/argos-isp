@@ -17,17 +17,20 @@ Menú: **Inventario → Movimientos → Existencias**.
 
 ## Qué ves
 
-Una fila por producto y bodega:
+Arriba, cuatro contadores: **Valor del inventario** (y en cuántas bodegas), **Bajo el mínimo**, **En tránsito** y **Equipos por recuperar**. Si alguno no se pudo leer dice «No se pudo leer» con «Reintentar»; nunca un cero inventado.
 
-| Columna    | Qué dice                                                                                                                                        |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Producto   | Nombre, SKU y su modalidad (Comodato, Gasto o Cobro). Si está por debajo del mínimo lleva la marca amarilla «Bajo mínimo».                      |
-| Bodega     | Nombre de la bodega, con el icono de bodega o de técnico.                                                                                       |
-| Existencia | Cuánto hay, en la unidad del producto. Si el producto tiene mínimo, debajo verás «mín. … · total …» (el total es la suma de todas las bodegas). |
-| Promedio   | Costo promedio por unidad en esa bodega.                                                                                                        |
-| Valor      | Lo que vale esa existencia.                                                                                                                     |
+Debajo, la tarjeta de Inventario con sus pestañas: Existencias, Equipos (serie/MAC), Kardex, Por recuperar y Revisión y garantía. En Existencias hay una fila por producto:
 
-Abajo de la tabla está el «Valor de esta página»: es la suma de las filas que tienes a la vista, no de todo el inventario. Para el valor total a una fecha usa el [inventario valorizado](./kardex-y-valorizado.md#inventario-valorizado).
+| Columna     | Qué dice                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| Producto    | Nombre; si está por debajo del mínimo, «Bajo el mínimo» en rojo.                                  |
+| Tipo        | «Serie» (equipos que se llevan uno por uno) o «Cantidad» (cable, conectores, grapas).            |
+| Dónde está  | Una pastilla por bodega con lo que hay en ella («Central 42», «Pedro 3»).                          |
+| Total       | La suma de todas las bodegas (en rojo si está bajo el mínimo).                                   |
+| Costo prom. | Costo promedio por unidad.                                                                       |
+| Valor       | Lo que vale todo lo que hay.                                                                     |
+
+Cada fila tiene su menú «⋯» (el mismo con clic derecho): ver kardex, ver equipos y registrar consumo, traslado, ajuste o baja. Para el valor total a una fecha usa el [inventario valorizado](./kardex-y-valorizado.md#inventario-valorizado).
 
 ### Filtros
 
