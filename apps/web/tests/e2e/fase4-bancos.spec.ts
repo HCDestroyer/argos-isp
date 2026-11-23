@@ -85,7 +85,17 @@ test('depositar desde la caja y conciliarlo con el extracto', async ({ page }) =
 test('castigar una factura con la frase escrita', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Cartera', /\/cartera/)
-    await page.getByRole('button', { name: 'Castigar cartera' }).click()
+    // Tablero ContaCartera: «Castigar…» va al pie de la lista en escritorio; en el teléfono, en el
+    // menú de cada cliente (decisión 9: el teléfono de finanzas también castiga, con confirmación).
+    const abrirCastigo = page.locator('[data-prueba="abrir-castigo"]:visible')
+    await expect(abrirCastigo.or(page.getByRole('button', { name: 'Más acciones: Juan Carlos Ramírez' })).first()).toBeVisible()
+    if (await abrirCastigo.isVisible()) {
+        await abrirCastigo.click()
+    }
+    else {
+        await page.getByRole('button', { name: 'Más acciones: Juan Carlos Ramírez' }).click()
+        await page.getByRole('menuitem', { name: 'Castigar…' }).click()
+    }
     const modal = page.getByRole('dialog', { name: 'Castigar cartera' })
     await modal.getByPlaceholder('Nombre, NIT, teléfono, usuario PPP o IP').fill('Juan Carlos')
     await page.getByRole('option', { name: /Juan Carlos Ramírez/ }).click()
@@ -102,5 +112,7 @@ test('castigar una factura con la frase escrita', async ({ page }) => {
     const resultado = page.locator('[data-prueba="resultado-castigo"]')
     await expect(resultado).toContainText('Juan Carlos Ramírez')
     await expect(resultado.locator('[data-estado-factura]').first()).toHaveText('Castigada')
+    // Tablero ContaCartera: los castigos registrados van en su pestaña.
+    await page.getByRole('tab', { name: /^Castigos/ }).click()
     await expect(page.locator('[data-prueba="tabla-castigos"]')).toContainText('Cliente se mudó del país')
 })
