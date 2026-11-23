@@ -197,7 +197,7 @@ function cobroDecidido(titulo: string) {
                                     size="sm"
                                     class="rounded-full"
                                     disabled
-                                    title="Argos crea la orden de retiro en Iris al retirar el servicio; crearla a mano aún no está en la API"
+                                    title="Argos crea la orden de retiro en Iris al retirar el servicio; pedirla a mano llega cuando Iris pueda crearla (su fase 2)"
                                 />
                                 <UButton
                                     v-if="puede('inventario.devolver_comodato')"

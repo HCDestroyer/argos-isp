@@ -11,7 +11,7 @@ pantallas:
 
 Los reportes de cartera, ingresos, cobranza, cajas, IVA, promesas, altas y bajas, egresos, bonificaciones y cuentas por pagar. Cada uno se filtra, muestra sus totales y se descarga en CSV o Excel con los mismos filtros.
 
-Está en **Reportes → Reportes**. A la izquierda eliges la categoría (Cobranza y cartera, Ingresos y clientes, Caja y bancos, Contabilidad y Fiscal), en medio buscas el reporte («morosos», «IVA», «caja») y lo abres con un toque. **Contabilidad** trae además el **Balance general** y el **Estado de resultados**; **Lealtad** abre el reporte del programa de puntos. A la derecha verás los envíos programados y las descargas recientes cuando la API los dé.
+Está en **Reportes → Reportes**. A la izquierda eliges la categoría (Cobranza y cartera, Ingresos y clientes, Caja y bancos, Contabilidad y Fiscal), en medio buscas el reporte («morosos», «IVA», «caja») y lo abres con un toque. **Contabilidad** trae además el **Balance general** y el **Estado de resultados**; **Lealtad** abre el reporte del programa de puntos. A la derecha, **Ver envíos programados** lleva a los [envíos programados](envios-programados.md); las descargas recientes aparecerán cuando la API las dé.
 
 ## Quién la usa
 

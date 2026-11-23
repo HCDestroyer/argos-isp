@@ -741,7 +741,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/configuracion/reportes': {
         titulo: 'Ajustes de reportes',
-        resumen: 'Cómo se cuentan las bajas en los reportes y en el panel del dueño, y a qué correos externos pueden ir los reportes programados.',
+        resumen: 'Cómo se cuentan las bajas en los reportes y en el panel del dueño, y cuándo avisa el panel que la empresa se acerca al límite anual del pequeño contribuyente.',
         pagina: 'configuracion/ajustes-de-reportes',
         ancla: null,
         temas: [
@@ -1561,6 +1561,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Cobranza diaria',
             'Cierres de caja',
             'IVA',
+        ],
+    },
+    '/reportes/envios': {
+        titulo: 'Envíos programados',
+        resumen: 'Los reportes que llegan solos por correo y la lista de correos de fuera de la empresa (contador, socios, auditoría) que el admin aprobó para recibirlos.',
+        pagina: 'reportes/envios-programados',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
         ],
     },
     '/reportes/lealtad': {

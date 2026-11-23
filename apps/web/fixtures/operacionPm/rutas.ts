@@ -3,6 +3,7 @@ import { rutasAjustesOperacionPm } from './ajustes'
 import { rutasBancosOrigen } from './bancosOrigen'
 import { rutasImpresionCaja } from './cajas'
 import { rutasCorreosExternos } from './correosExternos'
+import { rutasEnviosReportes } from './envios'
 import { rutasEquiposIntegracion } from './equipos'
 import { rutasIntentosRecuperacion } from './intentos'
 import { rutasRecuperacion } from './recuperacion'
@@ -13,6 +14,7 @@ export const rutasOperacionPm: RutasFixture = {
     ...rutasAjustesOperacionPm,
     ...rutasBancosOrigen,
     ...rutasCorreosExternos,
+    ...rutasEnviosReportes,
     ...rutasEquiposIntegracion,
     ...rutasIntentosRecuperacion,
     ...rutasImpresionCaja,

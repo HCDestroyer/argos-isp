@@ -6,11 +6,13 @@ import UApp from '@nuxt/ui/components/App.vue'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
+import { usuariosPorToken } from '~~/fixtures/comun'
 import { CORREO_LIMITADO_FIXTURE, TOKEN_RECUPERACION_FIXTURE, UNIDAD_CON_INTENTOS } from '~~/fixtures/operacionPm/datos'
 import PaginaRedPortal from '~/pages/configuracion/portal-corte.vue'
 import PaginaReglasCobro from '~/pages/configuracion/reglas-cobro.vue'
 import PaginaBancosOrigen from '~/pages/configuracion/bancos-origen.vue'
 import PaginaReportes from '~/pages/configuracion/reportes.vue'
+import PaginaEnvios from '~/pages/reportes/envios.vue'
 import PaginaLogin from '~/pages/login.vue'
 import PaginaDeclarar from '~/pages/inventario/por-recuperar/[id].vue'
 import PaginaTecnicosIris from '~/pages/inventario/tecnicos-iris.vue'
@@ -62,6 +64,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+    usuariosPorToken['fixture-admin'] = meAdmin
     sesionFixture(null)
     useUsuarioActual().value = null
     localStorage.clear()
@@ -215,19 +218,97 @@ describe('configuración · reportes', () => {
         useEmpresaActiva().elegir(1)
         const leida = await usePanelFinancieroAjustes().ver()
         expect(leida.ok && leida.data).toMatchObject({ dias_baja: 60, fabrica: true, version: 1 })
-        const guardada = await usePanelFinancieroAjustes().guardar(90, 1)
-        expect(guardada.ok && guardada.data).toMatchObject({ dias_baja: 90, fabrica: false, version: 2 })
+        const guardada = await usePanelFinancieroAjustes().guardar({ dias_baja: 90, version: 1 })
+        // Como la API: la primera vez se inserta la fila con su `version` de fábrica (1); luego sube.
+        expect(guardada.ok && guardada.data).toMatchObject({ dias_baja: 90, fabrica: false, version: 1 })
+        const otra = await usePanelFinancieroAjustes().guardar({ dias_baja: 30, version: 1 })
+        expect(otra.ok && otra.data).toMatchObject({ dias_baja: 30, version: 2 })
     })
 
-    it('correos externos: aprobar, retirar y reactivar', async () => {
+    it('aviso de pequeño contribuyente: umbrales de pc_alertas, aplica según el régimen y apagadas en las alertas', async () => {
+        useEmpresaActiva().elegir(2)
+        const leida = await usePanelFinancieroAjustes().ver()
+        expect(leida.ok && leida.data).toMatchObject({ aviso_pc_activo: true, aviso_pc_umbrales: ['80.00', '100.00'], aviso_pc_umbrales_nivel: 'paquete', aviso_pc_aplica: true })
+        const umbrales = await usePanelFinancieroAjustes().guardar({ aviso_pc_umbrales: ['95', '80'], version: 1 })
+        expect(umbrales.ok && umbrales.data).toMatchObject({ aviso_pc_umbrales: ['80.00', '95.00'], aviso_pc_umbrales_nivel: 'empresa', version: 1 })
+        const otraVez = await usePanelFinancieroAjustes().guardar({ aviso_pc_umbrales: ['90'], version: 1 })
+        expect(!otraVez.ok && codigoProblema(otraVez.problema)).toBe('vigencia_duplicada')
+        const iguales = await usePanelFinancieroAjustes().guardar({ aviso_pc_umbrales: ['80.00', '95.00'], aviso_pc_activo: false, version: 1 })
+        expect(iguales.ok && iguales.data).toMatchObject({ aviso_pc_activo: false, fabrica: false, version: 1 })
+        const alertas = await usePanelFinancieroAjustes().alertas()
+        expect(alertas.ok && alertas.data.empresas.find(e => e.empresa_id === 2)?.apagadas).toEqual(['limite_pequeno_contribuyente'])
+
+        useEmpresaActiva().elegir(1)
+        const utilidades = await usePanelFinancieroAjustes().ver()
+        expect(utilidades.ok && utilidades.data.aviso_pc_aplica).toBe(false)
+    })
+
+    it('sin fiscal.editar_parametros los umbrales se ven de solo lectura y la API responde 403', async () => {
+        const sinFiscal = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'fiscal.editar_parametros') }
+        usuariosPorToken['fixture-admin'] = sinFiscal
+        useUsuarioActual().value = sinFiscal
+        useEmpresaActiva().elegir(2)
+        const r = await usePanelFinancieroAjustes().guardar({ aviso_pc_umbrales: ['70'], version: 1 })
+        expect(!r.ok && r.problema.status).toBe(403)
         await montar(PaginaReportes, '/configuracion/reportes')
-        await esperar(() => expect(document.body.querySelector('[data-correo="contador@despachomm.gt"]')).not.toBeNull())
-        const r = await useCorreosExternos().aprobar({ correo: 'Socio@Ejemplo.gt', nombre: 'Socio' })
-        expect(r.ok && r.data).toMatchObject({ correo: 'socio@ejemplo.gt', activo: true })
-        const retirado = await useCorreosExternos().retirar(1)
-        expect(retirado.ok && retirado.data).toMatchObject({ activo: false })
+        await esperar(() => expect(enBody('umbrales-lectura')?.textContent).toContain('80 %'))
+        expect(enBody('umbrales-form')).toBeNull()
+        expect(enBody('aviso-pc-no-aplica')).toBeNull()
+    })
+
+    it('la pantalla guarda los umbrales y dice cuando ya se cambiaron hoy', async () => {
+        useEmpresaActiva().elegir(2)
+        await montar(PaginaReportes, '/configuracion/reportes')
+        await esperar(() => expect(enBody('umbrales-form')).not.toBeNull())
+        expect(enBody('correos-externos')).toBeNull()
+        boton('Agregar')!.click()
+        await flushPromises()
+        enBody('umbrales-guardar')!.click()
+        await esperar(() => expect(bd.fiscal.valores.find(v => v.clave === 'pc_alertas' && v.empresa_id === 2)?.valor).toEqual(['80.00', '95.00', '100.00']))
+        boton('Agregar')!.click()
+        await flushPromises()
+        enBody('umbrales-guardar')!.click()
+        await esperar(() => expect(enBody('umbrales-error')?.textContent).toContain('ya se cambiaron hoy'))
+    })
+})
+
+describe('reportes · envíos programados', () => {
+    it('lista los envíos con su detalle y corridas; pausar manda el envío completo', async () => {
+        useEmpresaActiva().elegir(1)
+        await montar(PaginaEnvios, '/reportes/envios')
+        await esperar(() => expect(document.body.querySelector('[data-envio="Cartera vencida por zona"]')).not.toBeNull())
+        expect(document.body.querySelector('[data-envio="Ingresos del mes"]')).not.toBeNull()
+        await esperar(() => expect(enBody('corridas-envio')?.textContent).toContain('Omitido: el correo se retiró de la lista'))
+        expect(document.body.querySelector('[data-envio-detalle="1"]')?.textContent).toContain('Retirado de la lista')
+        enBody('envio-pausar')!.click()
+        await esperar(() => expect(bd.operacionPm.envios.find(e => e.id === 1)?.activo).toBe(false))
+        expect(bd.operacionPm.envios.find(e => e.id === 1)?.destinatarios).toHaveLength(2)
+    })
+
+    it('correos externos: envíos por correo y quién aprobó o retiró; retirar marca los envíos', async () => {
+        useEmpresaActiva().elegir(1)
+        const lista = await useCorreosExternos().listar()
+        const contador = lista.ok ? lista.data.find(c => c.id === 1) : undefined
+        expect(contador).toMatchObject({ aprobado_por_nombre: 'Ana Administradora', envios_programados: 1, envios_activos: 1 })
+        await montar(PaginaEnvios, '/reportes/envios?ver=correos')
+        await esperar(() => expect(document.body.querySelector('[data-envios="contador@despachomm.gt"]')?.textContent).toContain('1 programado'))
+        expect(document.body.querySelector('[data-correo="gerencia@argosnet.gt"]')?.closest('tr')?.textContent).toContain('Retirado por Ana Administradora')
+        const r = await useCorreosExternos().retirar(1)
+        expect(r.ok).toBe(true)
+        expect(bd.operacionPm.envios.find(e => e.id === 3)?.destinatarios[0]?.retirado).toBe(true)
         const otraVez = await useCorreosExternos().aprobar({ correo: 'contador@despachomm.gt', nombre: 'Despacho' })
         expect(otraVez.ok && otraVez.data).toMatchObject({ id: 1, activo: true, retirado_en: null })
+        expect(bd.operacionPm.envios.find(e => e.id === 3)?.destinatarios[0]?.retirado).toBe(false)
+    })
+
+    it('sin alcance global no cuentan ni se ven los consolidados', async () => {
+        const sinGlobal = { ...meAdmin, alcance_global: false }
+        usuariosPorToken['fixture-admin'] = sinGlobal
+        useEmpresaActiva().elegir(1)
+        const envios = await useEnviosReportes().listar()
+        expect(envios.ok && envios.data.map(e => e.id)).toEqual([1, 2, 4])
+        const correos = await useCorreosExternos().listar()
+        expect(correos.ok && correos.data.find(c => c.id === 1)?.envios_programados).toBe(0)
     })
 })
 

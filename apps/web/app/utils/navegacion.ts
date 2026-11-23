@@ -221,6 +221,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         corta: 'Reportes',
         secciones: [
             { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cobranza, ingresos, caja, contabilidad y fiscal: cada uno se filtra y se descarga en Excel o PDF.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
+            { id: 'envios-reportes', etiqueta: 'Envíos programados', descripcion: 'Reportes que llegan solos por correo y los correos de fuera de la empresa que el admin aprobó.', icono: 'i-lucide-send', ruta: '/reportes/envios', permiso: 'reportes.programar_envio' },
             { id: 'bitacora', etiqueta: 'Bitácora', descripcion: 'Acciones por actor y canal, e historial de cambios.', icono: 'i-lucide-scroll-text', ruta: '/bitacora', permiso: 'bitacora.ver' },
         ],
     },
@@ -295,7 +296,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                     { id: 'registro', etiqueta: 'Registro del sistema', descripcion: 'Errores y avisos recientes de la API, la red, RADIUS, CoA, colas y contabilidad.', icono: 'i-lucide-scroll', ruta: '/sistema/registro', permiso: 'sistema.ver_registro' },
                     { id: 'almacenamiento', etiqueta: 'Almacenamiento', descripcion: 'Qué ocupa espacio: disco, archivos por tipo, base de datos y Redis.', icono: 'i-lucide-hard-drive', ruta: '/sistema/almacenamiento', permiso: 'sistema.ver_almacenamiento' },
                     { id: 'tareas', etiqueta: 'Tareas programadas', descripcion: 'Las tareas automáticas: cuándo corrieron, cuándo corren, cuáles se atrasaron y ejecutarlas ahora.', icono: 'i-lucide-calendar-clock', ruta: '/sistema/tareas', permiso: 'sistema.ver_crons' },
-                    { id: 'config-reportes', etiqueta: 'Ajustes de reportes', descripcion: 'Cuándo un servicio cuenta como baja y a qué correos externos van los envíos programados.', icono: 'i-lucide-chart-pie', ruta: '/configuracion/reportes', permiso: 'reportes.ver' },
+                    { id: 'config-reportes', etiqueta: 'Ajustes de reportes', descripcion: 'Cuándo un servicio cuenta como baja y cuándo avisa el límite del pequeño contribuyente.', icono: 'i-lucide-chart-pie', ruta: '/configuracion/reportes', permiso: 'reportes.ver' },
                     { id: 'apariencia', etiqueta: 'Apariencia', descripcion: 'Color del panel y del portal, modo claro u oscuro, marca y logo y fondo del inicio de sesión.', icono: 'i-lucide-palette', ruta: '/configuracion/apariencia', permiso: 'apariencia.ver' },
                 ],
             },

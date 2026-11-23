@@ -8,8 +8,9 @@ useHead({ title: 'Reportes · ArgosIsp' })
  * en medio y, a la derecha, los envíos programados y las descargas recientes. Cada reporte respeta
  * la empresa activa y se descarga con los mismos filtros.
  * - «Rentabilidad» (ganancia por zona, plan y router) no se muestra: decisión 5 del PM, más adelante.
- * - Favoritos, envíos programados (decisión 6) y descargas recientes esperan la API de A3
- *   (`agente/a3-reportes-pm`); se dice qué falta, sin listas inventadas.
+ * - Los envíos programados (decisión 6) viven en Reportes › Envíos programados (`/reportes/envios`).
+ * - Favoritos y descargas recientes esperan la API de A3 (`agente/a3-reportes-pm`); se dice qué
+ *   falta, sin listas inventadas.
  */
 const { puede } = usePermisos()
 
@@ -239,10 +240,15 @@ const vistaMovil = ref<'lista' | 'categorias'>('lista')
                         <p class="text-xs text-muted">
                             Llegan por correo como archivo, solo a personas con permiso o a correos de la lista aprobada; nunca con datos de otra empresa.
                         </p>
-                        <SeccionSinApi
-                            titulo="Todavía sin envíos"
-                            descripcion="Programar un envío desde un reporte llega con la API de envíos programados."
-                            icono="i-lucide-send"
+                        <UButton
+                            v-if="puede('reportes.programar_envio')"
+                            label="Ver envíos programados"
+                            icon="i-lucide-send"
+                            to="/reportes/envios"
+                            color="neutral"
+                            variant="outline"
+                            class="self-start rounded-full"
+                            data-prueba="ver-envios"
                         />
                     </section>
                     <section
