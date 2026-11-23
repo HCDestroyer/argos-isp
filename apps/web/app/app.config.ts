@@ -107,6 +107,10 @@ export default defineAppConfig({
                 footer: 'justify-end gap-2',
             },
         },
+        // En el teléfono, los avisos emergentes salen encima de la isla de navegación (`PanelIslaMovil`).
+        toaster: {
+            slots: { viewport: 'mb-(--ax-isla-reserva)' },
+        },
         toast: {
             slots: { root: 'rounded-(--ax-radio) ring-(--ax-borde)', icon: 'size-5' },
         },
