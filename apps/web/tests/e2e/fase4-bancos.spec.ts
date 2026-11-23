@@ -88,15 +88,20 @@ test('castigar una factura con la frase escrita', async ({ page }) => {
     // Tablero ContaCartera: «Castigar…» va al pie de la lista en escritorio; en el teléfono, en el
     // menú de cada cliente (decisión 9: el teléfono de finanzas también castiga, con confirmación).
     const abrirCastigo = page.locator('[data-prueba="abrir-castigo"]:visible')
-    await expect(abrirCastigo.or(page.getByRole('button', { name: 'Más acciones: Juan Carlos Ramírez' })).first()).toBeVisible()
+    const menuCliente = page.locator('[data-prueba="menu-fila"]').first()
+    await expect(abrirCastigo.or(menuCliente).first()).toBeVisible()
     if (await abrirCastigo.isVisible()) {
         await abrirCastigo.click()
     }
     else {
-        await page.getByRole('button', { name: 'Más acciones: Juan Carlos Ramírez' }).click()
+        await menuCliente.click()
         await page.getByRole('menuitem', { name: 'Castigar…' }).click()
+        // El menú devuelve el foco a su botón al cerrarse: se escribe cuando ya cerró, para que ese
+        // foco no borre la búsqueda del cliente.
+        await expect(page.getByRole('menu')).toHaveCount(0)
     }
     const modal = page.getByRole('dialog', { name: 'Castigar cartera' })
+    await expect(modal).toBeVisible()
     await modal.getByPlaceholder('Nombre, NIT, teléfono, usuario PPP o IP').fill('Juan Carlos')
     await page.getByRole('option', { name: /Juan Carlos Ramírez/ }).click()
     const facturas = modal.locator('[data-prueba="castigo-facturas"]')
