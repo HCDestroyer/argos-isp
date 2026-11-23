@@ -48,6 +48,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'ip.buscar_historial': 'Búsqueda de quién tenía una IP',
     'incidentes_red.abrir': 'Falla general abierta a mano',
     'incidentes_red.cerrar': 'Falla general cerrada',
+    'incidentes_red.leer': 'Servicios de una falla general consultados',
     'incidentes_red.evaluar': 'Fallas generales revisadas',
     // Anuncios del portal (A5, `contratos/anuncios.md`).
     'anuncios.crear': 'Anuncio creado',
