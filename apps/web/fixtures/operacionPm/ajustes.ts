@@ -150,7 +150,10 @@ export const rutasAjustesOperacionPm: RutasFixture = {
 
     /**
      * Como `alertasPanel` (A3), solo con lo que el fixture sabe calcular: el límite del pequeño
-     * contribuyente desde el bloque del tablero fiscal (con `fiscal.ver`) y `apagadas` de los ajustes.
+     * contribuyente desde el bloque del tablero fiscal (con `fiscal.ver`) y `apagadas` de los ajustes
+     * (con el aviso apagado la empresa sigue en `apagadas`, pero el límite superado, 100 %, llega
+     * igual como alerta `critico` con `datos.aviso_apagado = true`, y un fallo de la revisión llega
+     * en `errores`).
      * Las revisiones del libro, FEL y vencimientos no se simulan: no van en `revisados` (nunca se
      * dan por buenas sin revisarlas).
      */
@@ -168,16 +171,17 @@ export const rutasAjustesOperacionPm: RutasFixture = {
             if (!revisados.includes('limite_pequeno_contribuyente')) {
                 return fila
             }
-            if (avisoPcApagado(id)) {
+            const apagado = avisoPcApagado(id)
+            if (apagado) {
                 fila.apagadas.push('limite_pequeno_contribuyente')
-                return fila
             }
             const bloque = tableroEmpresa(id, hoy).bloques.pequeno_contribuyente
             if (bloque.estado === 'error' && bloque.error) {
                 fila.errores.push({ tipo: 'limite_pequeno_contribuyente', error: bloque.error })
             }
             const pc = bloque.estado === 'ok' ? bloque.datos : null
-            if (pc && (pc.umbral_alcanzado !== null || pc.supera_limite)) {
+            /* Apagado: no salen el 80 % ni el 95 %; el 100 % (límite superado) se avisa siempre. */
+            if (pc && (apagado ? pc.supera_limite : pc.umbral_alcanzado !== null || pc.supera_limite)) {
                 const menor = pc.umbrales.map(u => new Decimal(u)).reduce((a, b) => (b.lt(a) ? b : a), new Decimal(100))
                 const alcanzado = new Decimal(pc.umbral_alcanzado ?? '0')
                 fila.alertas.push({
@@ -185,7 +189,8 @@ export const rutasAjustesOperacionPm: RutasFixture = {
                     nivel: pc.supera_limite || alcanzado.gt(menor) ? 'critico' : 'aviso',
                     titulo: pc.supera_limite ? 'Superó el límite anual del pequeño contribuyente' : `Lleva el ${pc.porcentaje} % del límite anual del pequeño contribuyente`,
                     detalle: pc.supera_limite ? String(pc.mensaje ?? '') : `Facturado en ${pc.anio}: Q${pc.acumulado} de Q${pc.limite}. Quedan Q${pc.disponible}.`,
-                    datos: { ...pc },
+                    // Como A3: con el aviso apagado solo llega el límite superado, marcado.
+                    datos: apagado ? { ...pc, aviso_apagado: true } : { ...pc },
                 })
             }
             return fila

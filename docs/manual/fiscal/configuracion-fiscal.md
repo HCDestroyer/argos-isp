@@ -6,7 +6,7 @@ pantallas:
 
 # Configuración fiscal
 
-La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia e impuestos. También los feriados, que valen para todas las empresas.
+La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia, el aviso de pequeño contribuyente e impuestos. También los feriados, que valen para todas las empresas.
 
 Está en **Configuración → Empresa y fiscal → Fiscal**. Lo que cambies aquí rige desde la fecha que indiques y nunca reescribe lo ya emitido.
 
@@ -22,10 +22,11 @@ Todo, menos los feriados, es por empresa (NIT). Con «Todas» en el selector de 
 - Establecimientos, frases y feriados: `fiscal.configurar` (**contabilidad** y **admin**).
 - Instalar o actualizar el paquete fiscal: `fiscal.instalar` (solo **admin**).
 - Cambiar el país: `empresas.cambiar_pais` (solo **admin**).
+- Aviso de pequeño contribuyente: verlo con `panel_financiero.ver`, encenderlo o apagarlo con `panel_financiero.configurar`; cambiar sus umbrales pide además `fiscal.editar_parametros` (sin él se ven de solo lectura).
 
 ## Qué ves
 
-Seis pestañas: **País y régimen**, **Establecimientos**, **Frases**, **Parámetros**, **Impuestos** y **Feriados**.
+Siete bloques: **País y régimen**, **Establecimientos**, **Frases**, **Parámetros**, **Aviso de pequeño contribuyente**, **Impuestos** y **Feriados**.
 
 En varias tablas verás de dónde sale cada valor: **Empresa** (propio de esta empresa), **Instalación** (lo dejó el instalador), **Global** (de toda la instalación), **Paquete** (el del paquete de localización) o **Derivado**. La etiqueta ámbar **Confirmar con contador** marca los valores que el contador debe revisar.
 
@@ -72,6 +73,16 @@ Los valores fiscales con vigencia (tasas, montos, plazos). Busca por nombre, eli
 - El botón de historial muestra todas las versiones con su fuente. Si un parámetro no tiene valor, los cálculos que lo necesiten responden «Falta un valor que debe confirmar el contador».
 - **Nuevo valor** (`fiscal.editar_parametros`): **Valor** (los porcentajes sin el signo: `12.00` es 12 %; los montos en quetzales), **Vigente desde** (no puede caer en un mes cerrado), **Valor global (toda la instalación)** si aplica, y **Motivo**. Lo anterior a esa fecha no cambia.
 
+## Aviso de pequeño contribuyente
+
+El aviso del panel financiero cuando las ventas del año se acercan al límite anual del pequeño contribuyente. Antes estaba en Configuración → Reportes. Se ve solo con `panel_financiero.ver`.
+
+- **Avisar al acercarse al límite anual:** encendido de fábrica; se guarda al tocar el interruptor (`panel_financiero.configurar`). **Apagado, no se avisan el 80 % ni el 95 %. El 100 % (límite superado) se avisa siempre**, porque obliga a cambiar de régimen.
+- **Umbrales del aviso:** los porcentajes del límite anual en que avisa (de fábrica, 80 % y 95 %), de 1 a 5 valores mayores que 0 y hasta 100. Dice si son el valor de fábrica del país o si los cambió la empresa, y desde cuándo rigen. Son el parámetro fiscal `pc_alertas` de la empresa: el mismo que usa el resumen fiscal y que verás en **Parámetros**.
+- **Guardar umbrales:** agrega o quita umbrales (botón **Agregar** y la **x** de cada uno), escribe un motivo si quieres y guarda. El cambio rige desde hoy y queda en el historial del parámetro.
+- Si el régimen actual de la empresa no es pequeño contribuyente, una nota dice que el aviso no sale aunque esté encendido.
+- Sin localización fiscal, los umbrales no se pueden ver ni cambiar: instala el paquete en **País y régimen**, en esta misma página.
+
 ## Impuestos
 
 Los impuestos de la empresa con su tasa, cálculo, cuadrículas y fuente. Filtra por **Vigentes al**, grupo y uso (ventas, compras o ambos).
@@ -96,9 +107,13 @@ Días inhábiles para los plazos fiscales de toda la instalación. Los feriados 
 | La fecha de vigencia cae en un mes cerrado      | Usa una fecha de un mes abierto                   |
 | «Ese código ya existe en la empresa»            | Cada establecimiento tiene un código SAT único    |
 | «Falta un valor que debe confirmar el contador» | Registra el valor del parámetro en **Parámetros** |
+| «Los umbrales ya se cambiaron hoy»              | Solo cabe un cambio por día: vuelve mañana o corrige `pc_alertas` en **Parámetros** |
+| «Sin permiso para cambiar los umbrales»         | Pide el permiso `fiscal.editar_parametros`        |
+| Apagué el aviso y aún sale                      | Es el del 100 %: el límite superado se avisa siempre |
 
 ## Relacionado
 
 - [FEL](./fel.md)
 - [Calendario fiscal](./calendario.md)
 - [Tablero fiscal y comparador](./tablero-y-comparador.md)
+- [Ajustes de reportes](../configuracion/ajustes-de-reportes.md)

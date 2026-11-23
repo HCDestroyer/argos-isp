@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { elegirEmpresa, entrar } from './ayudas'
+import { elegirEmpresa, entrar, ir } from './ayudas'
 
 /**
  * «Pendientes del backend» en el panel (tableros OperLogin, OperConfigRed, OperConfigCobro,
@@ -95,7 +95,7 @@ test('facturación y cobro: reglas por empresa, impresión por caja y bancos de 
     await expect(page.locator('[data-banco="Banrural"]')).toHaveAttribute('data-oculto', 'true')
 })
 
-test('reportes: los días de baja y el aviso de pequeño contribuyente de la empresa', async ({ page }) => {
+test('reportes: los días de baja de la empresa; el aviso de pequeño contribuyente ya no está aquí', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/configuracion/reportes')
     await page.locator('[data-prueba="pastillas-empresa"] [data-empresa="1"]').click()
@@ -105,15 +105,25 @@ test('reportes: los días de baja y el aviso de pequeño contribuyente de la emp
     await dias.blur()
     await page.locator('[data-prueba="dias-baja-guardar"]').click()
     await expect(aviso(page, 'Días para contar una baja guardados')).toBeVisible()
-    // ArgosNet tributa sobre utilidades: el aviso no sale aunque esté encendido.
-    await expect(page.locator('[data-prueba="aviso-pc-no-aplica"]')).toBeVisible()
+    await expect(page.locator('[data-prueba="bloque-aviso-pc"]')).toHaveCount(0)
     await expect(page.locator('[data-prueba="correos-externos"]')).toHaveCount(0)
+})
+
+test('fiscal: el aviso de pequeño contribuyente, su interruptor y los umbrales de la empresa', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/configuracion/fiscal')
+    await page.locator('[data-prueba="pastillas-empresa"] [data-empresa="1"]').click()
+    const bloque = page.locator('[data-prueba="bloque-aviso-pc"]')
+    // ArgosNet tributa sobre utilidades: el aviso no sale aunque esté encendido.
+    await expect(bloque.locator('[data-prueba="aviso-pc-no-aplica"]')).toBeVisible()
 
     await page.locator('[data-prueba="pastillas-empresa"] [data-empresa="2"]').click()
-    await expect(page.locator('[data-prueba="aviso-pc-no-aplica"]')).toHaveCount(0)
-    await page.locator('[data-prueba="aviso-pc-activo"]').click()
+    await expect(bloque.locator('[data-prueba="aviso-pc-no-aplica"]')).toHaveCount(0)
+    await expect(bloque.locator('[data-prueba="aviso-pc-fila"]')).toContainText('El 100 % (límite superado) se avisa siempre')
+    await bloque.locator('[data-prueba="aviso-pc-activo"]').click()
     await expect(aviso(page, 'Aviso de pequeño contribuyente apagado')).toBeVisible()
-    const form = page.locator('[data-prueba="umbrales-form"]')
+    await expect(bloque.locator('[data-prueba="aviso-pc-fila"]')).toContainText('Apagado: no se avisan el 80 % ni el 95 %. El 100 % (límite superado) se avisa siempre, porque obliga a cambiar de régimen.')
+    const form = bloque.locator('[data-prueba="umbrales-form"]')
     await form.getByRole('button', { name: 'Agregar' }).click()
     await expect(form.getByLabel('Umbral 3 en %')).toHaveValue('95')
     await form.locator('[data-prueba="umbrales-motivo"]').fill('El contador pidió avisar antes')
@@ -123,6 +133,28 @@ test('reportes: los días de baja y el aviso de pequeño contribuyente de la emp
     await form.getByRole('button', { name: 'Quitar el umbral 3' }).click()
     await form.locator('[data-prueba="umbrales-guardar"]').click()
     await expect(form.locator('[data-prueba="umbrales-error"]')).toContainText('Los umbrales ya se cambiaron hoy')
+})
+
+test('panel financiero: con el aviso apagado, el límite superado (100 %) se avisa igual', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/configuracion/fiscal')
+    await page.locator('[data-prueba="pastillas-empresa"] [data-empresa="2"]').click()
+    // Un límite anual propio muy bajo: las ventas del año de la empresa ya lo superan.
+    await page.locator('#fiscal-parametros').scrollIntoViewIfNeeded()
+    await page.getByRole('button', { name: 'Nuevo valor de pc_limite_anual', exact: true }).click()
+    const modal = page.getByRole('dialog')
+    await modal.getByLabel('Valor', { exact: true }).fill('1.00')
+    await modal.getByLabel('Vigente desde').fill(`${new Date().getFullYear()}-01-01`)
+    await modal.getByLabel('Motivo').fill('Prueba del aviso')
+    await modal.getByRole('button', { name: 'Guardar valor' }).click()
+    await expect(modal).toBeHidden()
+    const bloque = page.locator('[data-prueba="bloque-aviso-pc"]')
+    await bloque.locator('[data-prueba="aviso-pc-activo"]').click()
+    await expect(aviso(page, 'Aviso de pequeño contribuyente apagado')).toBeVisible()
+
+    // Sin recargar: los fixtures viven en el navegador.
+    await ir(page, 'Panel financiero', /\/finanzas$/)
+    await expect(page.locator('[data-aviso="pc-2"]')).toContainText('Pequeño contribuyente al')
 })
 
 test('envíos programados: el detalle con sus corridas, pausar y los correos externos con sus envíos', async ({ page }) => {

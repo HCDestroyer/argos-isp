@@ -7,11 +7,14 @@ import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { usuariosPorToken } from '~~/fixtures/comun'
+import { tableroEmpresa } from '~~/fixtures/tablero/rutas'
 import { CORREO_LIMITADO_FIXTURE, TOKEN_RECUPERACION_FIXTURE, UNIDAD_CON_INTENTOS } from '~~/fixtures/operacionPm/datos'
 import PaginaRedPortal from '~/pages/configuracion/portal-corte.vue'
 import PaginaReglasCobro from '~/pages/configuracion/reglas-cobro.vue'
 import PaginaBancosOrigen from '~/pages/configuracion/bancos-origen.vue'
 import PaginaReportes from '~/pages/configuracion/reportes.vue'
+import PaginaFiscal from '~/pages/configuracion/fiscal.vue'
+import PaginaFinanzas from '~/pages/finanzas/index.vue'
 import PaginaEnvios from '~/pages/reportes/envios.vue'
 import PaginaLogin from '~/pages/login.vue'
 import PaginaDeclarar from '~/pages/inventario/por-recuperar/[id].vue'
@@ -41,6 +44,34 @@ function enBody(prueba: string): HTMLElement | null {
 
 function boton(texto: string): HTMLButtonElement | undefined {
     return [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim().includes(texto))
+}
+
+/** Lo facturado en el año por la empresa, como lo calcula el tablero fiscal del fixture. */
+function acumuladoPc(empresaId: number): number {
+    const datos = tableroEmpresa(empresaId, hoyGuatemala()).bloques.pequeno_contribuyente.datos
+    return datos ? Number(datos.acumulado) : 0
+}
+
+/** Un límite anual propio de la empresa para llevarla al porcentaje que pida la prueba. */
+function limitePc(empresaId: number, valor: string, desde?: string) {
+    const hoy = hoyGuatemala()
+    bd.fiscal.valores.push({
+        id: 9_000 + bd.fiscal.valores.length,
+        pais: 'GT',
+        empresa_id: empresaId,
+        clave: 'pc_limite_anual',
+        valor,
+        vigente_desde: desde ?? `${hoy.slice(0, 4)}-01-01`,
+        origen: 'usuario',
+        motivo: 'Prueba del aviso',
+        creado_por: null,
+        created_at: `${hoy}T00:00:00.000Z`,
+        nivel: 'empresa',
+    })
+}
+
+function botonEn(prueba: string, texto: string): HTMLButtonElement | undefined {
+    return [...(enBody(prueba)?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(b => b.textContent?.trim().includes(texto))
 }
 
 async function escribir(selector: string, valor: string) {
@@ -225,7 +256,17 @@ describe('configuración · reportes', () => {
         expect(otra.ok && otra.data).toMatchObject({ dias_baja: 30, version: 2 })
     })
 
-    it('aviso de pequeño contribuyente: umbrales de pc_alertas, aplica según el régimen y apagadas en las alertas', async () => {
+    it('la pantalla de Reportes ya no trae el aviso de pequeño contribuyente (se movió a Fiscal)', async () => {
+        useEmpresaActiva().elegir(2)
+        await montar(PaginaReportes, '/configuracion/reportes')
+        await esperar(() => expect(enBody('bloque-bajas')).not.toBeNull())
+        expect(enBody('bloque-aviso-pc')).toBeNull()
+        expect(enBody('aviso-pc-activo')).toBeNull()
+    })
+})
+
+describe('configuración · fiscal · aviso de pequeño contribuyente', () => {
+    it('umbrales de pc_alertas, aplica según el régimen y apagadas en las alertas', async () => {
         useEmpresaActiva().elegir(2)
         const leida = await usePanelFinancieroAjustes().ver()
         expect(leida.ok && leida.data).toMatchObject({ aviso_pc_activo: true, aviso_pc_umbrales: ['80.00', '100.00'], aviso_pc_umbrales_nivel: 'paquete', aviso_pc_aplica: true })
@@ -243,6 +284,71 @@ describe('configuración · reportes', () => {
         expect(utilidades.ok && utilidades.data.aviso_pc_aplica).toBe(false)
     })
 
+    it('apagado no salen el 80 % ni el 95 %; el límite superado (100 %) sale siempre', async () => {
+        const acumulado = acumuladoPc(2)
+        expect(acumulado).toBeGreaterThan(0)
+        const alertaPc = async () => {
+            const r = await usePanelFinancieroAjustes().alertas()
+            const fila = r.ok ? r.data.empresas.find(e => e.empresa_id === 2) : undefined
+            return { apagadas: fila?.apagadas, alerta: fila?.alertas.find(a => a.tipo === 'limite_pequeno_contribuyente') ?? null }
+        }
+        useEmpresaActiva().elegir(2)
+        // Lleva el 85 % del límite: encendido avisa; apagado, no.
+        limitePc(2, (acumulado / 0.85).toFixed(2))
+        expect((await alertaPc()).alerta).not.toBeNull()
+        const apagado = await usePanelFinancieroAjustes().guardar({ aviso_pc_activo: false, version: 1 })
+        expect(apagado.ok).toBe(true)
+        expect(await alertaPc()).toEqual({ apagadas: ['limite_pequeno_contribuyente'], alerta: null })
+        // Superó el límite: sale aunque el aviso esté apagado.
+        limitePc(2, (acumulado / 2).toFixed(2))
+        const superado = await alertaPc()
+        expect(superado.apagadas).toEqual(['limite_pequeno_contribuyente'])
+        expect(superado.alerta).toMatchObject({ nivel: 'critico', titulo: 'Superó el límite anual del pequeño contribuyente', datos: { aviso_apagado: true, supera_limite: true } })
+    })
+
+    it('apagado, si la revisión del límite falla el error llega en errores y el panel lo muestra con «Reintentar»', async () => {
+        bd.operacionPm.panelFinanciero[2] = { dias_baja: 60, aviso_pc_activo: false, version: 1 }
+        // Un límite de la empresa sin valor del año: la revisión no se puede hacer.
+        const anterior = String(Number(hoyGuatemala().slice(0, 4)) - 1)
+        limitePc(2, '1.00', `${anterior}-01-01`)
+        const r = await usePanelFinancieroAjustes().alertas()
+        const fila = r.ok ? r.data.empresas.find(e => e.empresa_id === 2) : undefined
+        expect(fila?.apagadas).toEqual(['limite_pequeno_contribuyente'])
+        expect(fila?.alertas).toEqual([])
+        expect(fila?.errores.map(e => e.tipo)).toEqual(['limite_pequeno_contribuyente'])
+
+        await montar(PaginaFinanzas, '/finanzas')
+        await esperar(() => expect(enBody('errores-pc')?.textContent).toContain('no se pudo revisar el límite de pequeño contribuyente'))
+        expect(enBody('errores-pc')?.textContent).toContain('Reintentar')
+        expect(document.body.querySelector('[data-aviso="pc-2"]')).toBeNull()
+    })
+
+    it('panel financiero: con el aviso apagado calla el 85 % pero muestra el límite superado', async () => {
+        const acumulado = acumuladoPc(2)
+        bd.operacionPm.panelFinanciero[2] = { dias_baja: 60, aviso_pc_activo: false, version: 1 }
+        limitePc(2, (acumulado / 0.85).toFixed(2))
+        await montar(PaginaFinanzas, '/finanzas')
+        await esperar(() => expect(enBody('avisos-panel')).not.toBeNull())
+        await flushPromises()
+        expect(document.body.querySelector('[data-aviso="pc-2"]')).toBeNull()
+        for (const vista of montadas.splice(0)) {
+            vista.unmount()
+        }
+        limitePc(2, (acumulado / 2).toFixed(2))
+        await montar(PaginaFinanzas, '/finanzas')
+        await esperar(() => expect(document.body.querySelector('[data-aviso="pc-2"]')?.textContent).toContain('Pequeño contribuyente al 200 %'))
+    })
+
+    it('el interruptor dice que el 100 % se avisa siempre', async () => {
+        useEmpresaActiva().elegir(2)
+        await montar(PaginaFiscal, '/configuracion/fiscal')
+        await esperar(() => expect(enBody('aviso-pc-activo')).not.toBeNull())
+        expect(enBody('aviso-pc-fila')?.textContent).toContain('El 100 % (límite superado) se avisa siempre')
+        enBody('aviso-pc-activo')!.click()
+        await esperar(() => expect(bd.operacionPm.panelFinanciero[2]?.aviso_pc_activo).toBe(false))
+        await esperar(() => expect(enBody('aviso-pc-fila')?.textContent).toContain('Apagado: no se avisan el 80 % ni el 95 %. El 100 % (límite superado) se avisa siempre, porque obliga a cambiar de régimen.'))
+    })
+
     it('sin fiscal.editar_parametros los umbrales se ven de solo lectura y la API responde 403', async () => {
         const sinFiscal = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'fiscal.editar_parametros') }
         usuariosPorToken['fixture-admin'] = sinFiscal
@@ -250,22 +356,31 @@ describe('configuración · reportes', () => {
         useEmpresaActiva().elegir(2)
         const r = await usePanelFinancieroAjustes().guardar({ aviso_pc_umbrales: ['70'], version: 1 })
         expect(!r.ok && r.problema.status).toBe(403)
-        await montar(PaginaReportes, '/configuracion/reportes')
+        await montar(PaginaFiscal, '/configuracion/fiscal')
         await esperar(() => expect(enBody('umbrales-lectura')?.textContent).toContain('80 %'))
         expect(enBody('umbrales-form')).toBeNull()
         expect(enBody('aviso-pc-no-aplica')).toBeNull()
     })
 
+    it('sin panel_financiero.ver la página Fiscal no muestra el bloque', async () => {
+        const sinPanel = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'panel_financiero.ver') }
+        usuariosPorToken['fixture-admin'] = sinPanel
+        useUsuarioActual().value = sinPanel
+        useEmpresaActiva().elegir(2)
+        await montar(PaginaFiscal, '/configuracion/fiscal')
+        await esperar(() => expect(document.body.querySelector('#fiscal-parametros')).not.toBeNull())
+        expect(enBody('bloque-aviso-pc')).toBeNull()
+    })
+
     it('la pantalla guarda los umbrales y dice cuando ya se cambiaron hoy', async () => {
         useEmpresaActiva().elegir(2)
-        await montar(PaginaReportes, '/configuracion/reportes')
+        await montar(PaginaFiscal, '/configuracion/fiscal')
         await esperar(() => expect(enBody('umbrales-form')).not.toBeNull())
-        expect(enBody('correos-externos')).toBeNull()
-        boton('Agregar')!.click()
+        botonEn('umbrales-form', 'Agregar')!.click()
         await flushPromises()
         enBody('umbrales-guardar')!.click()
         await esperar(() => expect(bd.fiscal.valores.find(v => v.clave === 'pc_alertas' && v.empresa_id === 2)?.valor).toEqual(['80.00', '95.00', '100.00']))
-        boton('Agregar')!.click()
+        botonEn('umbrales-form', 'Agregar')!.click()
         await flushPromises()
         enBody('umbrales-guardar')!.click()
         await esperar(() => expect(enBody('umbrales-error')?.textContent).toContain('ya se cambiaron hoy'))
