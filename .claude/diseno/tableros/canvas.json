@@ -406,7 +406,7 @@
       "h": 1000,
       "is_interactive": true,
       "page": "red",
-      "title": "5 · Direcciones IP: ¿de quién es esta IP?, redes con mapa, IPv6 e IPs fijas y públicas (interactiva)",
+      "title": "5 · Direcciones IP: ¿de quién es esta IP?, redes con mapa, IPv6 e IPs fijas y públicas (interactiva) · quién tenía una IP en una fecha y origen de la IP pública",
       "w": 1440,
       "x": 0,
       "y": 3600
@@ -415,7 +415,7 @@
       "expand": "fill",
       "h": 1100,
       "page": "red",
-      "title": "4 · Plan: formulario en página con «así queda» al lado",
+      "title": "4 · Plan: formulario en página con «así queda» al lado · incluye IP pública",
       "w": 1440,
       "x": 1520,
       "y": 2300
@@ -435,7 +435,7 @@
       "h": 1000,
       "is_interactive": true,
       "page": "red",
-      "title": "2 · Ficha del router: resumen, conexión, red e IPs, velocidad, servicios y bitácora (interactiva)",
+      "title": "2 · Ficha del router: resumen, conexión, red e IPs, velocidad, servicios y bitácora (interactiva) · abrir falla general y su aviso",
       "w": 1440,
       "x": 0,
       "y": 1100
@@ -485,7 +485,7 @@
       "h": 900,
       "is_interactive": true,
       "page": "red",
-      "title": "7 · Conectados ahora: sesiones, caídas repetidas y activos sin conexión (interactiva)",
+      "title": "7 · Conectados ahora: sesiones, caídas repetidas y activos sin conexión (interactiva) · aviso de falla general",
       "w": 1440,
       "x": 0,
       "y": 4800
@@ -563,7 +563,7 @@
       "h": 900,
       "is_interactive": true,
       "page": "contabilidad",
-      "title": "3 · Libro: diario, mayor, auxiliar de cliente y detalle de un asiento con reverso (interactiva)",
+      "title": "3 · Libro: diario, mayor, auxiliar de cliente y detalle de un asiento con reverso (interactiva) · pestaña Por aprobar (borradores de asiento)",
       "w": 1440,
       "x": 0,
       "y": 2140
@@ -651,7 +651,7 @@
       "expand": "fill",
       "h": 1000,
       "page": "operacion",
-      "title": "2 · Ficha del servicio S-000412: sesión, IPs, equipo, tráfico, plan, adicionales, facturas, contactos, bitácora y portal de corte (interactiva)",
+      "title": "2 · Ficha del servicio S-000412: sesión, IPs, equipo, tráfico, plan, adicionales, facturas, contactos, bitácora y portal de corte (interactiva) · pestañas Promociones y Pausas, pausa sin cobro, código con cuenta regresiva, agregar adicional",
       "w": 1440,
       "x": 0,
       "y": 1100,
@@ -691,7 +691,7 @@
       "expand": "fill",
       "h": 900,
       "page": "operacion",
-      "title": "3 · Emitir facturas por periodo, incluidas las pasadas: sin prorrateo, monto editable y tramo inicial",
+      "title": "3 · Emitir facturas por periodo, incluidas las pasadas: sin prorrateo, monto editable y tramo inicial · días de gracia antes del corte",
       "w": 1440,
       "x": 3040,
       "y": 2300
@@ -719,7 +719,7 @@
       "expand": "fill",
       "h": 900,
       "page": "operacion",
-      "title": "4 · Inicio de sesión con logo y fondo de Apariencia",
+      "title": "4 · Inicio de sesión con logo y fondo de Apariencia · recuperar y restablecer la contraseña",
       "w": 1440,
       "x": 0,
       "y": 4500,
@@ -729,7 +729,7 @@
       "expand": "fill",
       "h": 844,
       "page": "operacion",
-      "title": "4 · Inicio de sesión · teléfono",
+      "title": "4 · Inicio de sesión · teléfono · recuperar y restablecer la contraseña",
       "w": 390,
       "x": 1520,
       "y": 4500,
@@ -749,7 +749,7 @@
       "expand": "fill",
       "h": 900,
       "page": "operacion",
-      "title": "5 · Configuración: facturación y cobro, cuentas y bancos de origen (interactiva)",
+      "title": "5 · Configuración: facturación y cobro, cuentas y bancos de origen (interactiva) · pestaña Reglas de cobro y libro (aprobación de asientos, tope de pausa) y adicionales",
       "w": 1440,
       "x": 1520,
       "y": 5600,
@@ -759,7 +759,7 @@
       "expand": "fill",
       "h": 900,
       "page": "operacion",
-      "title": "5 · Configuración: red y portal",
+      "title": "5 · Configuración: red y portal · pestañas Caídas y fallas generales, Retiro/historial de IP/acceso, vigencia del código; global o por empresa",
       "w": 1440,
       "x": 3040,
       "y": 5600
@@ -871,6 +871,86 @@
       "page": "portal",
       "title": "Portal · Mis contactos, un contacto y «Está a tu cargo»"
     },
+    "PendPromociones.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "1 · Promociones de velocidad: vigentes, programadas, terminadas y canceladas; detalle con servicios, asignar, quitar y cancelar (interactiva, claro/oscuro)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "PendPromocionForm.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "1 · Nueva promoción en página: multiplicador o plan destino, días o franja diaria, precio opcional y los errores 422 (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "PendPromocionesMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "1 · Promociones de velocidad · teléfono (lista y detalle)",
+      "w": 390,
+      "x": 3040,
+      "y": 0
+    },
+    "PendIncidentes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "2 · Fallas generales: abiertas y cerradas, detalle con afectados por páginas, abrir y cerrar (interactiva, claro/oscuro)",
+      "w": 1440,
+      "x": 0,
+      "y": 1200
+    },
+    "PendIncidentesMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "2 · Fallas generales · teléfono",
+      "w": 390,
+      "x": 1520,
+      "y": 1200
+    },
+    "PendEnviosReportes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "3 · Envíos programados de reportes (corridas, pausar) y correos externos aprobados (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 2300
+    },
+    "PendIntentosRecuperacion.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "4 · Declarar no recuperado: intentos con verificación de Iris y decisión de los anteriores (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 2300
+    },
+    "PendVinculosTecnicos.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "4 · Técnicos de Iris: vínculos rechazados, vinculados y desvinculados, conciliar (interactiva)",
+      "w": 1440,
+      "x": 3040,
+      "y": 2300
+    },
     "MarcoMovil.dc.html": {
       "expand": "fill",
       "h": 844,
@@ -900,6 +980,7 @@
     "tituloRed",
     "tituloConta",
     "tituloOper",
+    "tituloPend",
     "tituloPortal"
   ],
   "notes": {
@@ -981,6 +1062,15 @@
       "kind": "title1",
       "maxW": 1400,
       "page": "portal"
+    },
+    "tituloPend": {
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "pendientes",
+      "text": "Pendientes del backend · lo que ya está en main y no tenía tablero (también se ampliaron Ficha del servicio, Configuración, Login, Libro, IPs, Conectados, Router y Plan)",
+      "w": 240,
+      "x": 0,
+      "y": -300
     }
   },
   "order": [
@@ -1077,6 +1167,14 @@
     "PortalFacturas.dc.html",
     "PortalSoporte.dc.html",
     "PortalContactos.dc.html",
+    "PendPromociones.dc.html",
+    "PendPromocionForm.dc.html",
+    "PendPromocionesMovil.dc.html",
+    "PendIncidentes.dc.html",
+    "PendIncidentesMovil.dc.html",
+    "PendEnviosReportes.dc.html",
+    "PendIntentosRecuperacion.dc.html",
+    "PendVinculosTecnicos.dc.html",
     "MarcoMovil.dc.html"
   ],
   "pages": [
@@ -1111,6 +1209,10 @@
     {
       "id": "portal",
       "name": "Portal del cliente"
+    },
+    {
+      "id": "pendientes",
+      "name": "Pendientes del backend"
     }
   ],
   "title": "Rediseño ArgosIsp"

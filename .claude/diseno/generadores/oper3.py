@@ -116,7 +116,8 @@ pinner=head('Emitir facturas por periodo','<span class="mono">S-000412</span> ·
    <div class="kv2"><b style="color:#0F172A">4 facturas</b><b class="num" style="font-size:20px">Q 1,150.00</b></div>
    <div style="margin-top:12px"><<f1>></div>
    <div style="margin-top:12px"><div class="kv2" style="border-top:0"><span style="color:#0F172A"><b>Certificar ahora (FEL)</b></span><span class="tg on"><i></i></span></div><div class="kv2"><span style="color:#0F172A"><b>Avisar al cliente</b><span class="m2" style="display:block">Un solo mensaje con las 4</span></span><span class="tg"><i></i></span></div></div>
-   <div class="av2 nf" style="margin-top:10px;align-items:flex-start"><i:info:16><div>Los periodos anteriores nacen <b>vencidos</b>. El servicio se evalúa al emitir: puede limitarse o suspenderse según su plantilla.</div></div>
+   <div style="margin-top:12px"><div class="lb">Días de gracia antes del corte <span class="nuevo">nuevo</span></div><div style="display:flex;gap:10px;align-items:center"><div class="in" style="width:110px;padding:8px 10px;justify-content:space-between"><b class="num">7</b><span class="m2">días</span></div><span class="m2">No corta por estos periodos antes del <b style="color:#0F172A">28 nov</b></span></div><div class="ay">Solo para los periodos anteriores · de 0 a 90 · vacío = como siempre</div></div>
+   <div class="av2 nf" style="margin-top:10px;align-items:flex-start"><i:info:16><div>Los periodos anteriores nacen <b>vencidos</b> y la mora no cambia, pero no cuentan para limitar ni cortar hasta que pasen los días de gracia.</div></div>
   </div>
   <div class="pf" style="padding:14px 18px"><button class="btn g">Cancelar</button><button class="btn p" style="flex:1;justify-content:center;padding:12px"><i:fac:16>Emitir 4 facturas</button></div>
  </aside>
