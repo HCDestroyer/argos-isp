@@ -469,9 +469,9 @@ function textoLock(tarea: TareaProgramada): string {
                         >
                             {{ seleccionada.nota }}
                         </p>
-                        <div
+                        <PanelBarraAccion
                             v-if="seleccionada.manual"
-                            class="fixed inset-x-0 bottom-0 z-10 flex items-center gap-2 bg-default/95 p-4 backdrop-blur lg:static lg:bg-transparent lg:px-4 lg:py-3"
+                            class="lg:px-4 lg:py-3"
                         >
                             <UButton
                                 label="Ejecutar ahora"
@@ -484,7 +484,7 @@ function textoLock(tarea: TareaProgramada): string {
                             <span class="hidden text-xs text-muted lg:inline">
                                 {{ puedeEjecutar(seleccionada) ? 'Respeta el lock: si ya corre, no se repite.' : 'No tienes permiso para ejecutarla.' }}
                             </span>
-                        </div>
+                        </PanelBarraAccion>
                         <p
                             v-else
                             class="px-4 py-3 text-xs text-muted"
