@@ -46,7 +46,7 @@ test('crear una plantilla POS 80 mm del recibo y verla en la lista', async ({ pa
     await sinScrollHorizontal(page)
     await sinViolaciones(page, 'editor de plantilla')
 
-    await page.getByRole('link', { name: 'Plantillas' }).click()
+    await page.getByRole('link', { name: 'Atrás' }).filter({ visible: true }).first().click()
     await expect(page).toHaveURL(/\/configuracion\/aviso-cobro\?tipo=recibo_cobro/)
     await expect(lista.locator('[data-plantilla]')).toHaveCount(3)
     await expect(lista.locator('[data-plantilla="6"]')).toContainText('Ticket mostrador')

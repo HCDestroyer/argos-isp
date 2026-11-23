@@ -977,3 +977,129 @@
         scroll-behavior: auto !important;
     }
 }
+
+/*
+ * Navegación del teléfono (pedido del PM, como el portal): isla flotante abajo (`PanelIslaMovil`)
+ * bajo `lg`; desde 1024 px manda el menú lateral y la isla no existe.
+ *
+ * - `--ax-isla-reserva`: alto que la isla le quita al fondo de la pantalla (68 px de isla + 12 px de
+ *   aire + el área segura del iPhone). Vale 0 en escritorio, en el login y con la isla oculta. Lo usan
+ *   el contenedor del contenido (`.panel-cuerpo`, termina encima de la isla), la acción fija y los
+ *   avisos emergentes (`app.config.ts`).
+ * - `.panel-barra-accion`: la acción principal fija de una pantalla (`PanelBarraAccion`) queda como
+ *   otra isla justo encima de la de navegación, sin taparla ni quedar tapada; desde `lg`, en su lugar.
+ * - `.menu-movil`: el menú completo («Más») a pantalla completa, respetando las áreas seguras.
+ */
+:root {
+    --ax-isla-reserva: 0px;
+}
+
+.isla-movil {
+    border-radius: 1.375rem;
+    background-color: var(--hf-glass-strong);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    backdrop-filter: blur(28px) saturate(150%);
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        0 18px 40px -18px rgb(30 27 75 / 0.28),
+        inset 0 1px 0 var(--hf-glass-edge);
+}
+
+.dark .isla-movil {
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        0 18px 40px -12px rgb(0 0 0 / 0.6),
+        inset 0 1px 0 var(--hf-glass-edge);
+}
+
+/* Activo en índigo con fondo suave; 700 en claro y 300 en oscuro para que el texto de 11 px pase AA. */
+.isla-activo,
+.isla-activo:hover {
+    background-color: color-mix(in oklab, var(--ui-primary) 12%, transparent);
+    color: var(--ui-color-primary-700);
+}
+
+.dark .isla-activo,
+.dark .isla-activo:hover {
+    color: var(--ui-color-primary-300);
+}
+
+/* Cobrar en verde, como su botón del encabezado. */
+.isla-exito,
+.isla-exito:hover {
+    color: var(--ui-color-success-700);
+}
+
+.isla-exito-activo,
+.isla-exito-activo:hover {
+    background-color: var(--ui-color-success-100);
+}
+
+.dark .isla-exito,
+.dark .isla-exito:hover {
+    color: var(--ui-color-success-300);
+}
+
+.dark .isla-exito-activo,
+.dark .isla-exito-activo:hover {
+    background-color: color-mix(in oklab, var(--ui-color-success-400) 16%, transparent);
+}
+
+@media (max-width: 1023.98px) {
+    :root:has(.isla-movil) {
+        --ax-isla-reserva: calc(5rem + env(safe-area-inset-bottom));
+    }
+
+    /*
+     * El contenedor que se desplaza termina encima de la isla: nada queda debajo de ella y lo que
+     * se pega abajo dentro de él (`FormularioAcciones`, `sticky bottom-0`) se detiene encima sin
+     * cálculos propios. Con una acción fija, el contenido gana además el aire de esa barra.
+     */
+    .panel-cuerpo {
+        margin-bottom: var(--ax-isla-reserva);
+    }
+
+    .panel-cuerpo:has(.panel-barra-accion) {
+        padding-bottom: 5rem;
+    }
+
+    .panel-barra-accion {
+        position: fixed;
+        inset-inline: 0.75rem;
+        bottom: calc(var(--ax-isla-reserva) + 0.5rem);
+        z-index: 25;
+        padding: 0.5rem;
+        border-radius: 1.375rem;
+        background-color: var(--hf-glass-strong);
+        -webkit-backdrop-filter: blur(28px) saturate(150%);
+        backdrop-filter: blur(28px) saturate(150%);
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 14px 32px -18px rgb(30 27 75 / 0.3);
+    }
+
+    .dark .panel-barra-accion {
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 14px 32px -12px rgb(0 0 0 / 0.6);
+    }
+
+    .menu-movil {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .isla-movil,
+    .panel-barra-accion {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+}
+
+@media print {
+    .isla-movil,
+    .panel-barra-accion {
+        display: none;
+    }
+}
