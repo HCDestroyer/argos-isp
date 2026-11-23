@@ -68,10 +68,14 @@ const migas = computed<BreadcrumbItem[]>(() => {
 </script>
 
 <template>
-    <UDashboardPanel :id="id">
+    <UDashboardPanel
+        :id="id"
+        :ui="{ body: 'panel-cuerpo' }"
+    >
         <template #header>
+            <!-- Sin botón de menú: en el teléfono el menú se abre con «Más» de la isla de abajo (`PanelIslaMovil`). -->
             <UDashboardNavbar
-                :toggle="{ color: 'neutral', variant: 'ghost', class: 'boton-flotante boton-circulo' }"
+                :toggle="false"
                 :ui="{
                     root: 'h-auto min-h-0 border-0 bg-transparent px-4 pt-4 pb-1 gap-2.5 sm:px-4',
                     left: 'min-w-0 gap-2.5',
@@ -79,6 +83,16 @@ const migas = computed<BreadcrumbItem[]>(() => {
                 }"
             >
                 <template #leading>
+                    <!-- Teléfono y tableta: la marca a la izquierda; los accesos y los avisos van en la isla de abajo. -->
+                    <NuxtLink
+                        :to="rutaInicio(useUsuarioActual().value)"
+                        class="flex shrink-0 items-center gap-2 font-semibold text-highlighted lg:hidden"
+                        aria-label="ArgosIsp, inicio"
+                        data-prueba="marca-movil"
+                    >
+                        <LogoArgos class="size-8 shrink-0" />
+                        <span class="text-base tracking-[-0.02em]">Argos<span class="text-primary">Isp</span></span>
+                    </NuxtLink>
                     <UDashboardSearchButton
                         label="Buscar…"
                         aria-label="Buscar sección (Ctrl+K)"
@@ -92,13 +106,13 @@ const migas = computed<BreadcrumbItem[]>(() => {
                             <span class="text-[0.6875rem] font-medium">Ctrl K</span>
                         </template>
                     </UDashboardSearchButton>
-                    <AccesosRapidosBarra />
+                    <AccesosRapidosBarra class="max-lg:hidden" />
                 </template>
 
                 <template #right>
                     <CajaAccesoDirecto />
                     <EstadoSistemaBoton />
-                    <AvisosBoton />
+                    <AvisosBoton class="max-lg:hidden" />
                     <MenuUsuario />
                 </template>
             </UDashboardNavbar>

@@ -180,7 +180,10 @@ describe('calendario fiscal', () => {
         useEmpresaActiva().elegir('todas')
         const vista = await mountSuspended(PaginaFiscal, { route: '/configuracion/fiscal?pestana=feriados' })
         await esperar(() => expect(vista.find('[data-prueba="feriados-confirmar-contador"]').exists()).toBe(true))
-        expect(vista.find('[data-prueba="elegir-empresa"]').exists()).toBe(false)
+        // Rediseño de Configuración: Régimen e impuestos es una sola pantalla con bloques. Con «Todas las
+        // empresas» los bloques por NIT piden elegir una, pero el de feriados (global) se ve y se usa igual.
+        expect(vista.find('[data-prueba="elegir-empresa"]').text()).toContain('Los feriados, abajo, valen para todas')
+        expect(vista.find('#fiscal-feriados').exists()).toBe(true)
         await esperar(() => expect(vista.find('[data-prueba="tabla-feriados"]').text()).toContain('Sin feriados en 2026'))
 
         await vista.find('[data-prueba="abrir-feriado"]').trigger('click')

@@ -478,6 +478,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/configuracion/bancos-origen': {
+        titulo: 'Bancos de origen',
+        resumen: 'El catálogo de bancos de donde viene el dinero de una transferencia o un ACH. Es uno solo para todo el sistema: al cobrar una transferencia, el cajero elige de aquí el banco del cliente; también lo usan el portal del cliente y la conciliación bancaria.',
+        pagina: 'configuracion/bancos-de-origen',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
     '/configuracion/cuentas-bancarias': {
         titulo: 'Cuentas bancarias',
         resumen: 'Las cuentas bancarias propias de la empresa: donde entran los depósitos, transferencias, ACH y remesas de los clientes. Las activas en quetzales son las que aparecen en el cobro y en el portal del cliente.',
@@ -544,6 +557,17 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Parámetros',
             'Impuestos',
             'Feriados',
+        ],
+    },
+    '/configuracion/importar': {
+        titulo: 'Importar desde Mikrowisp',
+        resumen: 'Trae a ArgosIsp los datos de tu sistema anterior: clientes, servicios, planes, facturas pendientes, pagos y promesas activas, con una revisión antes de guardar nada.',
+        pagina: 'configuracion/importar-mikrowisp',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Pasos',
+            'Relacionado',
         ],
     },
     '/configuracion/integraciones': {
@@ -625,6 +649,17 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/configuracion/plantillas-conceptos': {
+        titulo: 'Plantillas y conceptos',
+        resumen: 'Un resumen en una sola pantalla de lo que define cómo se cobra y qué se imprime: las plantillas de facturación, las plantillas de documentos y los conceptos de cargo único. Cada bloque tiene «Abrir» para ir a su pantalla completa.',
+        pagina: 'configuracion/plantillas-y-conceptos',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Relacionado',
+        ],
+    },
     '/configuracion/plantillas-documentos/[id]': {
         titulo: 'Plantillas de documentos',
         resumen: 'Aquí decides cómo se ven los PDF del aviso de cobro (que pasa a llamarse factura cuando está certificada en FEL), del recibo de cobro de la caja y de la nota de crédito. Cada plantilla es HTML con variables que Argos llena con los datos de cada documento.',
@@ -688,6 +723,17 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Qué ves',
             'Acciones',
             'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
+    '/configuracion/reportes': {
+        titulo: 'Ajustes de reportes',
+        resumen: 'Cómo se cuentan las bajas en los reportes y en el panel del dueño, y a qué correos externos pueden ir los reportes programados.',
+        pagina: 'configuracion/ajustes-de-reportes',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
             'Relacionado',
         ],
     },
