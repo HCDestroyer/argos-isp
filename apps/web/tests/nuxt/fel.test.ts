@@ -305,6 +305,10 @@ describe('FEL · pantallas', () => {
         expect(pruebas.text()).toContain('argosnet')
         expect(pruebas.text()).toContain('Válidas')
         expect(vista.find('[data-credenciales="produccion"]').text()).toContain('Sin configurar')
+        // El estado de la contingencia se lee del aviso visible del bloque «Contingencia».
+        const contingencia = vista.find('[data-prueba="contingencia-estado"]')
+        expect(contingencia.attributes('data-activa')).toBe('false')
+        expect(contingencia.text()).toContain('Sin contingencia: los documentos se certifican al emitirse.')
 
         const radios = vista.find('[data-prueba="fel-modos"]').findAll('[role="radio"]')
         expect(radios).toHaveLength(3)
@@ -312,6 +316,16 @@ describe('FEL · pantallas', () => {
         await vista.find('form').trigger('submit')
         await esperar(() => expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').text()).toMatch(/\d+ avisos de cobro sin certificar/)
+    })
+
+    it('Configuración → FEL: la contingencia activa se ve en el aviso con su fecha y su motivo', async () => {
+        const activa = await useFel().cambiarContingencia(true, 'El certificador no responde', nuevaClaveIdempotencia(), 1)
+        expect(activa.ok).toBe(true)
+        const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
+        await esperar(() => expect(vista.find('[data-prueba="contingencia-estado"]').attributes('data-activa')).toBe('true'))
+        const contingencia = vista.find('[data-prueba="contingencia-estado"]')
+        expect(contingencia.text()).toContain('En contingencia desde')
+        expect(contingencia.text()).toContain('Motivo: El certificador no responde')
     })
 
     it('Configuración → FEL con error de la API: el aviso con «Reintentar», sin datos inventados', async () => {

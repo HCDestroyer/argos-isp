@@ -151,6 +151,8 @@ test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interrupt
     await expect(tarjeta.locator('[data-prueba="whatsapp-entrega"]')).toHaveText('En cola hacia Iris')
 
     await abrir(page, '/configuracion/notificaciones')
+    // Rediseño: cada canal se abre con su tarjeta de arriba; de entrada se ve el correo.
+    await page.locator('[data-prueba="canales-notificaciones"] [data-canal="whatsapp"]').click()
     const interruptor = page.locator('[data-prueba="seccion-whatsapp"]').getByRole('switch', { name: /Avisos a clientes por WhatsApp/ })
     await expect(interruptor).not.toBeChecked()
     await interruptor.click()

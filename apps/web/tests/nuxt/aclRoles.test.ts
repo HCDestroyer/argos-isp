@@ -131,7 +131,8 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/routers/1?pestana=pools', espera: '100.64.10.0/24' },
         { ruta: '/configuracion/cuentas-bancarias', espera: 'Cuentas bancarias' },
         { ruta: '/configuracion/empresa', espera: 'Contacto y pagos' },
-        { ruta: '/configuracion/empresas', espera: 'Empresas' },
+        // Rediseño: la pantalla es «Datos de la empresa» dentro de «Empresa y fiscal»; se espera el formulario cargado.
+        { ruta: '/configuracion/empresas', espera: 'Razón social' },
         { ruta: '/configuracion/notificaciones', espera: 'Correo (SMTP)' },
         // Fase 4 (cobros y bancos).
         { ruta: '/configuracion/proveedores-cobro', espera: 'Pasarela en línea' },
