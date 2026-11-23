@@ -1,20 +1,17 @@
 <script setup lang="ts">
 /**
- * Teléfono (390 px): la acción principal fija abajo, a todo el ancho (sistema visual, tableros
- * RedRoutersMovil, RedRouterFichaMovil, RedSesionesMovil y OperServicioFichaMovil). Deja un espacio
- * al final del contenido para que la barra no tape la última fila. Desde `sm` no se muestra.
+ * Teléfono (390 px): la acción principal fija abajo (sistema visual, tableros RedRoutersMovil,
+ * RedRouterFichaMovil, RedSesionesMovil y OperServicioFichaMovil). Va como `PanelBarraAccion`: otra
+ * isla justo encima de la navegación del teléfono (tablero MarcoMovil), sin taparla ni quedar
+ * tapada; el contenido gana el aire de la barra. Desde `sm` no se muestra.
  */
 </script>
 
 <template>
-    <div
-        class="h-20 sm:hidden"
-        aria-hidden="true"
-    />
-    <div
-        class="fixed inset-x-0 bottom-0 z-20 flex gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta) p-3 sm:hidden"
+    <PanelBarraAccion
+        class="sm:hidden"
         data-prueba="barra-telefono"
     >
         <slot />
-    </div>
+    </PanelBarraAccion>
 </template>
