@@ -113,10 +113,11 @@ describe('semana 2 · cola de comprobantes', () => {
 
     it('la cola muestra pestañas y filas; con error muestra "Reintentar" y no la tabla', async () => {
         const vista = await mountSuspended(PaginaComprobantes, { route: '/comprobantes' })
-        await esperar(() => expect(vista.text()).toContain('Comprobante #4'))
-        expect(vista.text()).toContain('Pendientes')
+        // Rediseño (decisión 13): cada fila lleva el cliente y el número; las pestañas, «Por revisar».
+        await esperar(() => expect(vista.find('[data-comprobante="4"]').exists()).toBe(true))
+        expect(vista.text()).toContain('Por revisar')
         expect(vista.text()).toContain('Rechazados')
-        expect(vista.text()).not.toContain('Comprobante #1')
+        expect(vista.find('[data-comprobante="1"]').exists()).toBe(false)
 
         simularFalla('GET /api/v1/comprobantes', 501)
         const conError = await mountSuspended(PaginaComprobantes, { route: '/comprobantes?estado=rechazado' })

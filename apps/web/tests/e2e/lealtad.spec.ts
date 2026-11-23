@@ -24,12 +24,12 @@ test('regla con vista previa y desactivar el programa', async ({ page }) => {
     await modal.getByRole('button', { name: 'Crear regla' }).click()
     await expect(page.locator('[data-prueba="tabla-reglas-lealtad"]')).toContainText('20 pts')
 
-    await page.getByRole('button', { name: 'Desactivar' }).click()
+    await page.locator('[data-prueba="desactivar-programa"]').click()
     const motivo = page.getByRole('dialog', { name: 'Desactivar programa' })
     await motivo.getByLabel('Motivo').fill('Rediseño para el próximo año')
     await motivo.getByRole('button', { name: 'Desactivar' }).click()
     await expect(page.locator('[data-prueba="estado-programa"]')).toHaveText('Inactivo')
-    await expect(page.getByRole('button', { name: 'Activar', exact: true })).toBeVisible()
+    await expect(page.locator('[data-prueba="activar-programa"]')).toBeVisible()
 })
 
 test('ajustar puntos desde la ficha del cliente', async ({ page }) => {

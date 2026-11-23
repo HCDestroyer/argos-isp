@@ -10,16 +10,14 @@ const ruta = computed(() => typeof route.query.ruta === 'string' ? route.query.r
         id="sin-permiso"
         titulo="Sin permiso"
         icono="i-lucide-shield-x"
+        descripcion="Tu rol no incluye esta sección"
     >
-        <UPageCard
-            variant="subtle"
-            class="mx-auto w-full max-w-2xl"
-        >
+        <section class="surface-card mx-auto w-full max-w-2xl rounded-[1.375rem] p-6 sm:p-8">
             <UEmpty
                 icon="i-lucide-shield-x"
                 title="No tienes acceso a esta sección"
                 :description="ruta ? `Tu usuario no puede abrir ${ruta}. Pide el permiso a un administrador.` : 'Pide el permiso a un administrador.'"
-                :actions="[{ label: 'Volver al inicio', to: '/', icon: 'i-lucide-house' }]"
+                :actions="[{ label: 'Volver al inicio', to: '/', icon: 'i-lucide-house', size: 'lg' }, { label: 'Volver atrás', icon: 'i-lucide-chevron-left', color: 'neutral', variant: 'outline', size: 'lg', onClick: () => $router.back() }]"
                 variant="naked"
             >
                 <template
@@ -34,6 +32,6 @@ const ruta = computed(() => typeof route.query.ruta === 'string' ? route.query.r
                     />
                 </template>
             </UEmpty>
-        </UPageCard>
+        </section>
     </PanelPagina>
 </template>

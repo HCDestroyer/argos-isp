@@ -2,6 +2,14 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Problem } from '@argosisp/contracts'
 
+/**
+ * Entrar al panel (tableros OperLogin y OperLoginMovil): fondo de la marca a todo lo ancho (color o
+ * foto de Configuración → Apariencia) y la tarjeta a la derecha con logo, marca y eslogan; en el
+ * teléfono, la tarjeta sobre una franja de color. Decisión 22: los botones «Iris» y «Horus» solo
+ * aparecen si están conectados y «¿La olvidaste?» manda un enlace por correo; la API todavía no
+ * publica ni las conexiones sin sesión ni el envío del enlace (A1, `.claude/integration/a4.md`):
+ * mientras tanto no se muestran.
+ */
 definePageMeta({
     layout: false,
     publica: true,
@@ -29,6 +37,11 @@ const problema = ref<Problem | null>(null)
 const verClave = ref(false)
 /** Últimos datos enviados, para «Reintentar» tras un error de red o del servidor. */
 const ultimo = shallowRef<DatosLogin | null>(null)
+/**
+ * Sistemas conectados para entrar desde ellos (Iris, Horus). Sin dato público de la API la lista
+ * queda vacía y la sección «o entra desde» no se pinta: nunca se ofrece un botón que no funciona.
+ */
+const conectados: { nombre: string, url: string }[] = []
 const reintentable = computed(() => !problema.value || problema.value.status === undefined || problema.value.status === 0 || problema.value.status >= 500)
 
 function destino(): string {
@@ -55,94 +68,71 @@ async function entrarCon(datos: DatosLogin) {
 </script>
 
 <template>
-    <div class="min-h-dvh bg-(--ax-fondo)">
-        <!-- Escritorio: marca a la izquierda (degradado índigo → cian) y formulario a la derecha;
-             en el teléfono, solo el formulario con el logo arriba. -->
-        <main class="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+    <div
+        class="relative min-h-dvh overflow-hidden bg-(--ax-fondo)"
+        :style="fondo ? { backgroundImage: `linear-gradient(rgb(15 23 42 / 0.45), rgb(15 23 42 / 0.55)), url(${fondo})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined"
+    >
+        <!-- Fondo de la marca: a todo lo ancho en escritorio; franja arriba en el teléfono. -->
+        <div
+            v-if="!fondo"
+            class="bienvenida absolute inset-x-0 top-0 h-48 rounded-none rounded-b-[2.5rem] lg:inset-0 lg:h-auto lg:rounded-none"
+            aria-hidden="true"
+        />
+
+        <div class="absolute top-4 right-4 z-10">
+            <UColorModeButton class="boton-flotante boton-circulo" />
+        </div>
+
+        <main class="relative grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-10 lg:px-16 xl:px-24">
+            <!-- Escritorio: la frase de la marca abajo a la izquierda. -->
             <section
-                class="bienvenida relative hidden flex-col justify-between overflow-hidden rounded-none bg-cover bg-center p-10 text-white lg:flex"
+                class="hidden flex-col justify-end pb-16 text-white lg:flex"
                 :aria-label="marca"
-                :style="fondo ? { backgroundImage: `linear-gradient(rgb(15 23 42 / 0.62), rgb(15 23 42 / 0.72)), url(${fondo})` } : undefined"
             >
-                <div class="relative flex items-center gap-3">
-                    <img
-                        v-if="logo"
-                        :src="logo"
-                        alt=""
-                        class="h-11 max-w-40 object-contain"
-                    >
-                    <span
-                        v-else
-                        class="flex size-11 items-center justify-center rounded-xl bg-white/15 ring ring-white/30"
-                    >
-                        <LogoArgos
-                            variante="linea"
-                            class="size-8"
-                        />
-                    </span>
-                    <span class="text-2xl font-bold tracking-[-0.02em]">{{ marca }}</span>
-                </div>
-                <div class="relative flex max-w-md flex-col gap-3">
-                    <p class="text-3xl leading-tight font-bold tracking-[-0.02em]">
-                        {{ eslogan ?? 'Tu red, tus clientes y tu cobro, en un solo lugar.' }}
-                    </p>
-                    <p class="text-base text-white/90">
-                        Clientes y servicios PPPoE, facturación con su libro contable, cobros y corte automático.
-                    </p>
-                </div>
-                <svg
-                    class="pointer-events-none absolute -right-16 -bottom-16 h-96 opacity-25"
-                    viewBox="0 0 64 64"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    aria-hidden="true"
-                >
-                    <path d="M5 42 C14.5 27 49.5 27 59 42 C49.5 57 14.5 57 5 42 Z" />
-                    <circle
-                        cx="32"
-                        cy="42"
-                        r="6.4"
-                    />
-                    <path d="M22.75 25.98 A18.5 18.5 0 0 1 41.25 25.98" />
-                    <path d="M19.12 20.57 A25 25 0 0 1 44.88 20.57" />
-                    <path d="M15.31 15.29 A31.5 31.5 0 0 1 48.69 15.29" />
-                </svg>
-                <p class="relative text-xs text-white/80">
-                    Panel de administración
+                <p class="max-w-lg text-[2.75rem] leading-tight font-bold tracking-[-0.03em]">
+                    {{ eslogan ?? 'Todo tu ISP en un solo lugar.' }}
+                </p>
+                <p class="mt-3 text-lg text-white/85">
+                    Clientes, cobros, red e inventario.
                 </p>
             </section>
 
-            <div class="relative flex flex-col items-center justify-center gap-6 px-4 py-10">
-                <div class="absolute top-4 right-4">
-                    <UColorModeButton />
-                </div>
-                <div class="flex flex-col items-center gap-2 lg:hidden">
-                    <img
-                        v-if="logo"
-                        :src="logo"
-                        alt=""
-                        class="h-14 max-w-48 object-contain"
-                    >
-                    <LogoArgos
-                        v-else
-                        class="size-14"
-                    />
-                    <span class="text-xl font-bold tracking-[-0.02em] text-highlighted">{{ marca }}</span>
-                    <span
-                        v-if="eslogan"
-                        class="text-sm text-muted"
-                    >{{ eslogan }}</span>
-                </div>
+            <div class="flex flex-col items-center justify-start px-4 pt-28 pb-10 lg:justify-center lg:px-0 lg:pt-10">
+                <div
+                    class="w-full max-w-md rounded-[1.75rem] bg-(--ax-tarjeta) p-6 shadow-(--ax-sombra-flotante) ring ring-(--ax-borde) sm:p-8"
+                    data-prueba="tarjeta-login"
+                >
+                    <div class="mb-6 flex items-center gap-3">
+                        <img
+                            v-if="logo"
+                            :src="logo"
+                            alt=""
+                            class="h-12 max-w-32 rounded-xl object-contain"
+                        >
+                        <span
+                            v-else
+                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-(image:--ax-gradiente) text-white shadow-lg"
+                        >
+                            <LogoArgos
+                                variante="linea"
+                                class="size-8"
+                            />
+                        </span>
+                        <div class="flex min-w-0 flex-col">
+                            <span class="truncate text-xl font-bold tracking-[-0.02em] text-highlighted">{{ marca }}</span>
+                            <span
+                                v-if="eslogan"
+                                class="truncate text-[0.8125rem] text-muted"
+                            >{{ eslogan }}</span>
+                        </div>
+                    </div>
 
-                <div class="surface-card w-full max-w-md p-6 sm:p-8">
-                    <div class="mb-6">
+                    <div class="mb-5">
                         <h1 class="text-2xl font-bold tracking-[-0.02em] text-highlighted">
-                            Iniciar sesión
+                            Inicia sesión
                         </h1>
-                        <p class="mt-1 text-sm text-muted">
-                            Entra con el correo que te dio tu administrador.
+                        <p class="mt-0.5 text-sm text-muted">
+                            Con el correo que te dio tu administrador
                         </p>
                     </div>
 
@@ -163,7 +153,7 @@ async function entrarCon(datos: DatosLogin) {
                                 autocomplete="username"
                                 placeholder="usuario@empresa.gt"
                                 icon="i-lucide-mail"
-                                size="lg"
+                                size="xl"
                                 class="w-full"
                             />
                         </UFormField>
@@ -178,7 +168,7 @@ async function entrarCon(datos: DatosLogin) {
                                 :type="verClave ? 'text' : 'password'"
                                 autocomplete="current-password"
                                 icon="i-lucide-lock"
-                                size="lg"
+                                size="xl"
                                 class="w-full"
                                 :ui="{ trailing: 'pe-1' }"
                             >
@@ -211,21 +201,48 @@ async function entrarCon(datos: DatosLogin) {
                         <UButton
                             type="submit"
                             label="Entrar"
-                            icon="i-lucide-log-in"
-                            size="lg"
+                            size="xl"
                             block
-                            class="glow-brand mt-1"
+                            class="glow-brand mt-1 rounded-xl"
                             :loading="enviando"
                         />
                     </UForm>
 
+                    <template v-if="conectados.length">
+                        <USeparator
+                            label="o entra desde"
+                            class="my-5"
+                            :ui="{ label: 'text-xs font-normal text-muted' }"
+                        />
+                        <div class="grid grid-cols-2 gap-3">
+                            <UButton
+                                v-for="sistema in conectados"
+                                :key="sistema.nombre"
+                                :to="sistema.url"
+                                :label="sistema.nombre"
+                                icon="i-lucide-link"
+                                color="neutral"
+                                variant="outline"
+                                size="lg"
+                                class="justify-center"
+                            />
+                        </div>
+                    </template>
+
+                    <p class="mt-5 text-center text-xs text-muted">
+                        La sesión se cierra sola a los 3 días
+                    </p>
                     <p
                         v-if="config.public.useFixtures"
-                        class="mt-6 text-center text-xs text-muted"
+                        class="mt-2 text-center text-xs text-muted"
                     >
                         Modo fixtures: admin@argos.test o cajero@argos.test, cualquier contraseña.
                     </p>
                 </div>
+
+                <p class="mt-6 text-center text-xs text-muted lg:text-white/80">
+                    {{ marca === 'ArgosIsp' ? 'ArgosIsp' : `${marca} · con ArgosIsp` }}
+                </p>
             </div>
         </main>
     </div>

@@ -12,7 +12,7 @@ useHead({ title: 'Sorteos · ArgosIsp' })
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const { puede, enlace } = usePermisos()
+const { puede } = usePermisos()
 
 const TODOS = 'todos'
 const estado = ref<EstadoSorteo | typeof TODOS>(typeof route.query.estado === 'string' && Object.hasOwn(ESTADOS_SORTEO, route.query.estado) ? route.query.estado as EstadoSorteo : TODOS)
@@ -53,43 +53,48 @@ onMounted(() => {
         id="sorteos"
         titulo="Sorteos"
         icono="i-lucide-ticket"
+        descripcion="Sorteos para clientes al día, con bases públicas, semilla verificable y acta"
     >
         <template #acciones>
-            <UButton
-                v-if="enlace('/lealtad')"
-                :to="enlace('/lealtad')"
-                icon="i-lucide-arrow-left"
-                label="Lealtad"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
-            />
             <UButton
                 v-if="puede('sorteos.gestionar')"
                 label="Nuevo sorteo"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand px-5"
                 data-prueba="nuevo-sorteo"
                 @click="creando = true"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <USelect
-                v-model="estado"
-                :items="itemsEstado"
-                aria-label="Estado"
-                class="w-full sm:w-56"
-                data-prueba="filtro-estado-sorteo"
-            />
-            <ProblemaAlerta
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
+                <p class="text-sm text-muted">
+                    Cada sorteo pasa por bases, participación, corte, sorteo, entrega y acta, con su evidencia.
+                </p>
+                <USelect
+                    v-model="estado"
+                    :items="itemsEstado"
+                    icon="i-lucide-filter"
+                    aria-label="Estado"
+                    class="w-full sm:w-56"
+                    data-prueba="filtro-estado-sorteo"
+                />
+            </div>
+            <div
                 v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-                data-prueba="sorteos-error"
-            />
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                    data-prueba="sorteos-error"
+                />
+            </div>
             <template v-else>
                 <UTable
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none' }"
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
@@ -133,17 +138,19 @@ onMounted(() => {
                         </div>
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
 
         <SorteoFormulario
             v-model:open="creando"

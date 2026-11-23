@@ -1,10 +1,11 @@
-import type { Schema } from '@argosisp/contracts'
+import type { Schema, paths } from '@argosisp/contracts'
 import type { BadgeProps } from '@nuxt/ui'
 import * as z from 'zod'
 import { formatearFechaHora } from './formato'
 
 type Comprobante = Schema<'Comprobante'>
 type Estado = Comprobante['estado']
+type FiltrosComprobantesCola = Omit<NonNullable<paths['/api/v1/comprobantes']['get']['parameters']['query']>, 'cursor'>
 
 export const ESTADOS_COMPROBANTE: Record<Estado, { etiqueta: string, plural: string, color: NonNullable<BadgeProps['color']>, icono: string }> = {
     pendiente: { etiqueta: 'Pendiente', plural: 'Pendientes', color: 'warning', icono: 'i-lucide-hourglass' },
@@ -156,4 +157,54 @@ export type SalidaRechazarComprobante = z.output<typeof esquemaRechazarComproban
 /** Etiqueta de la causa guardada (`causa_rechazo`), o `null` en los rechazados antes de 0.6.0. */
 export function etiquetaCausaRechazo(causa: Comprobante['causa_rechazo'] | undefined): string | null {
     return causa ? CAUSAS_RECHAZO[causa].etiqueta : null
+}
+
+/**
+ * Filtros de la cola de comprobantes que viajan en la URL (`cliente`, `metodo`, `cuenta`, `canal`,
+ * `desde`, `hasta`), sin el estado. En el teléfono la fila abre `/comprobantes/:id` con ellos, para
+ * que «pasar al siguiente» (decisión 13) siga en la misma cola que el cajero estaba viendo.
+ */
+const CLAVES_FILTRO_COLA = ['cliente', 'metodo', 'cuenta', 'canal', 'desde', 'hasta'] as const
+
+export function queryFiltrosCola(query: Record<string, unknown>): Record<string, string> {
+    const salida: Record<string, string> = {}
+    for (const clave of CLAVES_FILTRO_COLA) {
+        const valor = query[clave]
+        if (typeof valor === 'string' && valor !== '') {
+            salida[clave] = valor
+        }
+    }
+    return salida
+}
+
+/** Los filtros de la cola (sin estado) leídos de la URL; lo que no es válido se ignora. */
+export function filtrosColaDeQuery(query: Record<string, unknown>): Omit<FiltrosComprobantesCola, 'estado'> {
+    const texto = (valor: unknown) => (typeof valor === 'string' ? valor : '')
+    const id = (valor: unknown) => {
+        const numero = Number(texto(valor))
+        return Number.isInteger(numero) && numero > 0 ? numero : 0
+    }
+    const fecha = (valor: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(texto(valor)) ? texto(valor) : '')
+    const filtros: Omit<FiltrosComprobantesCola, 'estado'> = {}
+    if (id(query.cliente)) {
+        filtros.cliente_id = id(query.cliente)
+    }
+    const metodo = texto(query.metodo)
+    if ((['deposito', 'transferencia', 'ach', 'remesa'] as string[]).includes(metodo)) {
+        filtros.metodo = metodo as Comprobante['metodo']
+    }
+    if (id(query.cuenta)) {
+        filtros.cuenta_bancaria_id = id(query.cuenta)
+    }
+    const canal = texto(query.canal)
+    if ((['portal', 'panel', 'iris'] as string[]).includes(canal)) {
+        filtros.canal = canal as Comprobante['canal']
+    }
+    if (fecha(query.desde)) {
+        filtros.desde = fecha(query.desde)
+    }
+    if (fecha(query.hasta)) {
+        filtros.hasta = fecha(query.hasta)
+    }
+    return filtros
 }

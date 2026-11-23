@@ -103,25 +103,33 @@ const datosExternos = computed(() => {
 </script>
 
 <template>
-    <div class="min-h-dvh">
+    <div class="relative min-h-dvh overflow-hidden bg-(--ax-fondo)">
+        <!-- Mismo marco que el login (tableros OperLogin y OperLoginMovil). -->
         <div
-            class="app-aura"
+            class="bienvenida absolute inset-x-0 top-0 h-48 rounded-none rounded-b-[2.5rem] lg:inset-0 lg:h-auto lg:rounded-none"
             aria-hidden="true"
         />
-        <main class="relative flex min-h-dvh flex-col items-center justify-center gap-6 px-4 py-10">
-            <div class="flex flex-col items-center gap-3 text-highlighted">
-                <LogoArgos
-                    variante="linea"
-                    class="size-16 text-primary"
-                />
-                <span class="text-2xl font-semibold tracking-[-0.015em]">ArgosIsp</span>
-            </div>
-
+        <div class="absolute top-4 right-4 z-10">
+            <UColorModeButton class="boton-flotante boton-circulo" />
+        </div>
+        <main class="relative flex min-h-dvh flex-col items-center justify-start gap-6 px-4 pt-28 pb-10 lg:justify-center lg:pt-10">
             <div
-                class="surface-card w-full max-w-sm p-6"
+                class="w-full max-w-md rounded-[1.75rem] bg-(--ax-tarjeta) p-6 shadow-(--ax-sombra-flotante) ring ring-(--ax-borde) sm:p-8"
                 data-prueba="sso-entrar"
                 :data-fase="fase"
             >
+                <div class="mb-5 flex items-center gap-3">
+                    <span class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-(image:--ax-gradiente) text-white shadow-lg">
+                        <LogoArgos
+                            variante="linea"
+                            class="size-8"
+                        />
+                    </span>
+                    <div class="flex min-w-0 flex-col">
+                        <span class="text-xl font-bold tracking-[-0.02em] text-highlighted">ArgosIsp</span>
+                        <span class="text-[0.8125rem] text-muted">{{ conector ? `Entrando desde ${sistema}` : 'Entrando desde otro sistema' }}</span>
+                    </div>
+                </div>
                 <div
                     v-if="fase === 'canjeando' || fase === 'entrando'"
                     class="flex flex-col items-center gap-3 py-4 text-center"
@@ -264,8 +272,6 @@ const datosExternos = computed(() => {
                     </p>
                 </template>
             </div>
-
-            <UColorModeButton />
         </main>
     </div>
 </template>
