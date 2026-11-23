@@ -6,6 +6,7 @@ import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaE
 import { agregarMovimiento, cantidad3, costoSalida, monto2, saldoDe } from './kardex'
 import { FECHAS_COMODATO, TIPO_BODEGA_TRANSITO, type ProductoFixture } from './datos'
 import { codigoTipoProducto, tipoDeProducto } from './faseD'
+import { vistaUnidad } from './equipos'
 
 type Producto = ProductoFixture
 type Bodega = Schema<'Bodega'>
@@ -160,7 +161,7 @@ export function salida(producto: Producto, bodega: Bodega, cantidad: Decimal, da
 
 function equipoDe(unidad: Unidad): Schema<'EquipoServicio'> {
     const asignado = bd.movimientosInventario.filter(m => m.unidad_id === unidad.id && m.tipo === 'asignacion_comodato').at(-1)
-    return { ...unidad, valor_libros: unidad.activo_id ? unidad.costo : null, fecha_asignacion: asignado?.fecha ?? FECHAS_COMODATO[unidad.id] ?? null }
+    return { ...vistaUnidad(unidad), valor_libros: unidad.activo_id ? unidad.costo : null, fecha_asignacion: asignado?.fecha ?? FECHAS_COMODATO[unidad.id] ?? null }
 }
 
 export function actualizarUnidad(unidad: Unidad, cambios: Partial<Unidad>): Unidad {
@@ -749,7 +750,7 @@ export const rutasInventario: RutasFixture = {
             .filter(u => servicioId === undefined || u.servicio_id === servicioId)
             .filter(u => !q || (u.serie ?? '').includes(q) || (qMac.length >= 2 && (u.mac ?? '').replaceAll(':', '').includes(qMac)))
             .sort((a, b) => b.id - a.id)
-        return { status: 200, cuerpo: paginar(filas, solicitud) }
+        return { status: 200, cuerpo: paginar(filas.map(vistaUnidad), solicitud) }
     }),
 
     'GET /api/v1/inventario/unidades/:id': conPermiso('inventario.ver', (solicitud) => {

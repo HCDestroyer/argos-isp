@@ -20,7 +20,7 @@ const bodega = ref<number>(Number(route.query.bodega) || 0)
 const conCeros = ref(route.query.con_ceros === 'true')
 
 const bodegas = shallowRef<Bodega[]>([])
-const itemsBodega = computed<SelectItem[]>(() => [{ label: 'Todas las bodegas', value: 0 }, ...bodegas.value.map(b => ({ label: b.nombre, value: b.id }))])
+const itemsBodega = computed<SelectItem[]>(() => [{ label: 'Bodega: todas', value: 0 }, ...bodegas.value.map(b => ({ label: b.nombre, value: b.id }))])
 
 const reporte = shallowRef<InventarioValorizado | null>(null)
 const cargando = ref(false)
@@ -54,10 +54,16 @@ type Fila = InventarioValorizado['data'][number]
 const columnas: TableColumn<Fila>[] = [
     { accessorKey: 'producto_nombre', header: 'Producto', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'bodega_nombre', header: 'Bodega', meta: SOLO_ANCHO },
-    { accessorKey: 'cantidad', header: 'Cantidad', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'costo_promedio', header: 'Promedio', meta: { class: { th: 'text-right hidden lg:table-cell', td: 'text-right hidden lg:table-cell' } } },
-    { accessorKey: 'valor', header: 'Valor', meta: { class: { th: 'text-right', td: 'text-right' } } },
+    { accessorKey: 'cantidad', header: 'Cantidad', meta: { class: { th: 'text-end', td: 'text-end' } } },
+    { accessorKey: 'costo_promedio', header: 'Promedio', meta: { class: { th: 'text-end hidden lg:table-cell', td: 'text-end hidden lg:table-cell' } } },
+    { accessorKey: 'valor', header: 'Valor', meta: { class: { th: 'text-end', td: 'text-end' } } },
 ]
+
+const busqueda = ref('')
+const filas = computed(() => {
+    const q = busqueda.value.trim().toLowerCase()
+    return (reporte.value?.data ?? []).filter(f => !q || f.producto_nombre.toLowerCase().includes(q) || f.producto_sku.toLowerCase().includes(q))
+})
 
 const descuadres = computed(() => (reporte.value?.cuadre ?? []).filter(c => !new Decimal(c.diferencia).isZero()))
 </script>
@@ -68,82 +74,99 @@ const descuadres = computed(() => (reporte.value?.cuadre ?? []).filter(c => !new
         titulo="Inventario valorizado"
         icono="i-lucide-scale"
     >
-        <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <UInput
-                    v-model="fecha"
-                    type="date"
-                    aria-label="Fecha"
-                    class="w-full sm:w-44"
-                    data-prueba="valorizado-fecha"
-                />
-                <USelect
-                    v-model="bodega"
-                    :items="itemsBodega"
-                    class="w-full sm:w-56"
-                    aria-label="Bodega"
-                />
-                <USwitch
-                    v-model="conCeros"
-                    label="Con existencia 0"
-                />
-            </div>
+        <div class="flex min-h-0 flex-1 flex-col gap-4">
             <ProblemaAlerta
                 v-if="problema"
                 :problema="problema"
                 :reintentar="cargar"
                 :reintentando="cargando"
             />
-            <template v-else>
+            <div
+                v-else
+                class="grid gap-3 sm:grid-cols-2"
+            >
+                <TarjetaDato
+                    :etiqueta="reporte ? `Valor al ${formatearFecha(reporte.fecha)}` : 'Valor'"
+                    icono="i-lucide-scale"
+                    tono="tono-marca"
+                    :valor="reporte ? formatearQuetzales(reporte.total) : null"
+                    :detalle="reporte ? `${reporte.data.length} ${reporte.data.length === 1 ? 'línea' : 'líneas'} de producto y bodega` : undefined"
+                    data-prueba="valorizado-total"
+                />
                 <div
-                    v-if="reporte"
-                    class="grid gap-3 sm:grid-cols-2"
+                    class="surface-card flex min-w-0 items-center gap-3 rounded-2xl p-3 sm:p-4"
+                    data-prueba="valorizado-cuadre"
                 >
-                    <div class="surface-card flex flex-col gap-1 p-4">
-                        <span class="text-sm text-muted">Valor al {{ formatearFecha(reporte.fecha) }}</span>
-                        <span
-                            class="text-2xl font-semibold text-highlighted tabular-nums"
-                            data-prueba="valorizado-total"
-                        >{{ formatearQuetzales(reporte.total) }}</span>
-                    </div>
-                    <div
-                        class="surface-card flex flex-col gap-1 p-4"
-                        data-prueba="valorizado-cuadre"
+                    <span
+                        class="pastilla-icono pastilla-tono hidden size-10 shrink-0 rounded-xl sm:flex"
+                        :class="descuadres.length ? 'tono-error' : 'tono-exito'"
                     >
-                        <span class="text-sm text-muted">Cuadre con 1.1.14 Inventarios</span>
+                        <UIcon
+                            :name="descuadres.length ? 'i-lucide-triangle-alert' : 'i-lucide-circle-check'"
+                            class="size-5"
+                        />
+                    </span>
+                    <div class="flex min-w-0 flex-col">
+                        <span class="text-[0.8125rem] text-muted">Cuadre con 1.1.14 Inventarios</span>
+                        <USkeleton
+                            v-if="!reporte"
+                            class="mt-1 h-5 w-40"
+                        />
                         <span
-                            v-if="!descuadres.length"
-                            class="flex items-center gap-1.5 text-sm font-medium text-success"
-                        >
-                            <UIcon
-                                name="i-lucide-circle-check"
-                                class="size-4"
-                            />
-                            El kardex cuadra con el libro
-                        </span>
+                            v-else-if="!descuadres.length"
+                            class="text-sm font-semibold text-success"
+                        >El kardex cuadra con el libro</span>
                         <span
                             v-for="c in descuadres"
                             :key="c.empresa_id"
-                            class="flex items-center gap-1.5 text-sm font-medium text-error"
-                        >
-                            <UIcon
-                                name="i-lucide-triangle-alert"
-                                class="size-4"
-                            />
-                            Empresa {{ c.empresa_id }}: kardex {{ formatearQuetzales(c.valor_kardex) }} · libro {{ formatearQuetzales(c.saldo_libro) }} · diferencia {{ formatearQuetzales(c.diferencia) }}
-                        </span>
+                            class="text-sm font-semibold text-error"
+                        >Empresa {{ c.empresa_id }}: kardex {{ formatearQuetzales(c.valor_kardex) }} · libro {{ formatearQuetzales(c.saldo_libro) }} · diferencia {{ formatearQuetzales(c.diferencia) }}</span>
                     </div>
                 </div>
+            </div>
+
+            <div class="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-auto rounded-2xl">
+                <div class="flex flex-wrap items-center gap-2 p-3 sm:px-4">
+                    <UInput
+                        v-model="busqueda"
+                        icon="i-lucide-search"
+                        placeholder="Producto o SKU"
+                        aria-label="Buscar producto"
+                        class="w-full sm:w-64"
+                        :ui="{ base: 'rounded-full' }"
+                    />
+                    <UInput
+                        v-model="fecha"
+                        type="date"
+                        aria-label="Fecha"
+                        class="w-full sm:w-44"
+                        data-prueba="valorizado-fecha"
+                    />
+                    <USelect
+                        v-model="bodega"
+                        :items="itemsBodega"
+                        icon="i-lucide-filter"
+                        class="w-full sm:w-52"
+                        aria-label="Bodega"
+                    />
+                    <USwitch
+                        v-model="conCeros"
+                        label="Con existencia 0"
+                        class="sm:ms-auto"
+                    />
+                </div>
                 <UTable
-                    :data="reporte?.data ?? []"
+                    v-if="!problema"
+                    :data="filas"
                     :columns="columnas"
                     :loading="cargando"
-                    :ui="{ td: 'py-2.5' }"
+                    sticky
+                    :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
                     data-prueba="tabla-valorizado"
                 >
                     <template #producto_nombre-cell="{ row }">
-                        <div class="flex min-w-0 flex-col gap-0.5">
-                            <span class="text-sm font-medium text-highlighted">{{ row.original.producto_nombre }}</span>
+                        <div class="flex min-w-0 flex-col">
+                            <span class="font-semibold text-highlighted">{{ row.original.producto_nombre }}</span>
                             <span class="font-mono text-xs text-muted">{{ row.original.producto_sku }}</span>
                             <span class="text-xs text-muted sm:hidden">{{ row.original.bodega_nombre }}</span>
                         </div>
@@ -152,10 +175,10 @@ const descuadres = computed(() => (reporte.value?.cuadre ?? []).filter(c => !new
                         <span class="text-sm tabular-nums">{{ formatearCantidad(row.original.cantidad, row.original.unidad) }}</span>
                     </template>
                     <template #costo_promedio-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ row.original.costo_promedio ? formatearQuetzales(new Decimal(row.original.costo_promedio).toFixed(2)) : '—' }}</span>
+                        <span class="text-sm tabular-nums text-muted">{{ row.original.costo_promedio ? formatearQuetzales(new Decimal(row.original.costo_promedio).toFixed(2)) : '—' }}</span>
                     </template>
                     <template #valor-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ formatearQuetzales(row.original.valor) }}</span>
+                        <span class="text-sm font-semibold tabular-nums">{{ formatearQuetzales(row.original.valor) }}</span>
                     </template>
                     <template #empty>
                         <UEmpty
@@ -166,7 +189,7 @@ const descuadres = computed(() => (reporte.value?.cuadre ?? []).filter(c => !new
                         />
                     </template>
                 </UTable>
-            </template>
+            </div>
         </div>
     </PanelPagina>
 </template>

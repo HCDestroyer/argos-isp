@@ -59,6 +59,7 @@ import { rutasPortalContrasena } from './portalContrasena/rutas'
 import { rutasContactos } from './contactos/rutas'
 import { rutasCamposPersonalizados } from './camposPersonalizados/rutas'
 import { rutasInventario } from './inventario/rutas'
+import { rutasEquipos } from './inventario/equipos'
 import { rutasInventarioFaseD } from './inventario/faseD'
 import { rutasBorradoresCompra } from './compras/borradores'
 import { rutasProcesosFacturacion } from './facturacion/procesos'
@@ -587,6 +588,8 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasPortalCorte,
     ...rutasCamposPersonalizados,
     ...rutasInventario,
+    // Equipos del cliente (A48) y cuadrilla (A47): después, para que el detalle de la unidad sea el completo.
+    ...rutasEquipos,
     ...rutasProcesosFacturacion,
     ...rutasCanjesLealtad,
     ...rutasBancos,
