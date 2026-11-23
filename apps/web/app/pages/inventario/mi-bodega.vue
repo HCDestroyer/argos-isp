@@ -474,7 +474,7 @@ const columnasKardex: TableColumn<MovimientoInventario>[] = [
                     </UCollapsible>
                 </section>
 
-                <div class="fixed inset-x-0 bottom-0 z-10 flex gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta)/95 p-3 backdrop-blur lg:static lg:mt-2 lg:border-0 lg:bg-transparent lg:p-0">
+                <PanelBarraAccion class="lg:mt-2">
                     <UButton
                         v-if="puede('inventario.crear_traslado')"
                         label="Devolver a central"
@@ -497,7 +497,7 @@ const columnasKardex: TableColumn<MovimientoInventario>[] = [
                         title="Pedir material todavía no está en la API (anotado para A3); por ahora pídelo a la bodega central"
                         data-prueba="mi-bodega-pedir"
                     />
-                </div>
+                </PanelBarraAccion>
             </template>
         </div>
 
