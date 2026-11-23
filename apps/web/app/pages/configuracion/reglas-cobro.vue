@@ -103,6 +103,7 @@ async function cambiarImpresion(caja: Caja, cambios: CambiosImpresionCaja) {
         return
     }
     cajas.value = cajas.value.map(c => (c.id === r.data.id ? r.data : c))
+    useImpresionCaja().recordar(r.data)
     toast.add({ title: `Impresión de ${caja.nombre} guardada`, icon: 'i-lucide-circle-check', color: 'success' })
 }
 
