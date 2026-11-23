@@ -1315,6 +1315,20 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Sincronizar plan',
         ],
     },
+    '/planes/[id]/editar': {
+        titulo: 'Planes · Crear o editar un plan',
+        resumen: 'Abre un plan desde la lista. Arriba, su nombre, tipo, «Inactivo» o «Por router», número y versión. Botones «Sincronizar plan» y «Editar».',
+        pagina: 'red/planes',
+        ancla: 'crear-o-editar-un-plan',
+        temas: [],
+    },
+    '/planes/nuevo': {
+        titulo: 'Planes · Crear o editar un plan',
+        resumen: 'Abre un plan desde la lista. Arriba, su nombre, tipo, «Inactivo» o «Por router», número y versión. Botones «Sincronizar plan» y «Editar».',
+        pagina: 'red/planes',
+        ancla: 'crear-o-editar-un-plan',
+        temas: [],
+    },
     '/plantillas': {
         titulo: 'Plantillas de facturación',
         resumen: 'Cada servicio factura con una plantilla. La plantilla dice cuándo se emite la factura, cuántos días tiene el cliente para pagar, cuándo se limita o se suspende el servicio, si se cobra mora, cuándo se certifica con FEL y qué promesas de pago se aceptan.',
@@ -1366,6 +1380,40 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ancla: 'ficha-del-proveedor',
         temas: [
             'Registrar un pago a un proveedor',
+        ],
+    },
+    '/red/acceso': {
+        titulo: 'Red de acceso',
+        resumen: 'Por dónde llega cada cliente: OLT → puerto PON → VLAN → servidor PPPoE → red. Sirve para ordenar y filtrar; ArgosIsp no se conecta a las OLT.',
+        pagina: 'red/red-de-acceso',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Relacionado',
+        ],
+    },
+    '/red/conectados': {
+        titulo: 'Conectados ahora',
+        resumen: 'Quién está navegando en este momento, desde cuándo y por cuál router.',
+        pagina: 'red/conectados',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Relacionado',
+        ],
+    },
+    '/red/ips': {
+        titulo: 'Direcciones IP',
+        resumen: 'Todas las redes de todos los routers en un solo lugar, y quién tiene una IP.',
+        pagina: 'red/direcciones-ip',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Relacionado',
         ],
     },
     '/red/qos': {
@@ -1437,6 +1485,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Qué ves',
             'Acciones',
             'Preguntas frecuentes y errores',
+            'Conectar un router',
             'Relacionado',
         ],
     },
@@ -1463,6 +1512,13 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Preguntas frecuentes',
             'Relacionado',
         ],
+    },
+    '/routers/nuevo': {
+        titulo: 'Routers · Conectar un router',
+        resumen: 'La lista de los MikroTik donde se conectan tus clientes: si responden, cómo controlan la velocidad y qué capacidad tiene su enlace. Desde aquí registras un router nuevo y entras a su ficha.',
+        pagina: 'red/routers',
+        ancla: 'conectar-un-router',
+        temas: [],
     },
     '/servicios': {
         titulo: 'Servicios',

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
-import RouterAltaModal from '~/components/RouterAltaModal.vue'
 import RouterConexionSeccion from '~/components/RouterConexionSeccion.vue'
 import RouterEditarModal from '~/components/RouterEditarModal.vue'
 import { UApp } from '#components'
@@ -71,51 +70,6 @@ describe('router sin RADIUS', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-    })
-
-    describe('alta (RouterAltaModal)', () => {
-        it('el modo va arriba; «Sin RADIUS» oculta la IP del NAS y el secreto y crea el router con nas_ip null', async () => {
-            const wrapper = await mountSuspended(RouterAltaModal, { props: { open: true } })
-            await esperar(() => expect(document.body.querySelector('[data-prueba="router-modo"]')).not.toBeNull())
-            const formulario = document.body.querySelector('#form-router')!
-            // El modo es el primer campo, con las dos opciones del PM.
-            expect(formulario.querySelector('[data-prueba]')?.getAttribute('data-prueba')).toBe('router-modo')
-            expect(formulario.textContent).toContain('RADIUS (recomendado)')
-            expect(formulario.textContent).toContain('Sin RADIUS (todo por la API REST)')
-            expect(formulario.querySelector('[data-prueba="router-nas"]')).not.toBeNull()
-            expect(formulario.textContent).toContain('Secreto RADIUS')
-
-            elegir('[data-prueba="router-modo"]', 'api')
-            await esperar(() => expect(document.body.querySelector('[data-prueba="router-nas"]')).toBeNull())
-            expect(document.body.querySelector('#form-router')!.textContent).not.toContain('Secreto RADIUS')
-
-            escribir('[data-prueba="router-nombre"] input, input[data-prueba="router-nombre"]', 'RB-Norte')
-            escribir('[data-prueba="router-host"] input, input[data-prueba="router-host"]', '10.40.0.1')
-            elegir('[data-prueba="router-corte-identificacion"]', 'ip')
-            const antes = bd.routers.length
-            document.body.querySelector<HTMLButtonElement>('[data-prueba="router-guardar"]')!.click()
-            await esperar(() => expect(bd.routers).toHaveLength(antes + 1))
-            const creado = bd.routers.at(-1)!
-            expect(creado.modo_seguridad).toBe('api')
-            expect(creado.nas_ip).toBeNull()
-            expect(creado.tiene_radius_secret).toBe(false)
-            // Sin RADIUS no se mandan la IP del NAS ni el secreto.
-            const entrada = bd.acciones.find(b => b.accion === 'routers.crear' && b.entidad_id === creado.id)?.entrada as Record<string, unknown> | undefined
-            expect(entrada && 'nas_ip' in entrada).toBe(false)
-            await esperar(() => expect(wrapper.emitted('creado')).toHaveLength(1))
-        })
-
-        it('con RADIUS la IP del NAS es obligatoria y el mensaje dice cómo evitarla', async () => {
-            await mountSuspended(RouterAltaModal, { props: { open: true } })
-            await esperar(() => expect(document.body.querySelector('[data-prueba="router-nas"]')).not.toBeNull())
-            escribir('[data-prueba="router-nombre"] input, input[data-prueba="router-nombre"]', 'RB-Sur')
-            escribir('[data-prueba="router-host"] input, input[data-prueba="router-host"]', '10.50.0.1')
-            const antes = bd.routers.length
-            document.body.querySelector<HTMLButtonElement>('[data-prueba="router-guardar"]')!.click()
-            await esperar(() => expect(document.body.querySelector('#form-router')!.textContent).toContain('La IP del NAS es obligatoria con RADIUS'))
-            expect(document.body.querySelector('#form-router')!.textContent).toContain('elige «Sin RADIUS»')
-            expect(bd.routers).toHaveLength(antes)
-        })
     })
 
     describe('edición (RouterEditarModal)', () => {

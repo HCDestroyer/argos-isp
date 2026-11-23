@@ -1,9 +1,5 @@
-import { expect, test, type Locator } from '@playwright/test'
-import { entrar } from './ayudas'
-
-function campo(contenedor: Locator, prueba: string): Locator {
-    return contenedor.locator(`[data-prueba="${prueba}"] input, input[data-prueba="${prueba}"]`).first()
-}
+import { expect, test } from '@playwright/test'
+import { conectarRouter, entrar } from './ayudas'
 
 /**
  * Routers duplicados (pedido del PM, `contratos/routers.md` de A1): el RB-Centro está registrado
@@ -79,15 +75,9 @@ test('dar de alta el mismo MikroTik otra vez explica el 409', async ({ page }) =
     // navegue antes de que Vite compile la página (la primera visita pasa de 5 s en frío).
     await page.goto('/routers')
     await expect(page.locator('[data-prueba="tabla-routers"]')).toBeVisible({ timeout: 30_000 })
-    await page.locator('[data-prueba="nuevo-router"]').click()
-    const alta = page.getByRole('dialog', { name: 'Nuevo router' })
-    await campo(alta, 'router-nombre').fill('RB-Centro otra vez')
-    await campo(alta, 'router-host').fill('10.10.0.1')
-    await campo(alta, 'router-nas').fill('10.10.0.9')
-    await alta.getByRole('radio', { name: /^Por IP/ }).click()
-    await alta.locator('[data-prueba="router-guardar"]').click()
+    const alta = await conectarRouter(page, { nombre: 'RB-Centro otra vez', host: '10.10.0.1', nas: '10.10.0.9', corte: 'ip' })
     const error = alta.locator('[data-prueba="router-duplicado"]')
     await expect(error).toContainText('Ese MikroTik ya está registrado')
     await expect(error).toContainText('«RB-Centro» (router 1): misma dirección de la API (10.10.0.1:443)')
-    await expect(page).toHaveURL(/\/routers$/)
+    await expect(page).toHaveURL(/\/routers\/nuevo$/)
 })

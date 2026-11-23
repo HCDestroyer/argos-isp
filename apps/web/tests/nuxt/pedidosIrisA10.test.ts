@@ -233,7 +233,7 @@ describe('servicio · ubicación y contacto en sitio', () => {
     it('la ficha agrupa dirección, referencia, coordenadas y contacto en sitio', async () => {
         const indice = bd.servicios.findIndex(s => s.id === 1)
         bd.servicios[indice] = { ...bd.servicios[indice]!, referencia: 'Casa verde frente a la iglesia', contacto_nombre: 'Don Julio', contacto_telefono: '+502 5512-3344' }
-        const vista = await mountSuspended(PaginaServicio, { route: '/servicios/1' })
+        const vista = await mountSuspended(PaginaServicio, { route: '/servicios/1?pestana=red' })
         await esperar(() => expect(vista.find('[data-prueba="ubicacion-contacto-servicio"]').exists()).toBe(true))
         const tarjeta = vista.find('[data-prueba="ubicacion-contacto-servicio"]')
         expect(tarjeta.text()).toContain('Ubicación y contacto en sitio')

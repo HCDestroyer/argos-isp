@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir, pestanaRouter } from './ayudas'
+import { accionServicio, entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Conexión del router por WireGuard (`contratos/conexion-routers.md`), en escritorio y teléfono:
@@ -55,7 +55,16 @@ test('probar conexión, reconciliar, script de conexión y zona del router', asy
     await expect(modal).toBeHidden()
 
     // Editar: la zona del router, con el aviso del túnel.
-    await page.locator('[data-prueba="editar-router"]').click()
+    // Tableros RedRouterFicha y RedRouterFichaMovil: «Editar» a la vista en escritorio; en el
+    // teléfono va en el menú de acciones del router.
+    const editar = page.locator('[data-prueba="editar-router"]')
+    if (await editar.isVisible()) {
+        await editar.click()
+    }
+    else {
+        await page.locator('[data-prueba="acciones-router-1"]').click()
+        await page.getByRole('menuitem', { name: 'Editar', exact: true }).click()
+    }
     modal = page.getByRole('dialog', { name: /Editar RB-Centro/ })
     await expect(modal.locator('[data-prueba="aviso-tunel"]')).toContainText('10.255.0.2')
     await modal.locator('[data-prueba="router-zona"]').click()
@@ -100,7 +109,7 @@ test('router sin certificado en www-ssl: explica la causa, comandos para copiar 
 test('ficha del servicio: «Sincronizar con el router» muestra lo corregido y luego que ya estaba bien', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
-    await page.locator('[data-prueba="abrir-sincronizar-router"]').click()
+    await accionServicio(page, 'Sincronizar con el router')
     const modal = page.getByRole('dialog', { name: /Sincronizar con el router/ })
     await modal.locator('[data-prueba="sincronizar-router-confirmar"]').click()
     await expect(modal.locator('[data-prueba="sincronizar-cambios"]')).toContainText('/queue/simple')

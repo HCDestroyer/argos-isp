@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar } from './ayudas'
+import { conectarRouter, entrar, irAFichaDesdeAlta, pestanaServicio } from './ayudas'
 
 /**
  * Identificación del cliente cortado (`contratos/corte-identificacion.md` §5 y §5 bis), en escritorio y
@@ -11,28 +11,21 @@ function campo(contenedor: Locator, prueba: string): Locator {
     return contenedor.locator(`[data-prueba="${prueba}"] input, input[data-prueba="${prueba}"]`).first()
 }
 
-test('alta del router: hay que elegir la identificación; «Por código» necesita la API', async ({ page }) => {
+test('conectar router: «Por código» necesita la API; con usuario y clave queda en código', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await page.goto('/routers')
-    await page.locator('[data-prueba="nuevo-router"]').click({ timeout: 30_000 })
-    const alta = page.getByRole('dialog', { name: 'Nuevo router' })
-    const corte = alta.locator('[data-prueba="router-corte-identificacion"]')
-    await expect(corte.getByRole('radio', { name: /^Por código/ })).not.toBeChecked()
-    await expect(corte.getByRole('radio', { name: /^Por IP/ })).not.toBeChecked()
+    // Sin API (acceso directo, sin usuario ni clave), «Por código» está deshabilitado.
+    await page.goto('/routers/nuevo')
+    const pagina = page.locator('[data-prueba="conectar-router"]')
+    await campo(pagina, 'router-nombre').fill('RB-Norte')
+    await pagina.locator('[data-prueba="via-conexion"]').getByRole('radio', { name: /Ya tengo acceso directo/ }).click()
+    await campo(pagina, 'router-host').fill('10.40.0.1')
+    await pagina.locator('[data-prueba="seguir-router"]').click()
+    const corte = pagina.locator('[data-prueba="corte-identificacion"]')
     await expect(corte.getByRole('radio', { name: /^Por código/ })).toBeDisabled()
-    await campo(alta, 'router-nombre').fill('RB-Norte')
-    await campo(alta, 'router-host').fill('10.40.0.1')
-    await campo(alta, 'router-nas').fill('10.40.0.1')
-    await alta.locator('[data-prueba="router-guardar"]').click()
-    await expect(corte).toContainText('Elige cómo identificar al cliente cortado')
+    await expect(corte.getByRole('radio', { name: /^Por IP/ })).toBeChecked()
 
-    await alta.getByLabel('Usuario de la API').fill('argos')
-    await alta.getByLabel('Contraseña de la API').fill('clave-api-segura')
-    await expect(corte.getByRole('radio', { name: /^Por código/ })).toBeEnabled()
-    await corte.getByRole('radio', { name: /^Por código/ }).click()
-    await expect(corte).toContainText('puerto 3346, cerrado desde afuera')
-    await alta.locator('[data-prueba="router-guardar"]').click()
-    await expect(page).toHaveURL(/\/routers\/\d+$/)
+    const alta = await conectarRouter(page, { nombre: 'RB-Norte', host: '10.40.0.1', nas: '10.40.0.1', apiUsuario: 'argos', apiClave: 'clave-api-segura', corte: 'codigo' })
+    await irAFichaDesdeAlta(page, alta)
     await expect(page.locator('[data-prueba="router-corte-identificacion"]')).toContainText('Corte por código')
 })
 
@@ -65,6 +58,8 @@ test('ficha del servicio: estado del código de corte sin el código, en claro y
     await entrar(page, 'admin@argos.test')
     // Andrea Paola Gómez: suspendida en CCR-Mixco, que identifica por código.
     await page.goto('/servicios/14')
+    // Tablero OperServicioFicha: el código de corte vive en la pestaña «Portal de corte».
+    await pestanaServicio(page, 'Portal de corte')
     const tarjeta = page.locator('[data-prueba="codigo-corte-servicio"]')
     for (const tema of ['light', 'dark'] as const) {
         await page.emulateMedia({ colorScheme: tema })
@@ -95,7 +90,7 @@ test('fase 2: el corte por el túnel sin la regla dice qué hacer y queda en ver
     await expect(ip).toContainText('Falla', { timeout: 30_000 })
     await expect(ip).toContainText('El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT»')
     await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('«Reconciliar ahora» pone la regla')
-    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('pestaña Pools e IPs')
+    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('pestaña Red e IPs')
     await expect(ip.locator('[data-prueba="corte-editar-router"]')).toHaveCount(0)
     await expect(ip.locator('[data-prueba="comandos-routeros"]')).toContainText('http://10.255.0.1:8088/api/v1/portal/eco-ip')
 
@@ -131,6 +126,7 @@ test('fase 2: ficha del router con «Corte por el túnel» y código activo en u
 
         // Juan Carlos Ramírez: suspendido en RB-Centro (por IP, por el túnel); el primer salto le dio su código.
         await page.goto('/servicios/2')
+        await pestanaServicio(page, 'Portal de corte')
         const tarjeta = page.locator('[data-prueba="codigo-corte-servicio"]')
         await expect(tarjeta.locator('[data-prueba="codigo-corte-estado"]')).toHaveText('Activo', { timeout: 30_000 })
         await expect(tarjeta).toContainText('Router: por ip')
