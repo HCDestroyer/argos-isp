@@ -1,36 +1,89 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
+import type { DropdownMenuItem } from '@nuxt/ui'
 
 /**
  * Configuración › Facturación y cobro › Bancos de origen (tablero OperConfigCobro, pestaña «Bancos
  * de origen»; decisión 23 del PM): el catálogo único de bancos de donde viene el dinero de una
- * transferencia o ACH (`GET /bancos`). Al cobrar, el cajero elige de aquí; también lo usan el
- * portal y la conciliación. Agregar un banco (admin) y ocultar en esta empresa los que no usa se
- * construyen en `agente/a3-cobro-pm`: la pantalla los deja listos sin inventar nada.
+ * transferencia o ACH (`GET /bancos-origen`, A3). El admin agrega y edita (para todas las
+ * empresas); cada empresa oculta los que no usa (`ocultar`/`mostrar`, de la empresa activa). Al
+ * cobrar, el cajero solo ve los que su empresa no ocultó.
  */
 definePageMeta({ permiso: 'cuentas_bancarias.ver' })
 
 useHead({ title: 'Bancos de origen · ArgosIsp' })
 
-const bancos = shallowRef<Banco[]>([])
+const { puede } = usePermisos()
+const toast = useToast()
+const { empresaId, empresa } = useEmpresaActiva()
+
+const bancos = shallowRef<BancoOrigen[]>([])
 const cargando = ref(false)
 const problema = ref<Problem | null>(null)
 const busqueda = ref('')
+const ocupado = ref<number | null>(null)
 
 async function cargar() {
     cargando.value = true
-    const resultado = await useBancos().listar()
+    const resultado = await useBancosOrigen().listar()
     cargando.value = false
     bancos.value = resultado.ok ? resultado.data : []
     problema.value = resultado.ok ? null : resultado.problema
 }
 
 onMounted(cargar)
+watch(empresaId, cargar)
 
 const visibles = computed(() => {
     const termino = normalizarBusqueda(busqueda.value.trim())
     return bancos.value.filter(b => !termino || normalizarBusqueda(b.nombre).includes(termino))
 })
+const ocultos = computed(() => bancos.value.filter(b => b.oculto).length)
+
+/* Agregar y editar */
+const modalAbierto = ref(false)
+const editando = shallowRef<BancoOrigen | null>(null)
+
+function abrir(banco: BancoOrigen | null) {
+    editando.value = banco
+    modalAbierto.value = true
+}
+
+function alGuardar(banco: BancoOrigen, nuevo: boolean) {
+    toast.add({ title: nuevo ? `${banco.nombre} agregado al catálogo` : `${banco.nombre} guardado`, description: 'Para todas las empresas.', icon: 'i-lucide-circle-check', color: 'success' })
+    void cargar()
+}
+
+/* Ocultar y mostrar en la empresa activa */
+async function cambiarOculto(banco: BancoOrigen) {
+    ocupado.value = banco.id
+    const r = banco.oculto ? await useBancosOrigen().mostrar(banco.id) : await useBancosOrigen().ocultar(banco.id)
+    ocupado.value = null
+    if (!r.ok) {
+        toast.add({ title: r.problema.title, description: r.problema.detail, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    bancos.value = bancos.value.map(b => (b.id === r.data.id ? r.data : b))
+    toast.add({
+        title: r.data.oculto ? `${r.data.nombre} oculto` : `${r.data.nombre} visible`,
+        description: `${r.data.oculto ? 'Ya no sale' : 'Vuelve a salir'} al cobrar en ${empresa.value?.nombre_comercial ?? 'esta empresa'}.`,
+        icon: 'i-lucide-circle-check',
+        color: 'success',
+    })
+}
+
+function menu(banco: BancoOrigen): DropdownMenuItem[] {
+    const items: DropdownMenuItem[] = []
+    if (puede('bancos_origen.editar')) {
+        items.push({ label: 'Editar', icon: ICONOS.editar, onSelect: () => abrir(banco) })
+    }
+    if (banco.oculto ? puede('bancos_origen.mostrar') : puede('bancos_origen.ocultar')) {
+        items.push(empresaId.value
+            ? { label: banco.oculto ? 'Mostrar en esta empresa' : 'Ocultar en esta empresa', icon: banco.oculto ? 'i-lucide-eye' : 'i-lucide-eye-off', onSelect: () => void cambiarOculto(banco) }
+            : { label: 'Elige una empresa para ocultarlo', icon: 'i-lucide-eye-off', disabled: true })
+    }
+    return items
+}
 </script>
 
 <template>
@@ -51,16 +104,21 @@ const visibles = computed(() => {
                 data-prueba="buscar-banco"
             />
             <UButton
+                v-if="puede('bancos_origen.crear')"
                 label="Agregar banco"
                 icon="i-lucide-plus"
-                class="self-start sm:self-center"
-                disabled
-                title="Agregar bancos al catálogo estará disponible en una próxima versión."
+                class="glow-brand self-start sm:self-center"
                 data-prueba="agregar-banco"
+                @click="abrir(null)"
             />
         </div>
         <p class="text-sm text-muted">
             Al cobrar una transferencia, el cajero elige de aquí el banco de donde viene el dinero. También lo usan el portal y la conciliación.
+            <template v-if="empresaId">
+                Los ocultos no salen en {{ empresa?.nombre_comercial ?? 'esta empresa' }}<template v-if="ocultos">
+                    ({{ ocultos }})
+                </template>.
+            </template>
         </p>
 
         <ProblemaAlerta
@@ -88,13 +146,28 @@ const visibles = computed(() => {
             <li
                 v-for="banco in visibles"
                 :key="banco.id"
-                class="inline-flex items-center gap-2 rounded-full border border-(--ax-borde) px-4 py-2 text-sm font-medium text-highlighted"
+                :data-banco="banco.nombre"
+                :data-oculto="banco.oculto"
             >
-                <UIcon
-                    name="i-lucide-landmark"
-                    class="size-4 text-muted"
-                />
-                {{ banco.nombre }}
+                <UDropdownMenu
+                    :items="menu(banco)"
+                    :disabled="!menu(banco).length"
+                    :content="{ align: 'start' }"
+                >
+                    <UButton
+                        :label="banco.nombre"
+                        :icon="banco.oculto ? 'i-lucide-eye-off' : 'i-lucide-landmark'"
+                        color="neutral"
+                        variant="outline"
+                        :loading="ocupado === banco.id"
+                        :class="[
+                            'px-4 py-2',
+                            banco.oculto ? 'border-dashed text-muted' : 'text-highlighted',
+                            !banco.activo ? 'line-through opacity-70' : '',
+                        ]"
+                        :aria-label="`${banco.nombre}${banco.oculto ? ' (oculto en esta empresa)' : ''}${!banco.activo ? ' (fuera de las listas)' : ''}`"
+                    />
+                </UDropdownMenu>
             </li>
         </ul>
         <UEmpty
@@ -104,16 +177,11 @@ const visibles = computed(() => {
             variant="naked"
         />
 
-        <ConfiguracionBloque
-            titulo="Por empresa"
-            icono="i-lucide-eye-off"
-        >
-            <ConfiguracionPendiente
-                etiqueta="Ocultar los bancos que esta empresa no usa"
-                ayuda="El catálogo es uno para todo el sistema; cada empresa esconde los que no recibe para que el cajero no los vea."
-                fabrica="De fábrica se ven todos"
-                :decision="23"
-            />
-        </ConfiguracionBloque>
+        <BancoOrigenModal
+            v-model:open="modalAbierto"
+            :banco="editando"
+            @hecho="alGuardar"
+            @recargar="cargar"
+        />
     </ConfiguracionMarco>
 </template>

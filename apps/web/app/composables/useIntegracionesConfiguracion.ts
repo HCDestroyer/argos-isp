@@ -4,8 +4,8 @@ import type { Problem } from '@argosisp/contracts'
  * Lista de integraciones de Configuración (tablero OperConfigIntegraciones): Iris, Horus, pasarela
  * de pago, factura electrónica, SmartOLT, GenieACS y asistentes de IA (MCP). Cada estado sale de su
  * propia lectura (conector de Iris y de Horus, configuración FEL, proveedores de cobro); si una
- * falla, esa fila queda sin estado y su panel muestra el error. SmartOLT y GenieACS todavía no tienen
- * API (`agente/a6-equipos`): «Próximamente», sin estado inventado.
+ * falla, esa fila queda sin estado y su panel muestra el error. SmartOLT y GenieACS son de la empresa
+ * activa (`GET /integraciones/equipos`); con «Todas las empresas» quedan sin estado.
  */
 export function useIntegracionesConfiguracion() {
     const { puede } = usePermisos()
@@ -19,6 +19,7 @@ export function useIntegracionesConfiguracion() {
     const cargandoIris = ref(false)
     const fel = shallowRef<ConfiguracionFel | null>(null)
     const problemaFel = ref<Problem | null>(null)
+    const equipos = shallowRef<ConfigEquipos | null>(null)
     const proveedores = shallowRef<ProveedorCobro[] | null>(null)
     const problemaProveedores = ref<Problem | null>(null)
 
@@ -55,7 +56,19 @@ export function useIntegracionesConfiguracion() {
         problemaProveedores.value = resultado.ok ? null : resultado.problema
     }
 
+    async function cargarEquipos() {
+        if (empresaId.value === null) {
+            equipos.value = null
+            return
+        }
+        const resultado = await useEquiposIntegracion().ver()
+        equipos.value = resultado.ok ? resultado.data : null
+    }
+
     function cargar() {
+        if (puede('equipos.ver')) {
+            void cargarEquipos()
+        }
         if (puede('iris.ver')) {
             void cargarIris()
         }
@@ -104,9 +117,17 @@ export function useIntegracionesConfiguracion() {
                 estado: config ? { etiqueta: MODOS_FEL[config.modo].etiqueta, color: MODOS_FEL[config.modo].color, icono: MODOS_FEL[config.modo].icono } : null,
             })
         }
-        if (puede('routers.ver')) {
-            lista.push({ id: 'smartolt', nombre: 'SmartOLT', frase: 'Estado de las ONU', icono: 'i-lucide-router', tono: 'tono-marca', to: '/configuracion/integraciones?ver=smartolt', estado: { etiqueta: 'Próximamente', color: 'neutral' } })
-            lista.push({ id: 'genieacs', nombre: 'GenieACS', frase: 'Configuración remota de equipos (TR-069)', icono: 'i-lucide-cpu', tono: 'tono-marca', to: '/configuracion/integraciones?ver=genieacs', estado: { etiqueta: 'Próximamente', color: 'neutral' } })
+        if (puede('equipos.ver')) {
+            const config = equipos.value
+            const estado = (sistema: SistemaEquipos) => {
+                if (!config) {
+                    return null
+                }
+                const e = estadoEquipos(config, sistema)
+                return { etiqueta: e.etiqueta, color: e.color, icono: e.icono, prueba: `estado-lista-${sistema}` }
+            }
+            lista.push({ id: 'smartolt', nombre: 'SmartOLT', frase: 'Estado de las ONU', icono: 'i-lucide-router', tono: 'tono-marca', to: '/configuracion/integraciones?ver=smartolt', estado: estado('smartolt') })
+            lista.push({ id: 'genieacs', nombre: 'GenieACS', frase: 'Configuración remota de equipos (TR-069)', icono: 'i-lucide-cpu', tono: 'tono-marca', to: '/configuracion/integraciones?ver=genieacs', estado: estado('genieacs') })
         }
         if (puede('tokens.ver')) {
             lista.push({ id: 'mcp', nombre: 'Asistentes de IA (MCP)', frase: 'Tokens con alcance acotado', icono: 'i-lucide-bot', tono: 'tono-marca', to: '/configuracion/integraciones?ver=mcp', estado: null })
@@ -120,5 +141,6 @@ export function useIntegracionesConfiguracion() {
         iris, problemaIris, cargandoIris, cargarIris,
         fel, problemaFel, cargarFel,
         pasarelas, problemaProveedores, cargarProveedores,
+        equipos, cargarEquipos,
     }
 }

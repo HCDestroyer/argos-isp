@@ -3,12 +3,11 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Entrar al panel (tableros OperLogin y OperLoginMovil): fondo de la marca a todo lo ancho (color o
- * foto de Configuración → Apariencia) y la tarjeta a la derecha con logo, marca y eslogan; en el
- * teléfono, la tarjeta sobre una franja de color. Decisión 22: los botones «Iris» y «Horus» solo
- * aparecen si están conectados y «¿La olvidaste?» manda un enlace por correo; la API todavía no
- * publica ni las conexiones sin sesión ni el envío del enlace (A1, `.claude/integration/a4.md`):
- * mientras tanto no se muestran.
+ * Inicio de sesión (tableros OperLogin y OperLoginMovil, decisión 22 del PM): entrar, «¿La olvidaste?»
+ * (pedir el enlace por correo), «Revisa tu correo» (misma respuesta exista o no el correo),
+ * demasiadas solicitudes y la recuperación apagada por el admin. Los botones de Iris y Horus solo
+ * aparecen si están conectados (`GET /auth/opciones`). `?recuperar=1` abre directo la recuperación
+ * (desde el enlace vencido).
  */
 definePageMeta({
     layout: false,
@@ -18,31 +17,62 @@ definePageMeta({
 useHead({ title: 'Iniciar sesión · ArgosIsp' })
 
 const route = useRoute()
-/** Marca, eslogan, logo y fondo de la instalación (`GET /apariencia/publica`, sin sesión). */
-const tema = useTemaApariencia()
-const marca = computed(() => tema.publica.value?.nombre_marca ?? 'ArgosIsp')
-const eslogan = computed(() => tema.publica.value?.eslogan ?? null)
-const logo = computed(() => tema.urlArchivo(tema.publica.value?.logo_login_url ?? null))
-const fondo = computed(() => tema.urlArchivo(tema.publica.value?.fondo_login_url ?? null))
 const { login } = useAuth()
 const config = useRuntimeConfig()
+const recuperacion = useRecuperacionContrasena()
 
-const estado = reactive<Partial<DatosLogin>>({
-    email: '',
-    password: '',
+type Vista = 'login' | 'recuperar' | 'enviado'
+const vista = ref<Vista>(route.query.recuperar === '1' ? 'recuperar' : 'login')
+
+/* Opciones públicas: si fallan, el login sigue (sin botones de Iris ni Horus y sin «¿La olvidaste?»). */
+const opciones = shallowRef<OpcionesLogin | null>(null)
+onMounted(async () => {
+    const r = await recuperacion.opciones()
+    opciones.value = r.ok ? r.data : null
 })
+const recuperarApagada = computed(() => opciones.value?.recuperar_contrasena === false)
+const conectores = computed(() => [
+    ...(opciones.value?.iris_url ? [{ id: 'iris', nombre: 'Iris', url: opciones.value.iris_url }] : []),
+    ...(opciones.value?.horus_url ? [{ id: 'horus', nombre: 'Horus', url: opciones.value.horus_url }] : []),
+])
+
+/* Entrar */
+const estado = reactive<Partial<DatosLogin>>({ email: '', password: '' })
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
-/** Contraseña a la vista (botón del ojo). */
 const verClave = ref(false)
-/** Últimos datos enviados, para «Reintentar» tras un error de red o del servidor. */
 const ultimo = shallowRef<DatosLogin | null>(null)
-/**
- * Sistemas conectados para entrar desde ellos (Iris, Horus). Sin dato público de la API la lista
- * queda vacía y la sección «o entra desde» no se pinta: nunca se ofrece un botón que no funciona.
- */
-const conectados: { nombre: string, url: string }[] = []
 const reintentable = computed(() => !problema.value || problema.value.status === undefined || problema.value.status === 0 || problema.value.status >= 500)
+
+/** Cuenta regresiva del 429 `demasiados_intentos` (segundos del `detail`, como `Retry-After`). */
+const esperaHasta = ref<number | null>(null)
+const ahoraMs = ref(Date.now())
+let reloj: ReturnType<typeof setInterval> | null = null
+const restanteS = computed(() => (esperaHasta.value === null ? 0 : Math.max(0, Math.ceil((esperaHasta.value - ahoraMs.value) / 1000))))
+const textoEspera = computed(() => `${Math.floor(restanteS.value / 60)}:${String(restanteS.value % 60).padStart(2, '0')} min`)
+
+function empezarEspera(problemaLogin: Problem) {
+    const s = /(\d+)\s*s\b/.exec(problemaLogin.detail ?? '')
+    if (!s) {
+        return
+    }
+    esperaHasta.value = Date.now() + Number(s[1]) * 1000
+    ahoraMs.value = Date.now()
+    reloj ??= setInterval(() => {
+        ahoraMs.value = Date.now()
+        if (restanteS.value === 0 && reloj) {
+            clearInterval(reloj)
+            reloj = null
+            esperaHasta.value = null
+        }
+    }, 1000)
+}
+
+onBeforeUnmount(() => {
+    if (reloj) {
+        clearInterval(reloj)
+    }
+})
 
 function destino(): string {
     const redirect = route.query.redirect
@@ -64,186 +94,309 @@ async function entrarCon(datos: DatosLogin) {
         return
     }
     problema.value = resultado.problema
+    if (resultado.problema.status === 429) {
+        empezarEspera(resultado.problema)
+    }
 }
+
+/* Recuperar */
+const estadoRecuperar = reactive<Partial<DatosRecuperarContrasena>>({ email: '' })
+const pidiendo = ref(false)
+const problemaRecuperar = ref<Problem | null>(null)
+const enviadoA = ref('')
+
+function abrirRecuperar() {
+    estadoRecuperar.email = estadoRecuperar.email || estado.email || ''
+    problemaRecuperar.value = null
+    vista.value = 'recuperar'
+}
+
+function volverAlLogin() {
+    problemaRecuperar.value = null
+    vista.value = 'login'
+}
+
+async function pedirEnlace(evento: FormSubmitEvent<DatosRecuperarContrasena>) {
+    pidiendo.value = true
+    problemaRecuperar.value = null
+    const r = await recuperacion.pedirEnlace(evento.data.email)
+    pidiendo.value = false
+    if (r.ok) {
+        enviadoA.value = evento.data.email
+        vista.value = 'enviado'
+        return
+    }
+    if (codigoProblema(r.problema) === 'recuperacion_apagada') {
+        opciones.value = { ...(opciones.value ?? { iris: false, horus: false, iris_url: null, horus_url: null }), recuperar_contrasena: false }
+    }
+    problemaRecuperar.value = r.problema
+}
+
+const demasiadasSolicitudes = computed(() => problemaRecuperar.value !== null && codigoProblema(problemaRecuperar.value) === 'demasiadas_solicitudes')
 </script>
 
 <template>
-    <div
-        class="relative min-h-dvh overflow-hidden bg-(--ax-fondo)"
-        :style="fondo ? { backgroundImage: `linear-gradient(rgb(15 23 42 / 0.45), rgb(15 23 42 / 0.55)), url(${fondo})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined"
-    >
-        <!-- Fondo de la marca: a todo lo ancho en escritorio; franja arriba en el teléfono. -->
-        <div
-            v-if="!fondo"
-            class="bienvenida absolute inset-x-0 top-0 h-48 rounded-none rounded-b-[2.5rem] lg:inset-0 lg:h-auto lg:rounded-none"
-            aria-hidden="true"
-        />
+    <LoginMarco id="tarjeta-login">
+        <!-- Entrar -->
+        <template v-if="vista === 'login'">
+            <h1 class="text-2xl font-bold tracking-[-0.02em] text-highlighted">
+                Inicia sesión
+            </h1>
+            <p class="mt-0.5 mb-5 text-sm text-muted">
+                Con el correo que te dio tu administrador
+            </p>
 
-        <div class="absolute top-4 right-4 z-10">
-            <UColorModeButton class="boton-flotante boton-circulo" />
-        </div>
-
-        <main class="relative grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-10 lg:px-16 xl:px-24">
-            <!-- Escritorio: la frase de la marca abajo a la izquierda. -->
-            <section
-                class="hidden flex-col justify-end pb-16 text-white lg:flex"
-                :aria-label="marca"
+            <UForm
+                :schema="esquemaLogin"
+                :state="estado"
+                class="flex flex-col gap-4"
+                @submit="alEnviar"
             >
-                <p class="max-w-lg text-[2.75rem] leading-tight font-bold tracking-[-0.03em]">
-                    {{ eslogan ?? 'Todo tu ISP en un solo lugar.' }}
-                </p>
-                <p class="mt-3 text-lg text-white/85">
-                    Clientes, cobros, red e inventario.
-                </p>
-            </section>
-
-            <div class="flex flex-col items-center justify-start px-4 pt-28 pb-10 lg:justify-center lg:px-0 lg:pt-10">
-                <div
-                    class="w-full max-w-md rounded-[1.75rem] bg-(--ax-tarjeta) p-6 shadow-(--ax-sombra-flotante) ring ring-(--ax-borde) sm:p-8"
-                    data-prueba="tarjeta-login"
+                <UAlert
+                    v-if="problema && problema.status === 429"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-clock"
+                    :title="restanteS > 0 ? `Demasiados intentos. Espera ${textoEspera} para volver a intentar.` : 'Demasiados intentos. Ya puedes volver a intentar.'"
+                    data-prueba="login-bloqueado"
+                />
+                <UFormField
+                    name="email"
+                    label="Correo"
+                    required
                 >
-                    <div class="mb-6 flex items-center gap-3">
-                        <img
-                            v-if="logo"
-                            :src="logo"
-                            alt=""
-                            class="h-12 max-w-32 rounded-xl object-contain"
-                        >
-                        <span
-                            v-else
-                            class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-(image:--ax-gradiente) text-white shadow-lg"
-                        >
-                            <LogoArgos
-                                variante="linea"
-                                class="size-8"
-                            />
-                        </span>
-                        <div class="flex min-w-0 flex-col">
-                            <span class="truncate text-xl font-bold tracking-[-0.02em] text-highlighted">{{ marca }}</span>
-                            <span
-                                v-if="eslogan"
-                                class="truncate text-[0.8125rem] text-muted"
-                            >{{ eslogan }}</span>
-                        </div>
-                    </div>
+                    <UInput
+                        v-model="estado.email"
+                        type="email"
+                        autocomplete="username"
+                        placeholder="usuario@empresa.gt"
+                        icon="i-lucide-mail"
+                        size="xl"
+                        class="w-full"
+                    />
+                </UFormField>
 
-                    <div class="mb-5">
-                        <h1 class="text-2xl font-bold tracking-[-0.02em] text-highlighted">
-                            Inicia sesión
-                        </h1>
-                        <p class="mt-0.5 text-sm text-muted">
-                            Con el correo que te dio tu administrador
-                        </p>
-                    </div>
-
-                    <UForm
-                        :schema="esquemaLogin"
-                        :state="estado"
-                        class="flex flex-col gap-4"
-                        @submit="alEnviar"
+                <UFormField
+                    name="password"
+                    label="Contraseña"
+                    required
+                >
+                    <template
+                        v-if="!recuperarApagada"
+                        #hint
                     >
-                        <UFormField
-                            name="email"
-                            label="Correo"
-                            required
-                        >
-                            <UInput
-                                v-model="estado.email"
-                                type="email"
-                                autocomplete="username"
-                                placeholder="usuario@empresa.gt"
-                                icon="i-lucide-mail"
-                                size="xl"
-                                class="w-full"
-                            />
-                        </UFormField>
-
-                        <UFormField
-                            name="password"
-                            label="Contraseña"
-                            required
-                        >
-                            <UInput
-                                v-model="estado.password"
-                                :type="verClave ? 'text' : 'password'"
-                                autocomplete="current-password"
-                                icon="i-lucide-lock"
-                                size="xl"
-                                class="w-full"
-                                :ui="{ trailing: 'pe-1' }"
-                            >
-                                <template #trailing>
-                                    <UButton
-                                        :icon="verClave ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                                        color="neutral"
-                                        variant="link"
-                                        size="sm"
-                                        :aria-label="verClave ? 'Ocultar lo escrito' : 'Mostrar lo escrito'"
-                                        :aria-pressed="verClave"
-                                        :title="verClave ? 'Ocultar lo escrito' : 'Mostrar lo escrito'"
-                                        @click="verClave = !verClave"
-                                    />
-                                </template>
-                            </UInput>
-                        </UFormField>
-
-                        <UAlert
-                            v-if="problema"
-                            color="error"
-                            variant="subtle"
-                            icon="i-lucide-circle-alert"
-                            :title="problema.title"
-                            :description="problema.detail"
-                            :actions="reintentable && ultimo ? [{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => { if (ultimo) void entrarCon(ultimo) } }] : undefined"
-                            data-prueba="error-login"
-                        />
-
                         <UButton
-                            type="submit"
-                            label="Entrar"
-                            size="xl"
-                            block
-                            class="glow-brand mt-1 rounded-xl"
-                            :loading="enviando"
+                            label="¿La olvidaste?"
+                            variant="link"
+                            size="xs"
+                            class="p-0 underline"
+                            data-prueba="olvidaste"
+                            @click="abrirRecuperar"
                         />
-                    </UForm>
-
-                    <template v-if="conectados.length">
-                        <USeparator
-                            label="o entra desde"
-                            class="my-5"
-                            :ui="{ label: 'text-xs font-normal text-muted' }"
-                        />
-                        <div class="grid grid-cols-2 gap-3">
-                            <UButton
-                                v-for="sistema in conectados"
-                                :key="sistema.nombre"
-                                :to="sistema.url"
-                                :label="sistema.nombre"
-                                icon="i-lucide-link"
-                                color="neutral"
-                                variant="outline"
-                                size="lg"
-                                class="justify-center"
-                            />
-                        </div>
                     </template>
-
-                    <p class="mt-5 text-center text-xs text-muted">
-                        La sesión se cierra sola a los 3 días
-                    </p>
-                    <p
-                        v-if="config.public.useFixtures"
-                        class="mt-2 text-center text-xs text-muted"
+                    <UInput
+                        v-model="estado.password"
+                        :type="verClave ? 'text' : 'password'"
+                        autocomplete="current-password"
+                        icon="i-lucide-lock"
+                        size="xl"
+                        class="w-full"
+                        :ui="{ trailing: 'pe-1' }"
                     >
-                        Modo fixtures: admin@argos.test o cajero@argos.test, cualquier contraseña.
-                    </p>
-                </div>
+                        <template #trailing>
+                            <UButton
+                                :icon="verClave ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                                color="neutral"
+                                variant="link"
+                                size="sm"
+                                :aria-label="verClave ? 'Ocultar lo escrito' : 'Mostrar lo escrito'"
+                                :aria-pressed="verClave"
+                                :title="verClave ? 'Ocultar lo escrito' : 'Mostrar lo escrito'"
+                                @click="verClave = !verClave"
+                            />
+                        </template>
+                    </UInput>
+                </UFormField>
 
-                <p class="mt-6 text-center text-xs text-muted lg:text-white/80">
-                    {{ marca === 'ArgosIsp' ? 'ArgosIsp' : `${marca} · con ArgosIsp` }}
+                <UAlert
+                    v-if="problema && problema.status !== 429"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-circle-alert"
+                    :title="problema.title"
+                    :description="problema.detail"
+                    :actions="reintentable && ultimo ? [{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => { if (ultimo) void entrarCon(ultimo) } }] : undefined"
+                    data-prueba="error-login"
+                />
+
+                <UButton
+                    type="submit"
+                    label="Entrar"
+                    size="xl"
+                    block
+                    class="glow-brand mt-1 rounded-xl"
+                    :loading="enviando"
+                    :disabled="restanteS > 0"
+                />
+            </UForm>
+
+            <template v-if="conectores.length">
+                <USeparator
+                    label="o entra desde"
+                    class="my-4"
+                    :ui="{ label: 'text-xs text-muted' }"
+                />
+                <div
+                    class="grid gap-2"
+                    :class="conectores.length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
+                    data-prueba="login-conectores"
+                >
+                    <UButton
+                        v-for="c in conectores"
+                        :key="c.id"
+                        :label="c.nombre"
+                        :href="c.url"
+                        external
+                        icon="i-lucide-link"
+                        color="neutral"
+                        variant="outline"
+                        block
+                        :data-conector="c.id"
+                    />
+                </div>
+                <p class="mt-2 text-center text-xs text-muted">
+                    Inicia sesión allí y usa «Abrir en Argos»: entras aquí sin escribir tu contraseña.
                 </p>
-            </div>
-        </main>
-    </div>
+            </template>
+
+            <p class="mt-4 text-center text-xs text-muted">
+                La sesión se cierra sola a los 3 días
+            </p>
+            <p
+                v-if="config.public.useFixtures"
+                class="mt-2 text-center text-xs text-muted"
+            >
+                Modo fixtures: admin@argos.test o cajero@argos.test, cualquier contraseña.
+            </p>
+        </template>
+
+        <!-- ¿Olvidaste tu contraseña? (o apagada por el admin) -->
+        <template v-else-if="vista === 'recuperar'">
+            <h1 class="text-2xl font-bold tracking-[-0.02em] text-highlighted">
+                ¿Olvidaste tu contraseña?
+            </h1>
+            <template v-if="recuperarApagada">
+                <p
+                    class="mt-1 mb-5 text-sm text-muted"
+                    data-prueba="recuperacion-apagada"
+                >
+                    La recuperación por correo está apagada. Pide a tu administrador que te asigne una nueva desde Usuarios.
+                </p>
+                <UButton
+                    label="Volver"
+                    icon="i-lucide-chevron-left"
+                    color="neutral"
+                    variant="outline"
+                    block
+                    @click="volverAlLogin"
+                />
+            </template>
+            <template v-else>
+                <p class="mt-1 mb-5 text-sm text-muted">
+                    Escribe tu correo y te mandamos un enlace para cambiarla. Vale una sola vez y por 30 minutos.
+                </p>
+                <UForm
+                    :schema="esquemaRecuperarContrasena"
+                    :state="estadoRecuperar"
+                    class="flex flex-col gap-4"
+                    @submit="pedirEnlace"
+                >
+                    <UAlert
+                        v-if="demasiadasSolicitudes"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-clock"
+                        title="Demasiadas solicitudes."
+                        description="Espera unos minutos antes de pedir otro enlace."
+                        data-prueba="recuperar-limite"
+                    />
+                    <ProblemaAlerta
+                        v-else-if="problemaRecuperar"
+                        :problema="problemaRecuperar"
+                    />
+                    <UFormField
+                        name="email"
+                        label="Correo"
+                        required
+                    >
+                        <UInput
+                            v-model="estadoRecuperar.email"
+                            type="email"
+                            autocomplete="username"
+                            placeholder="usuario@empresa.gt"
+                            icon="i-lucide-mail"
+                            size="lg"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UButton
+                        type="submit"
+                        label="Mandar enlace"
+                        icon="i-lucide-send"
+                        size="lg"
+                        block
+                        class="glow-brand"
+                        :loading="pidiendo"
+                        data-prueba="mandar-enlace"
+                    />
+                </UForm>
+                <div class="mt-3 flex justify-center">
+                    <UButton
+                        label="Volver a iniciar sesión"
+                        icon="i-lucide-chevron-left"
+                        color="neutral"
+                        variant="ghost"
+                        @click="volverAlLogin"
+                    />
+                </div>
+            </template>
+        </template>
+
+        <!-- Revisa tu correo: la misma respuesta exista o no la cuenta -->
+        <div
+            v-else
+            class="flex flex-col items-center gap-3 text-center"
+            data-prueba="recuperar-enviado"
+        >
+            <span class="flex size-12 items-center justify-center rounded-2xl bg-success/10 text-success">
+                <UIcon
+                    name="i-lucide-mail"
+                    class="size-6"
+                />
+            </span>
+            <h1 class="text-2xl font-bold tracking-[-0.02em] text-highlighted">
+                Revisa tu correo
+            </h1>
+            <p class="text-sm text-muted">
+                Si <b class="text-highlighted">{{ enviadoA }}</b> tiene cuenta en Argos, le llegó un enlace para cambiar la contraseña. Vence en 30 minutos. Revisa también el correo no deseado.
+            </p>
+            <UButton
+                label="Volver a iniciar sesión"
+                color="neutral"
+                variant="outline"
+                block
+                @click="volverAlLogin"
+            />
+            <p class="text-xs text-muted">
+                ¿No llegó?
+                <UButton
+                    label="Pedir otro"
+                    variant="link"
+                    size="xs"
+                    class="p-0 underline"
+                    @click="abrirRecuperar"
+                />
+            </p>
+        </div>
+    </LoginMarco>
 </template>

@@ -1,4 +1,4 @@
-import type { paths } from '@argosisp/contracts'
+import type { Schema, paths } from '@argosisp/contracts'
 
 export type CambiosConectorIris = paths['/api/v1/integraciones/iris']['put']['requestBody']['content']['application/json']
 export type DatosTokenIris = paths['/api/v1/integraciones/iris/tokens']['post']['requestBody']['content']['application/json']
@@ -77,5 +77,13 @@ export function useIris() {
         return resolver(api.POST('/api/v1/integraciones/iris/autorizar', { body: datos }))
     }
 
-    return { conector, estado, guardar, generarEnlace, tokens, generarToken, revocarToken, envios, resumenEnvios, vistaPreviaAutorizacion, autorizar }
+    /**
+     * `POST /integraciones/iris/abrir` (`iris.abrir`): URL de autologin a una orden, ticket o
+     * prospecto de Iris (un uso, 60 s). 422 `iris_apagado`; 502 `iris_error`.
+     */
+    function abrir(tipo: 'ticket' | 'orden' | 'prospecto', idExterno: string): Promise<Resultado<Schema<'TicketIris'>>> {
+        return resolver(api.POST('/api/v1/integraciones/iris/abrir', { body: { destino: { tipo, id_externo: idExterno } } }))
+    }
+
+    return { conector, estado, guardar, generarEnlace, abrir, tokens, generarToken, revocarToken, envios, resumenEnvios, vistaPreviaAutorizacion, autorizar }
 }

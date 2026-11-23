@@ -15,3 +15,21 @@ export type DatosLogin = z.output<typeof esquemaLogin>
 export const esquemaDesbloqueo = esquemaLogin.pick({ password: true })
 
 export type DatosDesbloqueo = z.output<typeof esquemaDesbloqueo>
+
+/** Espejo de `POST /auth/recuperar-contrasena` (A1): un correo de hasta 200 caracteres. */
+export const esquemaRecuperarContrasena = z.object({
+    email: z.email('Escribe un correo válido').trim().toLowerCase().max(200, 'Máximo 200 caracteres'),
+})
+
+export type DatosRecuperarContrasena = z.output<typeof esquemaRecuperarContrasena>
+
+/**
+ * Espejo de `POST /auth/restablecer-contrasena` (A1): la contraseña nueva de 8 a 200 caracteres. La
+ * repetición solo existe en el panel (no se envía).
+ */
+export const esquemaRestablecerContrasena = z.object({
+    password: z.string('Escribe la contraseña nueva').min(8, 'Al menos 8 caracteres').max(200, 'Máximo 200 caracteres'),
+    repetir: z.string('Escríbela otra vez'),
+}).refine(d => d.password === d.repetir, { path: ['repetir'], message: 'No coincide con la contraseña nueva' })
+
+export type DatosRestablecerContrasena = z.output<typeof esquemaRestablecerContrasena>
