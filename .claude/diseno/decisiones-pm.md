@@ -36,3 +36,25 @@ Respuestas del PM a las 31 preguntas de los diseños de reportes y contabilidad 
 33. Historial de quién tenía cada IP: la retención la controla Horus. Argos no purga ni archiva por su cuenta; su búsqueda cubre sus propias sesiones (retención configurable) y para lo histórico remite a Horus.
 34. Promociones de velocidad en routers con control por plan (PCQ o árbol): se aplican moviendo al servicio al plan destino mientras dura la promoción (días o franja) y regresándolo al terminar; con multiplicador exigen plan destino.
 35. Conectar router: «Por código» viene preseleccionado para identificar a los clientes en la página de corte (como el diseño).
+
+## Aclaraciones al diseñar lo pendiente del backend (23 nov 2026)
+
+Sin cambiar ninguna decisión; así quedaron en los tableros y lo que falta confirmar.
+
+- **16:** la ventana «Suspender» ya no ofrece «Seguir facturando»: la suspensión siempre factura y la pausa sin cobro es su propia acción, con permiso, motivo y tope.
+- **21:** los días de gracia antes del corte son un campo de «Emitir por periodo», no un ajuste de Configuración.
+- **31:** los textos de caídas repetidas dicen 3 caídas en 60 minutos (el valor de fábrica del backend); antes decían 5 en 30.
+- **Por confirmar con el PM:**
+  - Promociones de velocidad como pestaña de Red › Planes (el menú Red de la decisión 29 no cambia).
+  - Las promociones «programadas» y «terminadas» se calculan con sus fechas; la API solo filtra por `activa` o `cancelada`.
+  - El detalle de una falla general muestra código, cliente y conexión de cada afectado; la API de afectados hoy solo da los ids.
+  - Argos no guarda el número del ticket general de Iris: el botón abre Iris por el número de la falla.
+  - «Técnicos de Iris» vive en Inventario; podría ir en Configuración › Integraciones.
+  - El visor de reportes programa en Excel o PDF; la API también acepta CSV.
+
+
+## Respuestas del PM a los pendientes del backend (23 nov 2026)
+
+- Diseños de «Pendientes del backend» aprobados tal como están en los tableros.
+- Promociones de velocidad: pestaña dentro de Red › Planes (no entrada propia en el menú).
+- Días de gracia (decisión 21): campo al emitir facturas de meses pasados, no ajuste fijo de cobro.
