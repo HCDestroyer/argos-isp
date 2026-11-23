@@ -296,7 +296,8 @@ const recuperacion: Ruta[] = [
         resumen: 'Qué muestra la pantalla de login (decisión del PM 22)',
         descripcion:
             'Pública: si se puede recuperar la contraseña por correo y si Iris y Horus están conectados (sus ' +
-            'botones). Sin datos de nadie.',
+            'botones). `iris_url` y `horus_url` son el origen público de cada app conectada (o null): el botón ' +
+            'lleva allí y el autologin sale de esa app («Abrir en Argos»). Sin datos de nadie ni secretos.',
         etiqueta: 'auth',
         seguridad: 'publico',
         permiso: null,
