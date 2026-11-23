@@ -26,6 +26,9 @@ test('aprobar un comprobante del portal reactiva el servicio', async ({ page }) 
 
     await revision.locator('[data-prueba="aprobar-comprobante"]').click()
 
-    await expect(page.getByText('Comprobante aprobado').first()).toBeVisible()
-    await expect(page.locator('[data-prueba="servicio-reactivado"]:visible')).toContainText('Suspendido → Activo', { timeout: 2_000 })
+    // Decisión 13: al aprobar la pantalla pasa al siguiente por revisar; el servicio reactivado
+    // (de `pago.servicios[]`, sin sondear) se dice en el aviso.
+    const aviso = page.locator('li').filter({ hasText: 'Comprobante aprobado' }).first()
+    await expect(aviso).toBeVisible()
+    await expect(aviso).toContainText('Servicio 2: Suspendido → Activo', { timeout: 2_000 })
 })

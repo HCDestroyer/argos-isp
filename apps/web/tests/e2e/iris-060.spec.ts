@@ -114,13 +114,24 @@ test('promesas: tipo, canal, comprobante y la cancelada con su motivo', async ({
     await expect(page.locator('[data-prueba="tipo-promesa"]').first()).toBeVisible()
     await expect(page.locator('[data-prueba="tipo-promesa"]')).toHaveCount(2)
     await expect(page.locator('[data-prueba="promesa-comprobante"]').filter({ hasText: 'Comprobante #5' })).toBeVisible()
-    await expect(page.getByText('la reconexión temporal venció con el comprobante sin revisar').filter({ visible: true }).first()).toBeVisible()
     // Motivo de la reconexión (A3, 17 nov 2026).
     const motivos = page.locator('[data-prueba="promesa-motivo-reconexion"]').filter({ visible: true })
     await expect(motivos.filter({ hasText: 'Fuera de horario' })).toBeVisible()
     await expect(motivos.filter({ hasText: 'Sin personal de caja' })).toBeVisible()
     await sinDesborde(page)
     await capturar(page, 'promesas')
+
+    // El motivo de la cancelada: en escritorio, en la columna de estado; en el teléfono esa columna
+    // no se ve y el cierre está en la promesa abierta (a pantalla completa).
+    const cierre = 'la reconexión temporal venció con el comprobante sin revisar'
+    if ((page.viewportSize()?.width ?? 0) >= 640) {
+        await expect(page.getByText(cierre).filter({ visible: true }).first()).toBeVisible()
+    }
+    else {
+        const fila = page.locator('tr').filter({ has: page.locator('[data-prueba="promesa-comprobante"]', { hasText: 'Comprobante #1' }) })
+        await fila.getByText(/^Servicio \d+$/).click()
+        await expect(page.getByRole('dialog').getByText(cierre, { exact: false }).first()).toBeVisible()
+    }
 })
 
 test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interruptor', async ({ page }) => {
@@ -166,6 +177,8 @@ test('WhatsApp: la baja de Iris en la ficha, la casilla al editar y el interrupt
 test('bitácora: las acciones de una conversación de Iris', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await abrir(page, '/bitacora')
+    // Tablero OperBitacora: la conversación de Iris es de «Más filtros».
+    await page.getByRole('button', { name: 'Más filtros' }).click()
     await page.locator('[data-prueba="filtro-conversacion-iris"] input, input[data-prueba="filtro-conversacion-iris"]').first().fill('wa:conv-7731')
     await expect(page).toHaveURL(/conversacion=wa%3Aconv-7731|conversacion=wa:conv-7731/)
     await expect(page.getByText('Reconexión temporal mientras se revisa el comprobante')).toBeVisible()
