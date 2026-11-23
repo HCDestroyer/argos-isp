@@ -309,22 +309,28 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'TipoProductoFormulario.vue': { permisos: ['tipos_producto.crear', 'tipos_producto.editar'], desde: ['pages/inventario/tipos-producto.vue'] },
     // Rediseño de inventario (A47/A48): las operaciones a mano se abren desde las acciones del encabezado,
     // que solo montan las páginas de inventario (`inventario.ver`) y comprueban el permiso de cada operación.
-    'InventarioAcciones.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue', 'pages/inventario/unidades.vue', 'pages/inventario/kardex.vue', 'pages/inventario/por-recuperar.vue', 'pages/inventario/revision.vue'] },
+    'InventarioAcciones.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue', 'pages/inventario/unidades.vue', 'pages/inventario/kardex.vue', 'pages/inventario/por-recuperar/index.vue', 'pages/inventario/revision.vue'] },
     'MovimientoInventarioModal.vue': { permisos: ['inventario.ver'], desde: ['components/InventarioAcciones.vue'], exentos: { 'components/InventarioAcciones.vue': ['inventario.ver'] } },
     // Marco de las pantallas de inventario: lee los contadores de las pestañas con el `inventario.ver` de la página.
-    'InventarioMarco.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue', 'pages/inventario/unidades.vue', 'pages/inventario/kardex.vue', 'pages/inventario/por-recuperar.vue', 'pages/inventario/revision.vue'] },
+    'InventarioMarco.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue', 'pages/inventario/unidades.vue', 'pages/inventario/kardex.vue', 'pages/inventario/por-recuperar/index.vue', 'pages/inventario/revision.vue'] },
     'InventarioTrasladosLista.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/traslados/index.vue', 'pages/inventario/bodegas.vue'] },
     // Acciones sobre un equipo (A48): EquipoAcciones lo montan Equipos, Por recuperar y Revisión (`inventario.ver`)
     // y monta cada ventana solo con el permiso de su acción; `ejecutar` tampoco abre una acción sin él.
-    'EquipoAcciones.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue', 'pages/inventario/por-recuperar.vue', 'pages/inventario/revision.vue'] },
-    'CobroEquipoAprobarModal.vue': { permisos: ['inventario.cobrar_equipo'], desde: ['pages/inventario/por-recuperar.vue'] },
+    'EquipoAcciones.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue', 'pages/inventario/por-recuperar/index.vue', 'pages/inventario/revision.vue'] },
+    'CobroEquipoAprobarModal.vue': { permisos: ['inventario.cobrar_equipo'], desde: ['pages/inventario/por-recuperar/index.vue'] },
     // Elegir la unidad nueva lee con `inventario.ver`: lo tienen las páginas de inventario que montan EquipoAcciones
     // y la ficha del servicio solo monta ServicioEquipos con `inventario.ver`.
     'EquipoCambiarModal.vue': { permisos: ['servicios.cambiar_equipo', 'inventario.ver'], desde: ['components/EquipoAcciones.vue', 'components/ServicioEquipos.vue'], exentos: { 'components/EquipoAcciones.vue': ['inventario.ver'], 'components/ServicioEquipos.vue': ['inventario.ver'] } },
-    'EquipoContactoModal.vue': { permisos: ['inventario.registrar_contacto_recuperacion'], desde: ['components/EquipoAcciones.vue'] },
+    'EquipoContactoModal.vue': { permisos: ['inventario.registrar_contacto_recuperacion'], desde: ['components/EquipoAcciones.vue', 'pages/inventario/por-recuperar/[id].vue'] },
     'EquipoDevolverModal.vue': { permisos: ['inventario.devolver_comodato'], desde: ['components/EquipoAcciones.vue'] },
     'EquipoGarantiaModal.vue': { permisos: ['inventario.enviar_garantia', 'inventario.resolver_garantia'], desde: ['components/EquipoAcciones.vue'] },
-    'EquipoNoRecuperadoModal.vue': { permisos: ['inventario.cobrar_equipo'], desde: ['components/EquipoAcciones.vue'] },
+    'EquipoNoRecuperadoModal.vue': { permisos: ['inventario.cobrar_equipo'], desde: ['components/EquipoAcciones.vue', 'pages/inventario/por-recuperar/[id].vue'] },
+    // Pendientes del backend (23 nov): cada ventana solo se abre con el permiso de su acción.
+    'IntentoDecidirModal.vue': { permisos: ['inventario.decidir_intento_recuperacion'], desde: ['pages/inventario/por-recuperar/[id].vue'] },
+    'BancoOrigenModal.vue': { permisos: ['bancos_origen.crear', 'bancos_origen.editar'], desde: ['pages/configuracion/bancos-origen.vue'] },
+    'CorreoExternoModal.vue': { permisos: ['reportes.aprobar_correo_externo'], desde: ['pages/configuracion/reportes.vue'] },
+    // SmartOLT y GenieACS: la página de integraciones se abre con cualquiera de sus permisos y monta la tarjeta con `equipos.ver`.
+    'ConfiguracionEquipos.vue': { permisos: ['equipos.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
     'CampoPersonalizadoFormulario.vue': { permisos: ['campos_personalizados.crear', 'campos_personalizados.editar'], desde: ['pages/campos-personalizados.vue'] },
@@ -367,7 +373,7 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
             // enlace de conexión (`conectar`) y "Mi cuenta" (`perfil`, cualquier usuario con sesión).
             // «Conectar con un botón» (`integraciones/iris/autorizar`) comprueba `iris.configurar` con
             // `puede()` y lo dice en su propia pantalla, sin menú y sin redirigir a Iris.
-            .filter(archivo => !/\/(login|sin-permiso|index|conectar|perfil|sso\/entrar|integraciones\/iris\/autorizar)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
+            .filter(archivo => !/\/(login|sin-permiso|index|conectar|perfil|restablecer-contrasena|sso\/entrar|integraciones\/iris\/autorizar)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
             .filter(archivo => !permisoDePagina(leer(archivo)))
             .map(relativo)
         expect(sinPermiso).toEqual([])

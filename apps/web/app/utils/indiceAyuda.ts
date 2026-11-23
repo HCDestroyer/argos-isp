@@ -480,7 +480,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/configuracion/bancos-origen': {
         titulo: 'Bancos de origen',
-        resumen: 'El catálogo de bancos de donde viene el dinero de una transferencia o un ACH. Es uno solo para todo el sistema: al cobrar una transferencia, el cajero elige de aquí el banco del cliente; también lo usan el portal del cliente y la conciliación bancaria.',
+        resumen: 'El catálogo de bancos de donde viene el dinero de una transferencia o un ACH. Es uno solo para todo el sistema: al cobrar una transferencia, el cajero elige de aquí el banco del cliente; también lo usan el portal del cliente y la conciliación bancaria. Cada empresa puede ocultar los que no usa.',
         pagina: 'configuracion/bancos-de-origen',
         ancla: null,
         temas: [
@@ -701,7 +701,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ],
     },
     '/configuracion/portal-corte': {
-        titulo: 'Portal de corte (configuración)',
+        titulo: 'Red y portal (configuración)',
         resumen: 'En esta pantalla decides a qué dirección mandan los routers a los clientes suspendidos y qué pasa con su conexión en el momento de suspenderlos. Es una sola configuración para toda la instalación. Cómo funciona la página que ve el cliente: Página de corte.',
         pagina: 'portal/portal-de-corte',
         ancla: null,
@@ -726,6 +726,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/configuracion/reglas-cobro': {
+        titulo: 'Reglas de cobro y libro',
+        resumen: 'Reglas de cada empresa para los asientos manuales y la pausa sin cobro, y el formato de impresión de cada caja.',
+        pagina: 'configuracion/reglas-de-cobro',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
     '/configuracion/reportes': {
         titulo: 'Ajustes de reportes',
         resumen: 'Cómo se cuentan las bajas en los reportes y en el panel del dueño, y a qué correos externos pueden ir los reportes programados.',
@@ -734,6 +747,8 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         temas: [
             'Quién la usa',
             'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
             'Relacionado',
         ],
     },
@@ -980,6 +995,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'No recuperados y cobros de equipo',
         ],
     },
+    '/inventario/por-recuperar/[id]': {
+        titulo: 'Declarar no recuperado',
+        resumen: 'Los intentos de recuperación de un equipo, cada uno con su verificación con Iris, y si ya se puede declarar no recuperado. El técnico nunca decide pérdidas ni cobros: la declaración la hace una persona aquí.',
+        pagina: 'inventario/declarar-no-recuperado',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
     '/inventario/productos': {
         titulo: 'Productos y tipos de producto',
         resumen: 'El catálogo de lo que el ISP compra, guarda, presta o vende: cable, conectores, routers, ONU, antenas. Cada producto dice cómo se lleva (por cantidad o por serie) y qué pasa cuando se usa con un servicio (se presta, se gasta o se cobra).',
@@ -1008,6 +1036,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         pagina: 'inventario/equipos',
         ancla: 'revision-y-garantia',
         temas: [],
+    },
+    '/inventario/tecnicos-iris': {
+        titulo: 'Técnicos de Iris',
+        resumen: 'Cómo se vincula cada técnico de Iris con su usuario de Argos para mover su bodega. Los vínculos llegan solos desde Iris y solo sirven para inventario: nunca autorizan cobros ni atención.',
+        pagina: 'inventario/tecnicos-de-iris',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
     },
     '/inventario/tipos-producto': {
         titulo: 'Productos y tipos de producto · Tipos de producto',
@@ -1205,6 +1246,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ancla: 'habilitaciones',
         temas: [
             'Registrar una habilitación',
+        ],
+    },
+    '/login': {
+        titulo: 'Iniciar sesión y recuperar la contraseña',
+        resumen: 'Entras al panel con el correo que te dio tu administrador y tu contraseña. Si la olvidaste, pides un enlace por correo y escribes una nueva.',
+        pagina: 'general/iniciar-sesion',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Recuperar la contraseña',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
         ],
     },
     '/notas-credito': {
@@ -1424,6 +1478,19 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         temas: [
             'Quién la usa',
             'Qué ves',
+            'Relacionado',
+        ],
+    },
+    '/restablecer-contrasena': {
+        titulo: 'Iniciar sesión y recuperar la contraseña',
+        resumen: 'Entras al panel con el correo que te dio tu administrador y tu contraseña. Si la olvidaste, pides un enlace por correo y escribes una nueva.',
+        pagina: 'general/iniciar-sesion',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Recuperar la contraseña',
+            'Preguntas frecuentes y errores',
             'Relacionado',
         ],
     },
