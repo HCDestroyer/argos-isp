@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.25.0](https://github.com/HCDestroyer/argos-isp/compare/v1.24.0...v1.25.0) (2026-11-23)
+
+
+### Funcionalidades
+
+* **integraciones:** CONTRATO_IRIS 0.14.3 y lo que faltaba de 0.13.0 a 0.14.3 ([#316](https://github.com/HCDestroyer/argos-isp/issues/316)) ([7701ccf](https://github.com/HCDestroyer/argos-isp/commit/7701ccf7cb3585e17edaa87b359afa943218e08d))
+
 ## [1.24.0](https://github.com/HCDestroyer/argos-isp/compare/v1.23.0...v1.24.0) (2026-11-23)
 
 
