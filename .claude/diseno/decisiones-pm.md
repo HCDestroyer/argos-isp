@@ -51,3 +51,10 @@ Sin cambiar ninguna decisión; así quedaron en los tableros y lo que falta conf
   - Argos no guarda el número del ticket general de Iris: el botón abre Iris por el número de la falla.
   - «Técnicos de Iris» vive en Inventario; podría ir en Configuración › Integraciones.
   - El visor de reportes programa en Excel o PDF; la API también acepta CSV.
+
+
+## Respuestas del PM a los pendientes del backend (23 nov 2026)
+
+- Diseños de «Pendientes del backend» aprobados tal como están en los tableros.
+- Promociones de velocidad: pestaña dentro de Red › Planes (no entrada propia en el menú).
+- Días de gracia (decisión 21): campo al emitir facturas de meses pasados, no ajuste fijo de cobro.
