@@ -81,22 +81,26 @@ async function conciliar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 v-if="puede('facturas.generar')"
                 label="Conciliar un día"
                 icon="i-lucide-play"
+                size="lg"
+                class="glow-brand rounded-full px-5"
                 data-prueba="conciliar-pasarela"
                 @click="abrir"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-sm text-muted">
-                    Cobros en línea de cada día contra el reporte del proveedor. El sistema concilia el día anterior cada madrugada.
-                </p>
+        <div class="surface-card flex min-h-0 flex-1 flex-col gap-3 rounded-2xl p-3 sm:p-4">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <UInput
                     v-model="fecha"
                     type="date"
+                    icon="i-lucide-calendar"
                     aria-label="Filtrar por día"
                     class="w-full sm:w-48"
+                    :ui="{ base: 'rounded-full' }"
                 />
+                <p class="text-xs text-muted">
+                    Cobros en línea de cada día contra el reporte del proveedor. El sistema concilia el día anterior cada madrugada.
+                </p>
             </div>
             <ProblemaAlerta
                 v-if="lista.problema.value"
@@ -118,7 +122,8 @@ async function conciliar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 <UCard
                     v-for="corrida in lista.filas.value"
                     :key="corrida.id"
-                    variant="subtle"
+                    variant="outline"
+                    class="rounded-xl"
                     :data-conciliacion="corrida.id"
                 >
                     <template #header>
@@ -130,7 +135,9 @@ async function conciliar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                             <UBadge
                                 :label="corrida.diferencias.length ? `${corrida.diferencias.length} diferencias` : 'Concilia'"
                                 :color="corrida.diferencias.length ? 'warning' : 'success'"
+                                :icon="corrida.diferencias.length ? 'i-lucide-triangle-alert' : 'i-lucide-circle-check'"
                                 variant="subtle"
+                                class="rounded-full"
                             />
                         </div>
                     </template>

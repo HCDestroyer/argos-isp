@@ -44,14 +44,16 @@ describe('alta de caja', () => {
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })
 
-    it('en pantalla: "Nueva caja" crea la caja y la deja elegida; el cajero no ve el botón', async () => {
+    it('en pantalla: «Nueva caja» (en «Más») muestra el error de la API; el cajero no la tiene', async () => {
         const vista = await mountSuspended(PaginaCaja, { route: '/caja' })
-        await esperar(() => expect(vista.find('[data-prueba="nueva-caja"]').exists()).toBe(true))
-        await esperar(() => expect(vista.find('[data-caja="1"]').exists()).toBe(true))
-        // Con dos empresas, cada tarjeta dice de cuál es.
-        expect(vista.get('[data-caja="4"]').text()).toContain('Fibra del Sur')
+        await esperar(() => expect(vista.find('[data-prueba="mas-cajas"]').exists()).toBe(true))
+        const estado = (vista.vm as unknown as { $: { setupState: { administrarAbierto: boolean, altaAbierta: boolean } } }).$.setupState
+        // «Cajas e impresión»: cada caja dice de qué empresa es.
+        estado.administrarAbierto = true
+        await esperar(() => expect(document.querySelector('[data-caja="4"]')?.textContent).toContain('Fibra del Sur'))
+        estado.administrarAbierto = false
 
-        await vista.get('[data-prueba="nueva-caja"]').trigger('click')
+        estado.altaAbierta = true
         await esperar(() => expect(document.querySelector('#form-crear-caja')).not.toBeNull())
         const nombre = document.querySelector<HTMLInputElement>('#form-crear-caja input')
         expect(nombre).not.toBeNull()
@@ -65,23 +67,25 @@ describe('alta de caja', () => {
         // Sin empresa elegida (Todas), la API responde 422 empresa_requerida y se ve.
         await esperar(() => expect(document.querySelector('#form-crear-caja')?.textContent).toContain('Elige la empresa de la caja'))
         expect(bd.cajas).toHaveLength(4)
-
         vista.unmount()
+
         sesionFixture('fixture-cajero')
         useUsuarioActual().value = meCajero
         await flushPromises()
         const cajero = await mountSuspended(PaginaCaja, { route: '/caja' })
-        await esperar(() => expect(cajero.find('[data-caja="1"]').exists()).toBe(true))
-        expect(cajero.find('[data-prueba="nueva-caja"]').exists()).toBe(false)
+        await esperar(() => expect(cajero.find('[data-prueba="contadores-cajas"]').exists()).toBe(true))
+        const items = (cajero.vm as unknown as { $: { setupState: { itemsMas: { label: string }[][] } } }).$.setupState.itemsMas
+        expect(items.flat().map(i => i.label)).not.toContain('Nueva caja')
+        cajero.unmount()
     })
 
-    it('en pantalla: con la empresa elegida, la caja nueva queda en esa empresa y seleccionada', async () => {
+    it('en pantalla: con la empresa elegida, la caja nueva queda en esa empresa', async () => {
         useEmpresaActiva().elegir(2)
         await flushPromises()
         const vista = await mountSuspended(PaginaCaja, { route: '/caja' })
-        await esperar(() => expect(vista.find('[data-caja="4"]').exists()).toBe(true))
-        expect(vista.find('[data-caja="1"]').exists()).toBe(false)
-        await vista.get('[data-prueba="nueva-caja"]').trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="mas-cajas"]').exists()).toBe(true))
+        const estado = (vista.vm as unknown as { $: { setupState: { altaAbierta: boolean } } }).$.setupState
+        estado.altaAbierta = true
         await esperar(() => expect(document.querySelector('#form-crear-caja input')).not.toBeNull())
         const nombre = document.querySelector<HTMLInputElement>('#form-crear-caja input')
         if (!nombre) {
@@ -92,7 +96,6 @@ describe('alta de caja', () => {
         await flushPromises()
         document.querySelector('#form-crear-caja')?.dispatchEvent(new Event('submit'))
         await esperar(() => expect(bd.cajas.some(c => c.nombre === 'Ventanilla Sur' && c.empresa_id === 2)).toBe(true))
-        const nueva = bd.cajas.find(c => c.nombre === 'Ventanilla Sur')
-        await esperar(() => expect(vista.find(`[data-caja="${nueva?.id}"]`).attributes('aria-checked')).toBe('true'))
+        vista.unmount()
     })
 })

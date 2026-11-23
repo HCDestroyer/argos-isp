@@ -62,17 +62,6 @@ onMounted(cargar)
         :titulo="`Liquidación #${route.params.id}`"
         icono="i-lucide-hand-coins"
     >
-        <template #acciones>
-            <UButton
-                to="/cobros/por-liquidar"
-                icon="i-lucide-arrow-left"
-                label="Cobros por liquidar"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
-            />
-        </template>
-
         <USkeleton
             v-if="cargando && !liquidacion"
             class="h-40 w-full"
@@ -94,22 +83,29 @@ onMounted(cargar)
 
         <div
             v-else-if="liquidacion"
-            class="flex flex-col gap-6"
+            class="flex flex-col gap-4"
         >
-            <div class="flex flex-col gap-1">
-                <h2 class="text-xl font-semibold text-highlighted">
-                    {{ liquidacion.referencia }}
-                </h2>
-                <p class="text-sm text-muted">
-                    {{ liquidacion.proveedor_nombre }} · {{ formatearFecha(liquidacion.fecha) }} · registrada {{ formatearFechaHora(liquidacion.created_at) }}
-                </p>
-            </div>
-
-            <UPageCard
-                title="Montos"
-                icon="i-lucide-calculator"
-                variant="subtle"
-            >
+            <div class="surface-card flex flex-col gap-4 rounded-2xl p-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="pastilla-icono size-10 bg-primary/10 text-primary">
+                        <UIcon
+                            name="i-lucide-hand-coins"
+                            class="size-5"
+                        />
+                    </span>
+                    <div class="flex min-w-0 flex-1 flex-col">
+                        <h2 class="truncate text-xl font-bold text-highlighted">
+                            {{ liquidacion.referencia }}
+                        </h2>
+                        <p class="text-sm text-muted">
+                            {{ liquidacion.proveedor_nombre }} · {{ formatearFecha(liquidacion.fecha) }} · registrada {{ formatearFechaHora(liquidacion.created_at) }}
+                        </p>
+                    </div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-xs text-muted">Neto al banco</span>
+                        <span class="text-2xl font-bold tabular-nums text-highlighted">{{ formatearQuetzales(liquidacion.neto) }}</span>
+                    </div>
+                </div>
                 <dl class="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
                     <DatoFicha
                         etiqueta="Bruto (sale del puente)"
@@ -118,10 +114,6 @@ onMounted(cargar)
                     <DatoFicha
                         etiqueta="Comisión (5.1.02)"
                         :valor="formatearQuetzales(liquidacion.comision)"
-                    />
-                    <DatoFicha
-                        etiqueta="Neto al banco"
-                        :valor="formatearQuetzales(liquidacion.neto)"
                     />
                     <DatoFicha
                         etiqueta="Banco"
@@ -143,15 +135,16 @@ onMounted(cargar)
                         :valor="liquidacion.nota"
                     />
                 </dl>
-            </UPageCard>
+            </div>
 
-            <section class="flex flex-col gap-2">
-                <h3 class="text-sm font-semibold text-highlighted">
+            <section class="surface-card flex flex-col overflow-hidden rounded-2xl">
+                <h3 class="border-b border-(--ax-borde) px-4 py-3 font-bold text-highlighted">
                     Pagos de la liquidación
                 </h3>
                 <UTable
                     :data="liquidacion.pagos"
                     :columns="columnas"
+                    :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
                 >
                     <template #pago_id-cell="{ row }">
                         <ULink
@@ -165,8 +158,10 @@ onMounted(cargar)
                         <UBadge
                             :label="row.original.tipo === 'contracargo' ? 'Contracargo' : 'Cobro'"
                             :color="row.original.tipo === 'contracargo' ? 'error' : 'neutral'"
+                            :icon="row.original.tipo === 'contracargo' ? 'i-lucide-undo-2' : 'i-lucide-banknote'"
                             variant="subtle"
                             size="sm"
+                            class="rounded-full"
                         />
                     </template>
                     <template #monto-cell="{ row }">
@@ -177,9 +172,9 @@ onMounted(cargar)
 
             <section
                 v-if="puede('libro.ver')"
-                class="flex flex-col gap-2"
+                class="surface-card flex flex-col gap-3 rounded-2xl p-4"
             >
-                <h3 class="text-sm font-semibold text-highlighted">
+                <h3 class="font-bold text-highlighted">
                     Asiento del libro
                 </h3>
                 <ProblemaAlerta

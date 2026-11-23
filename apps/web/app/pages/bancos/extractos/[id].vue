@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem } from '@nuxt/ui'
+import Decimal from 'decimal.js'
 
 /**
- * Un extracto y sus líneas (A3, fase 4 §10.3): conciliar cada línea con el libro, depósitos o
- * traslados; registrar las que no tienen documento (comisión, interés); deshacer una conciliación
- * con motivo; y aplicar las reglas de conciliación (`bancos.conciliar`).
+ * Conciliación bancaria de un estado de cuenta (tablero NuevoConciliacion): a la izquierda las
+ * líneas del banco, a la derecha lo registrado en Argos (movimientos del libro sin conciliar,
+ * depósitos de caja y traslados en tránsito hacia la cuenta). Se marca una línea, Argos propone
+ * su pareja (igual monto y referencia, en ámbar para confirmar) y «Conciliar» la liga
+ * (`POST /bancos/conciliaciones`). «Automático» aplica las reglas. Abajo, lo que queda sin pareja
+ * y las acciones para registrar un gasto bancario o un ingreso sin documento.
  */
 definePageMeta({ permiso: 'bancos.ver' })
 
 const route = useRoute()
+const router = useRouter()
 const toast = useToast()
 const { puede, enlace } = usePermisos()
 
@@ -19,65 +24,91 @@ const lineas = shallowRef<LineaExtracto[]>([])
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
+const partidas = shallowRef<PartidaConciliable[]>([])
+const problemaPartidas = ref<Problem | null>(null)
+const reporte = shallowRef<ResumenConciliacionBancaria | null>(null)
+const problemaReporte = ref<Problem | null>(null)
+const otros = shallowRef<Extracto[]>([])
+const cuentasBanco = shallowRef<CuentaBancaria[]>([])
+
+const lineaElegida = ref<number | null>(null)
+const elegidas = ref<string[]>([])
+const conciliando = ref(false)
+const problemaConciliar = ref<Problem | null>(null)
 const aplicando = ref(false)
 const resultadoReglas = shallowRef<ResultadoAplicarReglas | null>(null)
 const problemaReglas = ref<Problem | null>(null)
+const importarAbierto = ref(false)
 
-const aConciliar = shallowRef<LineaExtracto | null>(null)
-const aRegistrar = shallowRef<LineaExtracto | null>(null)
-const aAnular = shallowRef<LineaExtracto | null>(null)
-/** Línea cuya llegada (depósito o traslado) se atribuyó al documento equivocado. */
-const aReatribuir = shallowRef<{ linea: LineaExtracto, llegada: MovimientoConciliado } | null>(null)
-const reatribuyendo = computed({
-    get: () => aReatribuir.value !== null,
-    set: (valor: boolean) => {
-        if (!valor) {
-            aReatribuir.value = null
-        }
+useHead(() => ({ title: `Conciliación · ${extracto.value?.cuenta_nombre ?? `extracto #${route.params.id}`} · ArgosIsp` }))
+
+const linea = computed(() => lineas.value.find(l => l.id === lineaElegida.value) ?? null)
+const seleccion = computed(() => partidas.value.filter(p => elegidas.value.includes(p.clave)))
+const sugeridas = computed(() => (linea.value && !linea.value.conciliada ? sugerenciaConciliacion(linea.value, partidas.value).map(p => p.clave) : []))
+const diferencia = computed(() => (linea.value ? diferenciaConciliacion(linea.value, seleccion.value) : null))
+const conciliadas = computed(() => lineas.value.filter(l => l.conciliada).length)
+const sinPareja = computed(() => lineas.value.filter(l => !l.conciliada))
+
+/** Lo de Argos ya conciliado con alguna línea del extracto (se pinta en verde). */
+const movimientosConciliados = computed(() => lineas.value.filter(l => l.conciliada).flatMap(l => l.movimientos.map(m => ({ ...m, lineaId: l.id }))))
+
+const itemsPeriodo = computed(() => otros.value.map(e => ({ label: `${formatearFechaCorta(e.desde)} al ${formatearFechaCorta(e.hasta)}`, value: e.id })))
+const periodo = computed({
+    get: () => extractoId.value,
+    set: (id: number) => {
+        void router.push(`/bancos/extractos/${id}`)
     },
 })
+const itemsCuenta = computed<DropdownMenuItem[][]>(() => [cuentasBanco.value.filter(c => c.activa).map(c => ({
+    label: `${c.banco_nombre} · ${c.alias} ···${c.numero.replace(/\D/g, '').slice(-4)}`,
+    icon: 'i-lucide-landmark',
+    type: 'checkbox' as const,
+    checked: c.cuenta_id === extracto.value?.cuenta_id,
+    onSelect: () => {
+        void irACuenta(c.cuenta_id)
+    },
+}))])
 
-/** La llegada de un depósito o traslado conciliada en la línea, si la hay. */
-function llegadaDe(linea: LineaExtracto): MovimientoConciliado | null {
-    return linea.movimientos.find(m => m.origen_tipo === 'deposito' || m.origen_tipo === 'traslado') ?? null
-}
-
-function reatribuir(linea: LineaExtracto) {
-    const llegada = llegadaDe(linea)
-    if (llegada) {
-        aReatribuir.value = { linea, llegada }
+async function irACuenta(cuentaId: number) {
+    const resultado = await useExtractos().listar(cuentaId)
+    const ultimo = resultado.ok ? resultado.data.data[0] : undefined
+    if (ultimo) {
+        await router.push(`/bancos/extractos/${ultimo.id}`)
+    }
+    else {
+        await router.push(`/bancos/extractos?cuenta=${cuentaId}`)
     }
 }
 
-function alReatribuir() {
-    toast.add({ title: 'Llegada reatribuida', description: 'El documento anterior volvió a tránsito y la línea quedó con el correcto.', icon: 'i-lucide-arrow-left-right', color: 'success' })
-    void cargar()
+async function cargarPartidas(cuentaId: number) {
+    const transito = useFondosEnTransito()
+    const [movimientos, depositos, traslados] = await Promise.all([
+        useConciliaciones().sinConciliar(cuentaId),
+        transito.depositos('en_transito', undefined, 200),
+        transito.traslados('en_transito', undefined, 200),
+    ])
+    const fallo = (!movimientos.ok ? movimientos.problema : null) ?? (!depositos.ok ? depositos.problema : null) ?? (!traslados.ok ? traslados.problema : null)
+    if (fallo || !movimientos.ok || !depositos.ok || !traslados.ok) {
+        partidas.value = []
+        problemaPartidas.value = fallo
+        return
+    }
+    problemaPartidas.value = null
+    partidas.value = [
+        ...movimientos.data.map((m): PartidaConciliable => ({ clave: `m${m.movimiento_id}`, tipo: 'movimiento', id: m.movimiento_id, fecha: m.fecha, descripcion: m.descripcion, monto: m.monto })),
+        ...depositos.data.data.filter(d => d.cuenta_id === cuentaId).map((d): PartidaConciliable => ({ clave: `d${d.id}`, tipo: 'deposito', id: d.id, fecha: d.fecha, descripcion: `Depósito #${d.id} · boleta ${d.boleta} · ${d.caja_nombre}`, monto: d.monto })),
+        ...traslados.data.data.filter(t => t.cuenta_destino_id === cuentaId).map((t): PartidaConciliable => ({ clave: `t${t.id}`, tipo: 'traslado', id: t.id, fecha: t.fecha, descripcion: `Traslado #${t.id} · ${t.referencia} · desde ${t.cuenta_origen_codigo}`, monto: t.monto })),
+    ].sort((a, b) => a.fecha.localeCompare(b.fecha))
 }
 
-function modelo(referencia: typeof aConciliar) {
-    return computed({
-        get: () => referencia.value !== null,
-        set: (valor: boolean) => {
-            if (!valor) {
-                referencia.value = null
-            }
-        },
-    })
+async function cargarReporte(datos: Extracto) {
+    if (!puede('reportes.ver')) {
+        return
+    }
+    const resultado = await useConciliaciones().reporte(datos.cuenta_id, datos.hasta)
+    reporte.value = resultado.ok ? (resultado.data.find(r => r.cuenta_id === datos.cuenta_id) ?? null) : null
+    problemaReporte.value = resultado.ok ? null : resultado.problema
 }
-const conciliando = modelo(aConciliar)
-const registrando = modelo(aRegistrar)
-const anulando = modelo(aAnular)
-
-useHead(() => ({ title: `Extracto #${route.params.id} · ArgosIsp` }))
-
-const pendientes = computed(() => lineas.value.filter(l => !l.conciliada).length)
-
-const columnas: TableColumn<LineaExtracto>[] = [
-    { accessorKey: 'descripcion', header: 'Línea' },
-    { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'conciliada', header: 'Conciliación', meta: SOLO_ANCHO },
-    { id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden sm:table-cell text-right w-0' } } },
-]
 
 async function cargar() {
     cargando.value = true
@@ -92,6 +123,52 @@ async function cargar() {
     }
     extracto.value = rExtracto.data
     lineas.value = rLineas.data
+    if (lineaElegida.value === null || lineas.value.find(l => l.id === lineaElegida.value)?.conciliada) {
+        lineaElegida.value = lineas.value.find(l => !l.conciliada)?.id ?? null
+    }
+    await Promise.all([
+        cargarPartidas(rExtracto.data.cuenta_id),
+        cargarReporte(rExtracto.data),
+        useExtractos().listar(rExtracto.data.cuenta_id).then((r) => {
+            otros.value = r.ok ? r.data.data : [rExtracto.data]
+        }),
+        cuentasBanco.value.length || !puede('cuentas_bancarias.ver')
+            ? Promise.resolve()
+            : useCuentasBancarias().listar({ activa: true }).then((r) => {
+                    cuentasBanco.value = r.ok ? r.data : []
+                }),
+    ])
+    elegidas.value = sugeridas.value
+}
+
+function elegirLinea(l: LineaExtracto) {
+    lineaElegida.value = l.id
+    problemaConciliar.value = null
+    elegidas.value = l.conciliada ? [] : sugeridas.value
+}
+
+function alternarPartida(clave: string) {
+    if (!linea.value || linea.value.conciliada) {
+        return
+    }
+    elegidas.value = elegidas.value.includes(clave) ? elegidas.value.filter(c => c !== clave) : [...elegidas.value, clave]
+}
+
+async function conciliar() {
+    if (!linea.value || !seleccion.value.length || conciliando.value) {
+        return
+    }
+    conciliando.value = true
+    problemaConciliar.value = null
+    const resultado = await useConciliaciones().conciliar(cuerpoConciliacion(linea.value.id, seleccion.value), nuevaClaveIdempotencia())
+    conciliando.value = false
+    if (!resultado.ok) {
+        problemaConciliar.value = resultado.problema
+        return
+    }
+    toast.add({ title: 'Línea conciliada', description: `${resultado.data.movimientos.length} ${resultado.data.movimientos.length === 1 ? 'movimiento' : 'movimientos'} · ${formatearQuetzales(resultado.data.monto)}`, icon: 'i-lucide-link', color: 'success' })
+    lineaElegida.value = null
+    await cargar()
 }
 
 async function aplicarReglas() {
@@ -104,17 +181,47 @@ async function aplicarReglas() {
         return
     }
     resultadoReglas.value = resultado.data
-    void cargar()
+    await cargar()
 }
 
-function alConciliar(conciliacion: Conciliacion) {
-    toast.add({ title: 'Línea conciliada', description: `${conciliacion.movimientos.length} ${conciliacion.movimientos.length === 1 ? 'movimiento' : 'movimientos'} · ${formatearQuetzales(conciliacion.monto)}`, icon: 'i-lucide-link', color: 'success' })
-    void cargar()
+// Registrar sin documento, deshacer y reatribuir (como antes, en sus ventanas)
+const aRegistrar = shallowRef<LineaExtracto | null>(null)
+const aAnular = shallowRef<LineaExtracto | null>(null)
+const aReatribuir = shallowRef<{ linea: LineaExtracto, llegada: MovimientoConciliado } | null>(null)
+function modelo<T>(referencia: Ref<T | null>) {
+    return computed({
+        get: () => referencia.value !== null,
+        set: (valor: boolean) => {
+            if (!valor) {
+                referencia.value = null
+            }
+        },
+    })
+}
+const registrando = modelo(aRegistrar)
+const anulando = modelo(aAnular)
+const reatribuyendo = modelo(aReatribuir)
+
+function llegadaDe(l: LineaExtracto): MovimientoConciliado | null {
+    return l.movimientos.find(m => m.origen_tipo === 'deposito' || m.origen_tipo === 'traslado') ?? null
 }
 
-function alRegistrar(conciliacion: Conciliacion) {
-    toast.add({ title: 'Línea registrada y conciliada', description: `Asiento #${conciliacion.movimientos[0]?.asiento_id ?? '—'} · ${formatearQuetzales(conciliacion.monto)}`, icon: 'i-lucide-file-plus', color: 'success' })
-    void cargar()
+function accionesLinea(l: LineaExtracto): DropdownMenuItem[][] {
+    if (!puede('bancos.conciliar')) {
+        return []
+    }
+    if (!l.conciliada) {
+        return [[{ label: new Decimal(l.monto).isNegative() ? 'Registrar gasto bancario' : 'Registrar pago recibido', icon: 'i-lucide-file-plus', onSelect: () => registrarLinea(l) }]]
+    }
+    const llegada = llegadaDe(l)
+    return [
+        ...(llegada && puede('bancos.reatribuir_llegada') ? [[{ label: 'Reatribuir la llegada', icon: 'i-lucide-arrow-left-right', onSelect: () => { aReatribuir.value = { linea: l, llegada } } }]] : []),
+        [{ label: 'Deshacer conciliación', icon: 'i-lucide-unlink', color: 'error' as const, onSelect: () => { aAnular.value = l } }],
+    ]
+}
+
+function registrarLinea(l: LineaExtracto) {
+    aRegistrar.value = l
 }
 
 function anularSeleccionada(motivo: string, clave: string) {
@@ -125,51 +232,98 @@ function anularSeleccionada(motivo: string, clave: string) {
     return useConciliaciones().anular(id, motivo, clave)
 }
 
+function alRegistrar(conciliacion: Conciliacion) {
+    toast.add({ title: 'Línea registrada y conciliada', description: `Asiento #${conciliacion.movimientos[0]?.asiento_id ?? '—'} · ${formatearQuetzales(conciliacion.monto)}`, icon: 'i-lucide-file-plus', color: 'success' })
+    void cargar()
+}
+
 function alAnular() {
     toast.add({ title: 'Conciliación deshecha', description: 'La línea y sus movimientos vuelven a estar por conciliar.', icon: 'i-lucide-unlink', color: 'neutral' })
     void cargar()
 }
 
-watch(extractoId, cargar)
+function alReatribuir() {
+    toast.add({ title: 'Llegada reatribuida', description: 'El documento anterior volvió a tránsito y la línea quedó con el correcto.', icon: 'i-lucide-arrow-left-right', color: 'success' })
+    void cargar()
+}
+
+function alImportar(nuevo: Extracto) {
+    if (nuevo.id !== extractoId.value) {
+        void router.push(`/bancos/extractos/${nuevo.id}`)
+    }
+}
+
+const resumenSinPareja = computed(() => {
+    const banco = sinPareja.value.slice(0, 3).map(l => `${l.descripcion.slice(0, 28)} ${montoConSigno(l.monto)}`).join(' y ')
+    const argos = partidas.value.filter(p => !sugeridas.value.includes(p.clave)).slice(0, 2).map(p => `${p.descripcion.slice(0, 28)} ${formatearQuetzales(p.monto)}`).join(' y ')
+    return { banco, argos }
+})
+
+watch(extractoId, () => {
+    lineaElegida.value = null
+    resultadoReglas.value = null
+    void cargar()
+})
 onMounted(cargar)
 </script>
 
 <template>
     <PanelPagina
         id="extracto"
-        :titulo="`Extracto #${route.params.id}`"
-        icono="i-lucide-file-spreadsheet"
+        titulo="Conciliación bancaria"
+        icono="i-lucide-scale"
+        descripcion=""
+        sin-descripcion
     >
         <template #acciones>
-            <UButton
-                to="/bancos/extractos"
-                icon="i-lucide-arrow-left"
-                label="Extractos"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
+            <UDropdownMenu
+                v-if="cuentasBanco.length"
+                :items="itemsCuenta"
+                :content="{ align: 'end' }"
+            >
+                <UButton
+                    :label="extracto?.cuenta_nombre ?? 'Cuenta'"
+                    icon="i-lucide-landmark"
+                    trailing-icon="i-lucide-chevron-down"
+                    color="neutral"
+                    variant="outline"
+                    class="max-w-72 rounded-xl"
+                    :ui="{ label: 'truncate' }"
+                    data-prueba="conciliacion-cuenta"
+                />
+            </UDropdownMenu>
+            <USelect
+                v-if="itemsPeriodo.length"
+                v-model="periodo"
+                :items="itemsPeriodo"
+                icon="i-lucide-calendar"
+                aria-label="Estado de cuenta"
+                class="w-52"
+                :ui="{ base: 'rounded-xl' }"
+                data-prueba="conciliacion-periodo"
             />
             <UButton
-                v-if="puede('bancos.conciliar') && extracto"
-                label="Aplicar reglas"
-                icon="i-lucide-wand-sparkles"
-                :loading="aplicando"
-                :disabled="!pendientes"
+                v-if="puede('bancos.importar_extracto_archivo')"
+                label="Importar estado de cuenta"
+                icon="i-lucide-file-up"
+                color="neutral"
+                variant="outline"
+                class="rounded-xl"
                 :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Aplicar reglas"
-                data-prueba="aplicar-reglas"
-                @click="aplicarReglas"
+                aria-label="Importar estado de cuenta"
+                data-prueba="importar-extracto"
+                @click="importarAbierto = true"
             />
         </template>
 
         <USkeleton
             v-if="cargando && !extracto"
-            class="h-40 w-full"
+            class="h-80 w-full"
         />
         <UEmpty
             v-else-if="problema?.status === 404"
             icon="i-lucide-file-x"
-            title="Extracto no encontrado"
+            title="Estado de cuenta no encontrado"
             :actions="[{ label: 'Volver', to: '/bancos/extractos', icon: 'i-lucide-arrow-left', color: 'neutral', variant: 'subtle' }]"
         />
         <ProblemaAlerta
@@ -181,50 +335,66 @@ onMounted(cargar)
 
         <div
             v-else-if="extracto"
-            class="flex flex-col gap-6"
+            class="flex min-h-0 flex-1 flex-col gap-4"
         >
-            <UPageCard
-                variant="subtle"
-                :title="extracto.cuenta_nombre"
-                :description="`${extracto.cuenta_codigo} · ${formatearFecha(extracto.desde)} → ${formatearFecha(extracto.hasta)}`"
-                icon="i-lucide-landmark"
+            <div
+                class="grid grid-cols-2 gap-3 lg:grid-cols-4"
+                data-prueba="contadores-conciliacion"
             >
-                <dl class="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
-                    <DatoFicha
-                        etiqueta="Saldo inicial"
-                        :valor="formatearQuetzales(extracto.saldo_inicial)"
+                <div class="surface-card flex flex-col rounded-2xl p-3 sm:p-4">
+                    <span class="text-xs text-muted">Saldo según el banco</span>
+                    <span
+                        class="text-lg font-bold tabular-nums text-highlighted sm:text-xl"
+                        data-prueba="saldo-extracto"
+                    >{{ formatearQuetzales(extracto.saldo_final) }}</span>
+                </div>
+                <div class="surface-card flex flex-col rounded-2xl p-3 sm:p-4">
+                    <span class="text-xs text-muted">Saldo según Argos</span>
+                    <span
+                        class="text-lg font-bold tabular-nums text-highlighted sm:text-xl"
+                        data-prueba="saldo-libro"
+                    >{{ reporte ? formatearQuetzales(reporte.saldo_libro) : '—' }}</span>
+                </div>
+                <div
+                    class="flex flex-col rounded-2xl border p-3 sm:p-4"
+                    :class="reporte && !reporte.cuadra ? 'border-warning/50 bg-warning/10' : 'surface-card'"
+                >
+                    <span
+                        class="text-xs"
+                        :class="reporte && !reporte.cuadra ? 'text-warning' : 'text-muted'"
+                    >Diferencia por explicar</span>
+                    <span
+                        class="text-lg font-bold tabular-nums sm:text-xl"
+                        :class="reporte && !reporte.cuadra ? 'text-warning' : 'text-highlighted'"
+                        data-prueba="cuadra-conciliacion"
+                    >{{ reporte ? (reporte.cuadra ? 'Cuadra' : montoConSigno(reporte.diferencia)) : '—' }}</span>
+                </div>
+                <div class="surface-card flex flex-col gap-1 rounded-2xl p-3 sm:p-4">
+                    <span class="text-xs text-muted">Conciliados</span>
+                    <span
+                        class="text-lg font-bold tabular-nums text-highlighted sm:text-xl"
+                        data-prueba="avance-conciliacion"
+                    >{{ conciliadas }} de {{ lineas.length }}</span>
+                    <UProgress
+                        :model-value="lineas.length ? (conciliadas / lineas.length) * 100 : 0"
+                        color="success"
+                        size="sm"
+                        :aria-label="`${conciliadas} de ${lineas.length} conciliados`"
                     />
-                    <DatoFicha
-                        etiqueta="Saldo final"
-                        :valor="formatearQuetzales(extracto.saldo_final)"
-                    />
-                    <DatoFicha etiqueta="Conciliadas">
-                        <UBadge
-                            :label="`${lineas.length - pendientes} de ${lineas.length}`"
-                            :color="pendientes ? 'warning' : 'success'"
-                            variant="subtle"
-                            data-prueba="avance-conciliacion"
-                        />
-                    </DatoFicha>
-                    <DatoFicha
-                        etiqueta="Archivo"
-                        :valor="extracto.archivo"
-                    />
-                    <DatoFicha
-                        v-if="extracto.sha256"
-                        etiqueta="sha256"
-                        :valor="extracto.sha256"
-                        mono
-                        class="col-span-2 break-all"
-                    />
-                    <DatoFicha
-                        v-if="extracto.motivo_no_encadena"
-                        etiqueta="Importado sin encadenar"
-                        :valor="extracto.motivo_no_encadena"
-                        class="col-span-2"
-                    />
-                </dl>
-            </UPageCard>
+                </div>
+            </div>
+            <p
+                v-if="problemaReporte"
+                class="text-xs text-muted"
+            >
+                No se pudo leer el saldo del libro ({{ problemaReporte.title }}).
+                <UButton
+                    label="Reintentar"
+                    variant="link"
+                    size="xs"
+                    @click="cargarReporte(extracto)"
+                />
+            </p>
 
             <ProblemaAlerta
                 v-if="problemaReglas"
@@ -236,8 +406,8 @@ onMounted(cargar)
                 v-else-if="resultadoReglas"
                 :color="resultadoReglas.conciliadas.length ? 'success' : 'neutral'"
                 variant="subtle"
-                icon="i-lucide-wand-sparkles"
-                :title="`Reglas aplicadas: ${resultadoReglas.conciliadas.length} ${resultadoReglas.conciliadas.length === 1 ? 'línea conciliada' : 'líneas conciliadas'}`"
+                icon="i-lucide-zap"
+                :title="`Automático: ${resultadoReglas.conciliadas.length} ${resultadoReglas.conciliadas.length === 1 ? 'línea conciliada' : 'líneas conciliadas'}`"
                 :description="[
                     resultadoReglas.sin_regla.length ? `${resultadoReglas.sin_regla.length} sin regla que aplique` : null,
                     resultadoReglas.sin_pago.length ? `${resultadoReglas.sin_pago.length} con regla de cliente sin un pago único que coincida` : null,
@@ -245,168 +415,271 @@ onMounted(cargar)
                 data-prueba="resultado-reglas"
             />
 
-            <UTable
-                :data="lineas"
-                :columns="columnas"
-                :loading="cargando"
-                data-prueba="tabla-lineas"
-            >
-                <template #descripcion-cell="{ row }">
-                    <div class="flex min-w-0 flex-col whitespace-normal">
-                        <span class="text-sm font-medium text-highlighted">{{ row.original.descripcion }}</span>
-                        <span class="text-xs text-muted">{{ formatearFecha(row.original.fecha) }}<template v-if="row.original.referencia"> · ref. <span class="break-all">{{ row.original.referencia }}</span></template><template v-if="row.original.saldo"> · saldo {{ formatearQuetzales(row.original.saldo) }}</template></span>
-                        <ul
-                            v-if="row.original.movimientos.length"
-                            class="mt-1 flex flex-col gap-0.5 text-xs text-muted"
+            <div class="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_9.5rem_minmax(0,1fr)]">
+                <!-- Banco -->
+                <section
+                    class="surface-card flex flex-col overflow-hidden rounded-2xl lg:min-h-64"
+                    aria-label="Estado de cuenta del banco"
+                >
+                    <h2 class="flex items-center gap-2 border-b border-(--ax-borde) px-4 py-3">
+                        <UIcon
+                            name="i-lucide-landmark"
+                            class="size-4 text-muted"
+                        />
+                        <span class="font-bold text-highlighted">Estado de cuenta del banco</span>
+                        <span class="truncate text-xs font-normal text-muted">importado {{ formatearFechaCorta(extracto.created_at) }} {{ formatearHora(extracto.created_at) }}</span>
+                    </h2>
+                    <ul
+                        class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                        aria-label="Líneas del banco"
+                        data-prueba="tabla-lineas"
+                    >
+                        <li
+                            v-for="l in lineas"
+                            :key="l.id"
+                            class="flex items-center gap-1 border-b border-(--ax-borde) border-l-3 pe-2"
+                            :class="l.conciliada ? 'border-l-success bg-success/5' : lineaElegida === l.id ? 'border-l-primary bg-primary/5' : 'border-l-transparent hover:bg-(--ax-fila-hover)'"
+                            :data-linea="l.id"
+                            :data-conciliar="l.conciliada ? undefined : l.id"
                         >
-                            <li
-                                v-for="movimiento in row.original.movimientos"
-                                :key="movimiento.movimiento_id"
+                            <UButton
+                                color="neutral"
+                                variant="ghost"
+                                :aria-pressed="lineaElegida === l.id"
+                                class="min-w-0 flex-1 gap-3 rounded-none px-3 py-2.5 text-start text-sm font-normal text-default hover:bg-transparent"
+                                :data-elegir-linea="l.id"
+                                @click="elegirLinea(l)"
                             >
                                 <UIcon
-                                    name="i-lucide-link"
-                                    class="size-3"
+                                    :name="l.conciliada ? 'i-lucide-circle-check' : lineaElegida === l.id ? 'i-lucide-circle-dot' : 'i-lucide-circle'"
+                                    class="size-5 shrink-0"
+                                    :class="l.conciliada ? 'text-success' : lineaElegida === l.id ? 'text-primary' : 'text-dimmed'"
                                 />
-                                {{ origenAsiento(movimiento.origen_tipo).etiqueta }} · {{ movimiento.descripcion }} · {{ formatearQuetzales(movimiento.monto) }}
-                            </li>
-                        </ul>
-                        <span class="mt-1 sm:hidden">
-                            <UBadge
-                                :label="row.original.conciliada ? 'Conciliada' : 'Por conciliar'"
-                                :color="row.original.conciliada ? 'success' : 'warning'"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </span>
-                        <div
-                            v-if="puede('bancos.conciliar')"
-                            class="mt-1 flex flex-wrap gap-1 sm:hidden"
+                                <span class="w-12 shrink-0 text-muted">{{ formatearFechaCorta(l.fecha) }}</span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate">{{ l.descripcion }}</span>
+                                    <span
+                                        v-if="l.referencia"
+                                        class="block truncate text-xs text-muted"
+                                    >ref. {{ l.referencia }}</span>
+                                </span>
+                                <span
+                                    class="shrink-0 font-bold tabular-nums"
+                                    :class="l.monto.startsWith('-') ? 'text-error' : 'text-highlighted'"
+                                >{{ l.monto.startsWith('-') ? `− ${formatearQuetzales(new Decimal(l.monto).abs())}` : formatearQuetzales(l.monto) }}</span>
+                            </UButton>
+                            <UDropdownMenu
+                                v-if="accionesLinea(l).length"
+                                :items="accionesLinea(l)"
+                                :content="{ align: 'end' }"
+                            >
+                                <UButton
+                                    icon="i-lucide-ellipsis"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="xs"
+                                    :aria-label="`Más acciones de la línea ${l.orden}`"
+                                    :data-acciones-linea="l.id"
+                                    :data-registrar="l.conciliada ? undefined : l.id"
+                                    :data-deshacer="l.conciliada ? l.id : undefined"
+                                    :data-reatribuir="l.conciliada && llegadaDe(l) && puede('bancos.reatribuir_llegada') ? l.id : undefined"
+                                />
+                            </UDropdownMenu>
+                        </li>
+                        <li
+                            v-if="!lineas.length"
+                            class="p-6"
                         >
-                            <template v-if="!row.original.conciliada">
-                                <UButton
-                                    label="Conciliar"
-                                    icon="i-lucide-link"
-                                    size="xs"
-                                    variant="soft"
-                                    @click="aConciliar = row.original"
-                                />
-                                <UButton
-                                    label="Registrar"
-                                    icon="i-lucide-file-plus"
-                                    size="xs"
-                                    color="neutral"
-                                    variant="ghost"
-                                    @click="aRegistrar = row.original"
-                                />
-                            </template>
-                            <template v-else>
-                                <UButton
-                                    label="Deshacer"
-                                    icon="i-lucide-unlink"
-                                    size="xs"
-                                    color="error"
-                                    variant="ghost"
-                                    @click="aAnular = row.original"
-                                />
-                                <UButton
-                                    v-if="puede('bancos.reatribuir_llegada') && llegadaDe(row.original)"
-                                    label="Reatribuir"
-                                    icon="i-lucide-arrow-left-right"
-                                    size="xs"
-                                    color="neutral"
-                                    variant="ghost"
-                                    @click="reatribuir(row.original)"
-                                />
-                            </template>
-                        </div>
-                    </div>
-                </template>
-                <template #monto-cell="{ row }">
-                    <span
-                        class="whitespace-nowrap tabular-nums font-medium"
-                        :class="row.original.monto.startsWith('-') ? 'text-error' : 'text-success'"
-                    >{{ montoConSigno(row.original.monto) }}</span>
-                </template>
-                <template #conciliada-cell="{ row }">
-                    <UBadge
-                        :label="row.original.conciliada ? 'Conciliada' : 'Por conciliar'"
-                        :color="row.original.conciliada ? 'success' : 'warning'"
-                        :icon="row.original.conciliada ? 'i-lucide-link' : 'i-lucide-circle-dashed'"
-                        variant="subtle"
-                        size="sm"
-                        :data-linea="row.original.id"
-                    />
-                </template>
-                <template #acciones-cell="{ row }">
-                    <div
-                        v-if="puede('bancos.conciliar')"
-                        class="flex justify-end gap-1"
-                    >
-                        <template v-if="!row.original.conciliada">
-                            <UButton
-                                label="Conciliar"
-                                icon="i-lucide-link"
-                                size="sm"
-                                variant="soft"
-                                :data-conciliar="row.original.id"
-                                @click="aConciliar = row.original"
+                            <UEmpty
+                                icon="i-lucide-list"
+                                title="El estado de cuenta no tiene líneas"
+                                variant="naked"
                             />
-                            <UButton
-                                label="Registrar"
-                                icon="i-lucide-file-plus"
-                                size="sm"
-                                color="neutral"
-                                variant="ghost"
-                                :data-registrar="row.original.id"
-                                @click="aRegistrar = row.original"
-                            />
-                        </template>
-                        <template v-else>
-                            <UButton
-                                v-if="puede('bancos.reatribuir_llegada') && llegadaDe(row.original)"
-                                icon="i-lucide-arrow-left-right"
-                                size="sm"
-                                color="neutral"
-                                variant="ghost"
-                                :aria-label="`Reatribuir la llegada de la línea ${row.original.orden}`"
-                                :data-reatribuir="row.original.id"
-                                @click="reatribuir(row.original)"
-                            />
-                            <UButton
-                                icon="i-lucide-unlink"
-                                size="sm"
-                                color="error"
-                                variant="ghost"
-                                :aria-label="`Deshacer la conciliación de la línea ${row.original.orden}`"
-                                :data-deshacer="row.original.id"
-                                @click="aAnular = row.original"
-                            />
-                        </template>
-                    </div>
-                </template>
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-list"
-                        title="El extracto no tiene líneas"
-                        variant="naked"
-                    />
-                </template>
-            </UTable>
+                        </li>
+                    </ul>
+                </section>
 
-            <p class="text-xs text-muted">
-                Conciliar nunca reescribe asientos: liga la línea con lo que ya está en el libro. Deshacer deja la anulación con su motivo.
-                <ULink
+                <!-- Acciones centrales -->
+                <div class="flex flex-col items-stretch justify-center gap-2 max-lg:order-last lg:pb-24">
+                    <UButton
+                        v-if="puede('bancos.conciliar')"
+                        icon="i-lucide-check"
+                        color="primary"
+                        class="glow-brand flex-col gap-0.5 rounded-3xl py-4 text-center"
+                        :disabled="!linea || linea.conciliada || !seleccion.length"
+                        :loading="conciliando"
+                        data-prueba="conciliar"
+                        @click="conciliar"
+                    >
+                        <span class="font-bold">Conciliar</span>
+                        <span class="text-[0.6875rem] font-normal">la pareja marcada</span>
+                    </UButton>
+                    <UButton
+                        v-if="puede('bancos.conciliar')"
+                        label="Automático"
+                        icon="i-lucide-zap"
+                        color="neutral"
+                        variant="outline"
+                        class="justify-center rounded-full"
+                        :loading="aplicando"
+                        :disabled="!sinPareja.length"
+                        data-prueba="aplicar-reglas"
+                        @click="aplicarReglas"
+                    />
+                    <p class="text-center text-[0.6875rem] text-muted">
+                        Une por monto, fecha y referencia. Lo dudoso queda en amarillo para que lo confirmes.
+                    </p>
+                    <p
+                        v-if="linea && diferencia && seleccion.length && !diferencia.isZero()"
+                        class="text-center text-xs text-warning"
+                        data-prueba="diferencia-pareja"
+                    >
+                        Falta {{ formatearQuetzales(diferencia.abs()) }} para cuadrar
+                    </p>
+                    <ProblemaAlerta
+                        v-if="problemaConciliar"
+                        :problema="problemaConciliar"
+                    />
+                </div>
+
+                <!-- Argos -->
+                <section
+                    class="surface-card flex flex-col overflow-hidden rounded-2xl lg:min-h-64"
+                    aria-label="Registrado en Argos"
+                >
+                    <h2 class="flex items-center gap-2 border-b border-(--ax-borde) px-4 py-3">
+                        <UIcon
+                            name="i-lucide-book-open"
+                            class="size-4 text-muted"
+                        />
+                        <span class="font-bold text-highlighted">Registrado en Argos</span>
+                        <span class="truncate text-xs font-normal text-muted">depósitos, transferencias y movimientos</span>
+                    </h2>
+                    <div
+                        v-if="problemaPartidas"
+                        class="p-3"
+                    >
+                        <ProblemaAlerta
+                            :problema="problemaPartidas"
+                            :reintentar="() => extracto && cargarPartidas(extracto.cuenta_id)"
+                        />
+                    </div>
+                    <ul
+                        v-else
+                        class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                        aria-label="Movimientos de Argos"
+                        data-prueba="partidas-argos"
+                    >
+                        <li
+                            v-for="m in movimientosConciliados"
+                            :key="`c${m.movimiento_id}`"
+                            class="flex items-center gap-3 border-b border-(--ax-borde) border-l-3 border-l-success bg-success/5 px-3 py-2.5 text-sm"
+                        >
+                            <UIcon
+                                name="i-lucide-circle-check"
+                                class="size-5 shrink-0 text-success"
+                            />
+                            <span class="min-w-0 flex-1 truncate">{{ origenAsiento(m.origen_tipo).etiqueta }} · {{ m.descripcion }}</span>
+                            <span class="shrink-0 font-bold tabular-nums">{{ formatearQuetzales(m.monto) }}</span>
+                        </li>
+                        <li
+                            v-for="p in partidas"
+                            :key="p.clave"
+                            class="border-b border-(--ax-borde)"
+                        >
+                            <UButton
+                                color="neutral"
+                                variant="ghost"
+                                block
+                                :aria-pressed="elegidas.includes(p.clave)"
+                                :disabled="!linea || linea.conciliada || !puede('bancos.conciliar')"
+                                class="justify-start gap-3 rounded-none border-l-3 px-3 py-2.5 text-start text-sm font-normal disabled:opacity-100"
+                                :class="elegidas.includes(p.clave) ? (sugeridas.includes(p.clave) ? 'border-l-warning bg-warning/10' : 'border-l-primary bg-primary/5') : 'border-l-transparent'"
+                                :data-partida="p.clave"
+                                @click="alternarPartida(p.clave)"
+                            >
+                                <UIcon
+                                    :name="elegidas.includes(p.clave) ? (sugeridas.includes(p.clave) ? 'i-lucide-circle-help' : 'i-lucide-circle-check') : 'i-lucide-circle'"
+                                    class="size-5 shrink-0"
+                                    :class="elegidas.includes(p.clave) ? (sugeridas.includes(p.clave) ? 'text-warning' : 'text-primary') : 'text-dimmed'"
+                                />
+                                <span class="w-12 shrink-0 text-muted">{{ formatearFechaCorta(p.fecha) }}</span>
+                                <span class="min-w-0 flex-1 truncate text-default">{{ p.tipo === 'movimiento' ? 'Libro' : p.tipo === 'deposito' ? 'Depósito' : 'Traslado' }} · {{ p.descripcion }}</span>
+                                <span class="shrink-0 font-bold tabular-nums text-highlighted">{{ formatearQuetzales(p.monto) }}</span>
+                            </UButton>
+                        </li>
+                        <li
+                            v-if="!partidas.length && !movimientosConciliados.length"
+                            class="p-6"
+                        >
+                            <UEmpty
+                                icon="i-lucide-book-open"
+                                title="Nada pendiente en Argos para esta cuenta"
+                                variant="naked"
+                            />
+                        </li>
+                    </ul>
+                </section>
+            </div>
+
+            <div class="surface-card flex flex-wrap items-center gap-3 rounded-2xl p-3 sm:px-4">
+                <UBadge
+                    :label="sinPareja.length ? `Sin pareja · ${sinPareja.length}` : 'Todo conciliado'"
+                    :color="sinPareja.length ? 'warning' : 'success'"
+                    :icon="sinPareja.length ? 'i-lucide-circle-dashed' : 'i-lucide-circle-check'"
+                    variant="subtle"
+                    class="rounded-full"
+                />
+                <p
+                    v-if="sinPareja.length"
+                    class="min-w-0 flex-1 truncate text-sm text-muted"
+                >
+                    Banco: <strong class="text-highlighted">{{ resumenSinPareja.banco }}</strong><template v-if="resumenSinPareja.argos">
+                        · Argos: <strong class="text-highlighted">{{ resumenSinPareja.argos }}</strong>
+                    </template>
+                </p>
+                <span
+                    v-else
+                    class="flex-1"
+                />
+                <template v-if="puede('bancos.conciliar') && linea && !linea.conciliada">
+                    <UButton
+                        v-if="linea.monto.startsWith('-')"
+                        label="Registrar gasto bancario"
+                        icon="i-lucide-plus"
+                        color="neutral"
+                        variant="outline"
+                        class="rounded-full"
+                        data-prueba="registrar-linea"
+                        @click="aRegistrar = linea"
+                    />
+                    <UButton
+                        v-else
+                        label="Registrar pago recibido"
+                        icon="i-lucide-banknote"
+                        color="neutral"
+                        variant="outline"
+                        class="rounded-full"
+                        data-prueba="registrar-linea"
+                        @click="aRegistrar = linea"
+                    />
+                </template>
+                <UButton
+                    v-if="enlace(`/bancos/conciliacion?cuenta=${extracto.cuenta_id}`)"
                     :to="enlace(`/bancos/conciliacion?cuenta=${extracto.cuenta_id}`)"
-                    class="underline"
-                >Ver el reporte de esta cuenta</ULink>.
-            </p>
+                    label="Ver reporte"
+                    icon="i-lucide-file-check"
+                    color="success"
+                    class="rounded-full"
+                />
+            </div>
         </div>
 
-        <ConciliarLineaSlideover
-            v-if="aConciliar"
-            v-model:open="conciliando"
-            :linea="aConciliar"
-            @hecho="alConciliar"
+        <ExtractoImportarModal
+            v-if="extracto && puede('bancos.importar_extracto_archivo')"
+            v-model:open="importarAbierto"
+            :cuenta-id="extracto.cuenta_id"
+            @hecho="alImportar"
         />
         <LineaRegistrarModal
             v-if="aRegistrar"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem, Schema } from '@argosisp/contracts'
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 definePageMeta({ permiso: 'pagos.ver' })
@@ -164,6 +164,33 @@ function alAnular(anulado: Pago) {
 
 watch(pagoId, cargar)
 onMounted(cargar)
+
+/** Pestañas dentro de la tarjeta del pago (sistema visual nuevo). */
+const pestana = ref<'datos' | 'facturas' | 'asientos'>('datos')
+const itemsPestanas = computed(() => [
+    { label: 'Datos', value: 'datos', icon: 'i-lucide-receipt' },
+    { label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt-text', badge: pago.value?.aplicaciones.length || undefined },
+    ...(puede('libro.ver') ? [{ label: 'Asientos', value: 'asientos', icon: 'i-lucide-book-open' }] : []),
+])
+
+const generandoRecibo = ref(false)
+async function imprimirRecibo(plantillaId: number | null) {
+    const cobroId = pago.value?.cobro_id
+    if (!cobroId || generandoRecibo.value) {
+        return
+    }
+    generandoRecibo.value = true
+    const problemaPdf = await abrirPdf(() => useDocumentos().reciboCobro(cobroId, plantillaId), `recibo-cobro-${cobroId}.pdf`)
+    generandoRecibo.value = false
+    if (problemaPdf) {
+        useToast().add({ title: 'No se pudo generar el recibo', description: problemaPdf.detail ?? problemaPdf.title, icon: 'i-lucide-circle-alert', color: 'error' })
+    }
+}
+
+const itemsMas = computed<DropdownMenuItem[][]>(() => [
+    ...(puedeCerrarDiferencia.value ? [[{ label: 'Cerrar diferencia', icon: 'i-lucide-scissors', onSelect: () => { diferenciaAbierta.value = true } }]] : []),
+    ...(pago.value && enlace(`/clientes/${pago.value.cliente_id}`) ? [[{ label: 'Ver cliente', icon: 'i-lucide-user', to: enlace(`/clientes/${pago.value.cliente_id}?tab=cuenta`) }]] : []),
+])
 </script>
 
 <template>
@@ -173,14 +200,40 @@ onMounted(cargar)
         icono="i-lucide-banknote"
     >
         <template #acciones>
-            <UButton
-                to="/pagos"
-                icon="i-lucide-arrow-left"
-                label="Pagos"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
+            <ImprimirConPlantilla
+                v-if="pago?.cobro_id && puede('pagos.ver')"
+                tipo="recibo_cobro"
+                etiqueta="Imprimir recibo"
+                variant="solid"
+                :generando="generandoRecibo"
+                data-prueba="recibo-pdf"
+                @imprimir="imprimirRecibo"
             />
+            <!-- Como «Anular factura» en OperFacturaDetalle: la anulación va a la vista, el resto en «Más». -->
+            <UButton
+                v-if="puedeAnular"
+                label="Anular pago"
+                icon="i-lucide-ban"
+                color="error"
+                variant="outline"
+                class="rounded-full"
+                data-prueba="anular-pago"
+                @click="anularAbierto = true"
+            />
+            <UDropdownMenu
+                v-if="itemsMas.length"
+                :items="itemsMas"
+                :content="{ align: 'end' }"
+            >
+                <UButton
+                    icon="i-lucide-ellipsis"
+                    color="neutral"
+                    variant="outline"
+                    class="rounded-full"
+                    aria-label="Más acciones del pago"
+                    data-prueba="mas-pago"
+                />
+            </UDropdownMenu>
         </template>
 
         <div
@@ -208,13 +261,19 @@ onMounted(cargar)
 
         <div
             v-else-if="pago"
-            class="flex flex-col gap-6"
+            class="flex flex-col gap-4"
         >
-            <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="surface-card flex flex-wrap items-start justify-between gap-3 rounded-2xl p-4">
                 <div class="flex flex-col gap-1">
                     <div class="flex flex-wrap items-center gap-2">
-                        <h2 class="text-xl font-semibold text-highlighted">
-                            Pago #{{ pago.id }}
+                        <span class="pastilla-icono size-10 bg-primary/10 text-primary">
+                            <UIcon
+                                :name="pago.metodo === 'caja' ? 'i-lucide-banknote' : 'i-lucide-landmark'"
+                                class="size-5"
+                            />
+                        </span>
+                        <h2 class="text-xl font-bold text-highlighted">
+                            {{ ETIQUETAS_METODO[pago.metodo] }}
                         </h2>
                         <EstadoPagoBadge :estado="pago.estado" />
                         <UBadge
@@ -244,24 +303,12 @@ onMounted(cargar)
                         </ULink>
                     </p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <UButton
-                        v-if="puedeCerrarDiferencia"
-                        label="Cerrar diferencia"
-                        icon="i-lucide-scissors"
-                        color="neutral"
-                        variant="outline"
-                        data-prueba="abrir-cerrar-diferencia"
-                        @click="diferenciaAbierta = true"
-                    />
-                    <UButton
-                        v-if="puedeAnular"
-                        label="Anular pago"
-                        icon="i-lucide-ban"
-                        color="error"
-                        variant="outline"
-                        @click="anularAbierto = true"
-                    />
+                <div class="flex flex-col items-end">
+                    <span class="text-xs text-muted">Monto</span>
+                    <span
+                        class="text-2xl font-bold tabular-nums"
+                        :class="pago.estado === 'anulado' ? 'text-muted line-through' : 'text-highlighted'"
+                    >{{ formatearQuetzales(pago.monto) }}</span>
                 </div>
             </div>
 
@@ -312,12 +359,21 @@ onMounted(cargar)
                 :description="servicio.motivo"
             />
 
-            <UPageCard
-                title="Datos del pago"
-                icon="i-lucide-receipt"
-                variant="subtle"
-            >
-                <dl class="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+            <div class="surface-card flex flex-col gap-4 rounded-2xl p-3 sm:p-4">
+                <UTabs
+                    v-model="pestana"
+                    :items="itemsPestanas"
+                    :content="false"
+                    color="neutral"
+                    variant="pill"
+                    class="w-full sm:w-auto"
+                    :ui="{ list: 'rounded-xl bg-(--ax-panel) p-1 sm:w-fit', trigger: 'rounded-lg px-4 data-[state=active]:bg-(--ax-tarjeta) data-[state=active]:text-primary data-[state=active]:shadow-sm max-sm:flex-1' }"
+                    aria-label="Secciones del pago"
+                />
+                <dl
+                    v-if="pestana === 'datos'"
+                    class="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4"
+                >
                     <DatoFicha
                         etiqueta="Monto"
                         :valor="formatearQuetzales(pago.monto)"
@@ -409,78 +465,81 @@ onMounted(cargar)
                         class="col-span-2"
                     />
                 </dl>
-            </UPageCard>
 
-            <section class="flex flex-col gap-2">
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Facturas pagadas
-                </h3>
-                <UTable
-                    :data="pago.aplicaciones"
-                    :columns="columnasAplicaciones"
+                <section
+                    v-else-if="pestana === 'facturas'"
+                    class="flex flex-col gap-2"
                 >
-                    <template #factura_id-cell="{ row }">
-                        <ULink
-                            v-if="puede('facturas.ver')"
-                            :to="`/facturas/${row.original.factura_id}`"
-                            class="text-sm font-medium text-highlighted hover:text-primary"
-                        >
-                            Factura #{{ row.original.factura_id }}
-                        </ULink>
-                        <span
-                            v-else
-                            class="text-sm"
-                        >Factura #{{ row.original.factura_id }}</span>
-                    </template>
-                    <template #monto-cell="{ row }">
-                        <span class="tabular-nums font-medium">{{ formatearQuetzales(row.original.monto) }}</span>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-piggy-bank"
-                            title="No se aplicó a facturas"
-                            description="Todo el monto quedó como anticipo del cliente."
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
-            </section>
+                    <h3 class="sr-only">
+                        Facturas pagadas
+                    </h3>
+                    <UTable
+                        :data="pago.aplicaciones"
+                        :columns="columnasAplicaciones"
+                    >
+                        <template #factura_id-cell="{ row }">
+                            <ULink
+                                v-if="puede('facturas.ver')"
+                                :to="`/facturas/${row.original.factura_id}`"
+                                class="text-sm font-medium text-highlighted hover:text-primary"
+                            >
+                                Factura #{{ row.original.factura_id }}
+                            </ULink>
+                            <span
+                                v-else
+                                class="text-sm"
+                            >Factura #{{ row.original.factura_id }}</span>
+                        </template>
+                        <template #monto-cell="{ row }">
+                            <span class="tabular-nums font-medium">{{ formatearQuetzales(row.original.monto) }}</span>
+                        </template>
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-piggy-bank"
+                                title="No se aplicó a facturas"
+                                description="Todo el monto quedó como anticipo del cliente."
+                                variant="naked"
+                            />
+                        </template>
+                    </UTable>
+                </section>
 
-            <section
-                v-if="puede('libro.ver')"
-                class="flex flex-col gap-2"
-            >
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Asientos del libro
-                </h3>
-                <ProblemaAlerta
-                    v-if="problemaAsientos"
-                    :problema="problemaAsientos"
-                    :reintentar="reintentarAsientos"
-                    :reintentando="cargandoAsientos"
-                />
-                <USkeleton
-                    v-else-if="cargandoAsientos && !asientos.length"
-                    class="h-24 w-full"
-                />
-                <p
-                    v-else-if="!asientos.length"
-                    class="text-sm text-muted"
+                <section
+                    v-else-if="pestana === 'asientos' && puede('libro.ver')"
+                    class="flex flex-col gap-2"
                 >
-                    No se encontró el asiento de este pago en el libro diario.
-                </p>
-                <div
-                    v-else
-                    class="grid gap-3 lg:grid-cols-2"
-                >
-                    <AsientoContable
-                        v-for="asiento in asientos"
-                        :key="asiento.id"
-                        :asiento="asiento"
-                        :con-origen="false"
+                    <h3 class="sr-only">
+                        Asientos del libro
+                    </h3>
+                    <ProblemaAlerta
+                        v-if="problemaAsientos"
+                        :problema="problemaAsientos"
+                        :reintentar="reintentarAsientos"
+                        :reintentando="cargandoAsientos"
                     />
-                </div>
-            </section>
+                    <USkeleton
+                        v-else-if="cargandoAsientos && !asientos.length"
+                        class="h-24 w-full"
+                    />
+                    <p
+                        v-else-if="!asientos.length"
+                        class="text-sm text-muted"
+                    >
+                        No se encontró el asiento de este pago en el libro diario.
+                    </p>
+                    <div
+                        v-else
+                        class="grid gap-3 lg:grid-cols-2"
+                    >
+                        <AsientoContable
+                            v-for="asiento in asientos"
+                            :key="asiento.id"
+                            :asiento="asiento"
+                            :con-origen="false"
+                        />
+                    </div>
+                </section>
+            </div>
 
             <AccionMotivoModal
                 v-model:open="diferenciaAbierta"

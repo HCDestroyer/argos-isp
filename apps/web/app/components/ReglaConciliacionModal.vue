@@ -55,12 +55,12 @@ async function enviar(evento: FormSubmitEvent<SalidaRegla>) {
 </script>
 
 <template>
-    <UModal
+    <USlideover
         v-model:open="abierto"
         :title="regla ? `Editar regla · ${regla.nombre}` : 'Nueva regla de conciliación'"
         description="Al aplicar reglas a un extracto, cada línea sin conciliar toma la primera regla que coincide (menor prioridad primero)."
         :dismissible="!enviando"
-        :ui="{ content: 'sm:max-w-xl' }"
+        :ui="{ content: 'sm:max-w-xl sm:m-4 sm:rounded-[1.375rem] sm:h-[calc(100dvh-2rem)]' }"
     >
         <template #body>
             <UForm
@@ -212,5 +212,5 @@ async function enviar(evento: FormSubmitEvent<SalidaRegla>) {
                 />
             </div>
         </template>
-    </UModal>
+    </USlideover>
 </template>
