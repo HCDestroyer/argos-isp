@@ -49,6 +49,7 @@ export const SECCIONES_CONFIGURACION: SeccionConfiguracion[] = [
             { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver', pestana: true },
             { id: 'bancos-origen', etiqueta: 'Bancos de origen', icono: 'i-lucide-list', ruta: '/configuracion/bancos-origen', permiso: 'cuentas_bancarias.ver', pestana: true },
             { id: 'plantillas-conceptos', etiqueta: 'Plantillas y conceptos', icono: 'i-lucide-file-text', ruta: '/configuracion/plantillas-conceptos', permiso: ['plantillas.ver', 'documentos.ver'], pestana: true, tambien: /^\/configuracion\/(aviso-cobro|plantillas-documentos)(\/|$)/ },
+            { id: 'reglas-cobro', etiqueta: 'Reglas de cobro y libro', icono: 'i-lucide-shield-check', ruta: '/configuracion/reglas-cobro', permiso: 'ajustes_cobro.ver', pestana: true },
             { id: 'proveedores-cobro', etiqueta: 'Proveedores de cobro', icono: 'i-lucide-credit-card', ruta: '/configuracion/proveedores-cobro', permiso: 'bancos.ver', pestana: true },
         ],
     },
@@ -90,7 +91,7 @@ export const SECCIONES_CONFIGURACION: SeccionConfiguracion[] = [
         resumen: 'Iris, Horus, pasarela',
         icono: 'i-lucide-link',
         paginas: [
-            { id: 'integraciones', etiqueta: 'Integraciones', icono: 'i-lucide-link', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver'], pestana: false, tambien: /^\/configuracion\/integraciones\// },
+            { id: 'integraciones', etiqueta: 'Integraciones', icono: 'i-lucide-link', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'equipos.ver'], pestana: false, tambien: /^\/configuracion\/integraciones\// },
         ],
     },
     {

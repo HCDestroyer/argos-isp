@@ -98,7 +98,7 @@ Debajo de la lista hay dos apartados:
 - **Cobros de equipo por decidir:** los cobros que propuso un cambio de equipo. Con `inventario.cobrar_equipo` eliges «Cobrar» (con el monto, que queda como cargo único al cliente) o «Sin cobro» (con el motivo).
 - **No recuperados (este año):** los equipos que se declararon no recuperados, con lo que se decidió: cobrado al cliente o sin cobro.
 
-Para **declarar un equipo no recuperado** (en el menú «⋯» de la fila) hacen falta intentos de 2 técnicos distintos o un contacto con el cliente registrado. Se da de baja como pérdida y, si lo eliges, se cobra al cliente el cargo «Equipo no devuelto». No se deshace.
+Para **declarar un equipo no recuperado** hacen falta intentos de 2 técnicos distintos que cuenten o un contacto con el cliente registrado. Se da de baja como pérdida y, si lo eliges, se cobra al cliente el cargo «Equipo no devuelto». No se deshace. Toca el equipo (o «Intentos y declaración» en su menú «⋯») para abrir [Declarar no recuperado](./declarar-no-recuperado.md), con cada intento y su verificación con Iris.
 
 «Crear orden de retiro (Iris)» aparece deshabilitado: Argos crea esa orden solo al retirar el servicio; crearla a mano todavía no está disponible.
 

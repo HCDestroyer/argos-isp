@@ -50,6 +50,7 @@ import { implementacionesPlan } from './planes/implementaciones'
 import { redAccesoInicial, sembrarServidoresServicios, type RedAccesoFixtures } from './redAcceso/datos'
 import { nodosPortal } from './nodosPortal/datos'
 import { portalCorteInicial } from './portalCorte/datos'
+import { operacionPmInicial, type OperacionPmFixtures } from './operacionPm/datos'
 import { portalContrasenasIniciales, type PortalContrasenasFixture } from './portalContrasena/datos'
 import { contactosIniciales } from './contactos/datos'
 import { fotosIniciales, revisionesIniciales, servicioPendienteTitular, type FotosRevision } from './titularesEmpresa/datos'
@@ -215,6 +216,8 @@ interface BaseFixtures {
     nodosPortal: Schema<'NodoPortal'>[]
     /** Portal de corte global (A5): destino del NAT de los routers y modo de suspensión. */
     portalCorte: Schema<'PortalCorte'>
+    /** Ajustes y pantallas de «Pendientes del backend» (operación, cobro, reportes, equipos, inventario). */
+    operacionPm: OperacionPmFixtures
     /** Contraseña del portal (A5): la por defecto por empresa y la propia de cada cliente, sin hashes. */
     portalContrasenas: PortalContrasenasFixture
     /** Contactos de los clientes (A1, #281). */
@@ -426,6 +429,7 @@ function inicial(): BaseFixtures {
         facturacionServicios,
         nodosPortal,
         portalCorte: portalCorteInicial(),
+        operacionPm: operacionPmInicial(),
         portalContrasenas: portalContrasenasIniciales(),
         contactos: contactosIniciales(),
         revisionesTitularEmpresa: [],

@@ -169,7 +169,7 @@ describe('portal de corte · pantalla', () => {
         await esperar(() => expect(enBody('portal-corte-puerto')).not.toBeNull())
         await escribir('portal-corte-v4', '190.56.10.20')
         await escribir('portal-corte-puerto', '8088')
-        document.body.querySelector('form')!.requestSubmit()
+        document.body.querySelector<HTMLFormElement>('[data-prueba="form-portal-corte"]')!.requestSubmit()
         await esperar(() => expect(enBody('portal-corte-confirmar')?.textContent).toContain('190.56.10.20:8088'))
         expect(bd.portalCorte.version).toBe(0)
         enBody('portal-corte-confirmar-guardar')!.click()
@@ -182,7 +182,7 @@ describe('portal de corte · pantalla', () => {
         await montar()
         await esperar(() => expect(enBody('portal-corte-v4')).not.toBeNull())
         await escribir('portal-corte-v4', '190.56.10')
-        document.body.querySelector('form')!.requestSubmit()
+        document.body.querySelector<HTMLFormElement>('[data-prueba="form-portal-corte"]')!.requestSubmit()
         await esperar(() => expect(document.body.textContent).toContain('Escribe una IPv4, p. ej. 190.56.10.20, o déjala vacía'))
         expect(enBody('portal-corte-confirmar')).toBeNull()
         expect(bd.portalCorte.version).toBe(0)
@@ -193,7 +193,7 @@ describe('portal de corte · pantalla', () => {
         await esperar(() => expect(enBody('portal-corte-guardar')).not.toBeNull())
         // Otra sesión guarda antes.
         bd.portalCorte = { ...bd.portalCorte, version: 3, origen: 'configuracion', modo_suspension: 'coa', updated_at: '2026-11-06T15:00:00.000Z' }
-        document.body.querySelector('form')!.requestSubmit()
+        document.body.querySelector<HTMLFormElement>('[data-prueba="form-portal-corte"]')!.requestSubmit()
         await esperar(() => expect(document.body.textContent).toContain('Conflicto de versión'))
         const recargar = [...document.body.querySelectorAll('button')].find(b => b.textContent?.includes('Recargar'))
         expect(recargar).toBeDefined()
@@ -213,8 +213,8 @@ describe('portal de corte · pantalla', () => {
         await esperar(() => expect(enBody('portal-corte-v4')).not.toBeNull())
     })
 
-    it('sin portal_corte.configurar se ve en solo lectura, sin «Guardar»', async () => {
-        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'portal_corte.configurar') }
+    it('sin portal_corte.configurar ni ajustes_operacion.editar se ve en solo lectura, sin «Guardar»', async () => {
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'portal_corte.configurar' && p !== 'ajustes_operacion.editar') }
         await montar()
         await esperar(() => expect(document.body.textContent).toContain('Solo lectura'))
         expect(enBody('portal-corte-guardar')).toBeNull()
