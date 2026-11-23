@@ -44,7 +44,7 @@ describe('configuración · cuentas bancarias', () => {
     it('la pantalla lista, filtra inactivas y muestra el botón de crear solo con cuentas_bancarias.editar', async () => {
         const vista = await mountSuspended(PaginaCuentas)
         await esperar(() => expect(vista.findAll('[data-cuenta]')).toHaveLength(4))
-        expect(vista.text()).toContain('Nueva cuenta')
+        expect(vista.text()).toContain('Agregar cuenta')
         expect(vista.text()).toContain('Inactiva')
 
         sesionFixture('fixture-cajero')
@@ -52,6 +52,6 @@ describe('configuración · cuentas bancarias', () => {
         const cajero = await mountSuspended(PaginaCuentas)
         await esperar(() => expect(cajero.findAll('[data-cuenta]').length).toBeGreaterThan(0))
         expect(cajero.find('[aria-label^="Editar"]').exists()).toBe(false)
-        expect(cajero.text()).not.toContain('Nueva cuenta')
+        expect(cajero.text()).not.toContain('Agregar cuenta')
     })
 })

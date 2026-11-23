@@ -43,14 +43,14 @@ const columnas: TableColumn<EntradaRegistro>[] = [
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="registro-sistema"
-        titulo="Registro del sistema"
-        icono="i-lucide-scroll"
+        titulo="Sistema"
+        descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
         <div class="flex flex-col gap-4">
             <div
-                class="grid gap-3 surface-card p-3 sm:grid-cols-3"
+                class="grid gap-3 rounded-2xl border border-(--ax-borde) p-3 sm:grid-cols-3"
                 role="group"
                 aria-label="Filtros del registro"
             >
@@ -156,5 +156,5 @@ const columnas: TableColumn<EntradaRegistro>[] = [
                 />
             </template>
         </div>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

@@ -870,6 +870,16 @@
       "h": 980,
       "page": "portal",
       "title": "Portal · Mis contactos, un contacto y «Está a tu cargo»"
+    },
+    "MarcoMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Marco del panel · teléfono: isla de navegación abajo, acción fija y menú «Más» (interactiva)",
+      "w": 390,
+      "x": 0,
+      "y": 13840
     }
   },
   "createdOnFiles": {
@@ -889,7 +899,8 @@
     "tituloA",
     "tituloRed",
     "tituloConta",
-    "tituloOper"
+    "tituloOper",
+    "tituloPortal"
   ],
   "notes": {
     "titulo": {
@@ -1065,7 +1076,8 @@
     "SistemaCrons.dc.html",
     "PortalFacturas.dc.html",
     "PortalSoporte.dc.html",
-    "PortalContactos.dc.html"
+    "PortalContactos.dc.html",
+    "MarcoMovil.dc.html"
   ],
   "pages": [
     {

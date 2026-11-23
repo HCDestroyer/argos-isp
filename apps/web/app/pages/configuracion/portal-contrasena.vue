@@ -90,12 +90,14 @@ onMounted(cargar)
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="portal-contrasena"
         titulo="Contraseña del portal"
-        icono="i-lucide-key-round"
+        descripcion="La que recibe un cliente nuevo para entrar a su portal"
+        volver="/configuracion/portal-corte"
+        empresas
     >
-        <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
+        <div class="flex w-full max-w-3xl flex-col gap-4">
             <ProblemaAlerta
                 v-if="problemaVisible"
                 :problema="problemaVisible"
@@ -110,12 +112,10 @@ onMounted(cargar)
                 <USkeleton class="h-48" />
             </div>
             <template v-else>
-                <UPageCard
-                    title="Contraseña del portal por defecto"
-                    :description="empresaActiva ? `Empresa: ${empresaActiva.nombre_comercial}` : undefined"
-                    icon="i-lucide-key-round"
-                    variant="subtle"
-                    :ui="{ container: 'gap-4 sm:p-5' }"
+                <ConfiguracionBloque
+                    titulo="Contraseña del portal por defecto"
+                    :descripcion="empresaActiva ? `Empresa: ${empresaActiva.nombre_comercial}` : undefined"
+                    icono="i-lucide-key-round"
                 >
                     <div
                         class="flex flex-wrap items-center gap-2"
@@ -133,7 +133,7 @@ onMounted(cargar)
                     <p class="text-sm text-muted">
                         Con ella entran al portal, con su número de documento, los clientes que aún no eligieron una contraseña propia. Por seguridad nunca se vuelve a mostrar; si la olvidas, escribe una nueva.
                     </p>
-                </UPageCard>
+                </ConfiguracionBloque>
 
                 <UAlert
                     color="info"
@@ -238,5 +238,5 @@ onMounted(cargar)
                 </p>
             </template>
         </div>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
