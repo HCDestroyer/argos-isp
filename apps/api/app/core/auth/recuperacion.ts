@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { ajusteBooleano } from '#core/ajustes_operacion'
-import { TABLAS_CONECTOR_SSO, urlPanel, type ConectorSso } from '#core/sso'
+import { TABLAS_CONECTOR_SSO, origenDeUrl, urlPanel, type ConectorSso } from '#core/sso'
 import { Problema } from '#shared/errores'
 
 /**
@@ -70,14 +70,22 @@ export async function exigirRecuperacionEncendida(cliente: QueryClientContract =
     if (!(await ajusteBooleano('auth.recuperar_contrasena', null, cliente))) throw new RecuperacionApagada()
 }
 
-/** ¿El conector está conectado? (activo y con `url_base`): el login muestra su botón. */
-async function conectorConectado(conector: ConectorSso, cliente: QueryClientContract): Promise<boolean> {
+/**
+ * Dirección pública para entrar por el conector, o null si no está conectado (activo y con
+ * `url_base`). El autologin nace del otro lado (contrato Iris §1.3 «Abrir en Argos», Horus §1.5):
+ * el botón del login lleva a esa app y desde ahí se pide el ticket. Solo el origen de la
+ * `url_base`, nunca credenciales, ruta ni secretos: el endpoint es público.
+ */
+async function urlEntradaConector(
+    conector: ConectorSso,
+    cliente: QueryClientContract,
+): Promise<string | null> {
     const fila = (await cliente
         .from(TABLAS_CONECTOR_SSO[conector])
         .where('id', 1)
         .select('activo', 'url_base')
         .first()) as { activo: boolean; url_base: string | null } | null
-    return Boolean(fila?.activo && fila.url_base)
+    return fila?.activo ? origenDeUrl(fila.url_base) : null
 }
 
 export interface OpcionesLogin {
@@ -86,12 +94,19 @@ export interface OpcionesLogin {
     /** conectores conectados: el login muestra «Entrar con Iris» / «Entrar con Horus» */
     iris: boolean
     horus: boolean
+    /** a dónde lleva cada botón: origen público de la app conectada, o null */
+    iris_url: string | null
+    horus_url: string | null
 }
 
 export async function opcionesLogin(cliente: QueryClientContract = db.connection()): Promise<OpcionesLogin> {
+    const irisUrl = await urlEntradaConector('iris', cliente)
+    const horusUrl = await urlEntradaConector('horus', cliente)
     return {
         recuperar_contrasena: await ajusteBooleano('auth.recuperar_contrasena', null, cliente),
-        iris: await conectorConectado('iris', cliente),
-        horus: await conectorConectado('horus', cliente),
+        iris: irisUrl !== null,
+        horus: horusUrl !== null,
+        iris_url: irisUrl,
+        horus_url: horusUrl,
     }
 }

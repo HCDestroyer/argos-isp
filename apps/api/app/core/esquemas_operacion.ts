@@ -131,6 +131,18 @@ export const OpcionesLogin = definirEsquema(
         recuperar_contrasena: { ...booleano, description: 'Mostrar «¿Olvidaste tu contraseña?»' },
         iris: { ...booleano, description: 'Iris conectado: mostrar «Entrar con Iris»' },
         horus: { ...booleano, description: 'Horus conectado: mostrar «Entrar con Horus»' },
+        iris_url: {
+            ...nulable(texto),
+            description:
+                'Origen público de Iris (`https://host[:puerto]`) al que lleva «Entrar con Iris»; allí se usa ' +
+                '«Abrir en Argos». null si Iris no está conectado. Nunca credenciales ni ruta',
+        },
+        horus_url: {
+            ...nulable(texto),
+            description:
+                'Origen público de Horus al que lleva «Entrar con Horus»; null si Horus no está conectado. ' +
+                'Nunca credenciales ni ruta',
+        },
     }),
 )
 
