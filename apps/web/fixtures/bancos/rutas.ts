@@ -1,6 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
+import { bancosOcultosDe } from '../operacionPm/bancosOrigen'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, registrarAccion, sinSesion, usuariosPorToken, versionCambiada } from '../comun'
 
 type CuentaBancaria = Schema<'CuentaBancaria'>
@@ -57,8 +58,9 @@ function repetida(bancoId: number, numero: string, excepto?: number): CuentaBanc
 }
 
 export const rutasBancos: RutasFixture = {
-    'GET /api/v1/bancos': ({ token }) => (token && usuariosPorToken[token]
-        ? { status: 200, cuerpo: bd.bancos.filter(b => b.activo) }
+    // Sin los que la empresa activa ocultó (decisión 23, `bancos-origen`).
+    'GET /api/v1/bancos': solicitud => (solicitud.token && usuariosPorToken[solicitud.token]
+        ? { status: 200, cuerpo: bd.bancos.filter(b => b.activo && !bancosOcultosDe(solicitud).includes(b.id)) }
         : sinSesion()),
 
     'GET /api/v1/cuentas-bancarias': conPermiso('cuentas_bancarias.ver', (solicitud) => {

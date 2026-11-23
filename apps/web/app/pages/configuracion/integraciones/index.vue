@@ -5,11 +5,11 @@ import type { Problem } from '@argosisp/contracts'
  * Configuración → Integraciones (tablero OperConfigIntegraciones): a la izquierda, los sistemas
  * con los que Argos habla y su estado; a la derecha, el elegido (`?ver=`). Iris y Horus se
  * configuran en su pantalla; pasarela y FEL muestran su estado y llevan a su configuración;
- * SmartOLT y GenieACS esperan su API (`agente/a6-equipos`): credenciales cifradas y «Probar
- * conexión» quedan listos sin datos inventados. Cada lectura va por separado: si una falla, las
+ * SmartOLT y GenieACS se configuran aquí por empresa (`ConfiguracionEquipos`): credenciales
+ * cifradas que no vuelven y «Probar conexión» de verdad. Cada lectura va por separado: si una falla, las
  * otras se ven igual.
  */
-definePageMeta({ permiso: ['horus.ver', 'iris.ver'] })
+definePageMeta({ permiso: ['horus.ver', 'iris.ver', 'equipos.ver'] })
 
 useHead({ title: 'Integraciones · ArgosIsp' })
 
@@ -60,7 +60,16 @@ const avisoCanjeTarjeta = computed(() => (conectorIris.value ? avisoCanjeIris(co
 const avisoReconexionTarjeta = computed(() => (conectorIris.value ? avisoReconexionIris(conectorIris.value) : null))
 const textoDesconexionTarjeta = computed(() => (avisoCanjeTarjeta.value?.estado === 'desconectado' ? textoDesconexionIris(avisoCanjeTarjeta.value) : null))
 
+watch(useEmpresaActiva().empresaId, () => {
+    if (puede('equipos.ver')) {
+        void resumen.cargarEquipos()
+    }
+})
+
 onMounted(() => {
+    if (puede('equipos.ver')) {
+        void resumen.cargarEquipos()
+    }
     if (puede('fel.ver')) {
         void resumen.cargarFel()
     }
@@ -327,29 +336,11 @@ onMounted(() => {
                     :descripcion="ver === 'smartolt' ? 'Estado de las ONU y su señal en la ficha del servicio.' : 'Configuración remota de los equipos del cliente (TR-069): wifi, reinicio y firmware.'"
                     :data-prueba="`tarjeta-${ver}`"
                 >
-                    <ConfiguracionPendiente
-                        etiqueta="Dirección y credenciales"
-                        ayuda="Se guardan cifradas y nunca vuelven a mostrarse; «Probar conexión» dice si responde."
-                        fabrica="Sin conectar"
+                    <ConfiguracionEquipos
+                        :key="ver"
+                        :sistema="ver"
+                        @cambio="config => resumen.equipos.value = config"
                     />
-                    <div class="flex flex-wrap gap-2">
-                        <UButton
-                            label="Guardar credenciales"
-                            icon="i-lucide-key-round"
-                            color="neutral"
-                            variant="outline"
-                            disabled
-                            title="Disponible en una próxima versión."
-                        />
-                        <UButton
-                            label="Probar conexión"
-                            icon="i-lucide-plug-zap"
-                            color="neutral"
-                            variant="outline"
-                            disabled
-                            title="Disponible en una próxima versión."
-                        />
-                    </div>
                 </ConfiguracionBloque>
 
                 <ConfiguracionBloque

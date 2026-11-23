@@ -3,11 +3,17 @@ import type { Problem } from '@argosisp/contracts'
 import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
 
 /**
- * Configuración · Portal de corte (`GET`/`PUT /corte/configuracion`, A5): IPv4, IPv6 y puerto a los
- * que el NAT de los routers manda la navegación de los suspendidos, y cómo se suspende la sesión
- * (desconectar o CoA). Una sola para la instalación; la página por empresa es su `url_corte`.
- * `version` 0 = nunca se guardó (valores iniciales del servidor). Ver con `portal_corte.ver`,
- * guardar con `portal_corte.configurar`; 409 con «Recargar».
+ * Configuración · Red y portal (tablero OperConfigRed). Tres pestañas en la tarjeta:
+ *
+ * - **Portal de corte** (`GET`/`PUT /corte/configuracion`, A5): IPv4, IPv6 y puerto a los que el
+ *   NAT de los routers manda a los suspendidos, y cómo se suspende la sesión. Una sola para la
+ *   instalación. `version` 0 = nunca se guardó. Más la vigencia del código de identificación.
+ * - **Caídas y fallas generales** y **Retiro, historial de IP y acceso**: los ajustes de operación
+ *   (`GET`/`PUT /ajustes-operacion`, A1, decisiones 17, 19, 22, 28 y 31).
+ *
+ * «Ajustes para» elige «Todas las empresas» (global) o una empresa: lo de la empresa manda sobre
+ * «Todas»; las claves solo globales se ven bloqueadas en una empresa. «Guardar» guarda lo que
+ * cambió en las dos APIs.
  */
 definePageMeta({ permiso: 'portal_corte.ver' })
 
@@ -29,7 +35,26 @@ const problemaGuardar = ref<Problem | null>(null)
 const pendiente = shallowRef<SalidaPortalCorte | null>(null)
 const confirmar = ref(false)
 
-const editable = computed(() => puede('portal_corte.configurar'))
+/* Pestañas y alcance («Ajustes para»). */
+type PestanaRed = 'corte' | 'caidas' | 'otros'
+const route = useRoute()
+const router = useRouter()
+const pestanaRed = computed<PestanaRed>({
+    get: () => (route.query.pestana === 'caidas' || route.query.pestana === 'otros' ? route.query.pestana : 'corte'),
+    set: (valor) => {
+        void router.replace({ query: { ...route.query, pestana: valor === 'corte' ? undefined : valor } })
+    },
+})
+const pestanasRed = [
+    { label: 'Portal de corte', value: 'corte', icon: 'i-lucide-ban' },
+    { label: 'Caídas y fallas generales', value: 'caidas', icon: 'i-lucide-triangle-alert' },
+    { label: 'Retiro, historial de IP y acceso', value: 'otros', icon: 'i-lucide-history' },
+]
+const { empresas: listaEmpresas } = useEmpresaActiva()
+/** `null` = «Todas las empresas» (los ajustes globales). */
+const ambito = ref<number | null>(null)
+
+const editable = computed(() => puede('portal_corte.configurar') && ambito.value === null)
 const sinGuardar = computed(() => config.value?.origen === 'entorno')
 const sinCambios = computed(() => config.value !== null && JSON.stringify(entradaPortalCorte(config.value)) === JSON.stringify({ ...estado }))
 const ayudaIpv4 = computed(() => (estado.portal_v4.trim() === ''
@@ -134,12 +159,159 @@ async function cargarNodos() {
     problemaNodos.value = resultado.ok ? null : resultado.problema
 }
 
+/* Ajustes de operación del alcance elegido. */
+const verAjustes = computed(() => puede('ajustes_operacion.ver'))
+const editaAjustes = computed(() => puede('ajustes_operacion.editar'))
+const ajustes = shallowRef<AjustesOperacion | null>(null)
+const cargandoAjustes = ref(false)
+const problemaAjustes = ref<Problem | null>(null)
+const problemaGuardarAjustes = ref<Problem | null>(null)
+const guardandoAjustes = ref(false)
+const valores = reactive<Record<string, ValorAjusteOperacion>>({})
+const formCorteAj = useTemplateRef('formCorteAj')
+const formCaidas = useTemplateRef('formCaidas')
+const formOtros = useTemplateRef('formOtros')
+
+const definicion = (clave: ClaveAjusteOperacion) => ajustes.value?.definiciones.find(d => d.clave === clave) ?? null
+const esquemaAjustes = computed(() => (ajustes.value ? esquemaAjustesOperacion(ajustes.value.definiciones) : esquemaAjustesOperacion([])))
+
+function rellenarAjustes(datos: AjustesOperacion) {
+    ajustes.value = datos
+    for (const clave of Object.keys(valores)) {
+        Reflect.deleteProperty(valores, clave)
+    }
+    for (const def of datos.definiciones) {
+        valores[def.clave] = valorAjuste(def, datos.efectivo[def.clave])
+    }
+    for (const f of [formCorteAj.value, formCaidas.value, formOtros.value]) {
+        f?.clear()
+    }
+}
+
+async function cargarAjustes() {
+    if (!verAjustes.value) {
+        return
+    }
+    cargandoAjustes.value = true
+    const pedido = ambito.value
+    const r = await useAjustesOperacion().ver(pedido)
+    if (pedido !== ambito.value) {
+        return
+    }
+    cargandoAjustes.value = false
+    problemaAjustes.value = r.ok ? null : r.problema
+    problemaGuardarAjustes.value = null
+    if (r.ok) {
+        rellenarAjustes(r.data)
+    }
+    else {
+        ajustes.value = null
+    }
+}
+
+watch(ambito, () => {
+    ajustes.value = null
+    void cargarAjustes()
+})
+
+/** Lo que cambió y se puede guardar en este alcance (en una empresa, solo las claves por empresa). */
+const cambiosAj = computed(() => {
+    const datos = ajustes.value
+    if (!datos || !editaAjustes.value) {
+        return {}
+    }
+    const permitidos = datos.definiciones.filter(d => ambito.value === null || d.por_empresa).map(d => d.clave)
+    const cambios = cambiosAjustes(datos.efectivo, valores)
+    return Object.fromEntries(Object.entries(cambios).filter(([clave]) => permitidos.includes(clave)))
+})
+const hayCambiosAj = computed(() => Object.keys(cambiosAj.value).length > 0)
+const propio = (clave: string) => ambito.value !== null && ajustes.value !== null && clave in ajustes.value.empresa
+
+function erroresAjustes(problema: Problem) {
+    return (problema.errors ?? []).map(e => ({ name: e.field.replace(/^valores\./, ''), message: e.message }))
+}
+
+async function enviarAjustes(cambios: ValoresAjustesOperacion, texto: string) {
+    guardandoAjustes.value = true
+    problemaGuardarAjustes.value = null
+    const r = await useAjustesOperacion().guardar(ambito.value, cambios)
+    guardandoAjustes.value = false
+    if (!r.ok) {
+        problemaGuardarAjustes.value = r.problema
+        if (r.problema.status === 422) {
+            const errores = erroresAjustes(r.problema)
+            for (const f of [formCorteAj.value, formCaidas.value, formOtros.value]) {
+                f?.setErrors(errores)
+            }
+        }
+        return false
+    }
+    rellenarAjustes(r.data)
+    toast.add({ title: texto, description: ambito.value === null ? 'Para todas las empresas.' : `Solo para ${nombreAmbito.value}.`, icon: 'i-lucide-circle-check', color: 'success' })
+    return true
+}
+
+function heredar(clave: string) {
+    void enviarAjustes({ [clave]: null }, 'Vuelve a usar el ajuste de «Todas»')
+}
+
+const nombreAmbito = computed(() => listaEmpresas.value.find(e => e.id === ambito.value)?.nombre_comercial ?? 'todas las empresas')
+
+/** Pestaña donde está una clave (para llevar al usuario al error). */
+function pestanaDe(clave: string): PestanaRed {
+    return clave.startsWith('caidas.') || clave.startsWith('falla_general.') ? 'caidas' : clave === 'codigo_corte.vigencia_min' ? 'corte' : 'otros'
+}
+
+/** «Guardar»: valida los ajustes y guarda lo que cambió del portal y de los ajustes. */
+async function guardarTodo() {
+    if (hayCambiosAj.value) {
+        const validos = await Promise.all([formCorteAj.value, formCaidas.value, formOtros.value].map(f => f?.validate({ silent: true }) ?? true))
+        if (validos.some(v => v === false)) {
+            const clave = Object.keys(cambiosAj.value)[0]
+            const conError = [formCorteAj, formCaidas, formOtros].findIndex(f => f.value?.getErrors().length)
+            pestanaRed.value = conError >= 0 ? (['corte', 'caidas', 'otros'] as const)[conError]! : pestanaDe(clave ?? '')
+            return
+        }
+    }
+    const portalCambio = editable.value && config.value !== null && (!sinCambios.value || sinGuardar.value)
+    if (hayCambiosAj.value) {
+        const ok = await enviarAjustes(cambiosAj.value, 'Ajustes guardados')
+        if (!ok) {
+            return
+        }
+    }
+    if (portalCambio && (!sinCambios.value || sinGuardar.value)) {
+        await formulario.value?.submit()
+    }
+}
+
+function descartar() {
+    if (config.value) {
+        rellenar(config.value)
+    }
+    if (ajustes.value) {
+        rellenarAjustes(ajustes.value)
+    }
+}
+
+const ejemploFalla = computed(() => {
+    const modo = String(valores['falla_general.modo'] ?? 'porcentaje')
+    const umbral = Number(valores['falla_general.umbral'] ?? 0)
+    const minimo = Number(valores['falla_general.minimo_servicios'] ?? 0)
+    const ventana = Number(valores['falla_general.ventana_min'] ?? 0)
+    if (!umbral || !minimo || !ventana) {
+        return null
+    }
+    return { total: 400, caidos: umbralFallaGeneral(400, modo, umbral, minimo), ventana }
+})
+
 function reintentarGuardar() {
     void formulario.value?.submit()
 }
 
 onMounted(() => {
     void cargar()
+    void cargarAjustes()
     if (puede('routers.ver')) {
         void cargarRouters()
     }
@@ -156,22 +328,233 @@ onMounted(() => {
     <ConfiguracionMarco
         id="configuracion-portal-corte"
         titulo="Red y portal"
-        descripcion="A dónde van los clientes suspendidos y cómo entra cada cliente a su portal"
+        descripcion="A dónde van los clientes suspendidos, caídas y fallas generales, y otros ajustes de operación"
     >
+        <template
+            v-if="verAjustes && listaEmpresas.length > 1"
+            #alcance
+        >
+            <div
+                class="flex flex-wrap items-center gap-2"
+                data-prueba="ajustes-para"
+            >
+                <span class="text-sm text-muted">Ajustes para</span>
+                <UButton
+                    label="Todas las empresas"
+                    icon="i-lucide-globe"
+                    :color="ambito === null ? 'primary' : 'neutral'"
+                    :variant="ambito === null ? 'solid' : 'outline'"
+                    :aria-pressed="ambito === null"
+                    data-ambito="todas"
+                    @click="ambito = null"
+                />
+                <UButton
+                    v-for="empresa in listaEmpresas"
+                    :key="empresa.id"
+                    :label="empresa.nombre_comercial"
+                    icon="i-lucide-building"
+                    :color="ambito === empresa.id ? 'primary' : 'neutral'"
+                    :variant="ambito === empresa.id ? 'solid' : 'outline'"
+                    :aria-pressed="ambito === empresa.id"
+                    :data-ambito="empresa.id"
+                    @click="ambito = empresa.id"
+                />
+                <span class="text-xs text-muted">Lo que cambies en una empresa manda sobre «Todas»</span>
+            </div>
+        </template>
+
+        <template
+            v-if="verAjustes"
+            #cabecera
+        >
+            <UTabs
+                v-model="pestanaRed"
+                :items="pestanasRed"
+                variant="pill"
+                color="neutral"
+                :content="false"
+                class="min-w-0 max-w-full"
+                :ui="{
+                    list: 'w-auto max-w-full justify-start self-start overflow-x-auto rounded-xl bg-(--ax-panel) p-1',
+                    indicator: 'rounded-lg bg-(--ax-tarjeta) shadow-sm ring ring-(--ax-borde)',
+                    trigger: 'shrink-0 grow-0 rounded-lg px-3 text-muted data-[state=active]:text-primary',
+                    leadingIcon: 'size-4',
+                }"
+                data-prueba="pestanas-red"
+            />
+        </template>
+
         <ProblemaAlerta
-            v-if="problema"
+            v-if="problemaGuardarAjustes && problemaGuardarAjustes.status !== 422"
+            :problema="problemaGuardarAjustes"
+            :reintentar="guardarTodo"
+            :reintentando="guardandoAjustes"
+        />
+
+        <!-- Caídas y fallas generales -->
+        <div
+            v-if="verAjustes"
+            v-show="pestanaRed === 'caidas'"
+            class="flex flex-col gap-4"
+            data-prueba="pestana-caidas"
+        >
+            <ProblemaAlerta
+                v-if="problemaAjustes"
+                :problema="problemaAjustes"
+                :reintentar="cargarAjustes"
+                :reintentando="cargandoAjustes"
+            />
+            <USkeleton
+                v-else-if="!ajustes"
+                class="h-56"
+            />
+            <UForm
+                v-else
+                ref="formCaidas"
+                :schema="esquemaAjustes"
+                :state="valores"
+                :disabled="guardandoAjustes"
+                class="grid items-start gap-4 xl:grid-cols-2"
+            >
+                <ConfiguracionBloque
+                    titulo="Caídas repetidas de un servicio"
+                    icono="i-lucide-activity"
+                >
+                    <template
+                        v-for="clave in (['caidas.activo', 'caidas.umbral', 'caidas.ventana_min'] as const)"
+                        :key="clave"
+                    >
+                        <AjusteOperacionFila
+                            v-if="definicion(clave)"
+                            v-model="valores[clave]!"
+                            :definicion="definicion(clave)!"
+                            :empresa-id="ambito"
+                            :propio="propio(clave)"
+                            :editable="editaAjustes"
+                            @heredar="heredar(clave)"
+                        />
+                    </template>
+                    <template #pie>
+                        De fábrica: 3 caídas en 60 minutos. Si el servicio está en una falla general, no se abre su ticket: va al ticket general.
+                    </template>
+                </ConfiguracionBloque>
+                <ConfiguracionBloque
+                    titulo="Falla general"
+                    icono="i-lucide-triangle-alert"
+                >
+                    <template
+                        v-for="clave in (['falla_general.activo', 'falla_general.modo', 'falla_general.umbral', 'falla_general.minimo_servicios', 'falla_general.ventana_min'] as const)"
+                        :key="clave"
+                    >
+                        <AjusteOperacionFila
+                            v-if="definicion(clave)"
+                            v-model="valores[clave]!"
+                            :definicion="clave === 'falla_general.umbral' && valores['falla_general.modo'] === 'cantidad' ? { ...definicion(clave)!, descripcion: 'Servicios caídos del router, OLT, PON o zona' } : definicion(clave)!"
+                            :empresa-id="ambito"
+                            :propio="propio(clave)"
+                            :editable="editaAjustes"
+                            @heredar="heredar(clave)"
+                        />
+                    </template>
+                    <UAlert
+                        v-if="ejemploFalla"
+                        color="primary"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        class="mt-2"
+                        :description="`Ejemplo: con un router de ${ejemploFalla.total} servicios, se abre si se caen ${ejemploFalla.caidos} o más en ${ejemploFalla.ventana} ${ejemploFalla.ventana === 1 ? 'minuto' : 'minutos'}.`"
+                        data-prueba="ejemplo-falla"
+                    />
+                </ConfiguracionBloque>
+            </UForm>
+        </div>
+
+        <!-- Retiro, historial de IP y acceso -->
+        <div
+            v-if="verAjustes"
+            v-show="pestanaRed === 'otros'"
+            class="flex flex-col gap-4"
+            data-prueba="pestana-otros"
+        >
+            <ProblemaAlerta
+                v-if="problemaAjustes"
+                :problema="problemaAjustes"
+                :reintentar="cargarAjustes"
+                :reintentando="cargandoAjustes"
+            />
+            <USkeleton
+                v-else-if="!ajustes"
+                class="h-56"
+            />
+            <UForm
+                v-else
+                ref="formOtros"
+                :schema="esquemaAjustes"
+                :state="valores"
+                :disabled="guardandoAjustes"
+                class="grid items-start gap-4 xl:grid-cols-2"
+            >
+                <div class="flex min-w-0 flex-col gap-4">
+                    <ConfiguracionBloque
+                        titulo="Retiro de servicios"
+                        icono="i-lucide-power"
+                    >
+                        <AjusteOperacionFila
+                            v-if="definicion('retiro.orden_iris')"
+                            v-model="valores['retiro.orden_iris']!"
+                            :definicion="definicion('retiro.orden_iris')!"
+                            :empresa-id="ambito"
+                            :propio="false"
+                            :editable="editaAjustes"
+                        />
+                    </ConfiguracionBloque>
+                    <ConfiguracionBloque
+                        titulo="Quién tenía una IP"
+                        icono="i-lucide-network"
+                    >
+                        <AjusteOperacionFila
+                            v-if="definicion('ip_historial.retencion_dias')"
+                            v-model="valores['ip_historial.retencion_dias']!"
+                            :definicion="definicion('ip_historial.retencion_dias')!"
+                            :empresa-id="ambito"
+                            :propio="false"
+                            :editable="editaAjustes"
+                        />
+                        <template #pie>
+                            Argos busca en sus propias sesiones. Lo más viejo lo guarda Horus: la búsqueda te lleva allá.
+                        </template>
+                    </ConfiguracionBloque>
+                </div>
+                <ConfiguracionBloque
+                    titulo="Acceso al panel"
+                    icono="i-lucide-lock"
+                >
+                    <AjusteOperacionFila
+                        v-if="definicion('auth.recuperar_contrasena')"
+                        v-model="valores['auth.recuperar_contrasena']!"
+                        :definicion="definicion('auth.recuperar_contrasena')!"
+                        :empresa-id="ambito"
+                        :propio="false"
+                        :editable="editaAjustes"
+                    />
+                </ConfiguracionBloque>
+            </UForm>
+        </div>
+
+        <ProblemaAlerta
+            v-if="pestanaRed === 'corte' && problema"
             :problema="problema"
             :reintentar="cargar"
             :reintentando="cargando"
         />
         <div
-            v-else-if="!config"
+            v-else-if="pestanaRed === 'corte' && !config"
             class="flex flex-col gap-3"
         >
             <USkeleton class="h-10" />
             <USkeleton class="h-56" />
         </div>
-        <template v-else>
+        <template v-else-if="pestanaRed === 'corte' && config">
             <UAlert
                 v-if="sinGuardar"
                 color="info"
@@ -186,8 +569,8 @@ onMounted(() => {
                 color="neutral"
                 variant="subtle"
                 icon="i-lucide-lock"
-                title="Solo lectura"
-                description="Solo un administrador puede cambiar esta configuración."
+                :title="ambito === null ? 'Solo lectura' : 'El portal de corte es para todas las empresas'"
+                :description="ambito === null ? 'Solo un administrador puede cambiar esta configuración.' : 'Cámbialo en «Todas las empresas». Aquí solo se ajusta la vigencia del código de esta empresa.'"
             />
 
             <div class="grid gap-4 xl:grid-cols-2">
@@ -199,6 +582,7 @@ onMounted(() => {
                         :state="estado"
                         :disabled="!editable || enviando"
                         class="flex flex-col gap-4"
+                        data-prueba="form-portal-corte"
                         @submit="alEnviar"
                     >
                         <ConfiguracionBloque
@@ -337,24 +721,34 @@ onMounted(() => {
                                 to="/routers"
                             />
                         </ConfiguracionFila>
-                        <ConfiguracionPendiente
-                            etiqueta="Cuánto dura el código de corte"
-                            ayuda="Pasado ese tiempo el cliente pide uno nuevo desde la página de corte."
-                            fabrica="15 min de fábrica · de 5 a 60 min"
-                            :decision="19"
-                        />
-                    </ConfiguracionBloque>
-
-                    <ConfiguracionBloque
-                        titulo="Caídas repetidas"
-                        icono="i-lucide-activity"
-                    >
-                        <ConfiguracionPendiente
-                            etiqueta="Cuándo avisar que un servicio se cae seguido"
-                            ayuda="Alerta en Argos y un ticket en Iris por servicio; si caen muchos del mismo router, OLT o zona, un solo ticket general."
-                            fabrica="3 caídas en 60 min de fábrica"
-                            :decision="31"
-                        />
+                        <template v-if="verAjustes">
+                            <ProblemaAlerta
+                                v-if="problemaAjustes"
+                                :problema="problemaAjustes"
+                                :reintentar="cargarAjustes"
+                                :reintentando="cargandoAjustes"
+                            />
+                            <USkeleton
+                                v-else-if="!ajustes"
+                                class="h-12 w-full"
+                            />
+                            <UForm
+                                v-else-if="definicion('codigo_corte.vigencia_min')"
+                                ref="formCorteAj"
+                                :schema="esquemaAjustes"
+                                :state="valores"
+                                :disabled="guardandoAjustes"
+                            >
+                                <AjusteOperacionFila
+                                    v-model="valores['codigo_corte.vigencia_min']!"
+                                    :definicion="definicion('codigo_corte.vigencia_min')!"
+                                    :empresa-id="ambito"
+                                    :propio="propio('codigo_corte.vigencia_min')"
+                                    :editable="editaAjustes"
+                                    @heredar="heredar('codigo_corte.vigencia_min')"
+                                />
+                            </UForm>
+                        </template>
                     </ConfiguracionBloque>
                 </div>
 
@@ -507,7 +901,7 @@ onMounted(() => {
         </template>
 
         <template
-            v-if="config"
+            v-if="config || ajustes"
             #pie
         >
             <span
@@ -519,27 +913,26 @@ onMounted(() => {
                     class="size-4 shrink-0 text-warning"
                 />
                 Cambiar la IP o el puerto reescribe las reglas de corte en todos los routers.
-                <template v-if="config.updated_at && !sinGuardar">
+                <template v-if="config?.updated_at && !sinGuardar">
                     <span data-prueba="portal-corte-guardado">Guardado el {{ formatearFechaHora(config.updated_at) }}.</span>
                 </template>
             </span>
-            <template v-if="editable">
+            <template v-if="editable || editaAjustes">
                 <UButton
                     label="Descartar"
                     color="neutral"
                     variant="ghost"
-                    :disabled="sinCambios || enviando"
-                    @click="config && rellenar(config)"
+                    :disabled="(sinCambios && !hayCambiosAj) || enviando || guardandoAjustes"
+                    @click="descartar"
                 />
                 <UButton
-                    type="submit"
-                    :form="idFormulario"
-                    :label="sinGuardar && sinCambios ? 'Guardar estos valores' : cambiaRed ? 'Guardar y actualizar routers' : 'Guardar'"
+                    :label="editable && sinGuardar && sinCambios && !hayCambiosAj ? 'Guardar estos valores' : editable && cambiaRed ? 'Guardar y actualizar routers' : 'Guardar'"
                     icon="i-lucide-check"
-                    :loading="enviando"
-                    :disabled="!sinGuardar && sinCambios"
+                    :loading="enviando || guardandoAjustes"
+                    :disabled="!(editable && (sinGuardar || !sinCambios)) && !hayCambiosAj"
                     class="glow-brand"
                     data-prueba="portal-corte-guardar"
+                    @click="guardarTodo"
                 />
             </template>
         </template>

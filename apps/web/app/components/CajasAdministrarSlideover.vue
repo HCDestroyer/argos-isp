@@ -26,7 +26,7 @@ const itemsFormato = FORMATOS_IMPRESION.map(f => ({ label: f.etiqueta, value: f.
 
 function cambiarFormato(caja: Caja, valor: unknown) {
     if (valor === 'pos_80' || valor === 'carta') {
-        impresion.guardar(caja.id, valor)
+        void impresion.guardar(caja.id, valor)
     }
 }
 </script>

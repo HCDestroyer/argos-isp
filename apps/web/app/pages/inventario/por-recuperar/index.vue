@@ -80,6 +80,7 @@ function menuEquipo(e: EquipoServicio) {
     const acciones = accionesEquipo(e, puede).filter(a => a !== 'recibir')
     return [
         [
+            { label: 'Intentos y declaración', icon: 'i-lucide-shield-check', to: `/inventario/por-recuperar/${e.id}` },
             { label: 'Ver historial', icon: 'i-lucide-history', to: `/inventario/unidades?unidad=${e.id}` },
             ...(e.servicio_id ? [{ label: 'Abrir el servicio', icon: ICONOS.abrir, to: enlace(`/servicios/${e.servicio_id}#equipos`) }] : []),
         ],
@@ -173,7 +174,13 @@ function cobroDecidido(titulo: string) {
                                     />
                                 </span>
                                 <div class="flex min-w-0 flex-col">
-                                    <span class="truncate font-semibold text-highlighted">{{ equipo.producto_nombre }} · <span class="font-mono">{{ identificacionUnidad(equipo) }}</span></span>
+                                    <ULink
+                                        :to="`/inventario/por-recuperar/${equipo.id}`"
+                                        class="truncate font-semibold text-highlighted hover:underline"
+                                        :data-intentos="identificacionUnidad(equipo)"
+                                    >
+                                        {{ equipo.producto_nombre }} · <span class="font-mono">{{ identificacionUnidad(equipo) }}</span>
+                                    </ULink>
                                     <span class="truncate text-xs text-warning">{{ subtitulo(equipo) }}</span>
                                     <span
                                         v-if="pendienteDe(equipo.id) && faltaParaDeclarar(pendienteDe(equipo.id)!)"
