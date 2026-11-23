@@ -163,7 +163,10 @@ const TEXTO_ATENDER: Record<Atender['tono'], string> = {
                         class="size-4"
                     />{{ estado.etiqueta }}
                 </dd>
-                <dd class="truncate text-xs text-muted">
+                <dd
+                    class="truncate text-xs text-muted"
+                    data-prueba="router-ultimo-contacto"
+                >
                     {{ router.ultimo_contacto ? haceCuanto(router.ultimo_contacto) : 'nunca respondió' }}
                 </dd>
             </div>

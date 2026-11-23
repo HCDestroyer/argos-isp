@@ -409,8 +409,12 @@ function hace(marca: number | null): string {
                                         variant="subtle"
                                         size="sm"
                                         class="rounded-full"
+                                        :data-prueba="`en-linea-${row.original.id}`"
                                     />
-                                    <span class="text-xs text-muted">{{ detalleContactoRouter(row.original) }}</span>
+                                    <span
+                                        class="text-xs text-muted"
+                                        :data-prueba="`ultimo-contacto-${row.original.id}`"
+                                    >{{ detalleContactoRouter(row.original) }}</span>
                                 </span>
                                 <span
                                     v-if="avisoFila(row.original)"
