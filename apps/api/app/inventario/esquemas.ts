@@ -282,6 +282,21 @@ const camposUnidad = {
 
 export const Unidad = definirEsquema('UnidadInventario', objeto(camposUnidad, ['estado_equipo']))
 
+export const OrdenRetiroSolicitada = definirEsquema(
+    'OrdenRetiroSolicitada',
+    objeto({
+        unidad_id: id,
+        servicio_id: id,
+        empresa_id: id,
+        cliente_id: id,
+        evento: {
+            ...enumerado(['inventario.equipo_por_recuperar']),
+            description:
+                'Webhook que pide la orden a Iris (contratos/iris.md §2.3); Iris no crea otra si ya hay una abierta para la unidad',
+        },
+    }),
+)
+
 const HistorialKardexUnidad = lista(
     objeto(
         {

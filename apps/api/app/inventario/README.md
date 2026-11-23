@@ -81,7 +81,9 @@ desde XML FEL, PDF o imagen con IA; la bodega del técnico e Iris).
 
 - Emite: `inventario.movimiento_registrado` (cada movimiento), `inventario.existencia_minima` (la
   existencia total cruza el mínimo hacia abajo), `inventario.comodato_asignado`,
-  `inventario.comodato_devuelto`, `inventario.equipo_por_recuperar`, `inventario.conteo_cerrado` (y
+  `inventario.comodato_devuelto`, `inventario.equipo_por_recuperar` (al retirar el servicio y, a mano,
+  con `inventario.solicitar_orden_retiro`: `POST /servicios/:id/equipos/:unidad_id/orden-retiro`, el
+  webhook que pide la orden de retiro a Iris), `inventario.conteo_cerrado` (y
   `activo.dado_de_baja` al devolver o perder un comodato); fase D: `inventario.traslado_enviado`,
   `inventario.traslado_recibido`, `inventario.traslado_cancelado` e `inventario.ia_config_cambiada`;
   A48: `inventario.unidad_estado_cambiado`, `inventario.equipo_cambiado` e `inventario.recuperacion_intentada`

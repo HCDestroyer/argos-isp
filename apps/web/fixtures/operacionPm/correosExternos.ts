@@ -11,8 +11,12 @@ import { texto } from './comun'
 export const rutasCorreosExternos: RutasFixture = {
     'GET /api/v1/reportes/correos-externos': conPermiso('reportes.programar_envio', (solicitud) => {
         const activo = solicitud.query.get('activo')
-        const filas = bd.operacionPm.correosExternos.filter(c => activo === null || c.activo === (activo === 'true'))
-        return { status: 200, cuerpo: { data: filas } }
+        const nombre = (id: number | null) => (id === null ? null : Object.values(usuariosPorToken).find(u => u.id === id)?.nombre ?? null)
+        const data: Schema<'CorreoExternoReportesListado'>[] = bd.operacionPm.correosExternos
+            .filter(c => activo === null || c.activo === (activo === 'true'))
+            // Los envíos programados del fixture no guardan destinatarios externos: 0 hasta que los tengan.
+            .map(c => ({ ...c, aprobado_por_nombre: nombre(c.aprobado_por), retirado_por_nombre: nombre(c.retirado_por), envios_programados: 0, envios_activos: 0 }))
+        return { status: 200, cuerpo: { data } }
     }),
 
     'POST /api/v1/reportes/correos-externos': conPermiso('reportes.aprobar_correo_externo', conIdempotencia((solicitud) => {

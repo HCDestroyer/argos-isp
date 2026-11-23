@@ -149,17 +149,33 @@ export const rutasAjustesOperacionPm: RutasFixture = {
         if (!empresa.ok) {
             return empresa.falla
         }
-        const { dias_baja: dias, version } = cuerpoObjeto(solicitud)
+        const cuerpo = cuerpoObjeto(solicitud)
+        const actual = panelDe(empresa.id)
+        const dias = cuerpo.dias_baja ?? actual.dias_baja
         if (typeof dias !== 'number' || !Number.isInteger(dias) || dias < 1 || dias > 365) {
             return datosInvalidos([{ field: 'dias_baja', message: 'El campo dias_baja debe estar entre 1 y 365', rule: 'range' }])
         }
-        const actual = panelDe(empresa.id)
-        if (version !== actual.version) {
+        const avisoActivo = cuerpo.aviso_pc_activo ?? actual.aviso_pc_activo
+        if (typeof avisoActivo !== 'boolean') {
+            return datosInvalidos([{ field: 'aviso_pc_activo', message: 'El campo aviso_pc_activo debe ser verdadero o falso', rule: 'boolean' }])
+        }
+        const umbrales = Array.isArray(cuerpo.aviso_pc_umbrales) ? cuerpo.aviso_pc_umbrales.map(String) : actual.aviso_pc_umbrales
+        const cambianUmbrales = JSON.stringify(umbrales) !== JSON.stringify(actual.aviso_pc_umbrales)
+        if (cuerpo.version !== actual.version) {
             return versionCambiada()
         }
-        const nuevo: Schema<'AjustesPanelFinanciero'> = { empresa_id: empresa.id, dias_baja: dias, fabrica: false, version: actual.version + 1 }
+        const nuevo: Schema<'AjustesPanelFinanciero'> = {
+            ...actual,
+            dias_baja: dias,
+            aviso_pc_activo: avisoActivo,
+            aviso_pc_umbrales: umbrales,
+            aviso_pc_umbrales_desde: cambianUmbrales ? new Date().toISOString().slice(0, 10) : actual.aviso_pc_umbrales_desde,
+            aviso_pc_umbrales_nivel: cambianUmbrales ? 'empresa' : actual.aviso_pc_umbrales_nivel,
+            fabrica: false,
+            version: actual.version + 1,
+        }
         bd.operacionPm.panelFinanciero[empresa.id] = nuevo
-        registrarAccion(solicitud, 'panel_financiero.configurar', { tipo: 'panel_financiero', id: empresa.id }, { dias_baja: dias })
+        registrarAccion(solicitud, 'panel_financiero.configurar', { tipo: 'panel_financiero', id: empresa.id }, { dias_baja: dias, aviso_pc_activo: avisoActivo })
         return { status: 200, cuerpo: nuevo }
     })),
 }
@@ -176,5 +192,15 @@ function ajustesCobroDe(empresaId: number): Schema<'AjustesCobro'> {
 }
 
 function panelDe(empresaId: number): Schema<'AjustesPanelFinanciero'> {
-    return bd.operacionPm.panelFinanciero[empresaId] ?? { empresa_id: empresaId, dias_baja: 60, fabrica: true, version: 1 }
+    return bd.operacionPm.panelFinanciero[empresaId] ?? {
+        empresa_id: empresaId,
+        dias_baja: 60,
+        aviso_pc_activo: true,
+        aviso_pc_umbrales: ['80', '95', '100'],
+        aviso_pc_umbrales_desde: null,
+        aviso_pc_umbrales_nivel: 'paquete',
+        aviso_pc_aplica: false,
+        fabrica: true,
+        version: 1,
+    }
 }

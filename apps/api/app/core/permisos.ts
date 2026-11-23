@@ -230,7 +230,7 @@ export const PERMISOS = {
     'panel_financiero.ver':
         'Ver el panel financiero: ingreso mensual recurrente, bajas, ingreso promedio, efectivo (con libro.ver) y alertas',
     'panel_financiero.configurar':
-        'Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja)',
+        'Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja y aviso de pequeño contribuyente)',
     'inicio.configurar_rol': 'Elegir la pantalla de inicio de un rol (panel financiero o día a día)',
     'inicio.configurar_usuario': 'Elegir la pantalla de inicio de otro usuario',
     'reportes.programar_envio':
@@ -357,6 +357,9 @@ export const PERMISOS = {
     'inventario.devolver_comodato': 'Recibir de vuelta un equipo en comodato (baja del activo sin resultado)',
     'inventario.declarar_perdida_comodato':
         'Declarar perdido un equipo en comodato (baja del activo a pérdida)',
+    // decisión 17 del PM: «Crear orden de retiro (Iris)» en Inventario › Por recuperar
+    'inventario.solicitar_orden_retiro':
+        'Pedir a Iris, a mano, la orden de retiro de un equipo por recuperar',
     // fase C (`contratos/inventario.md` §5)
     'inventario.abrir_conteo': 'Abrir un conteo físico de una bodega',
     'inventario.contar': 'Capturar lo contado en un conteo físico abierto',
@@ -756,6 +759,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.trasladar',
             'inventario.asignar_comodato',
             'inventario.devolver_comodato',
+            'inventario.solicitar_orden_retiro',
             'inventario.contar',
             'inventario.marcar_reparada',
             'inventario.crear_traslado',

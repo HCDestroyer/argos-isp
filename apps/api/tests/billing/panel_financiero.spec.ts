@@ -208,7 +208,14 @@ test.group('billing · panel financiero', (group) => {
         // octubre (su baja fue a los 20 días); el retirado en suspensión pasa a septiembre
         const ctx = ctxEmpresa(E)
         const ajustes = await new ConfigurarPanelFinanciero().execute({ dias_baja: 20, version: 1 }, ctx)
-        assert.deepEqual(ajustes, { empresa_id: E, dias_baja: 20, fabrica: false, version: 1 })
+        assert.deepInclude(ajustes, {
+            empresa_id: E,
+            dias_baja: 20,
+            aviso_pc_activo: true,
+            aviso_pc_umbrales: null,
+            fabrica: false,
+            version: 1,
+        })
         const evento = await db
             .from('audit.outbox')
             .where('evento', 'panel_financiero.ajustes_cambiados')
