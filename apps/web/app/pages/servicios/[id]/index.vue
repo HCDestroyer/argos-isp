@@ -450,14 +450,18 @@ watch(servicio, (actual, anterior) => {
 /* Acciones en una sola fila: Cobrar, la principal de estado y el resto en «Más». */
 const accionPrincipal = computed(() => accionesEstado.value[0] ?? null)
 
-const itemsMas = computed<DropdownMenuItem[][]>(() => {
+/**
+ * «Más» del servicio. En el teléfono la acción principal de estado no se ve en la franja (tablero
+ * OperServicioFichaMovil: «Más», Promesa y Cobrar abajo), así que su «Más» la trae también.
+ */
+function gruposMas(conPrincipal: boolean): DropdownMenuItem[][] {
     const actual = servicio.value
     if (!actual) {
         return []
     }
     const estado: DropdownMenuItem[] = [
         ...(puedeActivarInstalacion.value && accionPrincipal.value ? [{ label: 'Activar instalación', icon: 'i-lucide-hard-hat', onSelect: () => { activarAbierto.value = true } }] : []),
-        ...accionesEstado.value.slice(1).map(a => ({ label: a.etiqueta, icon: a.icono, onSelect: () => abrirAccion(a) })),
+        ...accionesEstado.value.slice(conPrincipal ? 0 : 1).map(a => ({ label: a.etiqueta, icon: a.icono, onSelect: () => abrirAccion(a) })),
         ...(puedeEditar.value ? [{ label: 'Cambiar plan', icon: 'i-lucide-arrow-right-left', onSelect: () => { editando.value = true } }] : []),
     ]
     const cobro: DropdownMenuItem[] = [
@@ -477,7 +481,9 @@ const itemsMas = computed<DropdownMenuItem[][]>(() => {
         ...(puedeEliminar.value && eliminable.value?.eliminable ? [{ label: 'Eliminar', icon: ICONOS.eliminar, color: 'error' as const, onSelect: () => { eliminarAbierto.value = true } }] : []),
     ]
     return [estado, cobro, red, baja].filter(grupo => grupo.length)
-})
+}
+const itemsMas = computed(() => gruposMas(false))
+const itemsMasTelefono = computed(() => gruposMas(true))
 
 const enlaceCobro = computed(() => (servicio.value ? `/cobro?cliente=${servicio.value.cliente_id}` : '/cobro'))
 
@@ -1498,8 +1504,8 @@ onMounted(cargar)
             <!-- Teléfono: «Más», Promesa y «Cobrar Q …» fijos abajo. -->
             <RedBarraTelefono>
                 <UDropdownMenu
-                    v-if="itemsMas.length"
-                    :items="itemsMas"
+                    v-if="itemsMasTelefono.length"
+                    :items="itemsMasTelefono"
                     :content="{ align: 'start', side: 'top' }"
                 >
                     <UButton
