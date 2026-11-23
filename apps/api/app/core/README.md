@@ -320,7 +320,7 @@ Valores con su valor de fábrica, globales o por empresa (solo las claves `porEm
 
 ### Recuperar la contraseña y botones del login (decisión 22; `auth/recuperacion.ts`)
 
-`GET /auth/opciones` (público: `recuperar_contrasena`, `iris`, `horus` conectados), `POST /auth/recuperar-contrasena` (202 siempre igual; límite por IP y por correo; correo con enlace de un solo uso al confirmar) y `POST /auth/restablecer-contrasena` (token por hash SHA-256, 30 min, cierra todas las sesiones). Eventos `usuario.recuperacion_solicitada { usuario_id }` y `usuario.contrasena_restablecida { usuario_id, sesiones_cerradas }`. El ajuste `auth.recuperar_contrasena` lo apaga (404 `recuperacion_apagada`).
+`GET /auth/opciones` (público: `recuperar_contrasena`, `iris`, `horus` conectados, e `iris_url`/`horus_url`: el origen `https://host[:puerto]` de la `url_base` de cada conector activo, o null; el botón «Entrar con Iris/Horus» lleva allí y el autologin sale de esa app con «Abrir en Argos», contrato Iris §1.3 y Horus §1.5; nunca credenciales, ruta ni secretos), `POST /auth/recuperar-contrasena` (202 siempre igual; límite por IP y por correo; correo con enlace de un solo uso al confirmar) y `POST /auth/restablecer-contrasena` (token por hash SHA-256, 30 min, cierra todas las sesiones). Eventos `usuario.recuperacion_solicitada { usuario_id }` y `usuario.contrasena_restablecida { usuario_id, sesiones_cerradas }`. El ajuste `auth.recuperar_contrasena` lo apaga (404 `recuperacion_apagada`).
 
 ### IP pública (decisión 30; `ip_publica.ts`)
 
