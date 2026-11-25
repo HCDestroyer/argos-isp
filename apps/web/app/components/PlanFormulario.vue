@@ -173,7 +173,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
 
 <template>
     <div
-        class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]"
+        class="surface-card flex min-w-0 flex-col overflow-clip rounded-[1.375rem]"
         data-prueba="plan-formulario"
     >
         <header class="flex items-center gap-3 border-b border-(--ax-borde) px-4 py-3 sm:px-5">
@@ -772,7 +772,11 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
             </aside>
         </div>
 
-        <footer class="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-(--ax-borde) bg-(--ax-tarjeta) px-4 py-3 sm:px-5">
+        <!-- Escritorio: pegada abajo de la tarjeta mientras se desplaza (la tarjeta usa `overflow-clip`, no
+             `hidden`, para no volverse ella el contenedor del `sticky`). Teléfono y tableta: la acción fija como
+             isla encima de la navegación (`panel-barra-accion`, como `PanelBarraAccion`), para que nada del
+             formulario asome entre la barra y la isla. -->
+        <footer class="panel-barra-accion sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-(--ax-borde) bg-(--ax-tarjeta) px-4 py-3 max-lg:border-t-0 sm:px-5">
             <span class="hidden text-sm text-muted sm:block">Los cambios quedan en la bitácora.</span>
             <span class="ms-auto flex flex-1 gap-2 sm:flex-none">
                 <UButton

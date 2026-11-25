@@ -369,6 +369,14 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RouterTipoConexion.vue': { permisos: ['routers.ver'], desde: ['components/RouterVelocidadPanel.vue'], exentos: { 'components/RouterVelocidadPanel.vue': ['routers.ver'] } },
     'CambiarTipoConexionModal.vue': { permisos: ['routers.cambiar_tipo_conexion', 'routers.ver'], desde: ['components/RouterTipoConexion.vue'], exentos: { 'components/RouterTipoConexion.vue': ['routers.ver'] } },
     // Desde el rediseño, «Nuevo cliente» abre su página (`/clientes/nuevo`): el panel lateral queda para editar desde la ficha.
+    // Promociones de velocidad (decisiones del PM 18 y 34): el detalle lee con el `promociones_velocidad.ver`
+    // de sus páginas; cada ventana se monta solo con el permiso de su acción.
+    'PromocionDetalle.vue': { permisos: ['promociones_velocidad.ver'], desde: ['pages/planes/promociones/index.vue', 'pages/planes/promociones/[id].vue'] },
+    'PromocionFormulario.vue': { permisos: ['promociones_velocidad.crear'], desde: ['pages/planes/promociones/nueva.vue'] },
+    'PromocionAsignarModal.vue': { permisos: ['promociones_velocidad.asignar'], desde: ['components/PromocionDetalle.vue'] },
+    'PromocionQuitarModal.vue': { permisos: ['promociones_velocidad.quitar'], desde: ['components/PromocionDetalle.vue', 'components/ServicioPromociones.vue'] },
+    'ServicioPromociones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
+    'ServicioAgregarPromocionModal.vue': { permisos: ['promociones_velocidad.asignar', 'promociones_velocidad.ver'], desde: ['components/ServicioPromociones.vue'] },
     'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 
