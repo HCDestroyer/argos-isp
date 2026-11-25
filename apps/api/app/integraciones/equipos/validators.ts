@@ -102,46 +102,6 @@ const secreto = () =>
         .optional()
         .meta({ description: 'Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve' })
 
-export const configurarEquiposValidator = vine.compile(
-    vine.object({
-        version: vine.number().withoutDecimals().min(0),
-        activo: vine.boolean().optional(),
-        smartolt_url: url().meta({ description: '`https://<subdominio>.smartolt.com`' }),
-        smartolt_token: secreto(),
-        genieacs_url: url().meta({ description: 'URL del NBI de GenieACS (o del proxy que lo protege)' }),
-        genieacs_usuario: vine.string().trim().maxLength(200).nullable().optional(),
-        genieacs_clave: secreto(),
-        genieacs_ca: vine
-            .string()
-            .trim()
-            .maxLength(20_000)
-            .nullable()
-            .optional()
-            .meta({ description: 'Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra' }),
-        pppoe_por_acs: vine.boolean().optional().meta({
-            description: 'Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar',
-        }),
-        perfiles: vine
-            .array(
-                vine.object({
-                    smartolt_olt_id: vine.string().trim().minLength(1).maxLength(50),
-                    plan_id: idEntidad().nullable().optional(),
-                    authorization_preset_id: vine.number().withoutDecimals().min(1),
-                    pon_type: vine
-                        .enum(['gpon', 'epon'] as const)
-                        .nullable()
-                        .optional(),
-                }),
-            )
-            .maxLength(500)
-            .optional()
-            .meta({
-                description:
-                    'Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset',
-            }),
-    }),
-)
-
 /** `PUT /integraciones/acs` (`contratos/equipos-olt-acs.md` §5.1). */
 export const configurarAcsValidator = vine.compile(
     vine.object({
@@ -197,6 +157,10 @@ export const crearInstanciaSmartOltValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'Compartida con todas las empresas (solo con alcance global)' }),
+        empresa_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Empresa dueña (sin `compartida`); por defecto la activa' }),
         activo: vine.boolean().optional(),
         nota: vine.string().trim().maxLength(1000).nullable().optional(),
     }),
@@ -218,7 +182,11 @@ export const editarInstanciaSmartOltValidator = vine.compile(
         compartida: vine
             .boolean()
             .optional()
-            .meta({ description: 'Pasarla a compartida o devolverla a la empresa activa (alcance global)' }),
+            .meta({ description: 'Pasarla a compartida o devolverla a una empresa (alcance global)' }),
+        empresa_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Empresa dueña (sin `compartida`); con acceso a ella' }),
         perfiles: perfilesInstancia(),
     }),
 )

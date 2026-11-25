@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { descifrarCampo, type ConfigSmartOlt } from '#integraciones/equipos/configuracion'
+import { nombreUsuario } from '#integraciones/equipos/acs'
 import type { ContextoAccion } from '#shared/contexto'
 import { Conflicto, NoEncontrado, Problema } from '#shared/errores'
 import { exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
@@ -36,6 +37,8 @@ export interface FilaInstancia {
     probado_en: Date | null
     prueba_ok: boolean | null
     prueba_error: string | null
+    prueba_latencia_ms: number | null
+    probado_por_id: number | null
     olts_sincronizadas_en: Date | null
     version: number
     created_at: Date
@@ -195,6 +198,10 @@ export interface VistaInstancia {
     probado_en: string | null
     prueba_ok: boolean | null
     prueba_error: string | null
+    /** en cuánto respondió la última prueba */
+    prueba_latencia_ms: number | null
+    /** quién hizo la última prueba (nombre), o null */
+    probado_por: string | null
     olts_sincronizadas_en: string | null
     version: number
     olts: VistaOltSmartOlt[]
@@ -253,6 +260,8 @@ export async function vistaInstancia(
         probado_en: iso(fila.probado_en),
         prueba_ok: fila.prueba_ok,
         prueba_error: fila.prueba_error,
+        prueba_latencia_ms: fila.prueba_latencia_ms ?? null,
+        probado_por: await nombreUsuario(fila.probado_por_id ?? null, cliente),
         olts_sincronizadas_en: iso(fila.olts_sincronizadas_en),
         version: fila.version,
         olts: visibles.map((o) => ({
@@ -299,7 +308,10 @@ export interface EleccionInstancia {
 }
 
 /** La OLT de Argos del servicio: servidor PPPoE → VLAN → puerto PON → OLT. */
-async function oltArgosDelServicio(servicioId: number, cliente: QueryClientContract): Promise<number | null> {
+export async function oltArgosDelServicio(
+    servicioId: number,
+    cliente: QueryClientContract,
+): Promise<number | null> {
     const fila = (await cliente
         .from('core.servicios as s')
         .join('network.servidores_pppoe as sp', 'sp.id', 's.servidor_pppoe_id')

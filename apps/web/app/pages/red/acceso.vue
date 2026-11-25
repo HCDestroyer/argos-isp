@@ -8,8 +8,9 @@ import type { SelectItem } from '@nuxt/ui'
  * de la OLT elegida con sus VLAN y clientes, y el camino de cada VLAN del puerto elegido. Lo
  * adoptado (ya estaba en el router y Argos no lo toca) va aparte, con «Tomar control» en la ficha
  * del router. Datos: `GET /olts` y `GET /routers/:id/red-acceso` y `/direccionamiento` de cada
- * router (`red_acceso.ver`). Las OLT son para ordenar y filtrar: Argos no se conecta a ellas
- * (el equipo en vivo con SmartOLT está en construcción en `agente/a6-equipos`).
+ * router (`red_acceso.ver`). Argos no se conecta a las OLT: SmartOLT sí, y cada OLT muestra (solo
+ * lectura) la instancia de SmartOLT a la que está ligada, con enlace a Integraciones
+ * (`contratos/equipos-olt-acs.md`, con `smartolt.ver`).
  */
 definePageMeta({ permiso: 'red_acceso.ver' })
 
@@ -54,6 +55,20 @@ async function cargar() {
 }
 
 onMounted(cargar)
+
+/* OLT de Argos → instancia y OLT de SmartOLT ligadas (solo lectura, `smartolt.ver`). */
+const ligadasSmartOlt = shallowRef<Map<number, { instanciaId: number, instancia: string, olt: string }>>(new Map())
+async function cargarSmartOlt() {
+    if (!puede('smartolt.ver')) {
+        return
+    }
+    const r = await useSmartOlt().listar()
+    if (r.ok) {
+        ligadasSmartOlt.value = new Map(r.data.flatMap(i => i.olts.filter(o => o.olt).map(o => [o.olt!.id, { instanciaId: i.id, instancia: i.nombre, olt: o.nombre ?? o.smartolt_olt_id }] as const)))
+    }
+}
+onMounted(cargarSmartOlt)
+watch(useEmpresaActiva().empresaId, cargarSmartOlt)
 
 const fallidos = computed(() => routers.value.filter(r => accesos.value[r.id] === null))
 const nombreRouter = computed(() => new Map(routers.value.map(r => [r.id, r.nombre])))
@@ -267,7 +282,7 @@ function elegirPuerto(id: number) {
                         </li>
                     </ul>
                     <p class="mt-auto border-t border-(--ax-borde) p-3 text-xs text-muted">
-                        Las OLT son para ordenar y filtrar: Argos no se conecta a ellas (SmartOLT llegará después).
+                        Argos no se conecta a las OLT: lo hace SmartOLT. Cada OLT se liga a su cuenta de SmartOLT en Integraciones.
                     </p>
                 </section>
 
@@ -296,6 +311,16 @@ function elegirPuerto(id: number) {
                                     v-if="olt"
                                     class="truncate text-xs text-muted"
                                 >{{ [olt.marca, olt.modelo].filter(Boolean).join(' ') }}{{ olt.marca || olt.modelo ? ' · ' : '' }}{{ olt.puertos.length }} puertos</span>
+                                <ULink
+                                    v-if="olt && ligadasSmartOlt.get(olt.id)"
+                                    :to="`/configuracion/integraciones/smartolt/${ligadasSmartOlt.get(olt.id)!.instanciaId}`"
+                                    class="truncate text-xs text-primary"
+                                    data-prueba="olt-smartolt"
+                                >SmartOLT: {{ ligadasSmartOlt.get(olt.id)!.instancia }} · {{ ligadasSmartOlt.get(olt.id)!.olt }}</ULink>
+                                <span
+                                    v-else-if="olt && puede('smartolt.ver')"
+                                    class="truncate text-xs text-muted"
+                                >Sin ligar a SmartOLT</span>
                             </div>
                         </div>
                         <UButton

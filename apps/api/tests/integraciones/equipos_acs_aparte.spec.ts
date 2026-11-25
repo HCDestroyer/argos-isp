@@ -11,8 +11,6 @@ import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
-import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
-import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
 import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
 import { vistaAcs } from '#integraciones/equipos/acs'
@@ -28,6 +26,7 @@ import { fijarEsperaReintentos } from '#integraciones/equipos/http'
 import {
     Simulado,
     borrarEquiposDe,
+    configurarEquipos,
     dispositivoTr098,
     limpiarEquipos,
     onuSinConfigurar,
@@ -287,11 +286,6 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
                 })
                 .responder('GET /api/onu/get_onu_signal/*', () => ({ status: 200, cuerpo: { status: true } }))
             acs.responder('GET /devices/', () => ({ status: 200, cuerpo: [] }))
-            await new ConfigurarEquipos().execute(
-                { version: 0, activo: true, smartolt_url: so.url, smartolt_token: 'token-smartolt-123' },
-                ctxEmpresa(),
-            )
-            await new ProbarEquipos().execute({}, ctxEmpresa())
             const clienteId = await crearClienteFila()
             const servicioId = await crearServicioFila({ cliente_id: clienteId, empresa_id: 1 })
             await db
@@ -299,15 +293,12 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
                 .where('id', servicioId)
                 .update({ estado: 'pendiente_instalacion', instalado_en: null })
             const { plan_id: planId } = await db.from('core.servicios').where('id', servicioId).firstOrFail()
-            const leida = await vistaConfig(1, db.connection())
-            const v = leida.version
-            await new ConfigurarEquipos().execute(
-                {
-                    version: v,
+            await configurarEquipos({
+                smartolt: {
+                    url: so.url,
                     perfiles: [{ smartolt_olt_id: '1', plan_id: planId, authorization_preset_id: 31 }],
                 },
-                ctxEmpresa(),
-            )
+            })
 
             // sin cola durante la petición: se encola a mano dos veces, una por instancia
             process.env.EQUIPOS_SIN_COLA = 'true'

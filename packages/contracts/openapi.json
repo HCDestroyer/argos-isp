@@ -33161,299 +33161,6 @@
         "x-implementado": true
       }
     },
-    "/api/v1/integraciones/equipos": {
-      "get": {
-        "operationId": "equiposConfigVer",
-        "summary": "Configuración de SmartOLT y GenieACS de la empresa activa (sin secretos)",
-        "description": "Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en `capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.",
-        "tags": [
-          "integraciones"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Configuración",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfigEquipos"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso smartolt.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "smartolt.ver",
-        "x-implementado": true
-      },
-      "put": {
-        "operationId": "equiposConfigurar",
-        "summary": "Guardar SmartOLT y GenieACS de la empresa activa",
-        "description": "Secretos: omitido = se conserva, null = se borra, texto = se reemplaza; se guardan cifrados y nunca vuelven. Cambiar URL o secreto borra la última prueba (la capacidad vuelve a false hasta probar). `perfiles` reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; desactualizada: 409.",
-        "tags": [
-          "integraciones"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "version": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "activo": {
-                    "type": "boolean"
-                  },
-                  "smartolt_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500,
-                    "description": "`https://<subdominio>.smartolt.com`"
-                  },
-                  "smartolt_token": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500,
-                    "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
-                  },
-                  "genieacs_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500,
-                    "description": "URL del NBI de GenieACS (o del proxy que lo protege)"
-                  },
-                  "genieacs_usuario": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 200
-                  },
-                  "genieacs_clave": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500,
-                    "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
-                  },
-                  "genieacs_ca": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 20000,
-                    "description": "Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra"
-                  },
-                  "pppoe_por_acs": {
-                    "description": "Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar",
-                    "type": "boolean"
-                  },
-                  "perfiles": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "smartolt_olt_id": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 50
-                        },
-                        "plan_id": {
-                          "type": [
-                            "integer",
-                            "null"
-                          ],
-                          "minimum": 1
-                        },
-                        "authorization_preset_id": {
-                          "type": "integer",
-                          "minimum": 1
-                        },
-                        "pon_type": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "enum": [
-                                "gpon",
-                                "epon"
-                              ]
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "smartolt_olt_id",
-                        "authorization_preset_id"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "maxItems": 500,
-                    "description": "Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset"
-                  }
-                },
-                "required": [
-                  "version"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Configuración guardada",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfigEquipos"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso smartolt.editar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicto de versión",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "smartolt.editar_instancia",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/integraciones/equipos/probar": {
-      "post": {
-        "operationId": "equiposProbar",
-        "summary": "Probar la conexión con SmartOLT y GenieACS (configuración guardada)",
-        "description": "SmartOLT: `GET /api/system/get_olts` (devuelve las OLT para armar los perfiles). GenieACS: una búsqueda de un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema no responde: devuelve su error.",
-        "tags": [
-          "integraciones"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resultado de la prueba",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PruebaEquipos"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso smartolt.probar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "smartolt.probar_instancia",
-        "x-implementado": true
-      }
-    },
     "/api/v1/integraciones/horus": {
       "get": {
         "operationId": "horusConectorVer",
@@ -37351,6 +37058,14 @@
                     "description": "Compartida con todas las empresas (solo con alcance global)",
                     "type": "boolean"
                   },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña (sin `compartida`); por defecto la activa"
+                  },
                   "activo": {
                     "type": "boolean"
                   },
@@ -37551,8 +37266,16 @@
                     "maxLength": 1000
                   },
                   "compartida": {
-                    "description": "Pasarla a compartida o devolverla a la empresa activa (alcance global)",
+                    "description": "Pasarla a compartida o devolverla a una empresa (alcance global)",
                     "type": "boolean"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña (sin `compartida`); con acceso a ella"
                   },
                   "perfiles": {
                     "type": "array",
@@ -94527,6 +94250,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/equipo/gestion": {
+      "get": {
+        "operationId": "serviciosGestionEquipo",
+        "summary": "Qué cuenta y OLT de SmartOLT usa el servicio y qué hace el ACS con él (ficha del servicio)",
+        "description": "Solo lee Argos: no llama a SmartOLT ni al ACS (el estado en vivo es `GET /servicios/:id/equipo`). `origen` dice cómo se elige la cuenta: la guardada, la de la OLT ligada, la única operativa o `sin_buscar` (se busca la serie en `cuentas` al aprovisionar). Para el panel: con el token de Iris, 403.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gestión del equipo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GestionEquipo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver_equipo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver_equipo",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/equipos": {
       "get": {
         "operationId": "serviciosEquipos",
@@ -113876,6 +113672,8 @@
           "probado_en",
           "prueba_ok",
           "prueba_error",
+          "prueba_latencia_ms",
+          "probado_por",
           "pppoe_por_acs",
           "version"
         ],
@@ -113933,192 +113731,20 @@
               "null"
             ]
           },
-          "pppoe_por_acs": {
-            "type": "boolean"
+          "prueba_latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
           },
-          "version": {
-            "type": "integer"
-          }
-        }
-      },
-      "ConfigEquipos": {
-        "type": "object",
-        "required": [
-          "empresa_id",
-          "activo",
-          "smartolt",
-          "genieacs",
-          "pppoe_por_acs",
-          "perfiles",
-          "capacidades",
-          "version"
-        ],
-        "properties": {
-          "empresa_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "activo": {
-            "type": "boolean"
-          },
-          "smartolt": {
-            "type": "object",
-            "required": [
-              "url",
-              "token",
-              "probado_en",
-              "prueba_ok",
-              "prueba_error"
-            ],
-            "properties": {
-              "url": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "token": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "enum": [
-                  "***"
-                ]
-              },
-              "probado_en": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "prueba_ok": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "prueba_error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
-          },
-          "genieacs": {
-            "type": "object",
-            "required": [
-              "url",
-              "usuario",
-              "clave",
-              "ca",
-              "probado_en",
-              "prueba_ok",
-              "prueba_error"
-            ],
-            "properties": {
-              "url": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "usuario": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "clave": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "enum": [
-                  "***"
-                ]
-              },
-              "ca": {
-                "type": "boolean"
-              },
-              "probado_en": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "prueba_ok": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "prueba_error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
+          "probado_por": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "pppoe_por_acs": {
             "type": "boolean"
-          },
-          "perfiles": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "smartolt_olt_id",
-                "plan_id",
-                "authorization_preset_id",
-                "pon_type"
-              ],
-              "properties": {
-                "smartolt_olt_id": {
-                  "type": "string"
-                },
-                "plan_id": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "minimum": 1
-                },
-                "authorization_preset_id": {
-                  "type": "integer"
-                },
-                "pon_type": {
-                  "type": "string",
-                  "enum": [
-                    "gpon",
-                    "epon"
-                  ]
-                }
-              }
-            }
-          },
-          "capacidades": {
-            "type": "object",
-            "required": [
-              "ftth",
-              "wireless",
-              "tr069"
-            ],
-            "properties": {
-              "ftth": {
-                "type": "boolean"
-              },
-              "wireless": {
-                "type": "boolean"
-              },
-              "tr069": {
-                "type": "boolean"
-              }
-            }
           },
           "version": {
             "type": "integer"
@@ -125159,6 +124785,251 @@
           }
         }
       },
+      "GestionEquipo": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "empresa_id",
+          "smartolt",
+          "acs",
+          "equipo"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "smartolt": {
+            "type": "object",
+            "required": [
+              "disponible",
+              "origen",
+              "instancia",
+              "cuentas",
+              "olt_argos",
+              "olt_smartolt",
+              "puerto_pon",
+              "perfil"
+            ],
+            "properties": {
+              "disponible": {
+                "type": "boolean"
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "guardada",
+                  "olt",
+                  "unica",
+                  "sin_buscar",
+                  "ninguna"
+                ]
+              },
+              "instancia": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "id",
+                  "nombre",
+                  "url",
+                  "operativa",
+                  "compartida"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "operativa": {
+                    "type": "boolean"
+                  },
+                  "compartida": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "cuentas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "nombre"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "nombre": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "olt_argos": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "id",
+                  "nombre"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string"
+                  }
+                }
+              },
+              "olt_smartolt": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "id",
+                  "smartolt_olt_id",
+                  "nombre"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "smartolt_olt_id": {
+                    "type": "string"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "puerto_pon": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "perfil": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "authorization_preset_id",
+                  "pon_type"
+                ],
+                "properties": {
+                  "authorization_preset_id": {
+                    "type": "integer"
+                  },
+                  "pon_type": {
+                    "type": "string",
+                    "enum": [
+                      "gpon",
+                      "epon"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "acs": {
+            "type": "object",
+            "required": [
+              "configurado",
+              "activo",
+              "operativo",
+              "pppoe_por_acs"
+            ],
+            "properties": {
+              "configurado": {
+                "type": "boolean"
+              },
+              "activo": {
+                "type": "boolean"
+              },
+              "operativo": {
+                "type": "boolean"
+              },
+              "pppoe_por_acs": {
+                "type": "boolean"
+              }
+            }
+          },
+          "equipo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "serie",
+              "mac",
+              "modelo",
+              "onu_external_id",
+              "en_acs"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "ont",
+                  "cpe_wireless",
+                  "router_tr069"
+                ]
+              },
+              "serie": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mac": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "modelo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "onu_external_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "en_acs": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
       "GrupoRoutersDuplicados": {
         "type": "object",
         "required": [
@@ -126361,6 +126232,8 @@
           "probado_en",
           "prueba_ok",
           "prueba_error",
+          "prueba_latencia_ms",
+          "probado_por",
           "olts_sincronizadas_en",
           "version",
           "olts"
@@ -126418,6 +126291,18 @@
             ]
           },
           "prueba_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prueba_latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "probado_por": {
             "type": [
               "string",
               "null"
@@ -139570,132 +139455,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChequeoConexion"
-            }
-          }
-        }
-      },
-      "PruebaEquipos": {
-        "type": "object",
-        "required": [
-          "probado_en",
-          "smartolt",
-          "genieacs",
-          "capacidades"
-        ],
-        "properties": {
-          "probado_en": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "smartolt": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "required": [
-              "ok",
-              "latencia_ms",
-              "error"
-            ],
-            "properties": {
-              "ok": {
-                "type": "boolean"
-              },
-              "latencia_ms": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "olts": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "name"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "genieacs": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "required": [
-              "ok",
-              "latencia_ms",
-              "error"
-            ],
-            "properties": {
-              "ok": {
-                "type": "boolean"
-              },
-              "latencia_ms": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "olts": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "name"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "capacidades": {
-            "type": "object",
-            "required": [
-              "ftth",
-              "wireless",
-              "tr069"
-            ],
-            "properties": {
-              "ftth": {
-                "type": "boolean"
-              },
-              "wireless": {
-                "type": "boolean"
-              },
-              "tr069": {
-                "type": "boolean"
-              }
             }
           }
         }

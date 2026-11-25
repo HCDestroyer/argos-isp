@@ -40,7 +40,7 @@ export default class ProbarAcs extends DomainAction<Record<string, never>, Resul
                 ok: false,
                 latencia_ms: null,
                 error: 'El ACS de la empresa no tiene URL guardada',
-                config: vistaAcsDeFila(fila, empresaId),
+                config: await vistaAcsDeFila(fila, empresaId, t.trx),
             }
         }
         const inicio = Date.now()
@@ -52,7 +52,13 @@ export default class ProbarAcs extends DomainAction<Record<string, never>, Resul
         }
         const latencia = Date.now() - inicio
         const ahora = new Date()
-        const cambios = { probado_en: ahora, prueba_ok: error === null, prueba_error: error }
+        const cambios = {
+            probado_en: ahora,
+            prueba_ok: error === null,
+            prueba_error: error,
+            prueba_latencia_ms: latencia,
+            probado_por_id: t.ctx.actor.tipo === 'usuario' ? t.ctx.actor.id : null,
+        }
         await t.trx.from(TABLA_ACS).where('empresa_id', empresaId).update(cambios)
         const despues = { ...fila, ...cambios } as FilaAcs
         const operativo = acsDesdeFila(despues, empresaId).operativo
@@ -70,7 +76,7 @@ export default class ProbarAcs extends DomainAction<Record<string, never>, Resul
             ok: error === null,
             latencia_ms: latencia,
             error,
-            config: vistaAcsDeFila(despues, empresaId),
+            config: await vistaAcsDeFila(despues, empresaId, t.trx),
         }
     }
 }

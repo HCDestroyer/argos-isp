@@ -61,6 +61,8 @@ export default class ProbarInstanciaSmartOlt extends DomainAction<{ id: number }
             probado_en: ahora,
             prueba_ok: error === null,
             prueba_error: error,
+            prueba_latencia_ms: antes.config ? latencia : null,
+            probado_por_id: t.ctx.actor.tipo === 'usuario' ? t.ctx.actor.id : null,
         }
         let listaCambio = false
         const vinculadas: ResultadoProbarInstancia['vinculadas_por_nombre'] = []

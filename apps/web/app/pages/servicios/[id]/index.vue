@@ -337,7 +337,7 @@ function alEliminar() {
 const precio = computed(() => servicio.value?.precio_mensual ?? null)
 
 /* Pestañas (tablero OperServicioFicha). */
-const PESTANAS_SERVICIO = ['resumen', 'red', 'facturas', 'contactos', 'bitacora', 'corte'] as const
+const PESTANAS_SERVICIO = ['resumen', 'red', 'equipo', 'facturas', 'contactos', 'bitacora', 'corte'] as const
 type PestanaServicio = typeof PESTANAS_SERVICIO[number]
 
 const pestana = computed<PestanaServicio>({
@@ -353,6 +353,8 @@ const pestana = computed<PestanaServicio>({
 const pestanas = computed<TabsItem[]>(() => [
     { label: 'Resumen', value: 'resumen', icon: 'i-lucide-house' },
     { label: 'Red y equipo', value: 'red', icon: 'i-lucide-network' },
+    // SmartOLT y ACS (tablero PendEquipoServicio): qué cuenta, OLT y ACS usa el equipo del servicio.
+    ...(puede('servicios.ver_equipo') ? [{ label: 'Equipo', value: 'equipo', icon: 'i-lucide-router' }] : []),
     ...(puede('facturas.ver') ? [{ label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt' }] : []),
     // Los contactos se leen con `contactos.buscar` (y el cliente con `clientes.ver`).
     ...(puede('clientes.ver') && puede('contactos.buscar') ? [{ label: 'Contactos', value: 'contactos', icon: 'i-lucide-users' }] : []),
@@ -1477,6 +1479,12 @@ onMounted(cargar)
                         </ul>
                     </section>
                 </div>
+
+                <!-- Equipo: SmartOLT y ACS. -->
+                <ServicioEquipoGestion
+                    v-else-if="pestana === 'equipo' && puede('servicios.ver_equipo')"
+                    :servicio-id="servicio.id"
+                />
 
                 <!-- Contactos. -->
                 <ClienteContactos

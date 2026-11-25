@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
-import { exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
+import { exigirAccesoEmpresa, exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
 import { normalizarUrl } from '#integraciones/equipos/configuracion'
 import {
     CompartidaSinAlcance,
@@ -24,6 +24,8 @@ export interface EntradaCrearInstancia {
     token: string
     /** true = compartida con todas las empresas (solo con alcance global); si no, de la empresa activa */
     compartida?: boolean
+    /** la empresa dueña (sin `compartida`); por defecto, la activa. Debe ser una a la que tenga acceso */
+    empresa_id?: number | null
     activo?: boolean
     nota?: string | null
 }
@@ -45,7 +47,9 @@ export default class CrearInstanciaSmartOlt extends DomainAction<EntradaCrearIns
     protected async handle(input: EntradaCrearInstancia, t: Transaccion): Promise<VistaInstancia> {
         const empresaActiva = exigirEmpresaActivaDelContexto(t.ctx)
         if (input.compartida && !alcanceGlobal(t.ctx)) throw new CompartidaSinAlcance()
-        const empresaId = input.compartida ? null : empresaActiva
+        const elegida = input.empresa_id ?? empresaActiva
+        if (!input.compartida) exigirAccesoEmpresa(t.ctx, elegida)
+        const empresaId = input.compartida ? null : elegida
         t.fijarEmpresa(empresaId)
 
         const errores: ErrorCampo[] = []

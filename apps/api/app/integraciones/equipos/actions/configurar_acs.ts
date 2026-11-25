@@ -114,7 +114,13 @@ export default class ConfigurarAcs extends DomainAction<EntradaConfigurarAcs, Vi
         const campos = Object.keys(cambios).map((k) => (k === 'clave_cifrada' ? 'clave' : k))
         // Una prueba vale solo para la URL y las credenciales con las que se hizo
         if (['url', 'usuario', 'clave_cifrada', 'ca'].some((k) => k in cambios)) {
-            Object.assign(cambios, { probado_en: null, prueba_ok: null, prueba_error: null })
+            Object.assign(cambios, {
+                probado_en: null,
+                prueba_ok: null,
+                prueba_error: null,
+                prueba_latencia_ms: null,
+                probado_por_id: null,
+            })
         }
 
         const ahora = new Date()
@@ -145,6 +151,6 @@ export default class ConfigurarAcs extends DomainAction<EntradaConfigurarAcs, Vi
                 operativa: acsDesdeFila(despues, empresaId).operativo,
             })
         }
-        return vistaAcsDeFila(despues, empresaId)
+        return vistaAcsDeFila(despues, empresaId, t.trx)
     }
 }

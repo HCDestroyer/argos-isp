@@ -4343,50 +4343,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/integraciones/equipos": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Configuración de SmartOLT y GenieACS de la empresa activa (sin secretos)
-         * @description Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en `capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.
-         */
-        get: operations["equiposConfigVer"];
-        /**
-         * Guardar SmartOLT y GenieACS de la empresa activa
-         * @description Secretos: omitido = se conserva, null = se borra, texto = se reemplaza; se guardan cifrados y nunca vuelven. Cambiar URL o secreto borra la última prueba (la capacidad vuelve a false hasta probar). `perfiles` reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; desactualizada: 409.
-         */
-        put: operations["equiposConfigurar"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/integraciones/equipos/probar": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Probar la conexión con SmartOLT y GenieACS (configuración guardada)
-         * @description SmartOLT: `GET /api/system/get_olts` (devuelve las OLT para armar los perfiles). GenieACS: una búsqueda de un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema no responde: devuelve su error.
-         */
-        post: operations["equiposProbar"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/integraciones/horus": {
         parameters: {
             query?: never;
@@ -12815,6 +12771,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/equipo/gestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qué cuenta y OLT de SmartOLT usa el servicio y qué hace el ACS con él (ficha del servicio)
+         * @description Solo lee Argos: no llama a SmartOLT ni al ACS (el estado en vivo es `GET /servicios/:id/equipo`). `origen` dice cómo se elige la cuenta: la guardada, la de la OLT ligada, la única operativa o `sin_buscar` (se busca la serie en `cuentas` al aprovisionar). Para el panel: con el token de Iris, 403.
+         */
+        get: operations["serviciosGestionEquipo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/equipos": {
         parameters: {
             query?: never;
@@ -16815,45 +16791,9 @@ export interface components {
             probado_en: string | null;
             prueba_ok: boolean | null;
             prueba_error: string | null;
+            prueba_latencia_ms: number | null;
+            probado_por: string | null;
             pppoe_por_acs: boolean;
-            version: number;
-        };
-        ConfigEquipos: {
-            empresa_id: number;
-            activo: boolean;
-            smartolt: {
-                url: string | null;
-                /** @enum {string|null} */
-                token: "***" | null;
-                /** Format: date-time */
-                probado_en: string | null;
-                prueba_ok: boolean | null;
-                prueba_error: string | null;
-            };
-            genieacs: {
-                url: string | null;
-                usuario: string | null;
-                /** @enum {string|null} */
-                clave: "***" | null;
-                ca: boolean;
-                /** Format: date-time */
-                probado_en: string | null;
-                prueba_ok: boolean | null;
-                prueba_error: string | null;
-            };
-            pppoe_por_acs: boolean;
-            perfiles: {
-                smartolt_olt_id: string;
-                plan_id: number | null;
-                authorization_preset_id: number;
-                /** @enum {string} */
-                pon_type: "gpon" | "epon";
-            }[];
-            capacidades: {
-                ftth: boolean;
-                wireless: boolean;
-                tr069: boolean;
-            };
             version: number;
         };
         ConfiguracionEfectivaServicio: {
@@ -19630,6 +19570,56 @@ export interface components {
             /** @description true si Iris repitió la misma gestión (mismo iris_gestion_id y datos): no se duplicó */
             repetida: boolean;
         };
+        GestionEquipo: {
+            servicio_id: number;
+            empresa_id: number;
+            smartolt: {
+                disponible: boolean;
+                /** @enum {string} */
+                origen: "guardada" | "olt" | "unica" | "sin_buscar" | "ninguna";
+                instancia: {
+                    id: number;
+                    nombre: string;
+                    url: string;
+                    operativa: boolean;
+                    compartida: boolean;
+                } | null;
+                cuentas: {
+                    id: number;
+                    nombre: string;
+                }[];
+                olt_argos: {
+                    id: number;
+                    nombre: string;
+                } | null;
+                olt_smartolt: {
+                    id: number;
+                    smartolt_olt_id: string;
+                    nombre: string | null;
+                } | null;
+                puerto_pon: string | null;
+                perfil: {
+                    authorization_preset_id: number;
+                    /** @enum {string} */
+                    pon_type: "gpon" | "epon";
+                } | null;
+            };
+            acs: {
+                configurado: boolean;
+                activo: boolean;
+                operativo: boolean;
+                pppoe_por_acs: boolean;
+            };
+            equipo: {
+                /** @enum {string} */
+                tipo: "ont" | "cpe_wireless" | "router_tr069";
+                serie: string | null;
+                mac: string | null;
+                modelo: string | null;
+                onu_external_id: string | null;
+                en_acs: boolean;
+            } | null;
+        };
         GrupoRoutersDuplicados: {
             /** @description Por qué parecen el mismo equipo */
             motivos: ("api" | "nas_ip" | "serial")[];
@@ -19965,6 +19955,8 @@ export interface components {
             probado_en: string | null;
             prueba_ok: boolean | null;
             prueba_error: string | null;
+            prueba_latencia_ms: number | null;
+            probado_por: string | null;
             /** Format: date-time */
             olts_sincronizadas_en: string | null;
             version: number;
@@ -23240,33 +23232,6 @@ export interface components {
             /** Format: date-time */
             probado_en: string;
             chequeos: components["schemas"]["ChequeoConexion"][];
-        };
-        PruebaEquipos: {
-            /** Format: date-time */
-            probado_en: string;
-            smartolt: {
-                ok: boolean;
-                latencia_ms: number | null;
-                error: string | null;
-                olts?: {
-                    id: string;
-                    name: string;
-                }[];
-            } | null;
-            genieacs: {
-                ok: boolean;
-                latencia_ms: number | null;
-                error: string | null;
-                olts?: {
-                    id: string;
-                    name: string;
-                }[];
-            } | null;
-            capacidades: {
-                ftth: boolean;
-                wireless: boolean;
-                tr069: boolean;
-            };
         };
         PruebaInstanciaSmartOlt: {
             ok: boolean;
@@ -45234,165 +45199,6 @@ export interface operations {
             };
         };
     };
-    equiposConfigVer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Configuración */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigEquipos"];
-                };
-            };
-            /** @description No autenticado */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso smartolt.ver */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    equiposConfigurar: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    version: number;
-                    activo?: boolean;
-                    /** @description `https://<subdominio>.smartolt.com` */
-                    smartolt_url?: string | null;
-                    /** @description Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve */
-                    smartolt_token?: string | null;
-                    /** @description URL del NBI de GenieACS (o del proxy que lo protege) */
-                    genieacs_url?: string | null;
-                    genieacs_usuario?: string | null;
-                    /** @description Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve */
-                    genieacs_clave?: string | null;
-                    /** @description Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra */
-                    genieacs_ca?: string | null;
-                    /** @description Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar */
-                    pppoe_por_acs?: boolean;
-                    /** @description Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset */
-                    perfiles?: {
-                        smartolt_olt_id: string;
-                        plan_id?: number | null;
-                        authorization_preset_id: number;
-                        pon_type?: ("gpon" | "epon") | null;
-                    }[];
-                };
-            };
-        };
-        responses: {
-            /** @description Configuración guardada */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigEquipos"];
-                };
-            };
-            /** @description No autenticado */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso smartolt.editar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Conflicto de versión */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Datos inválidos */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    equiposProbar: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Resultado de la prueba */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PruebaEquipos"];
-                };
-            };
-            /** @description No autenticado */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso smartolt.probar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     horusConectorVer: {
         parameters: {
             query?: never;
@@ -47610,6 +47416,8 @@ export interface operations {
                     token: string;
                     /** @description Compartida con todas las empresas (solo con alcance global) */
                     compartida?: boolean;
+                    /** @description Empresa dueña (sin `compartida`); por defecto la activa */
+                    empresa_id?: number | null;
                     activo?: boolean;
                     nota?: string | null;
                 };
@@ -47722,8 +47530,10 @@ export interface operations {
                     token?: string;
                     activo?: boolean;
                     nota?: string | null;
-                    /** @description Pasarla a compartida o devolverla a la empresa activa (alcance global) */
+                    /** @description Pasarla a compartida o devolverla a una empresa (alcance global) */
                     compartida?: boolean;
+                    /** @description Empresa dueña (sin `compartida`); con acceso a ella */
+                    empresa_id?: number | null;
                     /** @description Reemplaza los perfiles de las OLT de esta instancia: OLT de SmartOLT + plan (null = cualquiera) → preset */
                     perfiles?: {
                         smartolt_olt_id: string;
@@ -77760,6 +77570,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EstadoEquipo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver_equipo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosGestionEquipo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gestión del equipo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GestionEquipo"];
                 };
             };
             /** @description No autenticado */

@@ -4,8 +4,9 @@ import type { Problem } from '@argosisp/contracts'
  * Lista de integraciones de Configuración (tablero OperConfigIntegraciones): Iris, Horus, pasarela
  * de pago, factura electrónica, SmartOLT, GenieACS y asistentes de IA (MCP). Cada estado sale de su
  * propia lectura (conector de Iris y de Horus, configuración FEL, proveedores de cobro); si una
- * falla, esa fila queda sin estado y su panel muestra el error. SmartOLT y GenieACS son de la empresa
- * activa (`GET /integraciones/equipos`); con «Todas las empresas» quedan sin estado.
+ * falla, esa fila queda sin estado y su panel muestra el error. SmartOLT (sus instancias, «2 de 4
+ * operativas») y el ACS van por separado y son de la empresa activa; con «Todas las empresas» quedan
+ * sin estado.
  */
 export function useIntegracionesConfiguracion() {
     const { puede } = usePermisos()
@@ -19,7 +20,10 @@ export function useIntegracionesConfiguracion() {
     const cargandoIris = ref(false)
     const fel = shallowRef<ConfiguracionFel | null>(null)
     const problemaFel = ref<Problem | null>(null)
-    const equipos = shallowRef<ConfigEquipos | null>(null)
+    const smartolt = shallowRef<InstanciaSmartOlt[] | null>(null)
+    const errorSmartolt = ref(false)
+    const acs = shallowRef<ConfigAcs | null>(null)
+    const errorAcs = ref(false)
     const proveedores = shallowRef<ProveedorCobro[] | null>(null)
     const problemaProveedores = ref<Problem | null>(null)
 
@@ -58,15 +62,24 @@ export function useIntegracionesConfiguracion() {
 
     async function cargarEquipos() {
         if (empresaId.value === null) {
-            equipos.value = null
+            smartolt.value = null
+            acs.value = null
             return
         }
-        const resultado = await useEquiposIntegracion().ver()
-        equipos.value = resultado.ok ? resultado.data : null
+        if (puede('smartolt.ver')) {
+            const r = await useSmartOlt().listar()
+            smartolt.value = r.ok ? r.data : null
+            errorSmartolt.value = !r.ok
+        }
+        if (puede('acs.ver')) {
+            const r = await useAcs().ver()
+            acs.value = r.ok ? r.data : null
+            errorAcs.value = !r.ok
+        }
     }
 
     function cargar() {
-        if (puede('smartolt.ver')) {
+        if (puede(['smartolt.ver', 'acs.ver'])) {
             void cargarEquipos()
         }
         if (puede('iris.ver')) {
@@ -118,16 +131,22 @@ export function useIntegracionesConfiguracion() {
             })
         }
         if (puede('smartolt.ver')) {
-            const config = equipos.value
-            const estado = (sistema: SistemaEquipos) => {
-                if (!config) {
-                    return null
-                }
-                const e = estadoEquipos(config, sistema)
-                return { etiqueta: e.etiqueta, color: e.color, icono: e.icono, prueba: `estado-lista-${sistema}` }
-            }
-            lista.push({ id: 'smartolt', nombre: 'SmartOLT', frase: 'Estado de las ONU', icono: 'i-lucide-router', tono: 'tono-marca', to: '/configuracion/integraciones?ver=smartolt', estado: estado('smartolt') })
-            lista.push({ id: 'genieacs', nombre: 'GenieACS', frase: 'Configuración remota de equipos (TR-069)', icono: 'i-lucide-cpu', tono: 'tono-marca', to: '/configuracion/integraciones?ver=genieacs', estado: estado('genieacs') })
+            const resumen = smartolt.value ? resumenSmartOlt(smartolt.value) : null
+            lista.push({
+                id: 'smartolt', nombre: 'SmartOLT', frase: 'Autoriza y mira las ONU (varias cuentas)', icono: 'i-lucide-server', tono: 'tono-marca', to: '/configuracion/integraciones?ver=smartolt',
+                estado: errorSmartolt.value
+                    ? { etiqueta: 'No se pudo leer', color: 'error', icono: 'i-lucide-triangle-alert', prueba: 'estado-lista-smartolt' }
+                    : resumen ? { ...resumen, prueba: 'estado-lista-smartolt' } : null,
+            })
+        }
+        if (puede('acs.ver')) {
+            const e = acs.value ? estadoAcs(acs.value) : null
+            lista.push({
+                id: 'acs', nombre: 'ACS (GenieACS)', frase: 'Wi-Fi y PPPoE de la ONU', icono: 'i-lucide-cpu', tono: 'tono-marca', to: '/configuracion/integraciones?ver=acs',
+                estado: errorAcs.value
+                    ? { etiqueta: 'No se pudo leer', color: 'error', icono: 'i-lucide-triangle-alert', prueba: 'estado-lista-acs' }
+                    : e ? { etiqueta: e.etiqueta === 'Probado' ? 'Conectado' : e.etiqueta, color: e.color, icono: e.icono, prueba: 'estado-lista-acs' } : null,
+            })
         }
         if (puede('tokens.ver')) {
             lista.push({ id: 'mcp', nombre: 'Asistentes de IA (MCP)', frase: 'Tokens con alcance acotado', icono: 'i-lucide-bot', tono: 'tono-marca', to: '/configuracion/integraciones?ver=mcp', estado: null })
@@ -141,6 +160,6 @@ export function useIntegracionesConfiguracion() {
         iris, problemaIris, cargandoIris, cargarIris,
         fel, problemaFel, cargarFel,
         pasarelas, problemaProveedores, cargarProveedores,
-        equipos, cargarEquipos,
+        smartolt, acs, cargarEquipos,
     }
 }

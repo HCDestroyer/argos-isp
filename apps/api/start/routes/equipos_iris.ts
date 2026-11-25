@@ -4,8 +4,8 @@
 |--------------------------------------------------------------------------
 |
 | A32 (aprovisionar), A33 (estado del equipo), A35 (Wi-Fi) y A37 (reenviar la bienvenida), con
-| SmartOLT (fibra) y GenieACS (TR-069) por empresa (`#integraciones/equipos`), y la configuración de
-| esas dos integraciones (`/integraciones/equipos`).
+| SmartOLT (varias instancias) y el ACS (GenieACS, uno por empresa) (`#integraciones/equipos`), y la
+| configuración de cada uno por separado (`/integraciones/smartolt/*`, `/integraciones/acs`).
 |
 */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -22,15 +22,14 @@ import {
     texto,
     booleano,
 } from '#shared/openapi/esquemas'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, Problema } from '#shared/errores'
 import { exigirAccesoEmpresa, exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
 import { CabeceraIrisRequerida, exigirActorIris } from '#integraciones/iris/atencion'
 import * as v from '#integraciones/equipos/validators'
-import { estadoEquipo } from '#integraciones/equipos/equipos'
+import { estadoEquipo, gestionEquipoServicio } from '#integraciones/equipos/equipos'
+import { exigirServicio } from '#core/acceso_empresa'
 import AprovisionarServicio from '#integraciones/equipos/actions/aprovisionar_servicio'
 import CambiarWifiServicio from '#integraciones/equipos/actions/cambiar_wifi_servicio'
-import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
-import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
 import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
 import { vistaAcs } from '#integraciones/equipos/acs'
@@ -40,7 +39,6 @@ import EliminarInstanciaSmartOlt from '#integraciones/equipos/actions/eliminar_i
 import ProbarInstanciaSmartOlt from '#integraciones/equipos/actions/probar_instancia_smartolt'
 import VincularOltSmartOlt from '#integraciones/equipos/actions/vincular_olt_smartolt'
 import { listarInstancias, verInstancia } from '#integraciones/equipos/smartolt_instancias'
-import db from '@adonisjs/lucid/services/db'
 import {
     iniciadoPor,
     leerAprovisionamiento,
@@ -134,62 +132,6 @@ function esAsistente(ctx: HttpContext): boolean {
     return exigirActorIris(ctx)?.actor === 'asistente_ia'
 }
 
-const ResultadoPruebaSistema = objeto(
-    {
-        ok: booleano,
-        latencia_ms: nulable({ type: 'integer' }),
-        error: nulable(texto),
-        olts: lista(objeto({ id: texto, name: texto })),
-    },
-    ['olts'],
-)
-const Capacidades = objeto({ ftth: booleano, wireless: booleano, tr069: booleano })
-
-const ConfigEquipos = definirEsquema(
-    'ConfigEquipos',
-    objeto({
-        empresa_id: idEsquema,
-        activo: booleano,
-        smartolt: objeto({
-            url: nulable(texto),
-            token: nulable(enumerado(['***'])),
-            probado_en: nulable(instante),
-            prueba_ok: nulable(booleano),
-            prueba_error: nulable(texto),
-        }),
-        genieacs: objeto({
-            url: nulable(texto),
-            usuario: nulable(texto),
-            clave: nulable(enumerado(['***'])),
-            ca: booleano,
-            probado_en: nulable(instante),
-            prueba_ok: nulable(booleano),
-            prueba_error: nulable(texto),
-        }),
-        pppoe_por_acs: booleano,
-        perfiles: lista(
-            objeto({
-                smartolt_olt_id: texto,
-                plan_id: nulable(idEsquema),
-                authorization_preset_id: { type: 'integer' },
-                pon_type: enumerado(['gpon', 'epon']),
-            }),
-        ),
-        capacidades: Capacidades,
-        version: { type: 'integer' },
-    }),
-)
-
-const PruebaEquipos = definirEsquema(
-    'PruebaEquipos',
-    objeto({
-        probado_en: instante,
-        smartolt: nulable(ResultadoPruebaSistema),
-        genieacs: nulable(ResultadoPruebaSistema),
-        capacidades: Capacidades,
-    }),
-)
-
 const ConfigAcs = definirEsquema(
     'ConfigAcs',
     objeto({
@@ -203,6 +145,8 @@ const ConfigAcs = definirEsquema(
         probado_en: nulable(instante),
         prueba_ok: nulable(booleano),
         prueba_error: nulable(texto),
+        prueba_latencia_ms: nulable({ type: 'integer' }),
+        probado_por: nulable(texto),
         pppoe_por_acs: booleano,
         version: { type: 'integer' },
     }),
@@ -254,6 +198,8 @@ const InstanciaSmartOlt = definirEsquema(
         probado_en: nulable(instante),
         prueba_ok: nulable(booleano),
         prueba_error: nulable(texto),
+        prueba_latencia_ms: nulable({ type: 'integer' }),
+        probado_por: nulable(texto),
         olts_sincronizadas_en: nulable(instante),
         version: { type: 'integer' },
         olts: lista(OltSmartOlt),
@@ -271,7 +217,80 @@ const PruebaInstanciaSmartOlt = definirEsquema(
     }),
 )
 
+const GestionEquipo = definirEsquema(
+    'GestionEquipo',
+    objeto({
+        servicio_id: idEsquema,
+        empresa_id: idEsquema,
+        smartolt: objeto({
+            disponible: booleano,
+            origen: enumerado(['guardada', 'olt', 'unica', 'sin_buscar', 'ninguna']),
+            instancia: nulable(
+                objeto({
+                    id: idEsquema,
+                    nombre: texto,
+                    url: texto,
+                    operativa: booleano,
+                    compartida: booleano,
+                }),
+            ),
+            cuentas: lista(objeto({ id: idEsquema, nombre: texto })),
+            olt_argos: nulable(objeto({ id: idEsquema, nombre: texto })),
+            olt_smartolt: nulable(objeto({ id: idEsquema, smartolt_olt_id: texto, nombre: nulable(texto) })),
+            puerto_pon: nulable(texto),
+            perfil: nulable(
+                objeto({
+                    authorization_preset_id: { type: 'integer' },
+                    pon_type: enumerado(['gpon', 'epon']),
+                }),
+            ),
+        }),
+        acs: objeto({
+            configurado: booleano,
+            activo: booleano,
+            operativo: booleano,
+            pppoe_por_acs: booleano,
+        }),
+        equipo: nulable(
+            objeto({
+                tipo: enumerado(['ont', 'cpe_wireless', 'router_tr069']),
+                serie: nulable(texto),
+                mac: nulable(texto),
+                modelo: nulable(texto),
+                onu_external_id: nulable(texto),
+                en_acs: booleano,
+            }),
+        ),
+    }),
+)
+
 const rutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/equipo/gestion',
+        operacion: 'serviciosGestionEquipo',
+        resumen: 'Qué cuenta y OLT de SmartOLT usa el servicio y qué hace el ACS con él (ficha del servicio)',
+        descripcion:
+            'Solo lee Argos: no llama a SmartOLT ni al ACS (el estado en vivo es `GET /servicios/:id/equipo`). `origen` dice ' +
+            'cómo se elige la cuenta: la guardada, la de la OLT ligada, la única operativa o `sin_buscar` (se busca la ' +
+            'serie en `cuentas` al aprovisionar). Para el panel: con el token de Iris, 403.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver_equipo',
+        respuesta: { status: 200, descripcion: 'Gestión del equipo', esquema: GestionEquipo },
+        handler: async (ctx, { params }) => {
+            if (esTokenIris(ctx)) {
+                throw new Problema(
+                    403,
+                    'solo_panel',
+                    'Solo para el panel',
+                    'Esta lectura es del panel de Argos',
+                )
+            }
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return gestionEquipoServicio(id)
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/integraciones/smartolt/instancias',
@@ -416,51 +435,6 @@ const rutas: Ruta[] = [
         permiso: 'acs.probar',
         respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaAcs },
         handler: async (ctx) => new ProbarAcs().execute({}, ctx.contextoAccion()),
-    }),
-    definirRuta({
-        metodo: 'get',
-        ruta: '/integraciones/equipos',
-        operacion: 'equiposConfigVer',
-        resumen: 'Configuración de SmartOLT y GenieACS de la empresa activa (sin secretos)',
-        descripcion:
-            'Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en ' +
-            '`capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.',
-        etiqueta: 'integraciones',
-        permiso: 'smartolt.ver',
-        respuesta: { status: 200, descripcion: 'Configuración', esquema: ConfigEquipos },
-        handler: async (ctx) =>
-            vistaConfig(exigirEmpresaActivaDelContexto(ctx.contextoAccion()), db.connection()),
-    }),
-    definirRuta({
-        metodo: 'put',
-        ruta: '/integraciones/equipos',
-        operacion: 'equiposConfigurar',
-        resumen: 'Guardar SmartOLT y GenieACS de la empresa activa',
-        descripcion:
-            'Secretos: omitido = se conserva, null = se borra, texto = se reemplaza; se guardan cifrados y nunca vuelven. ' +
-            'Cambiar URL o secreto borra la última prueba (la capacidad vuelve a false hasta probar). `perfiles` ' +
-            'reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; ' +
-            'desactualizada: 409.',
-        etiqueta: 'integraciones',
-        permiso: 'smartolt.editar_instancia',
-        cuerpo: v.configurarEquiposValidator,
-        versionada: true,
-        respuesta: { status: 200, descripcion: 'Configuración guardada', esquema: ConfigEquipos },
-        handler: async (ctx, { cuerpo }) => new ConfigurarEquipos().execute(cuerpo, ctx.contextoAccion()),
-    }),
-    definirRuta({
-        metodo: 'post',
-        ruta: '/integraciones/equipos/probar',
-        operacion: 'equiposProbar',
-        resumen: 'Probar la conexión con SmartOLT y GenieACS (configuración guardada)',
-        descripcion:
-            'SmartOLT: `GET /api/system/get_olts` (devuelve las OLT para armar los perfiles). GenieACS: una búsqueda de ' +
-            'un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema ' +
-            'no responde: devuelve su error.',
-        etiqueta: 'integraciones',
-        permiso: 'smartolt.probar_instancia',
-        respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaEquipos },
-        handler: async (ctx) => new ProbarEquipos().execute({}, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',

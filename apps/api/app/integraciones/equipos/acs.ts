@@ -25,6 +25,8 @@ export interface FilaAcs {
     probado_en: Date | null
     prueba_ok: boolean | null
     prueba_error: string | null
+    prueba_latencia_ms: number | null
+    probado_por_id: number | null
     pppoe_por_acs: boolean
     version: number
     created_at: Date
@@ -96,12 +98,20 @@ export interface VistaAcs {
     probado_en: string | null
     prueba_ok: boolean | null
     prueba_error: string | null
+    /** en cuánto respondió la última prueba */
+    prueba_latencia_ms: number | null
+    /** quién hizo la última prueba (nombre), o null */
+    probado_por: string | null
     pppoe_por_acs: boolean
     /** 0 = nunca guardada */
     version: number
 }
 
-export function vistaAcsDeFila(fila: FilaAcs | null, empresaId: number): VistaAcs {
+export async function vistaAcsDeFila(
+    fila: FilaAcs | null,
+    empresaId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<VistaAcs> {
     return {
         empresa_id: empresaId,
         activo: fila?.activo ?? false,
@@ -113,6 +123,8 @@ export function vistaAcsDeFila(fila: FilaAcs | null, empresaId: number): VistaAc
         probado_en: fila?.probado_en ? new Date(fila.probado_en).toISOString() : null,
         prueba_ok: fila?.prueba_ok ?? null,
         prueba_error: fila?.prueba_error ?? null,
+        prueba_latencia_ms: fila?.prueba_latencia_ms ?? null,
+        probado_por: await nombreUsuario(fila?.probado_por_id ?? null, cliente),
         pppoe_por_acs: fila?.pppoe_por_acs ?? false,
         version: fila?.version ?? 0,
     }
@@ -122,5 +134,14 @@ export async function vistaAcs(
     empresaId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<VistaAcs> {
-    return vistaAcsDeFila(await leerFilaAcs(empresaId, cliente), empresaId)
+    return vistaAcsDeFila(await leerFilaAcs(empresaId, cliente), empresaId, cliente)
+}
+
+/** Nombre de un usuario (quién probó), o null. */
+export async function nombreUsuario(id: number | null, cliente: QueryClientContract): Promise<string | null> {
+    if (id === null) return null
+    const fila = (await cliente.from('core.usuarios').where('id', id).select('nombre').first()) as {
+        nombre: string
+    } | null
+    return fila?.nombre ?? null
 }

@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
 import { verificarVersion } from '#shared/version'
-import { exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
+import { exigirAccesoEmpresa, exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
 import { normalizarUrl } from '#integraciones/equipos/configuracion'
 import {
     CompartidaSinAlcance,
@@ -38,8 +38,10 @@ export interface EntradaEditarInstancia {
     token?: string
     activo?: boolean
     nota?: string | null
-    /** pasar a compartida o devolverla a la empresa activa (solo con alcance global) */
+    /** pasar a compartida o devolverla a una empresa (solo con alcance global) */
     compartida?: boolean
+    /** la empresa dueña (sin `compartida`); con acceso a ella. Por defecto se conserva (o la activa) */
+    empresa_id?: number | null
     /** reemplaza todos los perfiles de autorización de las OLT de esta instancia */
     perfiles?: PerfilInstanciaEntrada[]
 }
@@ -92,9 +94,17 @@ export default class EditarInstanciaSmartOlt extends DomainAction<EntradaEditarI
             const nota = input.nota?.trim() || null
             if (nota !== (antes.nota ?? null)) cambios.nota = nota
         }
-        if (input.compartida !== undefined && input.compartida !== (antes.empresa_id === null)) {
+        const compartidaFinal = input.compartida ?? antes.empresa_id === null
+        if (compartidaFinal !== (antes.empresa_id === null)) {
             if (!alcanceGlobal(t.ctx)) throw new CompartidaSinAlcance()
-            cambios.empresa_id = input.compartida ? null : exigirEmpresaActivaDelContexto(t.ctx)
+        }
+        const duenaFinal = compartidaFinal
+            ? null
+            : (input.empresa_id ??
+              (antes.empresa_id === null ? exigirEmpresaActivaDelContexto(t.ctx) : Number(antes.empresa_id)))
+        if (duenaFinal !== null) exigirAccesoEmpresa(t.ctx, duenaFinal)
+        if (duenaFinal !== (antes.empresa_id === null ? null : Number(antes.empresa_id))) {
+            cambios.empresa_id = duenaFinal
         }
         if (input.perfiles) {
             const vistos = new Set<string>()
@@ -125,11 +135,26 @@ export default class EditarInstanciaSmartOlt extends DomainAction<EntradaEditarI
         }
         // Una prueba vale solo para la URL y el token con los que se hizo
         if ('url' in cambios || 'token_cifrado' in cambios) {
-            Object.assign(cambios, { probado_en: null, prueba_ok: null, prueba_error: null })
+            Object.assign(cambios, {
+                probado_en: null,
+                prueba_ok: null,
+                prueba_error: null,
+                prueba_latencia_ms: null,
+                probado_por_id: null,
+            })
         }
 
         const campos = Object.keys(cambios)
-            .filter((k) => !['probado_en', 'prueba_ok', 'prueba_error'].includes(k))
+            .filter(
+                (k) =>
+                    ![
+                        'probado_en',
+                        'prueba_ok',
+                        'prueba_error',
+                        'prueba_latencia_ms',
+                        'probado_por_id',
+                    ].includes(k),
+            )
             .map((k) => (k === 'token_cifrado' ? 'token' : k === 'empresa_id' ? 'empresa' : k))
         let perfilesCambiaron = false
         if (input.perfiles) perfilesCambiaron = await this.reemplazarPerfiles(t, input.id, input.perfiles)

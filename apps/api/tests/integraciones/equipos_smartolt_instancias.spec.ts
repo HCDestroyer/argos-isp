@@ -622,4 +622,105 @@ test.group('Equipos · SmartOLT con varias instancias (lote 3)', (group) => {
         ]
         for (const t of textos) assert.notInclude(t, TOKEN_A)
     })
+
+    test('ficha del servicio: cuenta, OLT y perfil que usa; sin OLT ligada, en qué cuentas se busca; sin llamar a SmartOLT', async ({
+        client,
+        assert,
+    }) => {
+        cuenta(a, nuevaCuenta([{ id: '1', name: 'Norte' }], TOKEN_A))
+        cuenta(b, nuevaCuenta([{ id: '1', name: 'Sur' }], TOKEN_B))
+        const s = await servicioPendiente()
+        await instancia(a, TOKEN_A, { nombre: 'Zona norte' })
+        const idB = await instancia(b, TOKEN_B, {
+            nombre: 'Zona sur',
+            perfiles: [{ smartolt_olt_id: '1', plan_id: s.planId, authorization_preset_id: 77 }],
+        })
+        const { token } = await usuarioConRoles(['soporte'])
+        const ver = () =>
+            client
+                .get(`/api/v1/servicios/${s.servicioId}/equipo/gestion`)
+                .bearerToken(token)
+                .header('X-Empresa-Id', '1')
+        a.peticiones.length = 0
+        b.peticiones.length = 0
+        const sinOlt = await estado(ver(), 200)
+        assert.equal(sinOlt.body().smartolt.origen, 'sin_buscar')
+        assert.sameMembers(
+            sinOlt.body().smartolt.cuentas.map((c: { nombre: string }) => c.nombre),
+            ['Zona norte', 'Zona sur'],
+        )
+        assert.isNull(sinOlt.body().smartolt.instancia)
+        assert.deepEqual(sinOlt.body().acs, {
+            configurado: false,
+            activo: false,
+            operativo: false,
+            pppoe_por_acs: false,
+        })
+
+        const oltSur = await oltDeArgos(unico('OLT Sur'))
+        await db.from('integraciones.smartolt_olts').where('instancia_id', idB).update({ olt_id: oltSur })
+        await servicioEnOlt(s.servicioId, s.routerId, oltSur)
+        const conOlt = await estado(ver(), 200)
+        assert.equal(conOlt.body().smartolt.origen, 'olt')
+        assert.equal(conOlt.body().smartolt.instancia.id, idB)
+        assert.equal(conOlt.body().smartolt.olt_smartolt.smartolt_olt_id, '1')
+        assert.equal(conOlt.body().smartolt.puerto_pon, '0/1/3')
+        assert.deepEqual(conOlt.body().smartolt.perfil, { authorization_preset_id: 77, pon_type: 'gpon' })
+        assert.notInclude(JSON.stringify(conOlt.body()), TOKEN_B)
+        assert.lengthOf(a.peticiones, 0)
+        assert.lengthOf(b.peticiones, 0)
+
+        // con el token de Iris: no
+        const iris = await tokenIris()
+        await estado(
+            client
+                .get(`/api/v1/servicios/${s.servicioId}/equipo/gestion`)
+                .bearerToken(iris)
+                .header('X-Iris-Actor', 'usuario:57'),
+            403,
+        )
+    })
+
+    test('alta con otra empresa dueña; editar la nota; la última prueba dice cuánto tardó y quién', async ({
+        client,
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        cuenta(a, nuevaCuenta([{ id: '1', name: 'Norte' }], TOKEN_A))
+        const { token, usuario } = await usuarioConRoles(['admin'])
+        const creada = await estado(
+            client
+                .post('/api/v1/integraciones/smartolt/instancias')
+                .bearerToken(token)
+                .header('X-Empresa-Id', '1')
+                .json({ nombre: 'De B', url: a.url, token: TOKEN_A, empresa_id: e.B }),
+            201,
+        )
+        assert.equal(creada.body().empresa_id, e.B)
+        // desde la empresa 1 no se ve
+        await estado(
+            client
+                .get(`/api/v1/integraciones/smartolt/instancias/${creada.body().id}`)
+                .bearerToken(token)
+                .header('X-Empresa-Id', '1'),
+            404,
+        )
+        const conB = (r: any) => r.bearerToken(token).header('X-Empresa-Id', String(e.B))
+        const prueba = await estado(
+            conB(client.post(`/api/v1/integraciones/smartolt/instancias/${creada.body().id}/probar`)),
+            200,
+        )
+        assert.isNumber(prueba.body().instancia.prueba_latencia_ms)
+        assert.equal(prueba.body().instancia.probado_por, usuario.nombre)
+        const nota = await estado(
+            conB(
+                client
+                    .put(`/api/v1/integraciones/smartolt/instancias/${creada.body().id}`)
+                    .json({ version: prueba.body().instancia.version, nota: 'La renueva Luis' }),
+            ),
+            200,
+        )
+        assert.equal(nota.body().nota, 'La renueva Luis')
+        assert.isTrue(nota.body().prueba_ok, 'cambiar la nota no borra la prueba')
+    })
 })

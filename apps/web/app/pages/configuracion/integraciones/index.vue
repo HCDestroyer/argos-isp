@@ -5,9 +5,10 @@ import type { Problem } from '@argosisp/contracts'
  * Configuración → Integraciones (tablero OperConfigIntegraciones): a la izquierda, los sistemas
  * con los que Argos habla y su estado; a la derecha, el elegido (`?ver=`). Iris y Horus se
  * configuran en su pantalla; pasarela y FEL muestran su estado y llevan a su configuración;
- * SmartOLT y GenieACS se configuran aquí por empresa (`ConfiguracionEquipos`): credenciales
- * cifradas que no vuelven y «Probar conexión» de verdad. Cada lectura va por separado: si una falla, las
- * otras se ven igual.
+ * SmartOLT (sus instancias, `ConfiguracionSmartOlt`, tablero PendSmartoltLista) y el ACS
+ * (`ConfiguracionAcs`, tablero PendAcs) van por separado, por empresa: credenciales cifradas que no
+ * vuelven y «Probar conexión» de verdad. Cada lectura va por separado: si una falla, las otras se ven
+ * igual.
  */
 definePageMeta({ permiso: ['horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver'] })
 
@@ -61,13 +62,13 @@ const avisoReconexionTarjeta = computed(() => (conectorIris.value ? avisoReconex
 const textoDesconexionTarjeta = computed(() => (avisoCanjeTarjeta.value?.estado === 'desconectado' ? textoDesconexionIris(avisoCanjeTarjeta.value) : null))
 
 watch(useEmpresaActiva().empresaId, () => {
-    if (puede('smartolt.ver')) {
+    if (puede(['smartolt.ver', 'acs.ver'])) {
         void resumen.cargarEquipos()
     }
 })
 
 onMounted(() => {
-    if (puede('smartolt.ver')) {
+    if (puede(['smartolt.ver', 'acs.ver'])) {
         void resumen.cargarEquipos()
     }
     if (puede('fel.ver')) {
@@ -329,19 +330,16 @@ onMounted(() => {
                     />
                 </ConfiguracionBloque>
 
-                <ConfiguracionBloque
-                    v-if="ver === 'smartolt' || ver === 'genieacs'"
-                    :titulo="ver === 'smartolt' ? 'SmartOLT' : 'GenieACS'"
-                    :icono="ver === 'smartolt' ? 'i-lucide-router' : 'i-lucide-cpu'"
-                    :descripcion="ver === 'smartolt' ? 'Estado de las ONU y su señal en la ficha del servicio.' : 'Configuración remota de los equipos del cliente (TR-069): wifi, reinicio y firmware.'"
-                    :data-prueba="`tarjeta-${ver}`"
-                >
-                    <ConfiguracionEquipos
-                        :key="ver"
-                        :sistema="ver"
-                        @cambio="config => resumen.equipos.value = config"
-                    />
-                </ConfiguracionBloque>
+                <ConfiguracionSmartOlt
+                    v-if="ver === 'smartolt' && puede('smartolt.ver')"
+                    data-prueba="tarjeta-smartolt"
+                    @cambio="lista => resumen.smartolt.value = lista"
+                />
+                <ConfiguracionAcs
+                    v-if="ver === 'acs' && puede('acs.ver')"
+                    data-prueba="tarjeta-acs"
+                    @cambio="config => resumen.acs.value = config"
+                />
 
                 <ConfiguracionBloque
                     v-if="ver === 'mcp'"
