@@ -55,6 +55,8 @@ export interface FilaAprovisionamiento {
     iris_actor: string | null
     senal: { rx_dbm: number | null; tx_dbm: number | null } | null
     smartolt_external_id: string | null
+    /** instancia de SmartOLT donde se autorizó la ONT (§4.2) */
+    smartolt_instancia_id: number | null
     acs_device_id: string | null
     intentos: number
     proximo_intento_en: Date | null
@@ -102,6 +104,10 @@ export async function leerAprovisionamiento(
         servicio_id: Number(fila.servicio_id),
         cliente_id: Number(fila.cliente_id),
         bodega_id: fila.bodega_id === null || fila.bodega_id === undefined ? null : Number(fila.bodega_id),
+        smartolt_instancia_id:
+            fila.smartolt_instancia_id === null || fila.smartolt_instancia_id === undefined
+                ? null
+                : Number(fila.smartolt_instancia_id),
     }
 }
 

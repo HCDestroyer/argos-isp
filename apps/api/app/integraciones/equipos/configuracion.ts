@@ -2,7 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { descifrar } from '#shared/cifrado'
-import { acsDeEmpresa, type AcsEmpresa, type ConfigGenieAcs } from '#integraciones/equipos/acs'
+import { acsDeEmpresa, type AcsEmpresa } from '#integraciones/equipos/acs'
 import { instanciasDeEmpresa, type InstanciaSmartOlt } from '#integraciones/equipos/smartolt_instancias'
 
 /**
@@ -112,40 +112,4 @@ export function gestionCon(instancias: InstanciaSmartOlt[], acs: AcsEmpresa): Ge
     const ftth = instancias.some((i) => i.operativa)
     const tr069 = acs.operativo
     return { ftth, tr069, wireless: ftth || tr069 }
-}
-
-/**
- * Vista de compatibilidad (lote 1 a 2): la instancia de SmartOLT «de la empresa» (la operativa de id
- * menor, la propia antes que la compartida) y su ACS. Lo usan los flujos que todavía no eligen la
- * instancia por servicio (§4.2 llega en el lote 3).
- */
-export interface ConfigEquipos {
-    empresaId: number
-    smartolt: ConfigSmartOlt | null
-    smartoltInstanciaId: number | null
-    genieacs: ConfigGenieAcs | null
-    smartoltProbado: boolean
-    genieacsProbado: boolean
-    pppoePorAcs: boolean
-    gestion: GestionEmpresa
-}
-
-export async function configDeEmpresa(
-    empresaId: number,
-    cliente: QueryClientContract = db.connection(),
-): Promise<ConfigEquipos> {
-    const instancias = await instanciasDeEmpresa(empresaId, cliente)
-    const acs = await acsDeEmpresa(empresaId, cliente)
-    const orden = (i: InstanciaSmartOlt) => (i.operativa ? 0 : 2) + (i.empresaId === null ? 1 : 0)
-    const instancia = instancias.toSorted((a, b) => orden(a) - orden(b) || a.id - b.id)[0] ?? null
-    return {
-        empresaId,
-        smartolt: instancia?.config ?? null,
-        smartoltInstanciaId: instancia?.id ?? null,
-        genieacs: acs.genieacs,
-        smartoltProbado: Boolean(instancia?.operativa),
-        genieacsProbado: acs.operativo,
-        pppoePorAcs: acs.pppoePorAcs,
-        gestion: gestionCon(instancias, acs),
-    }
 }

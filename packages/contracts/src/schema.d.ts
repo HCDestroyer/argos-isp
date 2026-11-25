@@ -5117,6 +5117,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/smartolt/instancias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instancias (cuentas, subdominios) de SmartOLT de la empresa activa y las compartidas
+         * @description Cada instancia con sus OLT (las de `get_olts`), su vínculo con la OLT de Argos y sus perfiles por plan. El token nunca sale (`***`). `operativa` = encendida y con la última prueba en ok. En una compartida, quien no tiene alcance global solo ve las OLT sin vínculo o ligadas a OLT de Argos suyas o compartidas.
+         */
+        get: operations["smartoltInstanciasListar"];
+        put?: never;
+        /**
+         * Registrar una instancia de SmartOLT (de la empresa activa o compartida)
+         * @description `409 subdominio_duplicado` si esa cuenta ya está registrada en la instalación; `409 instancia_duplicada` si el nombre ya existe en la empresa. `compartida: true` solo con alcance global (`403 empresa_no_permitida`). Nace sin probar. Emite `equipos.config_cambiada`.
+         */
+        post: operations["smartoltInstanciasCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/smartolt/instancias/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Una instancia de SmartOLT con sus OLT (sin el token) */
+        get: operations["smartoltInstanciasVer"];
+        /**
+         * Editar una instancia de SmartOLT (nombre, URL, token, encendido, nota y perfiles)
+         * @description Token omitido = se conserva. Cambiar URL o token borra la última prueba. `perfiles` reemplaza los perfiles de las OLT de esta instancia. Una compartida solo con alcance global. `version` desactualizada: 409.
+         */
+        put: operations["smartoltInstanciasEditar"];
+        post?: never;
+        /** Eliminar una instancia de SmartOLT sin uso (`409 instancia_en_uso`) */
+        delete: operations["smartoltInstanciasEliminar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/smartolt/instancias/{id}/probar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probar una instancia de SmartOLT y sincronizar sus OLT (una sola llamada a `get_olts`)
+         * @description Con lo guardado. No llama a otras instancias. Guarda la prueba y, si responde, la lista de OLT; las nuevas con el mismo nombre que una sola OLT de Argos libre se vinculan solas (`vinculadas_por_nombre`). No falla si SmartOLT no responde: devuelve su error.
+         */
+        post: operations["smartoltInstanciasProbar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/smartolt/olts/{id}/vincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ligar una OLT de SmartOLT con la OLT de la red de acceso de Argos (null la desliga)
+         * @description `409 olt_ya_vinculada` si esa OLT de Argos ya está ligada a otra; `422 olt_de_otra_empresa` si es de otra empresa que la instancia. De este vínculo sale la instancia de un servicio (por su servidor PPPoE → VLAN → puerto PON → OLT).
+         */
+        post: operations["smartoltOltsVincular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/aaa/servicio": {
         parameters: {
             query?: never;
@@ -19864,6 +19950,26 @@ export interface components {
             /** @description version de la elección propia (null sin elección) */
             version: number | null;
         };
+        InstanciaSmartOlt: {
+            id: number;
+            empresa_id: number | null;
+            compartida: boolean;
+            nombre: string;
+            nota: string | null;
+            url: string;
+            /** @enum {string} */
+            token: "***";
+            activo: boolean;
+            operativa: boolean;
+            /** Format: date-time */
+            probado_en: string | null;
+            prueba_ok: boolean | null;
+            prueba_error: string | null;
+            /** Format: date-time */
+            olts_sincronizadas_en: string | null;
+            version: number;
+            olts: components["schemas"]["OltSmartOlt"][];
+        };
         IntegridadLibro: {
             empresa_id: number;
             /** @description Versión del JSON canónico de la cadena (`v1`) */
@@ -20877,6 +20983,26 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        OltSmartOlt: {
+            id: number;
+            smartolt_olt_id: string;
+            nombre: string | null;
+            hardware: string | null;
+            ip: string | null;
+            presente: boolean;
+            /** @enum {string} */
+            origen: "sincronizada" | "manual";
+            olt: {
+                id: number;
+                nombre: string;
+            } | null;
+            perfiles: {
+                plan_id: number | null;
+                authorization_preset_id: number;
+                /** @enum {string} */
+                pon_type: "gpon" | "epon";
+            }[];
         };
         OpcionesLogin: {
             /** @description Mostrar «¿Olvidaste tu contraseña?» */
@@ -23141,6 +23267,17 @@ export interface components {
                 wireless: boolean;
                 tr069: boolean;
             };
+        };
+        PruebaInstanciaSmartOlt: {
+            ok: boolean;
+            latencia_ms: number | null;
+            error: string | null;
+            instancia: components["schemas"]["InstanciaSmartOlt"];
+            vinculadas_por_nombre: {
+                id: number;
+                smartolt_olt_id: string;
+                olt_id: number;
+            }[];
         };
         PuertoPon: {
             id: number;
@@ -47397,6 +47534,420 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultadoWebhookIris"];
+                };
+            };
+        };
+    };
+    smartoltInstanciasListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de instancias */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InstanciaSmartOlt"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    smartoltInstanciasCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre: string;
+                    /** @description `https://<subdominio>.smartolt.com` */
+                    url: string;
+                    /** @description Clave de API de esa cuenta (General > API key). Nunca vuelve */
+                    token: string;
+                    /** @description Compartida con todas las empresas (solo con alcance global) */
+                    compartida?: boolean;
+                    activo?: boolean;
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Instancia registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanciaSmartOlt"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.crear_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    smartoltInstanciasVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instancia */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanciaSmartOlt"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    smartoltInstanciasEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    nombre?: string;
+                    url?: string;
+                    /** @description Omitido: se conserva. Nunca vuelve */
+                    token?: string;
+                    activo?: boolean;
+                    nota?: string | null;
+                    /** @description Pasarla a compartida o devolverla a la empresa activa (alcance global) */
+                    compartida?: boolean;
+                    /** @description Reemplaza los perfiles de las OLT de esta instancia: OLT de SmartOLT + plan (null = cualquiera) → preset */
+                    perfiles?: {
+                        smartolt_olt_id: string;
+                        plan_id?: number | null;
+                        authorization_preset_id: number;
+                        pon_type?: ("gpon" | "epon") | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Instancia guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanciaSmartOlt"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.editar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    smartoltInstanciasEliminar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instancia eliminada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.eliminar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    smartoltInstanciasProbar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado de la prueba */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PruebaInstanciaSmartOlt"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.probar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    smartoltOltsVincular: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description OLT de la red de acceso de Argos (`network.olts`); null la desvincula */
+                    olt_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OLT ligada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OltSmartOlt"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso smartolt.vincular_olt; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

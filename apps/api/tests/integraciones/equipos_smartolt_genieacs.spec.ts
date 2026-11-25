@@ -6,6 +6,12 @@ import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
 import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
+import CrearInstanciaSmartOlt from '#integraciones/equipos/actions/crear_instancia_smartolt'
+import EditarInstanciaSmartOlt from '#integraciones/equipos/actions/editar_instancia_smartolt'
+import ProbarInstanciaSmartOlt from '#integraciones/equipos/actions/probar_instancia_smartolt'
+import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
+import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
+import { vistaAcs } from '#integraciones/equipos/acs'
 import {
     procesarAprovisionamiento,
     procesarPendientesEquipos,
@@ -60,27 +66,31 @@ async function servicioPendiente() {
     return { clienteId, servicioId, planId: Number(planId) }
 }
 
+/** Una instancia de SmartOLT (con sus perfiles) y el ACS de la empresa, guardados y probados por sus acciones. */
 async function configurar(
     so: Simulado,
     acs: Simulado,
     perfiles: Array<Record<string, unknown>> = [],
     empresaId = 1,
 ) {
-    const { version } = await vistaConfig(empresaId, db.connection())
-    await new ConfigurarEquipos().execute(
-        {
-            version,
-            activo: true,
-            smartolt_url: so.url,
-            smartolt_token: TOKEN_SO,
-            genieacs_url: acs.url,
-            genieacs_usuario: 'argos',
-            genieacs_clave: CLAVE_ACS,
-            perfiles: perfiles as never,
-        },
-        ctxEmpresa(empresaId),
+    const ctx = ctxEmpresa(empresaId)
+    const inst = await new CrearInstanciaSmartOlt().execute(
+        { nombre: 'SmartOLT', url: so.url, token: TOKEN_SO, activo: true },
+        ctx,
     )
-    return new ProbarEquipos().execute({}, ctxEmpresa(empresaId))
+    if (perfiles.length > 0) {
+        await new EditarInstanciaSmartOlt().execute(
+            { id: inst.id, version: inst.version, perfiles: perfiles as never },
+            ctx,
+        )
+    }
+    await new ProbarInstanciaSmartOlt().execute({ id: inst.id }, ctx)
+    const { version } = await vistaAcs(empresaId)
+    await new ConfigurarAcs().execute(
+        { version, activo: true, url: acs.url, usuario: 'argos', clave: CLAVE_ACS },
+        ctx,
+    )
+    return new ProbarAcs().execute({}, ctx)
 }
 
 /** SmartOLT con una ONT por autorizar y GenieACS con su dispositivo TR-098. */

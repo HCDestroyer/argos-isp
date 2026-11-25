@@ -2,7 +2,13 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { Problema, ReglaNegocio, type ErrorCampo, type ProblemaJson } from '#shared/errores'
 import type { TipoEquipoCliente } from '#shared/eventos'
-import { configDeEmpresa, gestionDe, type GestionEmpresa } from '#integraciones/equipos/configuracion'
+import { gestionDe, type ConfigSmartOlt, type GestionEmpresa } from '#integraciones/equipos/configuracion'
+import {
+    instanciaParaServicio,
+    instanciasDeEmpresa,
+    leerInstancia,
+    type InstanciaSmartOlt,
+} from '#integraciones/equipos/smartolt_instancias'
 import { acsDeEmpresa } from '#integraciones/equipos/acs'
 import * as smartolt from '#integraciones/equipos/smartolt'
 import * as genieacs from '#integraciones/equipos/genieacs'
@@ -238,13 +244,16 @@ export interface EquipoGestionado {
     modelo: string | null
     unidad_id: number | null
     smartolt_external_id: string | null
+    /** instancia de SmartOLT donde está la ONU (§4.2); null en registros anteriores al lote 3 */
+    smartolt_instancia_id: number | null
     acs_device_id: string | null
 }
 
 /**
- * El equipo gestionado del servicio **en el ACS y la OLT de esa empresa**. Cada empresa tiene su
- * propio SmartOLT y su propio GenieACS: si el servicio pasó a otra empresa, el registro viejo no vale
- * (apunta al ACS de la otra) y se vuelve a descubrir.
+ * El equipo gestionado del servicio. Se guardó con la empresa de entonces: si el servicio pasó a otra
+ * empresa, el id del ACS ya no vale (es del ACS de la otra empresa) y la parte de SmartOLT solo vale si
+ * la instancia es **compartida** (la ven las dos). Si no queda nada que valga: null (se vuelve a
+ * descubrir).
  */
 export async function equipoGestionado(
     servicioId: number,
@@ -252,17 +261,30 @@ export async function equipoGestionado(
     cliente: QueryClientContract = db.connection(),
 ): Promise<EquipoGestionado | null> {
     const fila = (await cliente
-        .from('integraciones.equipos_servicio')
-        .where('servicio_id', servicioId)
-        .where('empresa_id', empresaId)
-        .first()) as EquipoGestionado | null
+        .from('integraciones.equipos_servicio as e')
+        .leftJoin('integraciones.smartolt_instancias as i', 'i.id', 'e.smartolt_instancia_id')
+        .where('e.servicio_id', servicioId)
+        .select('e.*', 'i.empresa_id as instancia_empresa_id', 'i.id as instancia_existe')
+        .first()) as
+        (EquipoGestionado & { instancia_empresa_id: number | null; instancia_existe: number | null }) | null
     if (!fila) return null
-    return {
-        ...fila,
+    const equipo: EquipoGestionado = {
         servicio_id: Number(fila.servicio_id),
         empresa_id: Number(fila.empresa_id),
+        tipo: fila.tipo,
+        serie: fila.serie,
+        mac: fila.mac,
+        modelo: fila.modelo,
         unidad_id: fila.unidad_id === null ? null : Number(fila.unidad_id),
+        smartolt_external_id: fila.smartolt_external_id,
+        smartolt_instancia_id:
+            fila.smartolt_instancia_id === null ? null : Number(fila.smartolt_instancia_id),
+        acs_device_id: fila.acs_device_id,
     }
+    if (equipo.empresa_id === empresaId) return equipo
+    const compartida = fila.instancia_existe !== null && fila.instancia_empresa_id === null
+    if (!compartida || !equipo.smartolt_external_id) return null
+    return { ...equipo, empresa_id: empresaId, acs_device_id: null }
 }
 
 /** Guarda (o reemplaza) el equipo gestionado de un servicio. */
@@ -281,8 +303,11 @@ export async function guardarEquipoGestionado(
 
 /**
  * Busca una vez el equipo de un servicio que no pasó por el aprovisionamiento (servicios viejos o
- * importados): por la serie de su comodato en SmartOLT (ONU ya autorizada, con su id externo) y por
- * la serie o la MAC en GenieACS. Lo que encuentra queda guardado como equipo gestionado.
+ * importados), por la serie o la MAC de su comodato:
+ * - SmartOLT: la instancia del servicio (§4.2: la de su OLT en Argos, la única operativa o, si hay
+ *   varias, la que tenga esa serie autorizada) y su id externo;
+ * - el ACS de la empresa, por separado: por la serie o la MAC.
+ * Lo que encuentra queda guardado como equipo gestionado, con la instancia.
  */
 export async function descubrirEquipo(
     servicioId: number,
@@ -290,24 +315,41 @@ export async function descubrirEquipo(
     /** la transacción de quien llama si ya bloqueó el servicio (la FK chocaría con su lock) */
     cliente: QueryClientContract = db.connection(),
 ): Promise<EquipoGestionado | null> {
-    const config = await configDeEmpresa(empresaId, cliente)
     const acsEmpresa = await acsDeEmpresa(empresaId, cliente)
-    const gestion = { ftth: config.gestion.ftth, tr069: acsEmpresa.operativo }
-    if (!gestion.ftth && !gestion.tr069) return null
+    const instancias = await instanciasDeEmpresa(empresaId, cliente)
+    const ftth = instancias.some((i) => i.operativa)
+    if (!ftth && !acsEmpresa.operativo) return null
     for (const u of await equiposEnComodato(servicioId, cliente)) {
         let externo: string | null = null
         let modelo: string | null = null
-        if (gestion.ftth && config.smartolt && u.serie) {
-            const onus = await smartolt.detallesPorSerie(config.smartolt, u.serie, servicioId).catch(() => [])
-            const onu = onus.find((o) => o.unique_external_id)
-            if (onu) {
-                externo = onu.unique_external_id
-                modelo = onu.onu_type_name
+        let instanciaId: number | null = null
+        if (ftth && u.serie) {
+            const serie = u.serie
+            const hallazgos = new Map<number, smartolt.DetalleOnu>()
+            const buscar = async (inst: InstanciaSmartOlt) => {
+                const onus = await smartolt.detallesPorSerie(inst.config!, serie, servicioId)
+                const onu = onus.find((o) => o.unique_external_id)
+                if (onu) hallazgos.set(inst.id, onu)
+                return Boolean(onu)
+            }
+            const eleccion = await instanciaParaServicio({ id: servicioId, empresa_id: empresaId }, null, {
+                cliente,
+                buscar,
+            })
+            const inst = eleccion.instancia
+            if (inst?.operativa && inst.config) {
+                if (!hallazgos.has(inst.id)) await buscar(inst).catch(() => false)
+                const onu = hallazgos.get(inst.id)
+                if (onu) {
+                    externo = onu.unique_external_id
+                    modelo = onu.onu_type_name
+                    instanciaId = inst.id
+                }
             }
         }
         let acs: genieacs.DispositivoAcs | null = null
-        const nbi = acsEmpresa.genieacs
-        if (gestion.tr069 && nbi) {
+        const nbi = acsEmpresa.operativo ? acsEmpresa.genieacs : null
+        if (nbi) {
             acs =
                 (u.serie ? await genieacs.porSerie(nbi, u.serie, servicioId).catch(() => null) : null) ??
                 (u.mac ? await genieacs.porMac(nbi, u.mac, servicioId).catch(() => null) : null)
@@ -322,12 +364,32 @@ export async function descubrirEquipo(
             modelo: modelo ?? acs?.clase_producto ?? null,
             unidad_id: u.unidad_id,
             smartolt_external_id: externo,
+            smartolt_instancia_id: instanciaId,
             acs_device_id: acs?.id ?? null,
         }
         await guardarEquipoGestionado(cliente, equipo)
         return equipo
     }
     return null
+}
+
+/**
+ * Credenciales de la instancia de SmartOLT donde está el equipo, si está operativa (§4.3: «cada
+ * sistema aporta lo suyo»). Registros anteriores al lote 3 (sin instancia): la que diga §4.2 sin
+ * buscar (la de su OLT en Argos o la única operativa).
+ */
+async function instanciaDelEquipo(equipo: EquipoGestionado): Promise<ConfigSmartOlt | null> {
+    let inst: InstanciaSmartOlt | null
+    if (equipo.smartolt_instancia_id === null) {
+        const eleccion = await instanciaParaServicio(
+            { id: equipo.servicio_id, empresa_id: equipo.empresa_id },
+            null,
+        )
+        inst = eleccion.instancia
+    } else {
+        inst = await leerInstancia(equipo.smartolt_instancia_id)
+    }
+    return inst?.operativa ? inst.config : null
 }
 
 // ── A33: estado del equipo ────────────────────────────────────────────────────────────────────
@@ -381,9 +443,8 @@ export async function estadoEquipo(
         .select('empresa_id')
         .first()) as { empresa_id: number } | null
     const empresaId = Number(servicio?.empresa_id)
-    const config = await configDeEmpresa(empresaId)
     const acsEmpresa = await acsDeEmpresa(empresaId)
-    const gestion = { ftth: config.gestion.ftth, tr069: acsEmpresa.operativo }
+    const gestion = await gestionDe(empresaId)
     const sinGestion = async () =>
         opciones.asistente
             ? new EquipoSinGestion()
@@ -402,7 +463,7 @@ export async function estadoEquipo(
         return opciones.asistente ? paraAsistente(guardada.datos) : guardada.datos
     }
 
-    const olt = equipo.smartolt_external_id && gestion.ftth && config.smartolt ? config.smartolt : null
+    const olt = equipo.smartolt_external_id ? await instanciaDelEquipo(equipo) : null
     const acs = equipo.acs_device_id && gestion.tr069 ? acsEmpresa.genieacs : null
     if (!olt && !acs) throw await sinGestion()
 

@@ -12,6 +12,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import {
     definirEsquema,
+    pagina,
     enumerado,
     id as idEsquema,
     instante,
@@ -33,6 +34,12 @@ import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
 import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
 import { vistaAcs } from '#integraciones/equipos/acs'
+import CrearInstanciaSmartOlt from '#integraciones/equipos/actions/crear_instancia_smartolt'
+import EditarInstanciaSmartOlt from '#integraciones/equipos/actions/editar_instancia_smartolt'
+import EliminarInstanciaSmartOlt from '#integraciones/equipos/actions/eliminar_instancia_smartolt'
+import ProbarInstanciaSmartOlt from '#integraciones/equipos/actions/probar_instancia_smartolt'
+import VincularOltSmartOlt from '#integraciones/equipos/actions/vincular_olt_smartolt'
+import { listarInstancias, verInstancia } from '#integraciones/equipos/smartolt_instancias'
 import db from '@adonisjs/lucid/services/db'
 import {
     iniciadoPor,
@@ -211,7 +218,163 @@ const PruebaAcs = definirEsquema(
     }),
 )
 
+const OltSmartOlt = definirEsquema(
+    'OltSmartOlt',
+    objeto({
+        id: idEsquema,
+        smartolt_olt_id: texto,
+        nombre: nulable(texto),
+        hardware: nulable(texto),
+        ip: nulable(texto),
+        presente: booleano,
+        origen: enumerado(['sincronizada', 'manual']),
+        olt: nulable(objeto({ id: idEsquema, nombre: texto })),
+        perfiles: lista(
+            objeto({
+                plan_id: nulable(idEsquema),
+                authorization_preset_id: { type: 'integer' },
+                pon_type: enumerado(['gpon', 'epon']),
+            }),
+        ),
+    }),
+)
+
+const InstanciaSmartOlt = definirEsquema(
+    'InstanciaSmartOlt',
+    objeto({
+        id: idEsquema,
+        empresa_id: nulable(idEsquema),
+        compartida: booleano,
+        nombre: texto,
+        nota: nulable(texto),
+        url: texto,
+        token: enumerado(['***']),
+        activo: booleano,
+        operativa: booleano,
+        probado_en: nulable(instante),
+        prueba_ok: nulable(booleano),
+        prueba_error: nulable(texto),
+        olts_sincronizadas_en: nulable(instante),
+        version: { type: 'integer' },
+        olts: lista(OltSmartOlt),
+    }),
+)
+
+const PruebaInstanciaSmartOlt = definirEsquema(
+    'PruebaInstanciaSmartOlt',
+    objeto({
+        ok: booleano,
+        latencia_ms: nulable({ type: 'integer' }),
+        error: nulable(texto),
+        instancia: InstanciaSmartOlt,
+        vinculadas_por_nombre: lista(objeto({ id: idEsquema, smartolt_olt_id: texto, olt_id: idEsquema })),
+    }),
+)
+
 const rutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/smartolt/instancias',
+        operacion: 'smartoltInstanciasListar',
+        resumen: 'Instancias (cuentas, subdominios) de SmartOLT de la empresa activa y las compartidas',
+        descripcion:
+            'Cada instancia con sus OLT (las de `get_olts`), su vínculo con la OLT de Argos y sus perfiles por plan. El token ' +
+            'nunca sale (`***`). `operativa` = encendida y con la última prueba en ok. En una compartida, quien no tiene ' +
+            'alcance global solo ve las OLT sin vínculo o ligadas a OLT de Argos suyas o compartidas.',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.ver',
+        query: v.listarInstanciasSmartOltValidator,
+        respuesta: { status: 200, descripcion: 'Página de instancias', esquema: pagina(InstanciaSmartOlt) },
+        handler: async (ctx, { query }) => listarInstancias(ctx.contextoAccion(), query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/smartolt/instancias/:id',
+        operacion: 'smartoltInstanciasVer',
+        resumen: 'Una instancia de SmartOLT con sus OLT (sin el token)',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.ver',
+        respuesta: { status: 200, descripcion: 'Instancia', esquema: InstanciaSmartOlt },
+        handler: async (ctx, { params }) => verInstancia(ctx.contextoAccion(), Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/smartolt/instancias',
+        operacion: 'smartoltInstanciasCrear',
+        resumen: 'Registrar una instancia de SmartOLT (de la empresa activa o compartida)',
+        descripcion:
+            '`409 subdominio_duplicado` si esa cuenta ya está registrada en la instalación; `409 instancia_duplicada` si ' +
+            'el nombre ya existe en la empresa. `compartida: true` solo con alcance global (`403 empresa_no_permitida`). ' +
+            'Nace sin probar. Emite `equipos.config_cambiada`.',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.crear_instancia',
+        cuerpo: v.crearInstanciaSmartOltValidator,
+        respuesta: { status: 201, descripcion: 'Instancia registrada', esquema: InstanciaSmartOlt },
+        handler: async (ctx, { cuerpo }) =>
+            new CrearInstanciaSmartOlt().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/integraciones/smartolt/instancias/:id',
+        operacion: 'smartoltInstanciasEditar',
+        resumen: 'Editar una instancia de SmartOLT (nombre, URL, token, encendido, nota y perfiles)',
+        descripcion:
+            'Token omitido = se conserva. Cambiar URL o token borra la última prueba. `perfiles` reemplaza los perfiles de ' +
+            'las OLT de esta instancia. Una compartida solo con alcance global. `version` desactualizada: 409.',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.editar_instancia',
+        cuerpo: v.editarInstanciaSmartOltValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Instancia guardada', esquema: InstanciaSmartOlt },
+        handler: async (ctx, { cuerpo, params }) =>
+            new EditarInstanciaSmartOlt().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'delete',
+        ruta: '/integraciones/smartolt/instancias/:id',
+        operacion: 'smartoltInstanciasEliminar',
+        resumen: 'Eliminar una instancia de SmartOLT sin uso (`409 instancia_en_uso`)',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.eliminar_instancia',
+        respuesta: { status: 204, descripcion: 'Instancia eliminada' },
+        handler: async (ctx, { params }) => {
+            await new EliminarInstanciaSmartOlt().execute({ id: Number(params.id) }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/smartolt/instancias/:id/probar',
+        operacion: 'smartoltInstanciasProbar',
+        resumen: 'Probar una instancia de SmartOLT y sincronizar sus OLT (una sola llamada a `get_olts`)',
+        descripcion:
+            'Con lo guardado. No llama a otras instancias. Guarda la prueba y, si responde, la lista de OLT; las nuevas ' +
+            'con el mismo nombre que una sola OLT de Argos libre se vinculan solas (`vinculadas_por_nombre`). No falla si ' +
+            'SmartOLT no responde: devuelve su error.',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.probar_instancia',
+        respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaInstanciaSmartOlt },
+        handler: async (ctx, { params }) =>
+            new ProbarInstanciaSmartOlt().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/smartolt/olts/:id/vincular',
+        operacion: 'smartoltOltsVincular',
+        resumen: 'Ligar una OLT de SmartOLT con la OLT de la red de acceso de Argos (null la desliga)',
+        descripcion:
+            '`409 olt_ya_vinculada` si esa OLT de Argos ya está ligada a otra; `422 olt_de_otra_empresa` si es de otra ' +
+            'empresa que la instancia. De este vínculo sale la instancia de un servicio (por su servidor PPPoE → VLAN → ' +
+            'puerto PON → OLT).',
+        etiqueta: 'integraciones',
+        permiso: 'smartolt.vincular_olt',
+        cuerpo: v.vincularOltSmartOltValidator,
+        respuesta: { status: 200, descripcion: 'OLT ligada', esquema: OltSmartOlt },
+        handler: async (ctx, { cuerpo, params }) =>
+            new VincularOltSmartOlt().execute(
+                { id: Number(params.id), olt_id: cuerpo.olt_id },
+                ctx.contextoAccion(),
+            ),
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/integraciones/acs',

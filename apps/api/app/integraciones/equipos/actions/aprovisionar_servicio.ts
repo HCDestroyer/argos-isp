@@ -7,6 +7,7 @@ import { normalizarMac, normalizarSerie } from '#inventario/unidades'
 import AsignarComodato from '#inventario/actions/asignar_comodato'
 import { gestionDe } from '#integraciones/equipos/configuracion'
 import { acsDeEmpresa } from '#integraciones/equipos/acs'
+import { instanciaParaServicio } from '#integraciones/equipos/smartolt_instancias'
 import {
     AprovisionamientoEnCurso,
     AprovisionamientoNoDisponible,
@@ -302,6 +303,19 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
                       ? 'La empresa no tiene el ACS (GenieACS) configurado y probado en Argos'
                       : undefined,
             )
+        }
+        if (equipo.tipo === 'ont') {
+            // §4.2 paso 4: la instancia que ya se sabe (o la de la OLT del servicio) debe estar operativa
+            const eleccion = await instanciaParaServicio(
+                { id: input.servicio_id, empresa_id: empresaId },
+                input.planta ?? null,
+                { cliente: t.trx },
+            )
+            if (eleccion.instancia && !eleccion.instancia.operativa) {
+                throw new AprovisionamientoNoDisponible(
+                    `La instancia «${eleccion.instancia.nombre}» de SmartOLT está apagada o sin probar`,
+                )
+            }
         }
         if (input.wifi && !gestion.tr069) {
             throw reglas0143 ? new CapacidadNoDisponible() : new WifiNoDisponible()

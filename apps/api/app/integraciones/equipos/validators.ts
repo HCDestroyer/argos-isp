@@ -1,5 +1,6 @@
 import vine from '@vinejs/vine'
 import { idEntidad, instanteIso } from '#shared/validadores'
+import { reglasPaginacion } from '#shared/paginacion'
 
 /**
  * Validadores de equipos (contrato Iris 0.9.0 §12) y del reenvío de la bienvenida (§12.5). Los
@@ -162,3 +163,73 @@ export const configurarAcsValidator = vine.compile(
         }),
     }),
 )
+
+const perfilesInstancia = () =>
+    vine
+        .array(
+            vine.object({
+                smartolt_olt_id: vine.string().trim().minLength(1).maxLength(50),
+                plan_id: idEntidad().nullable().optional(),
+                authorization_preset_id: vine.number().withoutDecimals().min(1),
+                pon_type: vine
+                    .enum(['gpon', 'epon'] as const)
+                    .nullable()
+                    .optional(),
+            }),
+        )
+        .maxLength(500)
+        .optional()
+        .meta({
+            description:
+                'Reemplaza los perfiles de las OLT de esta instancia: OLT de SmartOLT + plan (null = cualquiera) → preset',
+        })
+
+/** `POST /integraciones/smartolt/instancias` (`contratos/equipos-olt-acs.md` §5.1). */
+export const crearInstanciaSmartOltValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(1).maxLength(100),
+        url: vine.string().trim().maxLength(500).meta({ description: '`https://<subdominio>.smartolt.com`' }),
+        token: vine
+            .string()
+            .maxLength(500)
+            .meta({ description: 'Clave de API de esa cuenta (General > API key). Nunca vuelve' }),
+        compartida: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Compartida con todas las empresas (solo con alcance global)' }),
+        activo: vine.boolean().optional(),
+        nota: vine.string().trim().maxLength(1000).nullable().optional(),
+    }),
+)
+
+/** `PUT /integraciones/smartolt/instancias/:id`. */
+export const editarInstanciaSmartOltValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1),
+        nombre: vine.string().trim().minLength(1).maxLength(100).optional(),
+        url: vine.string().trim().maxLength(500).optional(),
+        token: vine
+            .string()
+            .maxLength(500)
+            .optional()
+            .meta({ description: 'Omitido: se conserva. Nunca vuelve' }),
+        activo: vine.boolean().optional(),
+        nota: vine.string().trim().maxLength(1000).nullable().optional(),
+        compartida: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Pasarla a compartida o devolverla a la empresa activa (alcance global)' }),
+        perfiles: perfilesInstancia(),
+    }),
+)
+
+/** `POST /integraciones/smartolt/olts/:id/vincular`. */
+export const vincularOltSmartOltValidator = vine.compile(
+    vine.object({
+        olt_id: idEntidad()
+            .nullable()
+            .meta({ description: 'OLT de la red de acceso de Argos (`network.olts`); null la desvincula' }),
+    }),
+)
+
+export const listarInstanciasSmartOltValidator = vine.compile(vine.object({ ...reglasPaginacion }))

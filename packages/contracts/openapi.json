@@ -37208,6 +37208,713 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/smartolt/instancias": {
+      "get": {
+        "operationId": "smartoltInstanciasListar",
+        "summary": "Instancias (cuentas, subdominios) de SmartOLT de la empresa activa y las compartidas",
+        "description": "Cada instancia con sus OLT (las de `get_olts`), su vínculo con la OLT de Argos y sus perfiles por plan. El token nunca sale (`***`). `operativa` = encendida y con la última prueba en ok. En una compartida, quien no tiene alcance global solo ve las OLT sin vínculo o ligadas a OLT de Argos suyas o compartidas.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de instancias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InstanciaSmartOlt"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "smartoltInstanciasCrear",
+        "summary": "Registrar una instancia de SmartOLT (de la empresa activa o compartida)",
+        "description": "`409 subdominio_duplicado` si esa cuenta ya está registrada en la instalación; `409 instancia_duplicada` si el nombre ya existe en la empresa. `compartida: true` solo con alcance global (`403 empresa_no_permitida`). Nace sin probar. Emite `equipos.config_cambiada`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "`https://<subdominio>.smartolt.com`"
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Clave de API de esa cuenta (General > API key). Nunca vuelve"
+                  },
+                  "compartida": {
+                    "description": "Compartida con todas las empresas (solo con alcance global)",
+                    "type": "boolean"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "url",
+                  "token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Instancia registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.crear_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.crear_instancia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/instancias/{id}": {
+      "get": {
+        "operationId": "smartoltInstanciasVer",
+        "summary": "Una instancia de SmartOLT con sus OLT (sin el token)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instancia",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "smartoltInstanciasEditar",
+        "summary": "Editar una instancia de SmartOLT (nombre, URL, token, encendido, nota y perfiles)",
+        "description": "Token omitido = se conserva. Cambiar URL o token borra la última prueba. `perfiles` reemplaza los perfiles de las OLT de esta instancia. Una compartida solo con alcance global. `version` desactualizada: 409.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Omitido: se conserva. Nunca vuelve"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  },
+                  "compartida": {
+                    "description": "Pasarla a compartida o devolverla a la empresa activa (alcance global)",
+                    "type": "boolean"
+                  },
+                  "perfiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "smartolt_olt_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 50
+                        },
+                        "plan_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "authorization_preset_id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "pon_type": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "gpon",
+                                "epon"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "smartolt_olt_id",
+                        "authorization_preset_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500,
+                    "description": "Reemplaza los perfiles de las OLT de esta instancia: OLT de SmartOLT + plan (null = cualquiera) → preset"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Instancia guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.editar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.editar_instancia",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "smartoltInstanciasEliminar",
+        "summary": "Eliminar una instancia de SmartOLT sin uso (`409 instancia_en_uso`)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Instancia eliminada"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.eliminar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.eliminar_instancia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/instancias/{id}/probar": {
+      "post": {
+        "operationId": "smartoltInstanciasProbar",
+        "summary": "Probar una instancia de SmartOLT y sincronizar sus OLT (una sola llamada a `get_olts`)",
+        "description": "Con lo guardado. No llama a otras instancias. Guarda la prueba y, si responde, la lista de OLT; las nuevas con el mismo nombre que una sola OLT de Argos libre se vinculan solas (`vinculadas_por_nombre`). No falla si SmartOLT no responde: devuelve su error.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PruebaInstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.probar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.probar_instancia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/olts/{id}/vincular": {
+      "post": {
+        "operationId": "smartoltOltsVincular",
+        "summary": "Ligar una OLT de SmartOLT con la OLT de la red de acceso de Argos (null la desliga)",
+        "description": "`409 olt_ya_vinculada` si esa OLT de Argos ya está ligada a otra; `422 olt_de_otra_empresa` si es de otra empresa que la instancia. De este vínculo sale la instancia de un servicio (por su servidor PPPoE → VLAN → puerto PON → OLT).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "olt_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "OLT de la red de acceso de Argos (`network.olts`); null la desvincula"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OLT ligada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OltSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.vincular_olt; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.vincular_olt",
+        "x-implementado": true
+      }
+    },
     "/api/v1/internal/aaa/servicio": {
       "get": {
         "operationId": "internoAaaServicio",
@@ -125639,6 +126346,101 @@
           }
         }
       },
+      "InstanciaSmartOlt": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "compartida",
+          "nombre",
+          "nota",
+          "url",
+          "token",
+          "activo",
+          "operativa",
+          "probado_en",
+          "prueba_ok",
+          "prueba_error",
+          "olts_sincronizadas_en",
+          "version",
+          "olts"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "compartida": {
+            "type": "boolean"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "enum": [
+              "***"
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "operativa": {
+            "type": "boolean"
+          },
+          "probado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "prueba_ok": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "prueba_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "olts_sincronizadas_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "olts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OltSmartOlt"
+            }
+          }
+        }
+      },
       "IntegridadLibro": {
         "type": "object",
         "required": [
@@ -130299,6 +131101,106 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OltSmartOlt": {
+        "type": "object",
+        "required": [
+          "id",
+          "smartolt_olt_id",
+          "nombre",
+          "hardware",
+          "ip",
+          "presente",
+          "origen",
+          "olt",
+          "perfiles"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "smartolt_olt_id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hardware": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "presente": {
+            "type": "boolean"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "sincronizada",
+              "manual"
+            ]
+          },
+          "olt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "nombre"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "nombre": {
+                "type": "string"
+              }
+            }
+          },
+          "perfiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "plan_id",
+                "authorization_preset_id",
+                "pon_type"
+              ],
+              "properties": {
+                "plan_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "authorization_preset_id": {
+                  "type": "integer"
+                },
+                "pon_type": {
+                  "type": "string",
+                  "enum": [
+                    "gpon",
+                    "epon"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -138793,6 +139695,60 @@
               },
               "tr069": {
                 "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "PruebaInstanciaSmartOlt": {
+        "type": "object",
+        "required": [
+          "ok",
+          "latencia_ms",
+          "error",
+          "instancia",
+          "vinculadas_por_nombre"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instancia": {
+            "$ref": "#/components/schemas/InstanciaSmartOlt"
+          },
+          "vinculadas_por_nombre": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "smartolt_olt_id",
+                "olt_id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "smartolt_olt_id": {
+                  "type": "string"
+                },
+                "olt_id": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               }
             }
           }

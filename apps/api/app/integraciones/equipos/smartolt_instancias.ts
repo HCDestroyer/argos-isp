@@ -1,6 +1,10 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { descifrarCampo, type ConfigSmartOlt } from '#integraciones/equipos/configuracion'
+import type { ContextoAccion } from '#shared/contexto'
+import { Conflicto, NoEncontrado, Problema } from '#shared/errores'
+import { exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
+import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 
 /**
  * Instancias (cuentas, subdominios) de SmartOLT y sus OLT (`contratos/equipos-olt-acs.md` §3.1-§3.3).
@@ -402,4 +406,124 @@ export async function instanciaParaServicio(
         return { oltEsperada: null, origen: 'busqueda', instancia: encontradas[0]!, candidatas, errores }
     }
     return { oltEsperada: null, origen: 'ninguna', instancia: null, candidatas, errores }
+}
+
+// ── Administración (acciones `smartolt.*`) ───────────────────────────────────────────────────
+
+/** ¿El actor tiene alcance global? (`empresasPermitidas` null o ausente). */
+export function alcanceGlobal(ctx: ContextoAccion): boolean {
+    return ctx.empresasPermitidas === null || ctx.empresasPermitidas === undefined
+}
+
+/** 403 `empresa_no_permitida`: una instancia compartida solo la administra quien ve todas las empresas. */
+export class CompartidaSinAlcance extends Problema {
+    constructor() {
+        super(
+            403,
+            'empresa_no_permitida',
+            'Empresa no permitida',
+            'Una instancia compartida de SmartOLT solo la administra quien tiene acceso a todas las empresas',
+        )
+    }
+}
+
+/**
+ * La instancia que se quiere administrar, bloqueada: 404 si no existe o no la ve la empresa activa;
+ * 403 si es compartida y el actor no tiene alcance global.
+ */
+export async function instanciaAdministrable(
+    trx: QueryClientContract,
+    ctx: ContextoAccion,
+    id: number,
+): Promise<FilaInstancia> {
+    const empresaId = exigirEmpresaActivaDelContexto(ctx)
+    const fila = await leerFilaInstancia(id, trx, { bloquear: true })
+    if (!fila || !instanciaVisible(fila, empresaId)) {
+        throw new NoEncontrado(`La instancia ${id} de SmartOLT no existe`)
+    }
+    if (fila.empresa_id === null && !alcanceGlobal(ctx)) throw new CompartidaSinAlcance()
+    return fila
+}
+
+/** La empresa que ve la vista: null (todas sus OLT) con alcance global; si no, la activa. */
+export function empresaQueMira(ctx: ContextoAccion): number | null {
+    return alcanceGlobal(ctx) ? null : exigirEmpresaActivaDelContexto(ctx)
+}
+
+/** 409 si ya hay otra instancia con ese nombre en la empresa (o entre las compartidas). */
+export async function exigirNombreLibre(
+    trx: QueryClientContract,
+    empresaId: number | null,
+    nombre: string,
+    excepto: number | null = null,
+): Promise<void> {
+    const q = trx
+        .from(TABLA_INSTANCIAS)
+        .whereRaw('coalesce(empresa_id, 0) = ?', [empresaId ?? 0])
+        .whereRaw('lower(nombre) = lower(?)', [nombre])
+    if (excepto !== null) q.whereNot('id', excepto)
+    if (await q.first()) {
+        throw new Conflicto(
+            `Ya hay una instancia de SmartOLT llamada «${nombre}»`,
+            'instancia_duplicada',
+            'Nombre repetido',
+        )
+    }
+}
+
+/** 409 `subdominio_duplicado`: una cuenta (subdominio) se registra una sola vez en la instalación. */
+export async function exigirUrlLibre(
+    trx: QueryClientContract,
+    url: string,
+    excepto: number | null = null,
+): Promise<void> {
+    const q = trx.from(TABLA_INSTANCIAS).whereRaw('lower(url) = lower(?)', [url])
+    if (excepto !== null) q.whereNot('id', excepto)
+    if (await q.first()) {
+        throw new Conflicto(
+            'Esa cuenta (subdominio) de SmartOLT ya está registrada en Argos',
+            'subdominio_duplicado',
+            'Subdominio repetido',
+        )
+    }
+}
+
+/** Para `audit.cambios`: el token solo como «hay» (`***`). */
+export function instanciaSinSecretos(fila: FilaInstancia, tokenNuevo = false): Record<string, unknown> {
+    return {
+        empresa_id: fila.empresa_id === null ? null : Number(fila.empresa_id),
+        nombre: fila.nombre,
+        nota: fila.nota ?? null,
+        url: fila.url,
+        token: tokenNuevo ? '*** (nuevo)' : '***',
+        activo: fila.activo,
+    }
+}
+
+/** `GET /integraciones/smartolt/instancias`: las de la empresa activa y las compartidas, por id. */
+export async function listarInstancias(
+    ctx: ContextoAccion,
+    opciones: OpcionesPaginacion,
+): Promise<Pagina<VistaInstancia>> {
+    const empresaId = exigirEmpresaActivaDelContexto(ctx)
+    const pagina = await paginar(
+        db.from(TABLA_INSTANCIAS).where((q) => q.where('empresa_id', empresaId).orWhereNull('empresa_id')),
+        opciones,
+        { direccion: 'asc' },
+    )
+    const data: VistaInstancia[] = []
+    for (const fila of pagina.data as FilaInstancia[]) {
+        data.push(await vistaInstancia(fila, db.connection(), empresaQueMira(ctx)))
+    }
+    return { data, nextCursor: pagina.nextCursor }
+}
+
+/** `GET /integraciones/smartolt/instancias/:id`: 404 si no existe o no la ve la empresa activa. */
+export async function verInstancia(ctx: ContextoAccion, id: number): Promise<VistaInstancia> {
+    const empresaId = exigirEmpresaActivaDelContexto(ctx)
+    const fila = await leerFilaInstancia(id)
+    if (!fila || !instanciaVisible(fila, empresaId)) {
+        throw new NoEncontrado(`La instancia ${id} de SmartOLT no existe`)
+    }
+    return vistaInstancia(fila, db.connection(), empresaQueMira(ctx))
 }
