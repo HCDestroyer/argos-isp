@@ -347,15 +347,18 @@
     opacity: 0;
 }
 
-/* Entrada de la página: aparece y sube 4 px en 0,22 s. */
+/*
+ * Entrada de la página: aparece en 0,22 s. Solo opacidad y sin `forwards`: un `transform` animado
+ * (aun con relleno final) vuelve a `.entrada-pagina` el bloque contenedor de todo lo `fixed` de
+ * adentro, y la barra de acción quedaba a media página en vez de pegada al borde de la pantalla.
+ */
 .entrada-pagina {
-    animation: ax-aparecer 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation: ax-aparecer 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
 }
 
 @keyframes ax-aparecer {
     from {
         opacity: 0;
-        transform: translateY(0.25rem);
     }
 }
 
@@ -899,9 +902,11 @@
 
     /*
      * Aire al final de la página (después del pie, con sus enlaces de políticas) para que la barra
-     * no tape lo último: en el `body`, no en `main`.
+     * no tape lo último: en el `body`, no en `main`. El alto real de la barra lo publica
+     * `PortalBarraAccion` (`--ax-barra-alto`); la barra de secciones (`--ax-nav-inferior`) ya la
+     * reserva el layout, así que aquí solo se suma la barra y el seguro del borde.
      */
     body:has(.barra-accion) {
-        padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+        padding-bottom: calc(var(--ax-barra-alto, 8rem) + 1rem + env(safe-area-inset-bottom));
     }
 }
