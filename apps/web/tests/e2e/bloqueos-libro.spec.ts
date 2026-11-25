@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir } from './ayudas'
+import { entrar, fijarHoyFixtures, ir, llenarFecha } from './ayudas'
 
 /**
  * Bloqueos del libro (A3, fase 6 PR A). En los fixtures, ArgosNet tiene global y impuestos hasta el
@@ -19,7 +19,7 @@ test('bloquear compras, el duro con su confirmación y sus requisitos, una excep
     const bloquear = page.getByRole('dialog', { name: 'Bloquear el libro' })
     await bloquear.locator('[data-prueba="bloqueo-tipo"]').click()
     await page.getByRole('option', { name: /Compras/ }).click()
-    await bloquear.locator('[data-prueba="bloqueo-hasta"]').fill('2026-08-31')
+    await llenarFecha(bloquear.locator('[data-prueba="bloqueo-hasta"]'), '2026-08-31')
     await bloquear.locator('[data-prueba="bloqueo-motivo"]').fill('Compras de agosto conciliadas')
     await bloquear.getByRole('button', { name: 'Bloquear' }).click()
     await expect(bloquear).toHaveCount(0)
@@ -28,7 +28,7 @@ test('bloquear compras, el duro con su confirmación y sus requisitos, una excep
     // Bloqueo duro: el botón espera la frase exacta; la API pide los meses cerrados.
     await empresa.locator('[data-prueba="abrir-duro"]').click()
     const duro = page.getByRole('dialog', { name: 'Bloqueo duro' })
-    await duro.locator('[data-prueba="duro-hasta"]').fill('2026-08-31')
+    await llenarFecha(duro.locator('[data-prueba="duro-hasta"]'), '2026-08-31')
     await duro.locator('[data-prueba="duro-motivo"]').fill('Auditoría del tercer trimestre')
     await duro.locator('[data-prueba="duro-confirmacion"]').fill('bloqueo duro hasta 2026-08-31')
     await expect(duro.locator('[data-prueba="confirmar-duro"]')).toBeDisabled()

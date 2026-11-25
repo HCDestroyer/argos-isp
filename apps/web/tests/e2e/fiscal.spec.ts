@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { elegirEmpresa, entrar, ir } from './ayudas'
+import { elegirEmpresa, entrar, ir, llenarFecha } from './ayudas'
 
 /**
  * Configuración → Fiscal (localización GT, fase 2): régimen con su aviso, parámetros con vigencia
@@ -26,13 +26,13 @@ test('parámetros: un valor en un mes cerrado se explica y uno futuro se inserta
 
     const modal = page.getByRole('dialog')
     await expect(modal.locator('[data-prueba="aviso-contador"]')).toBeVisible()
-    await modal.getByLabel('Vigente desde').fill('2026-09-15')
+    await llenarFecha(modal.getByLabel('Vigente desde'), '2026-09-15')
     await modal.getByLabel('Motivo').fill('Confirmado con el contador')
     await modal.getByRole('button', { name: 'Guardar valor' }).click()
     await expect(modal).toContainText('La fecha cae en un mes cerrado')
     await expect(modal).toContainText('2026-09')
 
-    await modal.getByLabel('Vigente desde').fill('2027-01-01')
+    await llenarFecha(modal.getByLabel('Vigente desde'), '2027-01-01')
     await modal.getByRole('button', { name: 'Guardar valor' }).click()
     await expect(modal).toBeHidden()
     await expect(page.getByText('ret_iva_minimo actualizado').first()).toBeVisible()

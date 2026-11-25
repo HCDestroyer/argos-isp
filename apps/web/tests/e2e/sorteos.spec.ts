@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { bytesBase64, IMAGENES_SEMILLA } from '../../fixtures/sorteos/imagenes'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, llenarFecha } from './ayudas'
 
 /**
  * Sorteos (A3, `contratos/lealtad.md` §7, §8 y §15.3). En los fixtures, «Sorteo de fiestas patrias»
@@ -80,7 +80,7 @@ test('crear un sorteo en borrador con premios por tipo e imagen, y publicar sus 
     await formulario.getByLabel('Premios no reclamados').fill('Pasa al primer suplente.')
     await formulario.getByLabel('Publicación de resultados').fill('En el portal, el mismo día.')
     await formulario.getByLabel('Fuente del valor público').fill('Primer premio de la Lotería Santa Lucía del día del sorteo')
-    await formulario.getByLabel('Participan desde').fill('2026-11-01')
+    await llenarFecha(formulario.getByLabel('Participan desde'), '2026-11-01')
     await formulario.getByLabel('Corte').fill('2026-12-28T23:59')
     await formulario.getByLabel('Sorteo', { exact: true }).fill('2026-12-30T16:00')
     await formulario.getByLabel('Lugar').fill('Oficina central')

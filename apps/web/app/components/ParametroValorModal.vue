@@ -166,10 +166,9 @@ async function enviar(evento: FormSubmitEvent<CuerpoValorParametro>) {
                         autoresize
                         class="w-full font-mono text-xs"
                     />
-                    <UInput
+                    <CampoFecha
                         v-else-if="parametro.tipo === 'fecha'"
                         v-model="estado.valor"
-                        type="date"
                         class="w-full"
                     />
                     <UInput
@@ -194,9 +193,8 @@ async function enviar(evento: FormSubmitEvent<CuerpoValorParametro>) {
                     required
                     help="Lo anterior a esta fecha no cambia. No puede caer en un mes cerrado."
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.vigente_desde"
-                        type="date"
                         class="w-full"
                     />
                 </UFormField>

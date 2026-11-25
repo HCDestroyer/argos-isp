@@ -144,9 +144,8 @@ async function enviar(evento: FormSubmitEvent<CuerpoPagoDeclaracion>) {
                         name="fecha"
                         help="Vacía: hoy."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             :max="hoy"
                             class="w-full"
                             data-prueba="pago-fecha"

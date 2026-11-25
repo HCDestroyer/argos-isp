@@ -540,9 +540,8 @@ onMounted(async () => {
                                 label="Desde"
                                 size="sm"
                             >
-                                <UInput
+                                <CampoFecha
                                     v-model="desde"
-                                    type="date"
                                     :max="hasta || undefined"
                                     class="w-full"
                                     @update:model-value="rango = 'elegir'"
@@ -553,9 +552,8 @@ onMounted(async () => {
                                 size="sm"
                                 help="Hora de Guatemala"
                             >
-                                <UInput
+                                <CampoFecha
                                     v-model="hasta"
-                                    type="date"
                                     :min="desde || undefined"
                                     class="w-full"
                                     @update:model-value="rango = 'elegir'"

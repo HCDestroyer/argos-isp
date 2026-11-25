@@ -423,9 +423,8 @@ async function verArchivo() {
                             :class="nivel('fecha')?.clase"
                             :hint="nivel('fecha')?.etiqueta"
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="datos.fecha"
-                                type="date"
                                 class="w-full"
                                 data-prueba="borrador-fecha"
                             />
@@ -749,9 +748,8 @@ async function verArchivo() {
                             name="vence_en"
                             help="Vacío = los días de crédito del proveedor."
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="confirmacion.vence_en"
-                                type="date"
                                 class="w-full"
                             />
                         </UFormField>
