@@ -168,13 +168,18 @@ export function numeroAcceso(identificador: string): string {
  * `0.1.0`, la forma anterior de Argos). El lote 6 prueba las dos en el ambiente demo.
  */
 export type FormaAnulacion = 'documentada' | 'atributos'
+/*
+ * Resultado del ambiente demo de INFILE (lote 6, 25-nov-2026): la forma `documentada` se rechaza
+ * por el XSD («No matching global declaration available for the validation root»); `atributos` se
+ * anula («Validado y Anulado Exitosamente»). Por eso la forma por defecto es `atributos`.
+ */
 
 /** XML de la anulación (`GTAnulacionDocumento`). `dte.fecha_emision` es la que se envió al certificar. */
 export function xmlAnulacion(
     dte: DteCertificado,
     motivo: string,
     fechaAnulacion: Date,
-    forma: FormaAnulacion = 'documentada',
+    forma: FormaAnulacion = 'atributos',
 ): string {
     const anulacion = fechaHoraGt(fechaAnulacion)
     if (forma === 'atributos') {

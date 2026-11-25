@@ -35,7 +35,10 @@ import type {
  * - **Errores**: `descripcion_alertas_sat[]` y `descripcion_alertas_infile[]` (`fuente`,
  *   `categoria`, `numeral`, `validacion`, `mensaje_error`).
  * - **Consulta de NIT**: `POST {RECEPTORES}/rest/action` con `emisor_codigo`, `emisor_clave` y
- *   `nit_consulta`; responde `resultado` y `razon_social`.
+ *   `nit_consulta`. El manual dice que responde `resultado` y `razon_social`; el servicio real
+ *   (ambiente demo, lote 6, 25-nov-2026) responde `{ nit, nombre, mensaje }`: `nombre` vacío con
+ *   `mensaje` «NIT no válido» si no lo encuentra y «Credenciales no registradas» con credenciales
+ *   malas. Se aceptan las dos formas (`leerConsultaNit`).
  */
 
 const CERTIFICADOR = 'https://certificador.feel.com.gt'
@@ -73,12 +76,33 @@ export interface RespuestaInfile {
     informacion_adicional?: unknown
     /** consulta de NIT */
     razon_social?: string | null
+    /** consulta de NIT, forma real del servicio */
+    nombre?: string | null
+    mensaje?: string | null
     /** forma anterior de los errores (compatibilidad) */
     descripcion_errores?: Array<AlertaInfile | string>
     [clave: string]: unknown
 }
 
 const OBLIGATORIAS = ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api']
+
+/** Lo que dice una consulta de NIT en cualquiera de sus dos formas (manual y servicio real). */
+export type LecturaConsultaNit =
+    | { tipo: 'encontrado'; nombre: string }
+    | { tipo: 'no_encontrado'; mensaje: string | null }
+    | { tipo: 'credenciales'; mensaje: string }
+    | { tipo: 'desconocida'; mensaje: string | null }
+
+export function leerConsultaNit(r: RespuestaInfile): LecturaConsultaNit {
+    const mensaje = (r.mensaje ?? r.descripcion ?? null) || null
+    if (mensaje && /credencial/i.test(mensaje)) return { tipo: 'credenciales', mensaje }
+    const nombre = String(r.razon_social ?? r.nombre ?? '').trim()
+    if (typeof r.resultado === 'boolean') {
+        return r.resultado && nombre ? { tipo: 'encontrado', nombre } : { tipo: 'no_encontrado', mensaje }
+    }
+    if ('nombre' in r) return nombre ? { tipo: 'encontrado', nombre } : { tipo: 'no_encontrado', mensaje }
+    return { tipo: 'desconocida', mensaje }
+}
 
 function requeridas(cred: CredencialesFel, campos: string[]): string | null {
     const faltan = campos.filter((c) => !cred[c])
@@ -235,18 +259,22 @@ export class ProveedorFelInfile implements ProveedorFel {
         }
         const r = await this.consultaNit(nit, cred)
         if (!r.ok) return { ok: false, detalle: `INFILE no aceptó las credenciales (${r.error})` }
-        if (typeof r.datos.resultado !== 'boolean') {
-            return {
-                ok: false,
-                detalle: `INFILE respondió algo que no es una consulta de NIT: ${r.datos.descripcion ?? 'sin descripción'}`,
-            }
-        }
-        if (r.datos.resultado && r.datos.razon_social) {
-            return { ok: true, detalle: `INFILE respondió con el NIT ${nit}: ${r.datos.razon_social}` }
-        }
-        return {
-            ok: true,
-            detalle: `INFILE aceptó las credenciales, pero no encontró el NIT ${nit}${r.datos.descripcion ? ` (${r.datos.descripcion})` : ''}`,
+        const lectura = leerConsultaNit(r.datos)
+        switch (lectura.tipo) {
+            case 'encontrado':
+                return { ok: true, detalle: `INFILE respondió con el NIT ${nit}: ${lectura.nombre}` }
+            case 'no_encontrado':
+                return {
+                    ok: true,
+                    detalle: `INFILE aceptó las credenciales, pero no encontró el NIT ${nit}${lectura.mensaje ? ` (${lectura.mensaje})` : ''}`,
+                }
+            case 'credenciales':
+                return { ok: false, detalle: `INFILE rechazó las credenciales: ${lectura.mensaje}` }
+            default:
+                return {
+                    ok: false,
+                    detalle: `INFILE respondió algo que no es una consulta de NIT: ${lectura.mensaje ?? 'sin descripción'}`,
+                }
         }
     }
 
@@ -297,7 +325,8 @@ export class ProveedorFelInfile implements ProveedorFel {
         const fecha = new Date()
         const r = await enviar(`${CERTIFICADOR}/fel/procesounificado/transaccion/v2/xml`, {
             cabeceras: this.cabeceras(cred, `${dte.identificador}-anulacion`),
-            cuerpo: xmlAnulacion(dte, motivo, fecha),
+            // el demo de INFILE rechazó la forma del manual (XSD) y aceptó la de atributos (lote 6)
+            cuerpo: xmlAnulacion(dte, motivo, fecha, 'atributos'),
         })
         if (!r.ok) {
             const yaAnulado = fechaYaAnulado(r.datos)
@@ -311,13 +340,16 @@ export class ProveedorFelInfile implements ProveedorFel {
             if (yaAnulado) return this.yaAnulado(yaAnulado, r.datos)
             return { resultado: 'rechazado', errores: errores(r.datos), respuesta: paraBitacora(r.datos) }
         }
+        // ya anulado (demo, lote 6): `resultado: true` con «…ya esta anulado…» y el XML de la primera
+        // anulación; es el estado, no un error
+        const yaAnulado = /ya esta anulado|ya está anulado/i.test(r.datos.descripcion ?? '')
         return {
             resultado: 'anulado',
             fecha: r.datos.fecha ? new Date(r.datos.fecha) : fecha,
             xml: r.datos.xml_certificado
                 ? Buffer.from(r.datos.xml_certificado, 'base64').toString('utf8')
                 : null,
-            respuesta: paraBitacora(r.datos),
+            respuesta: paraBitacora(r.datos, yaAnulado ? { ya_anulado: true } : {}),
         }
     }
 
@@ -371,12 +403,10 @@ export class ProveedorFelInfile implements ProveedorFel {
     async consultarNit(nit: string, cred: CredencialesFel): Promise<{ nombre: string } | null> {
         const r = await this.consultaNit(nit, cred)
         if (!r.ok) throw new Error(`INFILE no respondió la consulta de NIT (${r.error})`)
-        if (typeof r.datos.resultado !== 'boolean') {
-            throw new Error(
-                `Respuesta inesperada de la consulta de NIT: ${r.datos.descripcion ?? 'sin descripción'}`,
-            )
-        }
-        if (!r.datos.resultado || !r.datos.razon_social) return null
-        return { nombre: String(r.datos.razon_social) }
+        const lectura = leerConsultaNit(r.datos)
+        if (lectura.tipo === 'encontrado') return { nombre: lectura.nombre }
+        if (lectura.tipo === 'no_encontrado') return null
+        // credenciales malas o respuesta desconocida: no es «no existe»
+        throw new Error(`La consulta de NIT no se pudo hacer: ${lectura.mensaje ?? 'respuesta inesperada'}`)
     }
 }

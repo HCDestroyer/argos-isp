@@ -471,3 +471,220 @@ test.group('INFILE · XML según los ejemplos de la documentación', (group) => 
         assert.include(xmlDte(envio), `IDReceptor="${dteFactura!.receptor.id}"`)
     })
 })
+
+/**
+ * Respuestas **reales** del ambiente demo de INFILE (lote 6, 25-nov-2026; emisor DEMO COMERCIAL,
+ * S.A.): se copia la forma, con datos del demo y sin llaves. Difieren del manual en la consulta de
+ * NIT (`{ nit, nombre, mensaje }`), en los errores (`descripcion_errores` con `fuente`, `categoria`,
+ * `numeral`, `validacion`, `mensaje_error`) y en la anulación repetida (`resultado: true`).
+ */
+test.group('INFILE · respuestas reales del ambiente demo', (group) => {
+    group.each.setup(async () => {
+        await sacarDeLaColaFel()
+        red.instalar()
+    })
+    group.each.teardown(async () => {
+        red.quitar()
+        await sacarDeLaColaFel()
+        await soloEmpresaPrincipal()
+    })
+
+    const SANDBOX_REAL =
+        'Este documento fue procesado en nuestro SandBox en modalidad de pruebas, por ningun motivo debe ser usado como comprobante fiscal. El que incumpliere será sancionado con multas según el acuerdo vigente.'
+
+    function rechazoReal(validacion: string, mensaje: string) {
+        return {
+            status: 200,
+            cuerpo: {
+                resultado: false,
+                fecha: '2026-11-25T15:35:35-06:00',
+                origen: 'Validaciones XML Segun FEL Reglas y Validaciones Versión 1.7.5',
+                descripcion: 'Existen errores en la validacion del XML. Por favor revisa e intenta de nuevo.',
+                control_emision: { Saldo: 1990, Creditos: 2000 },
+                alertas_infile: false,
+                descripcion_alertas_infile: [],
+                alertas_sat: false,
+                descripcion_alertas_sat: [],
+                cantidad_errores: 1,
+                descripcion_errores: [
+                    {
+                        resultado: false,
+                        fuente: 'FEL Reglas y Validaciones',
+                        categoria: 'Receptor',
+                        numeral: '4',
+                        validacion: validacion,
+                        mensaje_error: mensaje,
+                    },
+                ],
+                informacion_adicional: 'sysid: 0, Nodo: 0',
+                serie: '',
+                uuid: '',
+                numero: 0,
+            },
+        }
+    }
+
+    test('consulta de NIT con la forma real: encontrado, «NIT no válido» y credenciales no registradas', async ({
+        assert,
+    }) => {
+        const infile = new ProveedorFelInfile()
+        red.respuestas.push({
+            status: 200,
+            cuerpo: { nit: '76365204', nombre: 'ALVIZURES,GONZALEZ,,JAIME,LEONEL', mensaje: '' },
+        })
+        assert.deepEqual(await infile.consultarNit('76365204', CRED), {
+            nombre: 'ALVIZURES,GONZALEZ,,JAIME,LEONEL',
+        })
+        red.respuestas.push({ status: 200, cuerpo: { nit: '1000001', nombre: '', mensaje: 'NIT no válido' } })
+        assert.isNull(await infile.consultarNit('1000001', CRED))
+        red.respuestas.push({
+            status: 200,
+            cuerpo: { nit: '76365204', nombre: '', mensaje: 'Credenciales no registradas' },
+        })
+        let lanzo = false
+        await infile.consultarNit('76365204', CRED).catch(() => {
+            lanzo = true
+        })
+        assert.isTrue(lanzo, 'credenciales malas no es «no existe»')
+
+        // probar credenciales: el NIT demo no está en la SAT, pero las credenciales sí sirven
+        red.respuestas.push({
+            status: 200,
+            cuerpo: { nit: '1170142K', nombre: '', mensaje: 'NIT no válido' },
+        })
+        const demo = await infile.probarCredenciales(CRED, 'pruebas', { nit_emisor: '1170142K' })
+        assert.isTrue(demo.ok)
+        assert.include(demo.detalle, 'no encontró el NIT 1170142K (NIT no válido)')
+        red.respuestas.push({
+            status: 200,
+            cuerpo: { nit: '', nombre: '', mensaje: 'Credenciales no registradas' },
+        })
+        const mala = await infile.probarCredenciales(CRED, 'pruebas', { nit_emisor: '1170142K' })
+        assert.isFalse(mala.ok)
+        assert.include(mala.detalle, 'Credenciales no registradas')
+    })
+
+    test('certificado real en sandbox (serie **PRUEBAS**, número numérico) y re-intento', async ({
+        assert,
+    }) => {
+        const e = await conInfile()
+        const { facturaId } = await dtePedido(e)
+        const uuid = uuidNuevo()
+        const real = {
+            status: 200,
+            cuerpo: {
+                resultado: true,
+                fecha: '2026-11-25T15:35:34-06:00',
+                origen: 'Validaciones XML Segun FEL Reglas y Validaciones Versión 1.7.5',
+                descripcion: 'Validado y Certificado Exitosamente',
+                control_emision: { Saldo: 1992, Creditos: 2000 },
+                alertas_infile: true,
+                descripcion_alertas_infile: [SANDBOX_REAL],
+                alertas_sat: false,
+                descripcion_alertas_sat: [],
+                cantidad_errores: 0,
+                descripcion_errores: [],
+                informacion_adicional: 'transaccion: 0, sysid: 0, etag: 0, Nodo: 0',
+                uuid,
+                serie: '**PRUEBAS**',
+                numero: 576472242,
+                xml_certificado: Buffer.from('<dte:GTDocumento/>').toString('base64'),
+            },
+        }
+        red.respuestas.push(real)
+        await cola(e)
+        const [dte] = await dtesDe('factura', facturaId)
+        assert.containSubset(dte, {
+            estado: 'certificado',
+            autorizacion: uuid,
+            serie: '**PRUEBAS**',
+            numero: '576472242',
+        })
+        const intento = await db
+            .from('fiscal.dte_intentos')
+            .where({ dte_id: dte!.id, operacion: 'certificar' })
+            .orderBy('id', 'desc')
+            .first()
+        assert.isTrue(intento.respuesta.sandbox)
+    })
+
+    test('rechazos reales: NIT del receptor inválido y establecimiento que no existe', async ({ assert }) => {
+        const e = await conInfile()
+        const primero = await dtePedido(e)
+        red.respuestas.push(
+            rechazoReal(
+                '2',
+                'FEL-GUI-18 | 2.2 | 2.2.4 | No. 4 | Error - El NIT del Receptor [ABC123] es inválido [2]. (2244)',
+            ),
+        )
+        await cola(e)
+        const [nit] = await dtesDe('factura', primero.facturaId)
+        assert.equal(nit!.estado, 'rechazado')
+        assert.include(nit!.ultimo_error, 'El NIT del Receptor [ABC123] es inválido')
+        assert.include(nit!.ultimo_error, 'FEL Reglas y Validaciones')
+
+        const segundo = await dtePedido(e)
+        red.respuestas.push(
+            rechazoReal(
+                '2202',
+                'FEL-GUI-14 | 2.2 | 2.2.3 | No. 2202 | Error - El establecimiento [2] no existe. (2202)',
+            ),
+        )
+        await cola(e)
+        const [establecimiento] = await dtesDe('factura', segundo.facturaId)
+        assert.include(establecimiento!.ultimo_error, 'El establecimiento [2] no existe')
+    })
+
+    test('anulación real: la forma de atributos; anular otra vez responde «ya esta anulado» y queda anulado', async ({
+        assert,
+    }) => {
+        const infile = new ProveedorFelInfile()
+        const certificadoDte = {
+            identificador: 'b2d6b5e2-0000-4000-8000-000000000002',
+            autorizacion: UUID,
+            serie: '**PRUEBAS**',
+            numero: '1138180656',
+            fecha_emision: '2026-11-25T15:35:38-06:00',
+            emisor_nit: '1170142K',
+            receptor_id: '76365204',
+        }
+        red.respuestas.push({
+            status: 200,
+            cuerpo: {
+                resultado: true,
+                fecha: '2026-11-25T15:35:39-06:00',
+                descripcion: 'Validado y Anulado Exitosamente',
+                alertas_infile: true,
+                descripcion_alertas_infile: [SANDBOX_REAL],
+                uuid: '53D8A6E4-463A-4B9D-80FB-1EF8BE97FF74',
+                serie: '**PRUEBAS**',
+                numero: 1178225565,
+            },
+        })
+        const anulado = await infile.anular(certificadoDte, 'Anulación de prueba', CRED)
+        assert.equal(anulado.resultado, 'anulado')
+        const cuerpo = red.llamadas[0]!.cuerpo
+        assert.include(cuerpo, 'xmlns:dte="http://www.sat.gob.gt/dte/fel/0.1.0"')
+        assert.include(cuerpo, `NumeroDocumentoAAnular="${UUID}"`)
+        assert.include(cuerpo, 'FechaEmisionDocumentoAnular="2026-11-25T15:35:38-06:00"')
+
+        red.respuestas.push({
+            status: 200,
+            cuerpo: {
+                resultado: true,
+                descripcion:
+                    '¡Ups! Parace que estas intentando anular un documento que ya esta anulado, por favor revisa la sección de [alertas_infile] en la estructura de esta respuesta para conocer mas detalles.',
+                alertas_infile: true,
+                descripcion_alertas_infile: [
+                    '1. La anulación que nos acabas de enviar NO ha sido procesada.',
+                ],
+                uuid: '53D8A6E4-463A-4B9D-80FB-1EF8BE97FF74',
+                serie: '**PRUEBAS**',
+                numero: 1178225565,
+            },
+        })
+        const otraVez = await infile.anular(certificadoDte, 'Otra vez', CRED)
+        assert.equal(otraVez.resultado, 'anulado')
+        assert.isTrue(otraVez.respuesta.ya_anulado)
+    })
+})

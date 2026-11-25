@@ -807,6 +807,33 @@ Frases: si el catálogo del paquete GT (`app/fiscal/l10n/`) no trae alguno de lo
 4/1, 5/1, 9/16, 9/17, se agrega al catálogo de frases **manuales** disponibles (tipo, escenario y
 texto), sin asignarlo a ningún régimen: cuál aplica a cada empresa lo decide el contador (P9).
 
+#### Resultados del ambiente demo (25-nov-2026)
+
+Corrida de `tests/fiscal/infile_demo.spec.ts` (manual; se salta sin `INFILE_DEMO_*`) contra el demo
+de INFILE con el emisor DEMO COMERCIAL, S.A., en la base `argosisp_test_fel`. Sin credenciales; la
+evidencia completa (UUID, serie, número, alertas) quedó fuera del repositorio. Las credenciales de la
+empresa demo se borran de la base al terminar.
+
+| Paso | Qué respondió INFILE | Consecuencia en el código |
+| --- | --- | --- |
+| 1 | Empresa con NIT `1170142K`: 201, `nit_valido: false` | Lote 1 confirmado |
+| 2 | Probar credenciales: la consulta de su propio NIT responde `{ nombre: "", mensaje: "NIT no válido" }` | `probarCredenciales` da `ok` con «no encontró el NIT»; credenciales malas responden «Credenciales no registradas» (`ok: false`) |
+| 3 | Consulta de NIT real: `{ nit, nombre, mensaje }` (no `resultado`/`razon_social` como el manual). `76365204` → nombre; `1000001` y `1170142K` → «NIT no válido» | `leerConsultaNit` acepta las dos formas; «Credenciales no registradas» lanza (no es «no existe») |
+| 4 | FACT Q120.00 a `76365204`, frases 1/1 y 2/1: «Validado y Certificado Exitosamente», serie `**PRUEBAS**`, número decimal, alerta de SandBox | Certifica; `sandbox: true` en el intento. En el sandbox la serie no son los 8 hexadecimales del UUID |
+| 5 | CF: certifica. CUI `2984561320101` (el de los fixtures): rechazo 2.2.4 «El CUI del Receptor no es válido. No cumple con el algoritmo de validación» | La SAT sí valida el verificador del CUI (`nit_cui.ts` no lo aplica): seguimiento para A1 |
+| 6 | NIT `ABC123`: rechazo 2.2.4 «El NIT del Receptor [ABC123] es inválido [2]. (2244)» | El certificador valida el NIT del receptor; el motivo llega a `ultimo_error` (`descripcion_errores`) |
+| 7 | `CodigoEstablecimiento="2"`: rechazo 2.2.3 «El establecimiento [2] no existe. (2202)» | Texto que el panel debe mostrar (lote 4) |
+| 8 | Reenvío con el mismo identificador: mismo UUID + «Documento enviado previamente» y «Documento consultado en modalidad de re-intento» | `reenvioIdempotente` confirmado |
+| 9 | NCRE con el complemento `Notas` del manual: certifica | Se queda la forma del manual |
+| 10 | Anulación con la forma del manual (namespace `0.2.0`, elementos hijos): rechazo XSD «No matching global declaration available for the validation root». Con `dte:DatosGenerales` y atributos (namespace `0.1.0`): «Validado y Anulado Exitosamente». Anular otra vez: `resultado: true` con «…ya esta anulado…» | `xmlAnulacion` usa `atributos` por defecto; «ya anulado» se registra como anulado (`ya_anulado`) |
+| 11 | Contingencia con `NumeroAcceso`: certifica | Correcto |
+| 12 | `UnidadMedida` `UNI`: también certifica | Se queda `UND` (la de los ejemplos) |
+| 13 | Ninguna llave en `fiscal.dte_intentos`, `audit.acciones` ni `audit.cambios` | Correcto |
+
+Frases: el catálogo GT no trae un «catálogo de frases manuales disponibles»; las frases manuales son
+filas por empresa (`fiscal.frases`, `fel.agregar_frase`). Para el demo se agregó la 2/1 a la empresa
+de prueba; crear un catálogo de frases sugeridas queda pendiente de decisión (P9).
+
 ### Lote 7 · Cierre
 
 - README de `apps/api/app/fiscal/` y `apps/api/app/core/` (regla de NIT, modos, establecimientos,
