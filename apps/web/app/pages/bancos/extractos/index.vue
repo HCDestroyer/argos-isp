@@ -67,17 +67,6 @@ onMounted(() => {
         icono="i-lucide-scale"
     >
         <template #acciones>
-            <UButton
-                v-if="puede('bancos.importar_extracto_archivo')"
-                label="Importar estado de cuenta"
-                icon="i-lucide-file-up"
-                size="lg"
-                class="glow-brand rounded-full px-5"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Importar estado de cuenta"
-                data-prueba="abrir-importar-extracto"
-                @click="importando = true"
-            />
             <UDropdownMenu
                 :items="itemsMas"
                 :content="{ align: 'end' }"
@@ -92,6 +81,18 @@ onMounted(() => {
                     data-prueba="mas-extractos"
                 />
             </UDropdownMenu>
+        </template>
+
+        <template #accion-principal>
+            <UButton
+                v-if="puede('bancos.importar_extracto_archivo')"
+                label="Importar estado de cuenta"
+                icon="i-lucide-file-up"
+                size="lg"
+                class="glow-brand rounded-full px-5"
+                data-prueba="abrir-importar-extracto"
+                @click="importando = true"
+            />
         </template>
 
         <div class="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
