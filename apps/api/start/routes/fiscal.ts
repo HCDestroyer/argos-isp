@@ -590,7 +590,7 @@ function fel(): Ruta[] {
             permiso: 'fel.certificar',
             idempotente: true,
             descripcion:
-                'Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.',
+                'Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT (una NCRE o NDEB conserva el receptor de su documento de origen). Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso, fel_desactivada (con la FEL desactivada no entra nada nuevo a la cola).',
             respuesta: { status: 200, descripcion: 'DTE en cola', esquema: Dte },
             handler: async (ctx, { params }) => {
                 const id = Number(params.id)
@@ -607,7 +607,7 @@ function fel(): Ruta[] {
             permiso: 'fel.certificar',
             idempotente: true,
             descripcion:
-                'Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.',
+                'Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 409 fel_desactivada (la FEL de la empresa está desactivada); 422 fel_no_configurada (falta certificador o credenciales), receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada. El panel ofrece el botón según fel_accion de la factura (primero se cobra y después se certifica).',
             respuesta: { status: 200, descripcion: 'Solicitud', esquema: SolicitudCertificacion },
             handler: async (ctx, { params }) => {
                 const id = Number(params.id)
@@ -625,7 +625,7 @@ function fel(): Ruta[] {
             cuerpo: v.loteFelValidator,
             idempotente: true,
             descripcion:
-                'facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.',
+                'facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type (fel_desactivada si la empresa tiene la FEL desactivada; el lote de otras empresas sigue).',
             respuesta: { status: 200, descripcion: 'Lote', esquema: LoteCertificacion },
             handler: (ctx, { cuerpo }) => new CertificarLote().execute(cuerpo, ctx.contextoAccion()),
         }),

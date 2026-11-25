@@ -18,7 +18,7 @@ import {
     type DteFila,
     type ReceptorFiscal,
 } from '#fiscal/fel/dte'
-import { FelNoConfigurada, ReceptorRequerido, TipoDteNoPermitido } from '#fiscal/fel/errores'
+import { FelDesactivada, FelNoConfigurada, ReceptorRequerido, TipoDteNoPermitido } from '#fiscal/fel/errores'
 
 /**
  * `fel.certificar` (`POST /facturas/:id/certificar`, `POST /fel/lotes`): pide la certificación de
@@ -155,9 +155,14 @@ export default class SolicitarCertificacion extends DomainAction<
         }
 
         const config = await configuracionFel(empresaId, t.trx)
-        if (config.modo === 'desactivada' || !config.proveedor) {
+        if (config.modo === 'desactivada') {
             if (input.automatico) return omitir('fel_desactivada')
-            throw new FelNoConfigurada('La FEL de la empresa está desactivada')
+            // 409 aparte de «falta configurar» (fel-establecimientos R2)
+            throw new FelDesactivada()
+        }
+        if (!config.proveedor) {
+            if (input.automatico) return omitir('fel_no_configurada')
+            throw new FelNoConfigurada('La empresa no tiene certificador FEL configurado')
         }
         if (
             !input.automatico &&

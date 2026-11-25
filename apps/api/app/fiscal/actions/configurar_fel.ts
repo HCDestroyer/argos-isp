@@ -4,6 +4,7 @@ import { empresaFiscal } from '#fiscal/comun'
 import {
     configuracionFel,
     proveedorFel,
+    serviciosConNunca,
     type ConfiguracionFel,
     type ModoFel,
 } from '#fiscal/fel/configuracion'
@@ -94,23 +95,10 @@ export default class ConfigurarFel extends DomainAction<EntradaConfigurarFel, Co
             if (avisos > 0) throw new AvisosPorCertificar(avisos)
         }
         if (input.modo === 'obligatoria') {
-            const conNunca = (await t.trx
-                .from('core.servicios as s')
-                .leftJoin('billing.plantillas_facturacion as p', 'p.id', 's.plantilla_facturacion_id')
-                .leftJoin('core.servicios_excepciones as x', (j) =>
-                    j.on('x.servicio_id', 's.id').andOnVal('x.campo', 'certificar_al'),
-                )
-                .where('s.empresa_id', empresaId)
-                .whereNot('s.estado', 'retirado')
-                .whereRaw(`coalesce(x.valor #>> '{}', p.certificar_al) = 'nunca'`)
-                .orderBy('s.id')
-                .limit(20)
-                .select('s.id')) as Array<{ id: number }>
+            const conNunca = await serviciosConNunca(t.trx, { empresaId })
             if (conNunca.length > 0) {
                 throw new CertificarAlIncompatible(
-                    `Con FEL obligatoria ningún servicio puede tener certificar_al = nunca (servicios ${conNunca
-                        .map((s) => s.id)
-                        .join(', ')}): cámbialo a emitir o pagar en su plantilla o excepción`,
+                    `Con FEL obligatoria ningún servicio puede tener certificar_al = nunca (servicios ${conNunca.join(', ')}): cámbialo a pagar en su plantilla o excepción`,
                 )
             }
         }

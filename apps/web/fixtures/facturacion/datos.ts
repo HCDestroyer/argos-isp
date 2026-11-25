@@ -87,6 +87,9 @@ export const facturas: Factura[] = servicios
                 fel_serie: null,
                 fel_numero: null,
                 fel_estado: null,
+                // Las rutas lo recalculan como `#fiscal/fel/accion` de la API
+                fel_modo: 'desactivada',
+                fel_accion: 'ninguna',
                 // Como la API: `tipo` siempre viene; `vencida_en` cuando el cron la marcó vencida.
                 tipo: 'servicio',
                 factura_origen_id: null,

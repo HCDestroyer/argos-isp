@@ -3011,7 +3011,7 @@ export interface paths {
         put?: never;
         /**
          * Reintentar un DTE rechazado o con error temporal
-         * @description Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.
+         * @description Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT (una NCRE o NDEB conserva el receptor de su documento de origen). Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso, fel_desactivada (con la FEL desactivada no entra nada nuevo a la cola).
          */
         post: operations["dteReintentar"];
         delete?: never;
@@ -3357,7 +3357,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir la certificación FEL de una factura
-         * @description Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.
+         * @description Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 409 fel_desactivada (la FEL de la empresa está desactivada); 422 fel_no_configurada (falta certificador o credenciales), receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada. El panel ofrece el botón según fel_accion de la factura (primero se cobra y después se certifica).
          */
         post: operations["facturasCertificar"];
         delete?: never;
@@ -3638,7 +3638,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir la certificación de varias facturas
-         * @description facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.
+         * @description facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type (fel_desactivada si la empresa tiene la FEL desactivada; el lote de otras empresas sigue).
          */
         post: operations["felLote"];
         delete?: never;
@@ -19089,6 +19089,16 @@ export interface components {
             dte_id?: number | null;
             /** @description Error visible del DTE (SAT, receptor_requerido…) */
             fel_error?: string | null;
+            /**
+             * @description Modo FEL de la empresa de la factura (desactivada sin configuración)
+             * @enum {string}
+             */
+            fel_modo: "obligatoria" | "opcional" | "desactivada";
+            /**
+             * @description Qué le toca en la FEL (primero se cobra y después se certifica): ninguna (desactivada, anulada, en cero o ya certificada), automatica (DTE en curso, o cubierta con FEL obligatoria), al_cobrar (aviso sin cubrir: se certifica al cobrarla), certificar_opcional (FEL opcional, cubierta y sin DTE)
+             * @enum {string}
+             */
+            fel_accion: "ninguna" | "automatica" | "al_cobrar" | "certificar_opcional";
             /** @description Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse */
             aviso_cobro?: boolean;
             /** @enum {string|null} */
@@ -62877,7 +62887,7 @@ export interface operations {
                     /** @description HH:MM hora de Guatemala */
                     hora_corte?: string;
                     /**
-                     * @description Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)
+                     * @description Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro, el DTE sale al quedar cubierta) o nunca (a mano; no con FEL obligatoria: 422 certificar_al_incompatible). emitir ya no se usa (primero se cobra y después se certifica): 422 certificar_al_obsoleto
                      * @enum {string}
                      */
                     certificar_al?: "emitir" | "pagar" | "nunca";

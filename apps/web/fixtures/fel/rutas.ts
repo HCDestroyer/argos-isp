@@ -117,6 +117,32 @@ export function configuracionFel(empresaId: number): ConfiguracionFel {
     }
 }
 
+/**
+ * `fel_modo` y `fel_accion` de una factura, como `columnasAccionFel` de la API (primero se cobra y
+ * después se certifica): ninguna, automatica, al_cobrar o certificar_opcional.
+ */
+export function accionFelDe(factura: Factura): Pick<Factura, 'fel_modo' | 'fel_accion'> {
+    const modo = configuracionFel(factura.empresa_id ?? 1).modo
+    const dte = factura.fel_estado ?? ''
+    let accion: Factura['fel_accion']
+    if (modo === 'desactivada' || ['anulada', 'castigada', 'acreditada'].includes(factura.estado) || Number(factura.total) <= 0) {
+        accion = 'ninguna'
+    }
+    else if (['certificado', 'anulacion_pendiente', 'anulado'].includes(dte)) {
+        accion = 'ninguna'
+    }
+    else if (['pendiente', 'enviando', 'error_temporal', 'contingencia'].includes(dte) || factura.estado === 'por_certificar') {
+        accion = 'automatica'
+    }
+    else if (factura.estado !== 'pagada') {
+        accion = 'al_cobrar'
+    }
+    else {
+        accion = modo === 'obligatoria' && factura.aviso_cobro ? 'automatica' : 'certificar_opcional'
+    }
+    return { fel_modo: modo, fel_accion: accion }
+}
+
 /** La nota como la ve la API: con su NCRE (`dte_id`, `fel_*`), o `null` en una nota interna. */
 export function vistaNota(nota: Schema<'NotaCredito'>): Schema<'NotaCredito'> {
     const ncre = dteDe('nota_credito', nota.id)

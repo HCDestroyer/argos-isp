@@ -56,13 +56,13 @@ export const MODOS_FEL: Record<ModoFel, { etiqueta: string, color: BadgeColor, i
         etiqueta: 'Obligatoria',
         color: 'success',
         icono: 'i-lucide-shield-check',
-        descripcion: 'Toda factura sale con DTE. Con «al emitir» nace por certificar y se emite al certificarse; con «al pagar» nace como aviso de cobro y se certifica al cubrirse.',
+        descripcion: 'Primero se cobra y después se certifica: toda factura nace como aviso de cobro y, al quedar cubierta, su DTE entra solo a la cola.',
     },
     opcional: {
         etiqueta: 'Opcional',
         color: 'info',
         icono: 'i-lucide-shield-half',
-        descripcion: 'Se certifica a mano desde la factura. Los avisos con «al pagar» se certifican al cubrirse.',
+        descripcion: 'Nada se certifica antes del cobro. Los avisos «al pagar» se certifican al cubrirse; las demás facturas pagadas, con el botón «Certificar (opcional)».',
     },
     desactivada: {
         etiqueta: 'Desactivada',
@@ -78,6 +78,23 @@ export const AVISO_FEL_DESACTIVADA = 'La FEL es obligatoria para el régimen gen
 export const AMBIENTES_FEL: Record<AmbienteFel, string> = {
     pruebas: 'Pruebas',
     produccion: 'Producción',
+}
+
+/**
+ * Qué dice la factura sin DTE según `fel_accion` (primero se cobra y después se certifica; decisión
+ * del PM del 25-nov-2026): «Aviso de cobro (sin certificar)» → «Pagada, certificando» → «Certificada».
+ */
+export function textoAccionFel(accion: NonNullable<Schema<'Factura'>['fel_accion']>, modo: Schema<'Factura'>['fel_modo'] | null): string {
+    switch (accion) {
+        case 'al_cobrar':
+            return 'Se certifica al cobrarla: hasta entonces es un aviso de cobro, sin DTE.'
+        case 'automatica':
+            return 'Pagada, certificando: el DTE entra solo a la cola.'
+        case 'certificar_opcional':
+            return 'La FEL de esta empresa es opcional: esta factura queda sin certificar hasta que lo pidas.'
+        default:
+            return modo === 'desactivada' ? 'FEL desactivada: esta factura no se certifica.' : 'Sin DTE: esta factura no se certifica.'
+    }
 }
 
 /** Faltantes que impiden certificar (`ConfiguracionFel.faltantes`, `fel-establecimientos.md` lote 2). */
@@ -112,9 +129,19 @@ export function campoSecreto(proveedor: ProveedorFelCatalogo, campo: string): bo
 }
 
 export const CERTIFICAR_AL: Record<CertificarAl, { etiqueta: string, descripcion: string }> = {
-    emitir: { etiqueta: 'Al emitir', descripcion: 'El DTE se pide al emitir la factura (en obligatoria nace por certificar).' },
+    emitir: { etiqueta: 'Al emitir (ya no se usa)', descripcion: 'Primero se cobra y después se certifica: elige «Al pagar».' },
     pagar: { etiqueta: 'Al pagar', descripcion: 'Aviso de cobro: su IVA queda por certificar hasta que el pago lo cubre.' },
-    nunca: { etiqueta: 'Nunca', descripcion: 'Sin DTE. No se admite con la FEL obligatoria.' },
+    nunca: { etiqueta: 'Nunca', descripcion: 'A mano, con el botón «Certificar (opcional)» una vez pagada. No se admite con la FEL obligatoria.' },
+}
+
+/** Opciones de `certificar_al` en un select: `emitir` ya no se ofrece; `nunca`, deshabilitada en obligatoria. */
+export function itemsCertificarAl(modo: ModoFel | null = null) {
+    return (['pagar', 'nunca'] as const).map(valor => ({
+        label: CERTIFICAR_AL[valor].etiqueta,
+        value: valor,
+        description: valor === 'nunca' && modo === 'obligatoria' ? 'No se admite con FEL obligatoria' : CERTIFICAR_AL[valor].descripcion,
+        disabled: valor === 'nunca' && modo === 'obligatoria',
+    }))
 }
 
 /** Acciones de un DTE según su estado (la API decide; esto solo evita ofrecer lo que responde 409). */
@@ -136,6 +163,8 @@ export function serieNumeroDte(dte: Pick<Dte, 'serie' | 'numero'>): string | nul
 }
 
 const TITULOS_FEL: Record<string, string> = {
+    fel_desactivada: 'La FEL de la empresa está desactivada',
+    certificar_al_obsoleto: 'Ya no se certifica al emitir',
     fel_no_configurada: 'La FEL no está configurada',
     fel_proveedor_no_disponible: 'El certificador no responde',
     receptor_requerido: 'El cliente necesita NIT, CUI o pasaporte',
@@ -170,7 +199,7 @@ const SUGERENCIAS_FEL: Record<string, string> = {
     receptor_requerido: 'Corrige los datos fiscales del cliente y vuelve a intentar.',
     anulacion_fuera_de_plazo: 'Emite una nota de crédito por el saldo.',
     nota_requiere_ncre: 'El documento ya tiene DTE certificado: la nota solo puede salir como NCRE. Activa la FEL de la empresa para emitirla.',
-    certificar_al_incompatible: 'Cambia el momento de certificar de esas plantillas o excepciones a «al emitir» o «al pagar».',
+    certificar_al_incompatible: 'Con FEL obligatoria no existe «nunca»: cambia esas plantillas o excepciones a «al pagar».',
     ncre_sin_certificar: 'Certifica las NCRE pendientes o anula las rechazadas antes de cerrar el mes.',
     integridad_rota: 'Revisa la integridad del libro: nadie debe cerrar un mes con la cadena rota.',
     conflicto_version: 'Recarga la configuración y vuelve a guardar.',

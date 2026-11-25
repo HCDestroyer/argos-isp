@@ -1,3 +1,4 @@
+import { FelDesactivada } from '#fiscal/fel/errores'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -67,6 +68,9 @@ export default class ReintentarDte extends DomainAction<EntradaReintentarDte, Dt
                 )
             }
         }
+        // FEL desactivada: nada nuevo entra a la cola (fel-establecimientos R2)
+        const configActual = await configuracionFel(dte.empresa_id, t.trx)
+        if (configActual.modo === 'desactivada') throw new FelDesactivada()
         const vigente = await dteVigente(t.trx, dte.documento_tipo, dte.documento_id)
         if (vigente) return vigente
 

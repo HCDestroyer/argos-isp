@@ -606,6 +606,26 @@ Pruebas:
 - Playwright `tests/e2e/fel.spec.ts`: ficha de factura en modo opcional muestra «Certificar
   (opcional)» y «Sin certificar»; en desactivada no hay botón; 1280 px y 390 px.
 
+#### Ejecución del lote 3 (25-nov-2026)
+
+Hecho: 409 `fel_desactivada`; `fel_modo` y `fel_accion` (`#fiscal/fel/accion`, con `al_cobrar` en
+lugar de `certificar_ahora`: antes del pago no hay DTE); `emitir` rechazado con 422
+`certificar_al_obsoleto` y migrado a `pagar` con su diff; el cargo único sin plantilla usa `pagar`;
+`nunca` validado en plantilla, excepción y asignación con FEL obligatoria; panel con los textos y el
+botón según `fel_accion`. Desvíos: (1) la API sigue admitiendo certificar a mano un aviso sin cubrir
+(solo el panel lo oculta): impedirlo rompe `tests/contabilidad`, que certifica avisos sin pagar;
+(2) el valor `emitir` no se borra de la base: las pruebas del auditor insertan plantillas con
+`emitir` directo y esperan el comportamiento de siempre; (3) `/fel/lotes` reporta la empresa
+desactivada en `errores[]` con `tipo: fel_desactivada` (la forma que ya tenía el lote). No se
+encontró regla de la SAT ni de un contrato (`iris_orden`, especial, exportación) que obligue a
+certificar al emitir en lo que hoy emite Argos.
+
+Pendiente (decisiones del PM del 25-nov que piden diseño y tocan la suite del auditor): cargos no
+facturables por concepto, caja sin factura, recibo no fiscal con su numeración, cuentas internas de
+ingresos y gastos no deducibles, egresos sin comprobante, visibilidad por caja y
+`contabilidad.ver_cuentas_internas`, reporte «Cobros en cajas sin factura», y la regla del pago
+repartido entre caja fiscal y sin factura (se propone al PM antes de implementarla).
+
 ### Lote 4 · Establecimientos según la SAT
 
 Modelo (migración `node ace make:migration alter_establecimientos_sucursales`):

@@ -295,7 +295,7 @@ onMounted(() => {
                     </template>
                     <template #actions>
                         <UButton
-                            v-if="configuracion.faltantes.includes('establecimiento')"
+                            v-if="configuracion.faltantes.includes('establecimiento') && puede('fiscal.ver')"
                             label="Establecimientos"
                             to="/configuracion/fiscal"
                             color="neutral"

@@ -366,7 +366,8 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
             ])
         }
 
-        const certificarAl: CertificarAl = config?.certificar_al ?? 'emitir'
+        // sin plantilla: «pagar» (decisión del PM, 25-nov-2026: primero se cobra y después se certifica)
+        const certificarAl: CertificarAl = config?.certificar_al ?? 'pagar'
         if (!sinCosto && conDescuentos.some((l) => l.tipo !== 'descuento' && !l.gravable)) {
             const fel = await configuracionFel(empresaId, t.trx)
             if (modoEmision(fel, certificarAl) !== 'sin_fel') {
