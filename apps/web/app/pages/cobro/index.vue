@@ -393,17 +393,6 @@ async function cargarPlantillaCarta() {
 }
 onMounted(cargarPlantillaCarta)
 
-/** Enlace de WhatsApp con el resumen del recibo para el móvil del cliente. */
-const enlaceWhatsapp = computed(() => {
-    const numero = (cliente.value?.movil ?? cliente.value?.telefono ?? '').replace(/\D/g, '')
-    if (!pago.value || numero.length < 8) {
-        return null
-    }
-    const completo = numero.length === 8 ? `502${numero}` : numero
-    const texto = `Recibo de pago #${pago.value.id} · ${formatearQuetzales(totalCobrado.value)} · ${ETIQUETAS_METODO[pago.value.metodo]} · ${cliente.value?.nombre ?? ''}. ¡Gracias!`
-    return `https://wa.me/${completo}?text=${encodeURIComponent(texto)}`
-})
-
 const miCaja = useMiCaja()
 /** Ventana de éxito: abierta mientras hay un pago registrado en pantalla. */
 const exitoAbierto = computed({
@@ -2084,7 +2073,7 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                         v-else-if="seguimiento.problema.value"
                         :problema="seguimiento.problema.value"
                     />
-                    <div class="grid w-full grid-cols-2 gap-2">
+                    <div class="grid w-full grid-cols-1 gap-2">
                         <!-- Reimprimir con el formato de la caja; «Elegir otra plantilla» abre el PDF con otra. -->
                         <ImprimirConPlantilla
                             v-if="pago.cobro_id && puede('pagos.ver')"
@@ -2105,18 +2094,11 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                             data-prueba="reimprimir"
                             @click="imprimirRecibo"
                         />
-                        <UButton
-                            v-if="enlaceWhatsapp"
-                            :to="enlaceWhatsapp"
-                            target="_blank"
-                            label="WhatsApp"
-                            icon="i-lucide-message-circle"
-                            color="neutral"
-                            variant="outline"
-                            class="justify-center rounded-full"
-                            data-prueba="recibo-whatsapp"
-                        />
                     </div>
+                    <ReciboWhatsapp
+                        v-if="pago"
+                        :pago-id="pago.id"
+                    />
                     <UButton
                         label="Siguiente cliente"
                         size="lg"

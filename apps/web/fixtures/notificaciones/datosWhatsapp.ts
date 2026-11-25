@@ -9,6 +9,8 @@ export interface WhatsappFixtures {
     contactos: Record<number, Contacto>
     /** Lo que Argos mandó a Iris (`notify.consentimientos_iris`). */
     consentimientos: Consentimiento[]
+    /** Cuántas veces se leyó el aviso de cada pago (el envío pasa de en cola a entregado). */
+    lecturasPago: Record<number, number>
 }
 
 /** Cliente que aceptó en el panel (2) y uno que pidió la baja escribiendo BAJA en el chat de Iris (8). */
@@ -18,6 +20,7 @@ export const CLIENTE_BAJA_IRIS = 8
 export function whatsappInicial(): WhatsappFixtures {
     const ocurrido = '2026-10-01T16:00:00.000Z'
     return {
+        lecturasPago: {},
         contactos: {
             [CLIENTE_ACEPTA_WHATSAPP]: { estado: 'acepta', ocurrido_en: ocurrido, origen: 'argos_panel' },
             [CLIENTE_BAJA_IRIS]: { estado: 'baja', ocurrido_en: '2026-10-14T02:15:00.000Z', origen: 'iris_cliente' },
