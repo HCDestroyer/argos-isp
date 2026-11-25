@@ -11,7 +11,7 @@ import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
-import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
+import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import {
     NOMBRE_COLA_EQUIPOS,
@@ -22,7 +22,13 @@ import {
     procesarWifi,
 } from '#integraciones/equipos/cola'
 import { fijarEsperaReintentos } from '#integraciones/equipos/http'
-import { Simulado, dispositivoTr098, onuSinConfigurar } from '#tests/integraciones/equipos_simulado'
+import {
+    Simulado,
+    borrarEquiposDe,
+    dispositivoTr098,
+    limpiarEquipos,
+    onuSinConfigurar,
+} from '#tests/integraciones/equipos_simulado'
 
 /**
  * GenieACS en un servidor aparte (decisión del PM, crecimiento horizontal):
@@ -81,10 +87,10 @@ function proxyNbi(acs: Simulado, opciones: { negarIp?: boolean } = {}) {
 const ctxEmpresa = (empresaId = 1) => ({ ...contextoPrueba(), empresaId, empresasPermitidas: null })
 
 async function configurarAcs(empresaId: number, url: string, extra: Record<string, unknown> = {}) {
-    const fila = await db.from('integraciones.equipos_config').where('empresa_id', empresaId).first()
+    const { version } = await vistaConfig(empresaId, db.connection())
     await new ConfigurarEquipos().execute(
         {
-            version: fila?.version ?? 0,
+            version,
             activo: true,
             genieacs_url: url,
             genieacs_usuario: USUARIO,
@@ -116,8 +122,7 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
         return () => rmSync(dir, { recursive: true, force: true })
     })
     group.each.teardown(async () => {
-        await db.from('integraciones.equipos_perfiles').delete()
-        await db.from('integraciones.equipos_config').delete()
+        await limpiarEquipos()
         await db.from('integraciones.iris_conector').delete()
     })
 
@@ -134,7 +139,7 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
             assert.lengthOf(acs.de('/devices/'), 1)
 
             // clave equivocada: 401 con un texto claro, y sin capacidad
-            const leida = await db.from('integraciones.equipos_config').where('empresa_id', 1).firstOrFail()
+            const leida = await vistaConfig(1, db.connection())
             const v = leida.version
             await new ConfigurarEquipos().execute(
                 { version: v, genieacs_clave: 'otra-clave-mala' },
@@ -168,7 +173,7 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
             await negado.detener()
 
             // un PEM que no es un certificado: 422
-            const config = await db.from('integraciones.equipos_config').where('empresa_id', 1).firstOrFail()
+            const config = await vistaConfig(1, db.connection())
             await assert.rejects(
                 () =>
                     new ConfigurarEquipos().execute(
@@ -256,7 +261,7 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
         } finally {
             await acs1.detener()
             await acs2.detener()
-            await db.from('integraciones.equipos_config').where('empresa_id', e.B).delete()
+            await borrarEquiposDe(e.B)
             await soloEmpresaPrincipal()
         }
     })
@@ -309,7 +314,7 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
                 .where('id', servicioId)
                 .update({ estado: 'pendiente_instalacion', instalado_en: null })
             const { plan_id: planId } = await db.from('core.servicios').where('id', servicioId).firstOrFail()
-            const leida = await db.from('integraciones.equipos_config').where('empresa_id', 1).firstOrFail()
+            const leida = await vistaConfig(1, db.connection())
             const v = leida.version
             await new ConfigurarEquipos().execute(
                 {

@@ -54,7 +54,7 @@ function textoONull(valor: unknown, campo: string, max: number, errores: Errores
  * borra la última prueba. Una URL con «falla» no responde al probar.
  */
 export const rutasEquiposIntegracion: RutasFixture = {
-    'GET /api/v1/integraciones/equipos': conPermiso('equipos.ver', (solicitud) => {
+    'GET /api/v1/integraciones/equipos': conPermiso('smartolt.ver', (solicitud) => {
         const empresa = empresaRequerida(solicitud)
         if (!empresa.ok) {
             return empresa.falla
@@ -62,7 +62,7 @@ export const rutasEquiposIntegracion: RutasFixture = {
         return { status: 200, cuerpo: vista(configDe(empresa.id), secretosDe(empresa.id)) }
     }),
 
-    'PUT /api/v1/integraciones/equipos': conPermiso('equipos.configurar', (solicitud) => {
+    'PUT /api/v1/integraciones/equipos': conPermiso('smartolt.editar_instancia', (solicitud) => {
         const empresa = empresaRequerida(solicitud)
         if (!empresa.ok) {
             return empresa.falla
@@ -131,7 +131,7 @@ export const rutasEquiposIntegracion: RutasFixture = {
         return { status: 200, cuerpo: vista(nueva, secretos) }
     }),
 
-    'POST /api/v1/integraciones/equipos/probar': conPermiso('equipos.probar', (solicitud) => {
+    'POST /api/v1/integraciones/equipos/probar': conPermiso('smartolt.probar_instancia', (solicitud) => {
         const empresa = empresaRequerida(solicitud)
         if (!empresa.ok) {
             return empresa.falla

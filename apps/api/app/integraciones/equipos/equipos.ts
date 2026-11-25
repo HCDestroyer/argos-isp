@@ -36,8 +36,7 @@ export async function gestionDeEmpresa(
     empresaId: number | null,
     cliente: QueryClientContract = db.connection(),
 ): Promise<GestionEmpresa> {
-    if (empresaId === null) return { ftth: false, wireless: false, tr069: false }
-    return gestionDe(await configDeEmpresa(empresaId, cliente))
+    return gestionDe(empresaId, cliente)
 }
 
 export interface CapacidadesIris {
@@ -296,7 +295,7 @@ export async function descubrirEquipo(
     /** la transacción de quien llama si ya bloqueó el servicio (la FK chocaría con su lock) */
     cliente: QueryClientContract = db.connection(),
 ): Promise<EquipoGestionado | null> {
-    const gestion = gestionDe(config)
+    const gestion = config.gestion
     if (!gestion.ftth && !gestion.tr069) return null
     for (const u of await equiposEnComodato(servicioId, cliente)) {
         let externo: string | null = null
@@ -387,7 +386,7 @@ export async function estadoEquipo(
         .first()) as { empresa_id: number } | null
     const empresaId = Number(servicio?.empresa_id)
     const config = await configDeEmpresa(empresaId)
-    const gestion = gestionDe(config)
+    const gestion = config.gestion
     const sinGestion = async () =>
         opciones.asistente
             ? new EquipoSinGestion()

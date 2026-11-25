@@ -32967,7 +32967,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso equipos.ver",
+            "description": "Sin el permiso smartolt.ver",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32977,7 +32977,7 @@
             }
           }
         },
-        "x-permiso": "equipos.ver",
+        "x-permiso": "smartolt.ver",
         "x-implementado": true
       },
       "put": {
@@ -33136,7 +33136,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso equipos.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso smartolt.editar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33166,7 +33166,7 @@
             }
           }
         },
-        "x-permiso": "equipos.configurar",
+        "x-permiso": "smartolt.editar_instancia",
         "x-implementado": true
       }
     },
@@ -33208,7 +33208,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso equipos.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso smartolt.probar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33218,7 +33218,7 @@
             }
           }
         },
-        "x-permiso": "equipos.probar",
+        "x-permiso": "smartolt.probar_instancia",
         "x-implementado": true
       }
     },
@@ -82804,6 +82804,9 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "acs.configurar",
+                        "acs.probar",
+                        "acs.ver",
                         "activos.dar_de_baja",
                         "activos.registrar",
                         "activos.ver",
@@ -82912,9 +82915,6 @@
                         "empresas.desactivar",
                         "empresas.editar",
                         "empresas.ver",
-                        "equipos.configurar",
-                        "equipos.probar",
-                        "equipos.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
                         "facturas.cargo_sin_costo",
@@ -83140,6 +83140,12 @@
                         "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
+                        "smartolt.crear_instancia",
+                        "smartolt.editar_instancia",
+                        "smartolt.eliminar_instancia",
+                        "smartolt.probar_instancia",
+                        "smartolt.ver",
+                        "smartolt.vincular_olt",
                         "sorteos.ejecutar",
                         "sorteos.entregar",
                         "sorteos.exportar",
@@ -83275,6 +83281,9 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "acs.configurar",
+                        "acs.probar",
+                        "acs.ver",
                         "activos.dar_de_baja",
                         "activos.registrar",
                         "activos.ver",
@@ -83383,9 +83392,6 @@
                         "empresas.desactivar",
                         "empresas.editar",
                         "empresas.ver",
-                        "equipos.configurar",
-                        "equipos.probar",
-                        "equipos.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
                         "facturas.cargo_sin_costo",
@@ -83611,6 +83617,12 @@
                         "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
+                        "smartolt.crear_instancia",
+                        "smartolt.editar_instancia",
+                        "smartolt.eliminar_instancia",
+                        "smartolt.probar_instancia",
+                        "smartolt.ver",
+                        "smartolt.vincular_olt",
                         "sorteos.ejecutar",
                         "sorteos.entregar",
                         "sorteos.exportar",
@@ -99649,6 +99661,9 @@
                         "items": {
                           "type": "string",
                           "enum": [
+                            "acs.configurar",
+                            "acs.probar",
+                            "acs.ver",
                             "activos.dar_de_baja",
                             "activos.registrar",
                             "activos.ver",
@@ -99757,9 +99772,6 @@
                             "empresas.desactivar",
                             "empresas.editar",
                             "empresas.ver",
-                            "equipos.configurar",
-                            "equipos.probar",
-                            "equipos.ver",
                             "facturas.anular",
                             "facturas.anular_nota_credito",
                             "facturas.cargo_sin_costo",
@@ -99985,6 +99997,12 @@
                             "sistema.ver_crons",
                             "sistema.ver_registro",
                             "sistema.ver_salud",
+                            "smartolt.crear_instancia",
+                            "smartolt.editar_instancia",
+                            "smartolt.eliminar_instancia",
+                            "smartolt.probar_instancia",
+                            "smartolt.ver",
+                            "smartolt.vincular_olt",
                             "sorteos.ejecutar",
                             "sorteos.entregar",
                             "sorteos.exportar",
@@ -128785,6 +128803,9 @@
         "type": "string",
         "description": "Nombre de un permiso del ACL (= nombre de la acción)",
         "enum": [
+          "acs.configurar",
+          "acs.probar",
+          "acs.ver",
           "activos.dar_de_baja",
           "activos.registrar",
           "activos.ver",
@@ -128893,9 +128914,6 @@
           "empresas.desactivar",
           "empresas.editar",
           "empresas.ver",
-          "equipos.configurar",
-          "equipos.probar",
-          "equipos.ver",
           "facturas.anular",
           "facturas.anular_nota_credito",
           "facturas.cargo_sin_costo",
@@ -129121,6 +129139,12 @@
           "sistema.ver_crons",
           "sistema.ver_registro",
           "sistema.ver_salud",
+          "smartolt.crear_instancia",
+          "smartolt.editar_instancia",
+          "smartolt.eliminar_instancia",
+          "smartolt.probar_instancia",
+          "smartolt.ver",
+          "smartolt.vincular_olt",
           "sorteos.ejecutar",
           "sorteos.entregar",
           "sorteos.exportar",
@@ -129148,6 +129172,9 @@
           "zonas.ver"
         ],
         "x-enum-descriptions": [
+          "Configurar el ACS (GenieACS) de la empresa (URL, usuario, clave, certificado, PPPoE por ACS)",
+          "Probar la conexión con el ACS (GenieACS) de la empresa con la configuración guardada",
+          "Ver la configuración del ACS (GenieACS) de la empresa (sin la clave)",
           "Dar de baja (venta o retiro) un activo fijo con su asiento",
           "Dar de alta activos fijos sin compra y registrar la depreciación pendiente",
           "Ver activos fijos, su depreciación y sus bajas",
@@ -129256,9 +129283,6 @@
           "Desactivar una empresa (no se borra)",
           "Editar los datos fiscales y de contacto de una empresa",
           "Ver las empresas (NIT) de la instalación",
-          "Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin",
-          "Probar la conexión con SmartOLT y GenieACS con la configuración guardada",
-          "Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización",
           "Anular facturas",
           "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)",
           "Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)",
@@ -129484,6 +129508,12 @@
           "Ver las tareas programadas: horario, última y próxima corrida, atrasos, quién las corre e historial",
           "Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos",
           "Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor",
+          "Registrar una instancia (subdominio y token) de SmartOLT; compartida solo con alcance global",
+          "Editar una instancia de SmartOLT (nombre, URL, token, encendido y perfiles por OLT y plan)",
+          "Eliminar una instancia de SmartOLT que ningún equipo ni pedido en curso usa",
+          "Probar la conexión con una instancia de SmartOLT y sincronizar sus OLT",
+          "Ver las instancias de SmartOLT (sin token), sus OLT, a qué OLT de Argos están vinculadas y sus perfiles",
+          "Vincular una OLT de SmartOLT con una OLT de la red de acceso de Argos",
           "Ejecutar un sorteo y cerrar su acta (con checklist legal completo)",
           "Registrar la entrega de un premio de sorteo o marcarlo no reclamado",
           "Exportar la lista de participantes de un sorteo (CSV o XLSX)",
@@ -146439,6 +146469,9 @@
             "nombre": "admin",
             "descripcion": "Acceso total",
             "permisos": [
+              "acs.configurar",
+              "acs.probar",
+              "acs.ver",
               "activos.dar_de_baja",
               "activos.registrar",
               "activos.ver",
@@ -146547,9 +146580,6 @@
               "empresas.desactivar",
               "empresas.editar",
               "empresas.ver",
-              "equipos.configurar",
-              "equipos.probar",
-              "equipos.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
               "facturas.cargo_sin_costo",
@@ -146775,6 +146805,12 @@
               "sistema.ver_crons",
               "sistema.ver_registro",
               "sistema.ver_salud",
+              "smartolt.crear_instancia",
+              "smartolt.editar_instancia",
+              "smartolt.eliminar_instancia",
+              "smartolt.probar_instancia",
+              "smartolt.ver",
+              "smartolt.vincular_olt",
               "sorteos.ejecutar",
               "sorteos.entregar",
               "sorteos.exportar",
@@ -147170,6 +147206,7 @@
             "nombre": "lectura",
             "descripcion": "Solo lectura",
             "permisos": [
+              "acs.ver",
               "activos.ver",
               "adicionales.ver",
               "ajustes_cobro.ver",
@@ -147189,7 +147226,6 @@
               "egresos.ver",
               "empresa.ver",
               "empresas.ver",
-              "equipos.ver",
               "facturas.ver",
               "fel.ver",
               "fiscal.ver",
@@ -147220,6 +147256,7 @@
               "routers.ver",
               "servicios.ver",
               "sesiones.ver",
+              "smartolt.ver",
               "sorteos.ver",
               "tokens.ver",
               "usuarios.ver",

@@ -4,7 +4,7 @@ import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
-import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
+import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import {
     procesarAprovisionamiento,
@@ -14,7 +14,13 @@ import {
 import { fijarEsperaReintentos } from '#integraciones/equipos/http'
 import { payloadParaIris } from '#integraciones/iris/envios'
 import { avisoAlTitular } from '#notify/contactos'
-import { Simulado, dispositivoTr098, onuSinConfigurar } from '#tests/integraciones/equipos_simulado'
+import {
+    Simulado,
+    borrarEquiposDe,
+    dispositivoTr098,
+    limpiarEquipos,
+    onuSinConfigurar,
+} from '#tests/integraciones/equipos_simulado'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { unicoBdMayusculas } from '#tests/billing/ayudas_billing'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -60,10 +66,10 @@ async function configurar(
     perfiles: Array<Record<string, unknown>> = [],
     empresaId = 1,
 ) {
-    const fila = await db.from('integraciones.equipos_config').where('empresa_id', empresaId).first()
+    const { version } = await vistaConfig(empresaId, db.connection())
     await new ConfigurarEquipos().execute(
         {
-            version: fila?.version ?? 0,
+            version,
             activo: true,
             smartolt_url: so.url,
             smartolt_token: TOKEN_SO,
@@ -153,8 +159,7 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
         acs.limpiar()
     })
     group.each.teardown(async () => {
-        await db.from('integraciones.equipos_perfiles').delete()
-        await db.from('integraciones.equipos_config').delete()
+        await limpiarEquipos()
         await db.from('integraciones.iris_conector').delete()
     })
 
@@ -196,9 +201,10 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
         assert.equal(r.body().smartolt.token, '***')
         assert.equal(r.body().genieacs.clave, '***')
         assert.deepEqual(r.body().capacidades, { ftth: false, wireless: false, tr069: false })
-        const fila = await db.from('integraciones.equipos_config').where('empresa_id', 1).first()
-        assert.notInclude(fila.smartolt_token_cifrado, TOKEN_SO)
-        assert.match(fila.genieacs_clave_cifrada, /^v1\./)
+        const instancia = await db.from('integraciones.smartolt_instancias').where('empresa_id', 1).first()
+        assert.notInclude(instancia.token_cifrado, TOKEN_SO)
+        const filaAcs = await db.from('integraciones.acs_config').where('empresa_id', 1).first()
+        assert.match(filaAcs.clave_cifrada, /^v1\./)
 
         const prueba = await estado(
             client
@@ -223,8 +229,7 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
         })
 
         // otro token: borra la prueba de SmartOLT; con token malo la prueba falla y no hay ftth
-        const config = await db.from('integraciones.equipos_config').where('empresa_id', 1).first()
-        const v = config.version
+        const { version: v } = await vistaConfig(1, db.connection())
         const otro = await estado(put({ version: v, smartolt_token: 'token-equivocado-999' }), 200)
         assert.isNull(otro.body().smartolt.prueba_ok)
         assert.isFalse(otro.body().capacidades.ftth)
@@ -714,7 +719,7 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
                 .firstOrFail()
             assert.equal(guardado.acs_device_id, `00259E-F670L-${serie}`)
         } finally {
-            await db.from('integraciones.equipos_config').where('empresa_id', e.B).delete()
+            await borrarEquiposDe(e.B)
             await soloEmpresaPrincipal()
         }
     })

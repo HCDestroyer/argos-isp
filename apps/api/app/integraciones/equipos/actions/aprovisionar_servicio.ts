@@ -5,7 +5,7 @@ import { cifrar } from '#shared/cifrado'
 import { PlanNoPermitido, planDisponibleEnRouter } from '#core/instalacion_iris'
 import { normalizarMac, normalizarSerie } from '#inventario/unidades'
 import AsignarComodato from '#inventario/actions/asignar_comodato'
-import { configDeEmpresa, gestionDe } from '#integraciones/equipos/configuracion'
+import { configDeEmpresa } from '#integraciones/equipos/configuracion'
 import {
     AprovisionamientoEnCurso,
     AprovisionamientoNoDisponible,
@@ -286,7 +286,7 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
         if (input.wifi) validarWifi(input.wifi, 'wifi.')
 
         const config = await configDeEmpresa(empresaId, t.trx)
-        const gestion = gestionDe(config)
+        const gestion = config.gestion
         const disponible =
             equipo.tipo === 'ont'
                 ? gestion.ftth

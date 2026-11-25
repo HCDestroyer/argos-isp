@@ -1,11 +1,9 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
-import {
-    TABLA_CONFIG,
-    desdeFila,
-    gestionDe,
-    type FilaConfigEquipos,
-} from '#integraciones/equipos/configuracion'
+import { gestionDe } from '#integraciones/equipos/configuracion'
+import { TABLA_ACS, acsDesdeFila, type FilaAcs } from '#integraciones/equipos/acs'
+import { TABLA_INSTANCIAS, instanciaDesdeFila } from '#integraciones/equipos/smartolt_instancias'
+import { instanciaPropia } from '#integraciones/equipos/actions/configurar_equipos'
 import * as smartolt from '#integraciones/equipos/smartolt'
 import * as genieacs from '#integraciones/equipos/genieacs'
 
@@ -41,14 +39,9 @@ async function medir<T>(
 }
 
 /**
- * `equipos.probar`: «Probar conexión» de la empresa activa con la configuración **guardada**.
- *
- * - SmartOLT: `GET /api/system/get_olts` con el token (una sola llamada a pedido; SmartOLT pide
- *   no usarla como latido). Devuelve las OLT para armar los perfiles.
- * - GenieACS: una búsqueda de un dispositivo en el NBI con la autenticación básica guardada.
- * - Guarda el resultado de cada sistema (`*_probado_en`, `*_prueba_ok`, `*_prueba_error`) sin tocar
- *   la `version`: de eso sale `capacidades.aprovisionamiento`. No lanza si un sistema falla: devuelve
- *   el error real (sin secretos).
+ * `equipos.probar` (**compatibilidad**, se borra al terminar el lote 3 de `contratos/equipos-olt-acs.md`):
+ * prueba la instancia propia de SmartOLT (`get_olts`) y el ACS de la empresa activa con lo guardado y
+ * guarda el resultado de cada uno en su fila, sin tocar su `version`. No lanza si un sistema falla.
  */
 export default class ProbarEquipos extends DomainAction<Record<string, never>, ResultadoProbarEquipos> {
     readonly nombre = 'equipos.probar'
@@ -57,41 +50,41 @@ export default class ProbarEquipos extends DomainAction<Record<string, never>, R
         const empresaId = exigirEmpresaActivaDelContexto(t.ctx)
         t.fijarEmpresa(empresaId)
         t.fijarEntidad('configuracion_equipos', empresaId)
-        const fila = ((await t.trx.from(TABLA_CONFIG).where('empresa_id', empresaId).first()) ??
-            null) as FilaConfigEquipos | null
-        const config = desdeFila(fila, empresaId)
         const ahora = new Date()
-        const cambios: Record<string, unknown> = {}
 
         let so: ResultadoSistema | null = null
-        if (config.smartolt) {
-            const r = await medir(() => smartolt.listarOlts(config.smartolt!))
-            so = { ok: r.ok, latencia_ms: r.ms, error: r.error, ...(r.valor ? { olts: r.valor } : {}) }
-            Object.assign(cambios, {
-                smartolt_probado_en: ahora,
-                smartolt_prueba_ok: r.ok,
-                smartolt_prueba_error: r.error,
-            })
+        const inst = await instanciaPropia(t.trx, empresaId)
+        const config = inst ? instanciaDesdeFila(inst).config : null
+        if (inst && config) {
+            const r = await medir(() => smartolt.listarOlts(config))
+            so = {
+                ok: r.ok,
+                latencia_ms: r.ms,
+                error: r.error,
+                ...(r.valor ? { olts: r.valor.map((o) => ({ id: o.id, name: o.name })) } : {}),
+            }
+            await t.trx
+                .from(TABLA_INSTANCIAS)
+                .where('id', inst.id)
+                .update({ probado_en: ahora, prueba_ok: r.ok, prueba_error: r.error })
         }
         let acs: ResultadoSistema | null = null
-        if (config.genieacs) {
-            const r = await medir(() => genieacs.probar(config.genieacs!))
+        const filaAcs = ((await t.trx.from(TABLA_ACS).where('empresa_id', empresaId).first()) ??
+            null) as FilaAcs | null
+        const genie = acsDesdeFila(filaAcs, empresaId).genieacs
+        if (genie) {
+            const r = await medir(() => genieacs.probar(genie))
             acs = { ok: r.ok, latencia_ms: r.ms, error: r.error }
-            Object.assign(cambios, {
-                genieacs_probado_en: ahora,
-                genieacs_prueba_ok: r.ok,
-                genieacs_prueba_error: r.error,
-            })
+            await t.trx
+                .from(TABLA_ACS)
+                .where('empresa_id', empresaId)
+                .update({ probado_en: ahora, prueba_ok: r.ok, prueba_error: r.error })
         }
-        if (fila && Object.keys(cambios).length > 0) {
-            await t.trx.from(TABLA_CONFIG).where('empresa_id', empresaId).update(cambios)
-        }
-        const despues = desdeFila(fila ? ({ ...fila, ...cambios } as FilaConfigEquipos) : null, empresaId)
         return {
             probado_en: ahora.toISOString(),
             smartolt: so,
             genieacs: acs,
-            capacidades: gestionDe(despues),
+            capacidades: await gestionDe(empresaId, t.trx),
         }
     }
 }

@@ -28,9 +28,9 @@ import * as v from '#integraciones/equipos/validators'
 import { estadoEquipo } from '#integraciones/equipos/equipos'
 import AprovisionarServicio from '#integraciones/equipos/actions/aprovisionar_servicio'
 import CambiarWifiServicio from '#integraciones/equipos/actions/cambiar_wifi_servicio'
-import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
+import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
-import { vistaConfig } from '#integraciones/equipos/configuracion'
+import db from '@adonisjs/lucid/services/db'
 import {
     iniciadoPor,
     leerAprovisionamiento,
@@ -190,9 +190,10 @@ const rutas: Ruta[] = [
             'Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en ' +
             '`capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.',
         etiqueta: 'integraciones',
-        permiso: 'equipos.ver',
+        permiso: 'smartolt.ver',
         respuesta: { status: 200, descripcion: 'Configuración', esquema: ConfigEquipos },
-        handler: async (ctx) => vistaConfig(exigirEmpresaActivaDelContexto(ctx.contextoAccion())),
+        handler: async (ctx) =>
+            vistaConfig(exigirEmpresaActivaDelContexto(ctx.contextoAccion()), db.connection()),
     }),
     definirRuta({
         metodo: 'put',
@@ -205,7 +206,7 @@ const rutas: Ruta[] = [
             'reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; ' +
             'desactualizada: 409.',
         etiqueta: 'integraciones',
-        permiso: 'equipos.configurar',
+        permiso: 'smartolt.editar_instancia',
         cuerpo: v.configurarEquiposValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Configuración guardada', esquema: ConfigEquipos },
@@ -221,7 +222,7 @@ const rutas: Ruta[] = [
             'un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema ' +
             'no responde: devuelve su error.',
         etiqueta: 'integraciones',
-        permiso: 'equipos.probar',
+        permiso: 'smartolt.probar_instancia',
         respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaEquipos },
         handler: async (ctx) => new ProbarEquipos().execute({}, ctx.contextoAccion()),
     }),

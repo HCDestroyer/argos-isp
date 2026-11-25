@@ -24,7 +24,7 @@ const config = shallowRef<ConfigEquipos | null>(null)
 const cargando = ref(false)
 const problema = ref<Problem | null>(null)
 const pideEmpresa = computed(() => enTodas.value || (problema.value !== null && codigoProblema(problema.value) === 'empresa_requerida'))
-const editable = computed(() => puede('equipos.configurar'))
+const editable = computed(() => puede('smartolt.editar_instancia'))
 
 const formulario = useTemplateRef('formulario')
 const idFormulario = useId()
@@ -404,7 +404,7 @@ onMounted(async () => {
             <div class="flex flex-wrap items-center gap-2 border-t border-(--ax-borde) pt-3">
                 <span class="me-auto text-xs text-muted">Las credenciales se guardan cifradas y nunca se vuelven a mostrar.</span>
                 <UButton
-                    v-if="puede('equipos.probar')"
+                    v-if="puede('smartolt.probar_instancia')"
                     label="Probar conexión"
                     icon="i-lucide-plug-zap"
                     color="neutral"

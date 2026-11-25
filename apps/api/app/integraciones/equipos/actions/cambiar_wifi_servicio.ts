@@ -3,7 +3,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
 import { LimiteExcedido } from '#core/limite_ventana'
-import { configDeEmpresa, gestionDe } from '#integraciones/equipos/configuracion'
+import { configDeEmpresa } from '#integraciones/equipos/configuracion'
 import {
     EquipoSinGestion,
     VerificacionRequerida,
@@ -102,7 +102,7 @@ export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi
         }
 
         const config = await configDeEmpresa(empresaId, t.trx)
-        if (!gestionDe(config).tr069) {
+        if (!config.gestion.tr069) {
             throw new EquipoSinGestion(
                 null,
                 'La empresa no tiene el ACS (GenieACS) configurado y probado en Argos',

@@ -1,13 +1,8 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { descifrar } from '#shared/cifrado'
 import type { CausaAprovisionamiento } from '#shared/eventos'
-import {
-    configDeEmpresa,
-    gestionDe,
-    perfilesDeEmpresa,
-    perfilPara,
-    type ConfigEquipos,
-} from '#integraciones/equipos/configuracion'
+import { configDeEmpresa, type ConfigEquipos } from '#integraciones/equipos/configuracion'
+import { oltDeInstancia, perfilPara } from '#integraciones/equipos/smartolt_instancias'
 import { ErrorEquipos } from '#integraciones/equipos/http'
 import * as smartolt from '#integraciones/equipos/smartolt'
 import * as genieacs from '#integraciones/equipos/genieacs'
@@ -165,7 +160,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
 
     /** ¿El paso `equipo` pasa por el ACS? */
     private usaAcs(fila: FilaAprovisionamiento, config: ConfigEquipos): boolean {
-        if (!gestionDe(config).tr069 || !config.genieacs) return false
+        if (!config.gestion.tr069 || !config.genieacs) return false
         return (
             fila.equipo.tipo === 'router_tr069' ||
             Boolean(fila.wifi_clave_cifrada || fila.wifi_ssid_cifrado) ||
@@ -255,7 +250,10 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                     true,
                 )
             }
-            const perfil = perfilPara(await perfilesDeEmpresa(fila.empresa_id), onu.olt_id, planId)
+            const ref = config.smartoltInstanciaId
+                ? await oltDeInstancia(config.smartoltInstanciaId, onu.olt_id)
+                : null
+            const perfil = ref ? await perfilPara(Number(ref.id), planId) : null
             if (!perfil) {
                 throw new FalloPaso(
                     'equipo',
@@ -311,7 +309,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
         config: ConfigEquipos,
     ): Promise<genieacs.DispositivoAcs> {
         const acs = config.genieacs
-        if (!acs || !gestionDe(config).tr069) {
+        if (!acs || !config.gestion.tr069) {
             throw new FalloPaso('equipo', 'otro', 'El ACS ya no está configurado en la empresa', false, true)
         }
         try {

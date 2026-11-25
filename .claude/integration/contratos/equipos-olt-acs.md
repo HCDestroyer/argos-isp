@@ -2,7 +2,15 @@
 
 Dueño: **A6** (`apps/api/app/integraciones/equipos/`). Lo consumen **A4** (panel: Configuración › Integraciones), **A1** (red de acceso: `network.olts`) e Iris por el contrato de siempre (`contratos/iris.md` §4.3 y §12, que **no cambia**).
 
-Estado: **versión 1 (25 nov 2026): análisis y plan. Nada de esto está implementado todavía.** La rama `agente/a6-olt-acs` solo trae este documento. Quien lo ejecute cambia el estado de cada lote aquí mismo, en la PR del lote.
+Estado: **versión 1 (25 nov 2026): análisis y plan.** Quien lo ejecute cambia el estado de cada lote aquí mismo, en la PR del lote.
+
+| Lote | Estado |
+| --- | --- |
+| 1 · Modelo y migración | Hecho (25 nov 2026). Mientras llegan los lotes 2 y 3, `GET`/`PUT /integraciones/equipos` y `POST …/probar` siguen con la forma de antes sobre las tablas nuevas (compatibilidad: la instancia propia de id menor + el ACS), con los permisos `smartolt.ver`, `smartolt.editar_instancia` y `smartolt.probar_instancia` |
+| 2 · ACS independiente | Pendiente |
+| 3 · SmartOLT multi-instancia | Pendiente |
+| 4 · Panel | Pendiente |
+| 5 · Cierre | Pendiente |
 
 Pedido del PM: «SmartOLT y ACS pueden estar separados, ya que ahora depende uno del otro; además SmartOLT, al ser el sistema multi agente, puede tener varias instancias/subdominios de SmartOLT y a su vez tener en cada uno varias OLTs».
 
@@ -82,6 +90,7 @@ core.servicios ── servidor_pppoe ── vlan ── puerto PON ── networ
 | `id` | bigint identity PK | |
 | `empresa_id` | bigint NULL → `core.empresas` | dueña; **null = compartida** entre las empresas de la instalación (igual que `network.olts`). Ver §3.6 |
 | `nombre` | text NOT NULL | etiqueta en Argos («Zona norte»); único por empresa sin distinguir mayúsculas (409 `instancia_duplicada`) |
+| `nota` | text NULL | nota libre del formulario (decisión del PM, 25 nov 2026, tableros `PendSmartolt*`) |
 | `url` | text NOT NULL | `https://<subdominio>.smartolt.com` (`normalizarUrl(…, 'smartolt')`); **única en toda la instalación** (409 `subdominio_duplicado`): una cuenta, un token, un presupuesto de llamadas |
 | `token_cifrado` | text NOT NULL | `cifrar()`; nunca sale (`***`) |
 | `activo` | boolean NOT NULL DEFAULT false | |
@@ -348,3 +357,11 @@ Pruebas:
 - **P5 · Aviso a Iris.** Cuando se apaga una instancia o el ACS, Iris se entera la próxima vez que consulta el estado. ¿Hace falta avisarle en el momento (cambio de contrato con Iris)?
 - **P6 · Tablero.** No hay diseño aprobado para SmartOLT con varias instancias ni para ACS aparte. ¿Lo dibujamos antes del lote 4, o se construye siguiendo el tablero de Integraciones y se revisa después?
 - **P7 · Un ACS por empresa.** Recomendación: uno por empresa (§3.4). ¿De acuerdo, o hay alguna empresa con más de un ACS?
+
+### Respuestas (25 nov 2026, decisión del PM)
+
+- **P1:** sí. Una cuenta de SmartOLT puede compartirse entre empresas: `empresa_id` null y solo la administra quien tiene alcance global. Una instancia es de **una** empresa o compartida con **todas** (como en el tablero).
+- **P3:** no. El Wi-Fi y el PPPoE de la ONU se configuran solo con ACS; sin ACS, SmartOLT no los configura.
+- **P7:** un ACS por empresa.
+- **P6:** tableros aprobados (`PendSmartolt*`, `PendAcs*`, `PendEquipoServicio*`, `decisiones-pm.md` «SmartOLT y ACS»). El formulario lleva el campo «Nota»: columna `nota` en la instancia (§3.1).
+- **P2, P4 y P5:** siguen abiertas. Se aplica lo que propone el plan: conservar el comportamiento de hoy (`wireless = ftth || tr069`, el perfil por número, sin aviso a Iris).

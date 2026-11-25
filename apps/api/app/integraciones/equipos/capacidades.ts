@@ -5,7 +5,7 @@ import { NoEncontrado, Problema } from '#shared/errores'
 import { exigirServicio } from '#core/acceso_empresa'
 import { usuarioIris } from '#core/integraciones_iris'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
-import { configDeEmpresa, gestionDe } from '#integraciones/equipos/configuracion'
+import { gestionDe } from '#integraciones/equipos/configuracion'
 import { contratoAdmite, leerFilaIris } from '#integraciones/iris/configuracion'
 import { esTokenIris } from '#integraciones/iris/atencion'
 import { avisoApagado, configPara, disponibilidad } from '#notify/configuracion'
@@ -109,7 +109,7 @@ export async function marcasDeEmpresa(
     empresaId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<MarcasEquipos> {
-    const gestion = gestionDe(await configDeEmpresa(empresaId, cliente))
+    const gestion = await gestionDe(empresaId, cliente)
     return {
         estado_equipo: gestion.ftth || gestion.tr069,
         wifi: gestion.tr069,

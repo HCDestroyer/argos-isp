@@ -9,7 +9,7 @@ import type { Problem } from '@argosisp/contracts'
  * cifradas que no vuelven y «Probar conexión» de verdad. Cada lectura va por separado: si una falla, las
  * otras se ven igual.
  */
-definePageMeta({ permiso: ['horus.ver', 'iris.ver', 'equipos.ver'] })
+definePageMeta({ permiso: ['horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver'] })
 
 useHead({ title: 'Integraciones · ArgosIsp' })
 
@@ -61,13 +61,13 @@ const avisoReconexionTarjeta = computed(() => (conectorIris.value ? avisoReconex
 const textoDesconexionTarjeta = computed(() => (avisoCanjeTarjeta.value?.estado === 'desconectado' ? textoDesconexionIris(avisoCanjeTarjeta.value) : null))
 
 watch(useEmpresaActiva().empresaId, () => {
-    if (puede('equipos.ver')) {
+    if (puede('smartolt.ver')) {
         void resumen.cargarEquipos()
     }
 })
 
 onMounted(() => {
-    if (puede('equipos.ver')) {
+    if (puede('smartolt.ver')) {
         void resumen.cargarEquipos()
     }
     if (puede('fel.ver')) {

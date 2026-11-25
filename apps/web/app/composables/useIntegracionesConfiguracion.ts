@@ -66,7 +66,7 @@ export function useIntegracionesConfiguracion() {
     }
 
     function cargar() {
-        if (puede('equipos.ver')) {
+        if (puede('smartolt.ver')) {
             void cargarEquipos()
         }
         if (puede('iris.ver')) {
@@ -117,7 +117,7 @@ export function useIntegracionesConfiguracion() {
                 estado: config ? { etiqueta: MODOS_FEL[config.modo].etiqueta, color: MODOS_FEL[config.modo].color, icono: MODOS_FEL[config.modo].icono } : null,
             })
         }
-        if (puede('equipos.ver')) {
+        if (puede('smartolt.ver')) {
             const config = equipos.value
             const estado = (sistema: SistemaEquipos) => {
                 if (!config) {
