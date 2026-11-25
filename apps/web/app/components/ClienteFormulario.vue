@@ -182,6 +182,8 @@ function consumidorFinal() {
     estado.nit_cui = ''
 }
 
+/** NIT con forma pero sin módulo 11: aviso, no bloquea Guardar (fel-establecimientos R1). */
+const avisoNit = computed(() => avisoDocumentoFiscal(estado.tipo_documento_fiscal, estado.nit_cui ?? ''))
 const itemsDocumento: SelectItem[] = Object.entries(TIPOS_DOCUMENTO_FISCAL).map(([value, label]) => ({ label, value }))
 const PLACEHOLDER_DOCUMENTO: Record<TipoDocumentoFiscal, string> = { nit: '1234567-9', cui: '2984 56132 0101', pasaporte: 'A1234567', cf: 'Sin número' }
 
@@ -448,7 +450,7 @@ onMounted(async () => {
                     variant="subtle"
                     icon="i-lucide-badge-alert"
                     title="NIT o CUI por corregir"
-                    description="El número no pasó la validación al activar la localización fiscal (se conservó tal cual). Corrígelo o márcalo como consumidor final: la factura FEL lo exige válido."
+                    description="El dígito verificador no cuadra (sirve para pruebas) o el número no pasó la validación al activar la localización fiscal. En producción la factura FEL sale como consumidor final hasta corregirlo."
                     class="mb-4"
                     data-prueba="nit-invalido"
                 />
@@ -468,7 +470,7 @@ onMounted(async () => {
                         label="Número"
                         :required="estado.tipo_documento_fiscal !== 'cf'"
                         help="La factura electrónica (FEL) sale a nombre de este documento."
-                        :description="estado.tipo_documento_fiscal === 'nit' ? 'Con dígito verificador (módulo 11).' : estado.tipo_documento_fiscal === 'cui' ? '13 dígitos del DPI.' : estado.tipo_documento_fiscal === 'pasaporte' ? '3 a 20 letras o dígitos.' : 'Consumidor final no lleva número.'"
+                        :description="estado.tipo_documento_fiscal === 'nit' ? 'Letras, dígitos y guiones; el dígito verificador se revisa como aviso.' : estado.tipo_documento_fiscal === 'cui' ? '13 dígitos del DPI.' : estado.tipo_documento_fiscal === 'pasaporte' ? '3 a 20 letras o dígitos.' : 'Consumidor final no lleva número.'"
                     >
                         <UFieldGroup class="w-full">
                             <UInput
@@ -485,6 +487,15 @@ onMounted(async () => {
                                 @click="consumidorFinal"
                             />
                         </UFieldGroup>
+                        <UAlert
+                            v-if="avisoNit"
+                            color="warning"
+                            variant="subtle"
+                            icon="i-lucide-triangle-alert"
+                            :description="avisoNit"
+                            class="mt-2"
+                            data-prueba="aviso-nit"
+                        />
                     </UFormField>
 
                     <UFormField

@@ -3557,7 +3557,7 @@ export interface paths {
         get: operations["felConfiguracion"];
         /**
          * Configurar proveedor, ambiente y modo FEL
-         * @description 409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).
+         * @description 409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).
          */
         put: operations["felConfigurar"];
         post?: never;
@@ -15977,7 +15977,7 @@ export interface components {
             tipo_documento_fiscal: "nit" | "cui" | "pasaporte" | "cf";
             /** @description Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf. Al usuario técnico Iris le sale `***` (contrato Iris 0.6.0 §1.1; null sigue null) */
             nit_cui: string | null;
-            /** @description true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo */
+            /** @description true: el número no pasó la validación al migrar a la localización fiscal (se conservó), o es un NIT que se guardó con advertencia porque el dígito verificador (módulo 11) no cuadra (NIT de pruebas del certificador); se apaga al corregirlo o cuando la consulta de NIT del certificador lo encuentra */
             nit_cui_invalido: boolean;
             nombre_fiscal: string | null;
             direccion_fiscal: string | null;
@@ -18274,6 +18274,8 @@ export interface components {
             activa: boolean;
             /** @description La empresa 1 (la de la instalación original) */
             principal: boolean;
+            /** @description Derivado: el NIT cuadra con el dígito verificador (módulo 11). false = guardado con advertencia (sirve para pruebas; la SAT lo rechazará en producción y PUT /fel/configuracion a producción responde 422 `nit_emisor_invalido`). null sin NIT */
+            nit_valido: boolean | null;
             /** @description Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó) */
             version: number;
             /** Format: date-time */
@@ -40517,7 +40519,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas */
+                    /** @description NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite */
                     nit: string;
                     razon_social: string;
                     nombre_comercial: string;
@@ -40660,7 +40662,7 @@ export interface operations {
                 "application/json": {
                     /** @description version leída (0 si la empresa 1 nunca se guardó); si cambió responde 409 */
                     version: number;
-                    /** @description NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas */
+                    /** @description NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite */
                     nit?: string | null;
                     razon_social?: string | null;
                     nombre_comercial?: string;

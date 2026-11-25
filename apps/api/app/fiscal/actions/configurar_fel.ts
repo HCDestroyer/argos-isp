@@ -7,7 +7,8 @@ import {
     type ConfiguracionFel,
     type ModoFel,
 } from '#fiscal/fel/configuracion'
-import { AvisosPorCertificar, CertificarAlIncompatible } from '#fiscal/fel/errores'
+import { AvisosPorCertificar, CertificarAlIncompatible, NitEmisorInvalido } from '#fiscal/fel/errores'
+import { nitValido } from '#core/nit_cui'
 import { camposProveedor, type AmbienteFel } from '#fiscal/fel/proveedor'
 
 /**
@@ -16,6 +17,8 @@ import { camposProveedor, type AmbienteFel } from '#fiscal/fel/proveedor'
  *
  * - `obligatoria` u `opcional` exigen un proveedor registrado; el proveedor `falso` no se admite en
  *   `produccion`.
+ * - `produccion` con modo distinto de `desactivada` exige un NIT de empresa que cuadre con el módulo
+ *   11: 422 `nit_emisor_invalido` (`contratos/fel-establecimientos.md` R1; en pruebas solo aviso).
  * - `obligatoria` no admite servicios de la empresa con `certificar_al = nunca` (plantilla o
  *   excepción): 422 `certificar_al_incompatible` con los servicios.
  * - `audit.cambios` (entidad `fel_configuracion`) y `fiscal.config_cambiada` con `fel_modo` y
@@ -65,6 +68,16 @@ export default class ConfigurarFel extends DomainAction<EntradaConfigurarFel, Co
                     rule: 'proveedor_de_pruebas',
                 },
             ])
+        }
+        if (input.modo !== 'desactivada' && input.ambiente === 'produccion') {
+            const empresa = (await t.trx
+                .from('core.empresas')
+                .where('id', empresaId)
+                .select('nit')
+                .first()) as {
+                nit: string | null
+            } | null
+            if (!empresa?.nit || !nitValido(empresa.nit)) throw new NitEmisorInvalido(empresa?.nit ?? null)
         }
         // H8: con avisos de cobro vivos sin DTE certificado, desactivar dejaría su IVA en 2.1.11
         if (input.modo === 'desactivada' && antes.modo !== 'desactivada') {

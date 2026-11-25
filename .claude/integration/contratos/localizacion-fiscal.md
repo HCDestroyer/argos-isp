@@ -61,6 +61,16 @@ Todas las tablas llevan `empresa_id NOT NULL` (FK a `core.empresas`) salvo los c
 | `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §12)                                                               |
 | `core.clientes` | Datos del receptor: `tipo_documento_fiscal` (`nit`, `cui`, `pasaporte`, `cf`; por defecto `cf`), `nit_cui` (ya existe), `nombre_fiscal`, `direccion_fiscal`, `pais_fiscal`, `agente_retencion_iva` (bool), `sector_publico` (bool). Van en `audit.cambios` |
 
+
+**NIT tolerante (`fel-establecimientos.md` R1, 25-nov-2026).** El NIT del emisor y del receptor
+admite letras, dígitos y guiones (`revisarNit`: limpio, `^[0-9A-Z]{2,20}$`); el dígito verificador
+(módulo 11) pasa a **advertencia**: la empresa lleva el derivado `nit_valido` y el cliente la marca
+`nit_cui_invalido` (que ahora también pone el alta o la edición, no solo la migración). La base lo
+sigue (`core.clasificar_documento` clasifica un valor con letras como `nit` marcado; el trigger no
+reclasifica un `nit` con forma de NIT). El único rechazo local es pasar la FEL a `produccion` con un
+NIT de empresa que no cuadra: 422 `nit_emisor_invalido`. En `pruebas`, el receptor marcado viaja
+con su NIT; en `produccion` sale como CF (§12). Siguen estrictos: importador, portal, Iris (completar
+datos), cambio de titular, verificación de NIT y proveedores de compras.
 ### 3.2 Localización y parámetros (`fiscal`, A3)
 
 | Tabla                       | Columnas clave                                                                                                                                                                                                                                     | Restricciones                                                                                                                                                                                                          |
@@ -843,6 +853,7 @@ Cambio de significado: en modo `obligatoria` con `certificar_al = emitir`, `fact
 | ------------------------------- | ------ | ----------------------------------------------------------------------------- |
 | `pais_no_soportado`             | 422    | País sin paquete                                                              |
 | `campo_solo_lectura`            | 422    | `PUT /empresas/:id` con otro `regimen_isr` o `codigo_establecimiento` (A1)    |
+| `nit_emisor_invalido`           | 422    | `PUT /fel/configuracion` a `produccion` (modo ≠ desactivada) con NIT de empresa sin dígito verificador válido (`fel-establecimientos.md` R1) |
 | `empresa_con_documentos`        | 409    | Cambiar el país de una empresa con documentos                                 |
 | `localizacion_no_instalada`     | 422    | Operación fiscal en una empresa sin localización                              |
 | `parametro_no_editable`         | 422    | Alcance `N`                                                                   |

@@ -80,17 +80,18 @@ export default class ReintentarDte extends DomainAction<EntradaReintentarDte, Dt
                     : 'reglas_snapshot',
             )
             .firstOrFail()) as { cliente_id: number; reglas_snapshot: { receptor?: unknown } | null }
+        const config = await configuracionFel(dte.empresa_id, t.trx)
         const receptor = await receptorDe(
             t.trx,
             documento.cliente_id,
             (documento.reglas_snapshot?.receptor ?? null) as Parameters<typeof receptorDe>[2],
+            { ambiente: config.ambiente },
         )
         const hoy = hoyGuatemala()
         if (await receptorFaltante(dte.empresa_id, receptor, dte.total, hoy, t.trx)) {
             const limite = await valorParametro<string>(dte.empresa_id, 'consumidor_final_limite', hoy, t.trx)
             throw new ReceptorRequerido(aTexto(dec(dte.total)), aTexto(dec(limite)))
         }
-        const config = await configuracionFel(dte.empresa_id, t.trx)
         return insertarDte(t.trx, {
             empresa_id: dte.empresa_id,
             documento_tipo: dte.documento_tipo,

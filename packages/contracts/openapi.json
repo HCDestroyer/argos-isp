@@ -25218,8 +25218,8 @@
                 "properties": {
                   "nit": {
                     "type": "string",
-                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite"
                   },
                   "razon_social": {
                     "type": "string",
@@ -25533,8 +25533,8 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite"
                   },
                   "razon_social": {
                     "type": [
@@ -28019,7 +28019,7 @@
       "put": {
         "operationId": "felConfigurar",
         "summary": "Configurar proveedor, ambiente y modo FEL",
-        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).",
+        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).",
         "tags": [
           "fel"
         ],
@@ -110410,7 +110410,7 @@
           },
           "nit_cui_invalido": {
             "type": "boolean",
-            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo"
+            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó), o es un NIT que se guardó con advertencia porque el dígito verificador (módulo 11) no cuadra (NIT de pruebas del certificador); se apaga al corregirlo o cuando la consulta de NIT del certificador lo encuentra"
           },
           "nombre_fiscal": {
             "type": [
@@ -119287,6 +119287,7 @@
           "logo_tipo",
           "activa",
           "principal",
+          "nit_valido",
           "version",
           "created_at",
           "updated_at"
@@ -119432,6 +119433,13 @@
           "principal": {
             "type": "boolean",
             "description": "La empresa 1 (la de la instalación original)"
+          },
+          "nit_valido": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Derivado: el NIT cuadra con el dígito verificador (módulo 11). false = guardado con advertencia (sirve para pruebas; la SAT lo rechazará en producción y PUT /fel/configuracion a producción responde 422 `nit_emisor_invalido`). null sin NIT"
           },
           "version": {
             "type": "integer",

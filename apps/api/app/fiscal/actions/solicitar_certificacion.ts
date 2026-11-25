@@ -202,7 +202,9 @@ export default class SolicitarCertificacion extends DomainAction<
                 'Factura en cero',
             )
         }
-        const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor)
+        const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor, {
+            ambiente: config.ambiente,
+        })
         const falta = await receptorFaltante(empresaId, receptor, aTexto(neto.total), hoy, t.trx)
         if (falta && !input.automatico) {
             const limite = await valorParametro<string>(empresaId, 'consumidor_final_limite', hoy, t.trx)

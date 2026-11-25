@@ -833,6 +833,92 @@ orden útil para el PM es 1 → 2 → 5 → 6 (ya se certifica en demo) y despu�
 
 ## 5. Preguntas para el PM (decisiones de negocio; nada de esto se decide en el código)
 
+**Respuestas del PM (25-nov-2026).** Las marcadas «decisión del PM» mandan sobre el texto del plan
+que contradigan (R1, R3 y los lotes 4 y 5); P2, P5, P6, P8, P9 y P10 siguen abiertas y se aplica lo
+que propone el plan.
+
+- **P1 · decisión del PM (25-nov-2026).** La factura sale del establecimiento **de la caja** que la
+  cobra: cada caja tiene su establecimiento. Las facturas que no pasan por caja (cron mensual, Iris,
+  API) salen del establecimiento **por defecto** de la empresa. Las notas (NCRE, NDEB) usan el
+  establecimiento del DTE de su factura. Sin ningún establecimiento: 422 `establecimiento_requerido`.
+  **Reemplaza la regla de la zona del cliente** de R3 y del lote 4 (no se crea
+  `fiscal.establecimientos_zonas`).
+- **P3 y P4 · decisión del PM (25-nov-2026).** El NIT del cliente en producción se decide con la
+  consulta de NIT de INFILE: si la SAT lo reconoce (existe y está activo) se usa ese NIT aunque no
+  cuadre con el módulo 11; si no existe, sale como consumidor final con un aviso visible en la
+  factura y en el cliente; si INFILE no responde, se aplica la regla de hoy (con la marca, CF) y se
+  deja un aviso.
+- **P7 · decisión del PM (25-nov-2026).** Se puede activar «Obligatoria» sin credenciales probadas;
+  solo se muestra un aviso hasta que funcionen (es lo que ya propone el lote 2: aviso, no 422).
+- **P11 · decisión del PM (25-nov-2026).** La consulta del NIT a INFILE se hace **al guardar el
+  cliente** (al crearlo o al cambiar su NIT); se guardan el nombre y el resultado. Además hay un
+  botón «Consultar NIT» para repetirla. No se consulta en cada factura.
+- **Cobrar antes de certificar · decisión del PM (25-nov-2026).** Primero se cobra y después se
+  certifica. Toda factura nace como **aviso de cobro**, sin DTE; el DTE se genera cuando la factura
+  queda **cubierta por completo** (lo que hoy hace `certificar_al = pagar`, «DTE al cubrirse»); un
+  pago parcial no certifica. `certificar_al = emitir` deja de usarse: el cargo único pasa a `pagar`
+  por defecto, ninguna acción nueva acepta `emitir` (422 con mensaje claro) y las plantillas,
+  excepciones y cargos con `emitir` se migran a `pagar` con su diff en la auditoría (antes de quitar
+  el valor se revisa si alguna regla de la SAT o de un contrato obliga a certificar al emitir; si la
+  hay, queda como excepción documentada). Opcional: el botón «Certificar» solo en facturas pagadas o
+  cubiertas sin DTE; en una pendiente, «Se certifica al cobrarla». Obligatoria: al cubrirse, el DTE
+  entra solo a la cola, sin botón para omitirlo. `nunca` sigue sin admitirse con obligatoria. Panel:
+  «Aviso de cobro (sin certificar)» → «Pagada, certificando» → «Certificada», o el error con
+  «Reintentar». Se aplica en el lote 3 y **reemplaza** los casos «al emitir» de R2 y del lote 3.
+- **Cargos no facturables · decisión del PM (25-nov-2026).** Se decide por concepto de cargo
+  (`GET /conceptos-cargo`): campo `facturable` (true por defecto en todos los existentes); al emitir
+  un cargo único, quien tenga el permiso puede cambiarlo para ese cargo. Un cargo no facturable es un
+  cobro de control: entra a la cuenta del cliente, a la caja y al libro contable, pero nunca genera
+  DTE ni entra en los libros fiscales (IVA y ventas), en cualquier modo FEL. El panel dice «Este
+  cargo no se factura». El cargo de instalación de Iris (`iris_orden`) sigue la marca de su
+  concepto. El tratamiento contable (IVA) no se inventa: lo que no esté claro va al contador o al PM.
+  Se aplica en el lote 3.
+- **Caja sin factura · decisión del PM (25-nov-2026).** Cada caja tiene la marca `fiscal` (true por
+  defecto). Una caja `fiscal = false` cobra y lleva todo el control (cierres, arqueo, depósitos,
+  asientos), pero sus cobros no certifican: las facturas que se cubren en ella no generan DTE ni
+  entran en los libros fiscales. Se permite incluso con FEL «Obligatoria», con un aviso visible en la
+  configuración de la caja y en el cobro. Esos cobros salen en un reporte aparte, «Cobros en cajas
+  sin factura». Una caja sin factura no necesita establecimiento (P1). Las dos marcas se configuran
+  con su permiso, auditoría y evento. Un pago repartido entre caja fiscal y sin factura: regla
+  propuesta al PM antes de implementarla. Se aplica en el lote 3.
+- **Recibo no fiscal · decisión del PM (25-nov-2026).** Lo que se entrega al cobrar en una caja sin
+  factura, o al cubrir un cargo no facturable, es un **recibo no fiscal de pago** (ni aviso de cobro
+  ni factura): dice claramente que no es factura y no lleva DTE, serie ni número de la SAT. Numeración
+  propia, correlativa y sin huecos por empresa (el ejecutor decide si por caja o por empresa y lo
+  justifica). Se imprime y consulta como el recibo de cobro de hoy (plantillas `recibo_cobro`). En el
+  panel la factura o el cargo cubierto así se ve «Pagada · Recibo #N», nunca como aviso pendiente ni
+  «por certificar». Antes del pago sigue siendo aviso de cobro. Los recibos salen en el reporte
+  «Cobros en cajas sin factura». Si choca con la contabilidad (ingresos, IVA) se avisa, no se inventa.
+  Se aplica en el lote 3.
+- **Contabilidad de los recibos · decisión del PM (25-nov-2026).** Los recibos (caja sin factura y
+  cargos no facturables) se registran en una **cuenta especial interna** del plan de cuentas de cada
+  empresa (siembra para las nuevas, migración para las existentes; nombre sugerido «Ingresos por
+  recibos internos (caja sin factura)»; el código sigue la numeración del catálogo y se justifica).
+  El asiento del recibo va contra esa cuenta en lugar de la de ingresos facturados, sin IVA débito,
+  con la doble partida y el cierre de caja de siempre. La cuenta queda fuera de los libros fiscales y
+  de las declaraciones (IVA, ISR, libro de ventas) con una exclusión explícita y verificable (atributo
+  de la cuenta); sí aparece en el balance y el estado de resultados internos y en el reporte «Cobros
+  en cajas sin factura». La cuenta se puede cambiar por empresa, con permiso y auditoría. La suite
+  `tests/contabilidad/` se corre completa y no se edita. Se aplica en el lote 3.
+- **Para qué es la caja sin factura · decisión del PM (25-nov-2026).** Para operaciones reales que
+  no llevan factura (pagos por dejar pasar por un camino, permisos por un poste o un cable). No es
+  para ocultar nada a la SAT: es para que esos datos no se mezclen con los de la declaración. Mueve
+  entradas y salidas.
+    - **Salidas:** la caja registra egresos con descripción, beneficiario (texto libre), motivo y
+      adjunto opcional. Asiento: gasto contra una cuenta interna de **gastos no deducibles** (creada
+      en el plan de cada empresa, como la de ingresos internos) con salida de la caja; fuera de los
+      libros fiscales y del crédito fiscal del IVA. Se reúsan los egresos de caja existentes
+      (`/egresos`, retiros), sin duplicar.
+    - **Entradas:** el recibo y la cuenta de ingresos internos.
+    - **Visibilidad:** la caja tiene la lista de usuarios que pueden verla y usarla (operar, ver
+      cierres y movimientos), con el alcance por caja del ACL (regla 8). Las cuentas internas
+      (ingresos y gastos), sus movimientos, asientos y reportes los ven solo quienes tienen un permiso
+      propio (`contabilidad.ver_cuentas_internas`); los demás ven los estados sin esas cuentas o
+      agregadas en una línea «Interno (restringido)» (el ejecutor decide cuál y lo justifica).
+    - **Sin ocultar nada en una auditoría:** todo sigue en el libro inmutable y en `audit.*`; Debe =
+      Haber y el sellado no cambian; quien tiene el permiso ve todo; la restricción es solo de
+      visibilidad, con su bitácora.
+
 - **P1 · Cómo se elige la sucursal.** El plan usa la **zona del cliente** y, si no hay, el
   establecimiento por defecto. ¿Es ese el criterio, o debe ser la caja que cobra, el router o un
   campo propio del servicio? Lo confirma el contador: la SAT pide que el código exista y esté

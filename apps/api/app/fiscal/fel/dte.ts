@@ -11,6 +11,7 @@ import { frasesVigentes } from '#fiscal/frases'
 import { valorParametro } from '#fiscal/parametros'
 import { datosFiscalesEmpresas } from '#fiscal/instalador_localizacion'
 import type {
+    AmbienteFel,
     DteCertificado,
     DteParaEnviar,
     LineaDte,
@@ -332,11 +333,19 @@ export interface ReceptorFiscal {
     direccion_fiscal?: string | null
 }
 
-/** Receptor de la factura: el dato fiscal del cliente o el corregido al sustituir. */
+/**
+ * Receptor de la factura: el dato fiscal del cliente o el corregido al sustituir.
+ *
+ * `nit_cui_invalido` (NIT guardado con advertencia, `contratos/fel-establecimientos.md` R1): en el
+ * ambiente `pruebas` el NIT viaja tal como está y el certificador decide (sus NIT de prueba no
+ * cuadran con el módulo 11); en `produccion` (o sin ambiente) sale como CF (§12 de
+ * `localizacion-fiscal.md`).
+ */
 export async function receptorDe(
     cliente: QueryClientContract,
     clienteId: number,
     corregido?: ReceptorFiscal | null,
+    opciones: { ambiente?: AmbienteFel | null } = {},
 ): Promise<ReceptorDte> {
     const c = (await cliente
         .from('core.clientes')
@@ -359,7 +368,8 @@ export async function receptorDe(
         tipo_documento_fiscal: ReceptorDte['tipo']
         nit_cui_invalido: boolean
     }
-    const tipo = corregido?.tipo_documento_fiscal ?? (c.nit_cui_invalido ? 'cf' : c.tipo_documento_fiscal)
+    const degradar = c.nit_cui_invalido && opciones.ambiente !== 'pruebas'
+    const tipo = corregido?.tipo_documento_fiscal ?? (degradar ? 'cf' : c.tipo_documento_fiscal)
     const id =
         tipo === 'cf' ? 'CF' : (corregido?.nit_cui ?? c.nit_cui ?? '').replace(/[\s-]/g, '').toUpperCase()
     return {

@@ -25,6 +25,21 @@ export class ReceptorRequerido extends Problema {
     }
 }
 
+/**
+ * 422 al pasar a producción con un NIT de empresa que falta o no cuadra con el módulo 11
+ * (`contratos/fel-establecimientos.md` R1): en pruebas es solo advertencia (`nit_valido`).
+ */
+export class NitEmisorInvalido extends Problema {
+    constructor(nit: string | null) {
+        const detalle = nit
+            ? `El NIT de la empresa (${nit}) no cuadra con el dígito verificador: sirve para pruebas, pero la SAT lo rechazará en producción. Corrígelo en Empresas antes de pasar a producción`
+            : 'La empresa no tiene NIT: agrégalo en Empresas antes de pasar a producción'
+        super(422, 'nit_emisor_invalido', 'NIT del emisor inválido', detalle, [
+            { field: 'ambiente', message: detalle, rule: 'nit_emisor_invalido' },
+        ])
+    }
+}
+
 export class CertificarAlIncompatible extends Problema {
     constructor(detalle: string) {
         super(422, 'certificar_al_incompatible', 'certificar_al incompatible', detalle, [

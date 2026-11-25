@@ -414,7 +414,7 @@ function fel(): Ruta[] {
             versionada: true,
             idempotente: true,
             descripcion:
-                '409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).',
+                '409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).',
             respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
             handler: async (ctx, { cuerpo }) => {
                 const config = await new ConfigurarFel().execute(cuerpo, ctx.contextoAccion())
