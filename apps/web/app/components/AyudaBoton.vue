@@ -7,6 +7,8 @@
  * directo al manual.
  * No usa `UTooltip`: va en todas las pantallas y las pruebas las montan sin el proveedor de `UApp`.
  */
+defineOptions({ inheritAttrs: false })
+
 const props = withDefaults(defineProps<{
     /** Con la etiqueta siempre visible (menú lateral del teléfono). */
     conEtiqueta?: boolean
@@ -31,17 +33,23 @@ const boton = computed(() => ({
     color: 'neutral' as const,
     variant: 'ghost' as const,
     block: props.conEtiqueta,
-    class: props.conEtiqueta ? 'justify-start cursor-help' : 'cursor-help',
-    ui: { label: props.conEtiqueta ? '' : 'hidden md:inline' },
+    square: props.soloIcono,
+    size: 'md' as const,
+    class: props.conEtiqueta ? 'justify-start cursor-help' : 'cursor-help justify-center',
+    ui: { label: props.conEtiqueta ? '' : 'hidden md:inline', leadingIcon: 'size-5' },
 }))
 </script>
 
 <template>
-    <!-- Un solo nodo raíz: la clase del padre (`hidden sm:inline-flex`) se aplica aquí. -->
-    <div v-if="url">
+    <!-- La clase del padre (`hidden sm:inline-flex`, `boton-flotante boton-circulo`) va al botón, no a
+         una envoltura: así el círculo y el icono quedan centrados. La envoltura no ocupa caja. -->
+    <div
+        v-if="url"
+        class="contents"
+    >
         <UButton
             v-if="entrada"
-            v-bind="boton"
+            v-bind="{ ...boton, ...$attrs, class: [boton.class, $attrs.class] }"
             title="Ayuda de esta pantalla"
             aria-label="Ayuda de esta pantalla"
             aria-haspopup="dialog"
@@ -51,7 +59,7 @@ const boton = computed(() => ({
         />
         <UButton
             v-else
-            v-bind="boton"
+            v-bind="{ ...boton, ...$attrs, class: [boton.class, $attrs.class] }"
             :to="url"
             target="_blank"
             rel="noopener"
