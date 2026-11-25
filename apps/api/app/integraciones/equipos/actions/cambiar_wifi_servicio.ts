@@ -3,7 +3,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
 import { LimiteExcedido } from '#core/limite_ventana'
-import { configDeEmpresa } from '#integraciones/equipos/configuracion'
+import { acsDeEmpresa } from '#integraciones/equipos/acs'
 import {
     EquipoSinGestion,
     VerificacionRequerida,
@@ -101,8 +101,8 @@ export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi
             }
         }
 
-        const config = await configDeEmpresa(empresaId, t.trx)
-        if (!config.gestion.tr069) {
+        const acs = await acsDeEmpresa(empresaId, t.trx)
+        if (!acs.operativo) {
             throw new EquipoSinGestion(
                 null,
                 'La empresa no tiene el ACS (GenieACS) configurado y probado en Argos',
@@ -110,7 +110,7 @@ export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi
         }
         const equipo =
             (await equipoGestionado(input.servicio_id, empresaId, t.trx)) ??
-            (await descubrirEquipo(input.servicio_id, empresaId, config, t.trx))
+            (await descubrirEquipo(input.servicio_id, empresaId, t.trx))
         if (!equipo?.acs_device_id) {
             throw new EquipoSinGestion(
                 null,

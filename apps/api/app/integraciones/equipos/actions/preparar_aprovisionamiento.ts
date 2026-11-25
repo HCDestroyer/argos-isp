@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { descifrar } from '#shared/cifrado'
 import type { CausaAprovisionamiento } from '#shared/eventos'
 import { configDeEmpresa, type ConfigEquipos } from '#integraciones/equipos/configuracion'
+import { acsDeEmpresa, type AcsEmpresa } from '#integraciones/equipos/acs'
 import { oltDeInstancia, perfilPara } from '#integraciones/equipos/smartolt_instancias'
 import { ErrorEquipos } from '#integraciones/equipos/http'
 import * as smartolt from '#integraciones/equipos/smartolt'
@@ -93,6 +94,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
             return { resultado: 'fallido' }
         }
         const config = await configDeEmpresa(fila.empresa_id, t.trx)
+        const acs = await acsDeEmpresa(fila.empresa_id, t.trx)
         let pasos = fila.pasos
         const datos = {
             smartolt_external_id: fila.smartolt_external_id,
@@ -109,12 +111,12 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                         Number(servicio.plan_id),
                     )
                 }
-                if (this.usaAcs(fila, config)) {
-                    const disp = await this.dispositivo(fila, config)
+                if (this.usaAcs(fila, acs)) {
+                    const disp = await this.dispositivo(fila, acs)
                     datos.acs_device_id = disp.id
-                    if (config.pppoePorAcs && servicio.user_ppp && servicio.pass_ppp) {
+                    if (this.pppoePorAcs(fila, acs) && servicio.user_ppp && servicio.pass_ppp) {
                         const p = genieacs.PARAMETROS[disp.modelo_datos ?? 'tr098']
-                        await this.aplicar(fila, config, disp, 'equipo', [
+                        await this.aplicar(fila, acs, disp, 'equipo', [
                             [p.pppUsuario, servicio.user_ppp],
                             [p.pppClave, descifrar(servicio.pass_ppp)],
                         ])
@@ -123,13 +125,13 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                 pasos = marcarPaso(pasos, 'equipo', 'hecho')
             }
             if (estadoPaso(pasos, 'wifi') === 'pendiente') {
-                const disp = await this.dispositivo(fila, config)
+                const disp = await this.dispositivo(fila, acs)
                 datos.acs_device_id = disp.id
                 const p = genieacs.PARAMETROS[disp.modelo_datos ?? 'tr098']
                 const valores: Array<[string, string]> = []
                 if (fila.wifi_ssid_cifrado) valores.push([p.ssid, descifrar(fila.wifi_ssid_cifrado)])
                 if (fila.wifi_clave_cifrada) valores.push([p.clave, descifrar(fila.wifi_clave_cifrada)])
-                if (valores.length > 0) await this.aplicar(fila, config, disp, 'wifi', valores)
+                if (valores.length > 0) await this.aplicar(fila, acs, disp, 'wifi', valores)
                 pasos = marcarPaso(pasos, 'wifi', 'hecho')
             }
             if (fila.equipo.tipo === 'ont' && datos.smartolt_external_id && config.smartolt && !datos.senal) {
@@ -159,13 +161,21 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
     }
 
     /** ¿El paso `equipo` pasa por el ACS? */
-    private usaAcs(fila: FilaAprovisionamiento, config: ConfigEquipos): boolean {
-        if (!config.gestion.tr069 || !config.genieacs) return false
+    private usaAcs(fila: FilaAprovisionamiento, acs: AcsEmpresa): boolean {
         return (
             fila.equipo.tipo === 'router_tr069' ||
             Boolean(fila.wifi_clave_cifrada || fila.wifi_ssid_cifrado) ||
-            config.pppoePorAcs
+            this.pppoePorAcs(fila, acs)
         )
+    }
+
+    /**
+     * PPPoE por el ACS: se decidió al aceptar (`equipo.pppoe_por_acs`, §4.3). Los pedidos aceptados antes
+     * del lote 2 no lo traen: entonces vale el ajuste actual del ACS si está operativo.
+     */
+    private pppoePorAcs(fila: FilaAprovisionamiento, acs: AcsEmpresa): boolean {
+        if (typeof fila.equipo.pppoe_por_acs === 'boolean') return fila.equipo.pppoe_por_acs
+        return acs.operativo && acs.pppoePorAcs
     }
 
     /** La serie o la MAC ya están en otro servicio (inventario o equipo gestionado). */
@@ -306,11 +316,17 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
 
     private async dispositivo(
         fila: FilaAprovisionamiento,
-        config: ConfigEquipos,
+        config: AcsEmpresa,
     ): Promise<genieacs.DispositivoAcs> {
         const acs = config.genieacs
-        if (!acs || !config.gestion.tr069) {
-            throw new FalloPaso('equipo', 'otro', 'El ACS ya no está configurado en la empresa', false, true)
+        if (!acs || !config.operativo) {
+            throw new FalloPaso(
+                'equipo',
+                'acs_sin_respuesta',
+                'El ACS de la empresa está apagado o sin probar',
+                false,
+                true,
+            )
         }
         try {
             const { serie, mac } = fila.equipo
@@ -339,7 +355,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
 
     private async aplicar(
         fila: FilaAprovisionamiento,
-        config: ConfigEquipos,
+        config: AcsEmpresa,
         disp: genieacs.DispositivoAcs,
         paso: NombrePaso,
         valores: Array<[string, string]>,

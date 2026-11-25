@@ -140,3 +140,25 @@ export const configurarEquiposValidator = vine.compile(
             }),
     }),
 )
+
+/** `PUT /integraciones/acs` (`contratos/equipos-olt-acs.md` §5.1). */
+export const configurarAcsValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(0),
+        activo: vine.boolean().optional(),
+        url: url().meta({ description: 'URL del NBI de GenieACS (o del proxy que lo protege)' }),
+        usuario: vine.string().trim().maxLength(200).nullable().optional(),
+        clave: secreto(),
+        ca: vine
+            .string()
+            .trim()
+            .maxLength(20_000)
+            .nullable()
+            .optional()
+            .meta({ description: 'Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra' }),
+        pppoe_por_acs: vine.boolean().optional().meta({
+            description:
+                'Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar (solo con el ACS operativo)',
+        }),
+    }),
+)

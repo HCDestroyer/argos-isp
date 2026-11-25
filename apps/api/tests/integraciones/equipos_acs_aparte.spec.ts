@@ -13,6 +13,9 @@ import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
 import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
+import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
+import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
+import { vistaAcs } from '#integraciones/equipos/acs'
 import {
     NOMBRE_COLA_EQUIPOS,
     crearWorkerEquipos,
@@ -86,20 +89,13 @@ function proxyNbi(acs: Simulado, opciones: { negarIp?: boolean } = {}) {
 
 const ctxEmpresa = (empresaId = 1) => ({ ...contextoPrueba(), empresaId, empresasPermitidas: null })
 
-async function configurarAcs(empresaId: number, url: string, extra: Record<string, unknown> = {}) {
-    const { version } = await vistaConfig(empresaId, db.connection())
-    await new ConfigurarEquipos().execute(
-        {
-            version,
-            activo: true,
-            genieacs_url: url,
-            genieacs_usuario: USUARIO,
-            genieacs_clave: CLAVE,
-            ...extra,
-        },
+async function configurarAcs(empresaId: number, url: string, extra: { ca?: string | null } = {}) {
+    const { version } = await vistaAcs(empresaId)
+    await new ConfigurarAcs().execute(
+        { version, activo: true, url, usuario: USUARIO, clave: CLAVE, ...extra },
         ctxEmpresa(empresaId),
     )
-    return new ProbarEquipos().execute({}, ctxEmpresa(empresaId))
+    return new ProbarAcs().execute({}, ctxEmpresa(empresaId))
 }
 
 async function tokenIris() {
@@ -133,53 +129,42 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
             proxyNbi(acs)
             proxyNbi(ajeno)
             // con la autoridad propia guardada y las credenciales correctas: ok, con la cabecera Basic
-            const ok = await configurarAcs(1, acs.url, { genieacs_ca: valido.cert })
-            assert.isTrue(ok.genieacs!.ok, ok.genieacs!.error ?? '')
-            assert.isTrue(ok.capacidades.tr069)
+            const ok = await configurarAcs(1, acs.url, { ca: valido.cert })
+            assert.isTrue(ok.ok, ok.error ?? '')
+            assert.isTrue(ok.config.operativo)
             assert.lengthOf(acs.de('/devices/'), 1)
 
             // clave equivocada: 401 con un texto claro, y sin capacidad
-            const leida = await vistaConfig(1, db.connection())
-            const v = leida.version
-            await new ConfigurarEquipos().execute(
-                { version: v, genieacs_clave: 'otra-clave-mala' },
-                ctxEmpresa(),
-            )
-            const mala = await new ProbarEquipos().execute({}, ctxEmpresa())
-            assert.isFalse(mala.genieacs!.ok)
-            assert.include(mala.genieacs!.error!, 'rechazó el usuario o la clave (401)')
-            assert.isFalse(mala.capacidades.tr069)
+            const { version: v } = await vistaAcs(1)
+            await new ConfigurarAcs().execute({ version: v, clave: 'otra-clave-mala' }, ctxEmpresa())
+            const mala = await new ProbarAcs().execute({}, ctxEmpresa())
+            assert.isFalse(mala.ok)
+            assert.include(mala.error!, 'rechazó el usuario o la clave (401)')
+            assert.isFalse(mala.config.operativo)
 
             // sin la autoridad propia: el certificado autofirmado no se acepta (y no se reintenta)
             acs.peticiones.length = 0
-            const sinCa = await configurarAcs(1, acs.url, { genieacs_ca: null })
-            assert.isFalse(sinCa.genieacs!.ok)
-            assert.include(
-                sinCa.genieacs!.error!,
-                'El certificado HTTPS de GenieACS no es válido: es autofirmado',
-            )
+            const sinCa = await configurarAcs(1, acs.url, { ca: null })
+            assert.isFalse(sinCa.ok)
+            assert.include(sinCa.error!, 'El certificado HTTPS de GenieACS no es válido: es autofirmado')
             assert.lengthOf(acs.peticiones, 0, 'no se mandan credenciales a un servidor no confiable')
 
             // certificado de otro nombre (aunque su autoridad esté guardada)
-            const nombre = await configurarAcs(1, ajeno.url, { genieacs_ca: otroNombre.cert })
-            assert.isFalse(nombre.genieacs!.ok)
-            assert.include(nombre.genieacs!.error!, 'no es del nombre de la URL')
+            const nombre = await configurarAcs(1, ajeno.url, { ca: otroNombre.cert })
+            assert.isFalse(nombre.ok)
+            assert.include(nombre.error!, 'no es del nombre de la URL')
 
             // el proxy niega la IP de Argos: 403 con su explicación
             const negado = await new Simulado().iniciar({ tls: valido })
             proxyNbi(negado, { negarIp: true })
-            const ip = await configurarAcs(1, negado.url, { genieacs_ca: valido.cert })
-            assert.include(ip.genieacs!.error!, 'la IP de Argos no está permitida')
+            const ip = await configurarAcs(1, negado.url, { ca: valido.cert })
+            assert.include(ip.error!, 'la IP de Argos no está permitida')
             await negado.detener()
 
             // un PEM que no es un certificado: 422
-            const config = await vistaConfig(1, db.connection())
+            const config = await vistaAcs(1)
             await assert.rejects(
-                () =>
-                    new ConfigurarEquipos().execute(
-                        { version: config.version, genieacs_ca: 'hola' },
-                        ctxEmpresa(),
-                    ),
+                () => new ConfigurarAcs().execute({ version: config.version, ca: 'hola' }, ctxEmpresa()),
                 /no son válidos|Datos inválidos|validos/i,
             )
 
@@ -188,7 +173,7 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
                 await db.from('audit.red').where('tipo', 'genieacs').orderBy('id', 'desc').limit(20),
                 await db
                     .from('audit.acciones')
-                    .where('accion', 'equipos.configurar')
+                    .where('accion', 'acs.configurar')
                     .orderBy('id', 'desc')
                     .limit(10),
             ])
@@ -214,8 +199,8 @@ test.group('Equipos · GenieACS en otro servidor, varios ACS y varios workers', 
                     return { status: 200, cuerpo: [] }
                 }).responder('POST /devices/*', (p) => ({ status: 200, cuerpo: { ...p.json, _id: 't1' } }))
             }
-            await configurarAcs(1, acs1.url, { genieacs_ca: valido.cert })
-            await configurarAcs(e.B, acs2.url, { genieacs_ca: valido.cert })
+            await configurarAcs(1, acs1.url, { ca: valido.cert })
+            await configurarAcs(e.B, acs2.url, { ca: valido.cert })
             const clienteId = await crearClienteFila()
             const servicioId = await crearServicioFila({
                 cliente_id: clienteId,

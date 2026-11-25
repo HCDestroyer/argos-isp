@@ -23,6 +23,11 @@ export interface EquipoPedido {
     unidad_id: number | null
     modelo: string | null
     gestionado: boolean
+    /**
+     * Interno (no sale en la vista): el PPPoE va por el ACS, decidido al aceptar (§4.3). Ausente en
+     * los pedidos anteriores al lote 2 de `contratos/equipos-olt-acs.md`.
+     */
+    pppoe_por_acs?: boolean
 }
 
 export interface FilaAprovisionamiento {
@@ -149,7 +154,14 @@ export async function vistaAprovisionamiento(
         reintentable: fila.reintentable,
         detalle: fila.detalle,
         servicio_estado: servicio?.estado ?? 'retirado',
-        equipo: fila.equipo,
+        equipo: {
+            tipo: fila.equipo.tipo,
+            serie: fila.equipo.serie,
+            mac: fila.equipo.mac,
+            unidad_id: fila.equipo.unidad_id,
+            modelo: fila.equipo.modelo,
+            gestionado: fila.equipo.gestionado,
+        },
         senal: fila.senal,
         creado_en: new Date(fila.created_at).toISOString(),
         actualizado_en: new Date(fila.updated_at).toISOString(),

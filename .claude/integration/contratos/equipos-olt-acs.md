@@ -7,7 +7,7 @@ Estado: **versión 1 (25 nov 2026): análisis y plan.** Quien lo ejecute cambia 
 | Lote | Estado |
 | --- | --- |
 | 1 · Modelo y migración | Hecho (25 nov 2026). Mientras llegan los lotes 2 y 3, `GET`/`PUT /integraciones/equipos` y `POST …/probar` siguen con la forma de antes sobre las tablas nuevas (compatibilidad: la instancia propia de id menor + el ACS), con los permisos `smartolt.ver`, `smartolt.editar_instancia` y `smartolt.probar_instancia` |
-| 2 · ACS independiente | Pendiente |
+| 2 · ACS independiente | Hecho (25 nov 2026): `GET`/`PUT /integraciones/acs`, `POST /integraciones/acs/probar`, evento `equipos.config_cambiada`. El PPPoE por ACS se decide al aceptar y queda en `aprovisionamientos.equipo.pppoe_por_acs` (interno, no sale en la vista) en vez de en `pasos`, para no cambiar la forma pública de `pasos` (§12.2 de Iris) |
 | 3 · SmartOLT multi-instancia | Pendiente |
 | 4 · Panel | Pendiente |
 | 5 · Cierre | Pendiente |

@@ -30,6 +30,9 @@ import AprovisionarServicio from '#integraciones/equipos/actions/aprovisionar_se
 import CambiarWifiServicio from '#integraciones/equipos/actions/cambiar_wifi_servicio'
 import ConfigurarEquipos, { vistaConfig } from '#integraciones/equipos/actions/configurar_equipos'
 import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
+import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
+import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
+import { vistaAcs } from '#integraciones/equipos/acs'
 import db from '@adonisjs/lucid/services/db'
 import {
     iniciadoPor,
@@ -180,7 +183,77 @@ const PruebaEquipos = definirEsquema(
     }),
 )
 
+const ConfigAcs = definirEsquema(
+    'ConfigAcs',
+    objeto({
+        empresa_id: idEsquema,
+        activo: booleano,
+        operativo: booleano,
+        url: nulable(texto),
+        usuario: nulable(texto),
+        clave: nulable(enumerado(['***'])),
+        ca: booleano,
+        probado_en: nulable(instante),
+        prueba_ok: nulable(booleano),
+        prueba_error: nulable(texto),
+        pppoe_por_acs: booleano,
+        version: { type: 'integer' },
+    }),
+)
+
+const PruebaAcs = definirEsquema(
+    'PruebaAcs',
+    objeto({
+        ok: booleano,
+        latencia_ms: nulable({ type: 'integer' }),
+        error: nulable(texto),
+        config: ConfigAcs,
+    }),
+)
+
 const rutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/acs',
+        operacion: 'acsVer',
+        resumen: 'ACS (GenieACS) de la empresa activa, sin la clave',
+        descripcion:
+            'Un ACS por empresa, independiente de SmartOLT. `clave` como `***` (o null). `operativo` = encendido, con URL y ' +
+            'la última prueba en ok: de ahí sale `tr069` de `capacidades.aprovisionamiento`. `version` 0 = nunca guardado.',
+        etiqueta: 'integraciones',
+        permiso: 'acs.ver',
+        respuesta: { status: 200, descripcion: 'ACS', esquema: ConfigAcs },
+        handler: async (ctx) => vistaAcs(exigirEmpresaActivaDelContexto(ctx.contextoAccion())),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/integraciones/acs',
+        operacion: 'acsConfigurar',
+        resumen: 'Guardar el ACS (GenieACS) de la empresa activa',
+        descripcion:
+            'Clave: omitida = se conserva, null = se borra, texto = se reemplaza; se guarda cifrada y nunca vuelve. Cambiar ' +
+            'URL, usuario, clave o certificado borra la última prueba. `activo: true` exige URL (422). `version` 0 la ' +
+            'primera vez; desactualizada: 409. Emite `equipos.config_cambiada`.',
+        etiqueta: 'integraciones',
+        permiso: 'acs.configurar',
+        cuerpo: v.configurarAcsValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'ACS guardado', esquema: ConfigAcs },
+        handler: async (ctx, { cuerpo }) => new ConfigurarAcs().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/acs/probar',
+        operacion: 'acsProbar',
+        resumen: 'Probar la conexión con el ACS de la empresa activa (configuración guardada)',
+        descripcion:
+            'Una búsqueda de un dispositivo en el NBI con la autenticación guardada. No llama a SmartOLT. Guarda el ' +
+            'resultado y no falla si el ACS no responde: devuelve su error.',
+        etiqueta: 'integraciones',
+        permiso: 'acs.probar',
+        respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaAcs },
+        handler: async (ctx) => new ProbarAcs().execute({}, ctx.contextoAccion()),
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/integraciones/equipos',

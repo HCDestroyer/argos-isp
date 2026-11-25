@@ -2,12 +2,8 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { Problema, ReglaNegocio, type ErrorCampo, type ProblemaJson } from '#shared/errores'
 import type { TipoEquipoCliente } from '#shared/eventos'
-import {
-    configDeEmpresa,
-    gestionDe,
-    type ConfigEquipos,
-    type GestionEmpresa,
-} from '#integraciones/equipos/configuracion'
+import { configDeEmpresa, gestionDe, type GestionEmpresa } from '#integraciones/equipos/configuracion'
+import { acsDeEmpresa } from '#integraciones/equipos/acs'
 import * as smartolt from '#integraciones/equipos/smartolt'
 import * as genieacs from '#integraciones/equipos/genieacs'
 import {
@@ -291,11 +287,12 @@ export async function guardarEquipoGestionado(
 export async function descubrirEquipo(
     servicioId: number,
     empresaId: number,
-    config: ConfigEquipos,
     /** la transacción de quien llama si ya bloqueó el servicio (la FK chocaría con su lock) */
     cliente: QueryClientContract = db.connection(),
 ): Promise<EquipoGestionado | null> {
-    const gestion = config.gestion
+    const config = await configDeEmpresa(empresaId, cliente)
+    const acsEmpresa = await acsDeEmpresa(empresaId, cliente)
+    const gestion = { ftth: config.gestion.ftth, tr069: acsEmpresa.operativo }
     if (!gestion.ftth && !gestion.tr069) return null
     for (const u of await equiposEnComodato(servicioId, cliente)) {
         let externo: string | null = null
@@ -309,12 +306,11 @@ export async function descubrirEquipo(
             }
         }
         let acs: genieacs.DispositivoAcs | null = null
-        if (gestion.tr069 && config.genieacs) {
+        const nbi = acsEmpresa.genieacs
+        if (gestion.tr069 && nbi) {
             acs =
-                (u.serie
-                    ? await genieacs.porSerie(config.genieacs, u.serie, servicioId).catch(() => null)
-                    : null) ??
-                (u.mac ? await genieacs.porMac(config.genieacs, u.mac, servicioId).catch(() => null) : null)
+                (u.serie ? await genieacs.porSerie(nbi, u.serie, servicioId).catch(() => null) : null) ??
+                (u.mac ? await genieacs.porMac(nbi, u.mac, servicioId).catch(() => null) : null)
         }
         if (!externo && !acs) continue
         const equipo: EquipoGestionado = {
@@ -386,7 +382,8 @@ export async function estadoEquipo(
         .first()) as { empresa_id: number } | null
     const empresaId = Number(servicio?.empresa_id)
     const config = await configDeEmpresa(empresaId)
-    const gestion = config.gestion
+    const acsEmpresa = await acsDeEmpresa(empresaId)
+    const gestion = { ftth: config.gestion.ftth, tr069: acsEmpresa.operativo }
     const sinGestion = async () =>
         opciones.asistente
             ? new EquipoSinGestion()
@@ -394,8 +391,7 @@ export async function estadoEquipo(
 
     if (!gestion.ftth && !gestion.tr069) throw await sinGestion()
     const equipo =
-        (await equipoGestionado(servicioId, empresaId)) ??
-        (await descubrirEquipo(servicioId, empresaId, config))
+        (await equipoGestionado(servicioId, empresaId)) ?? (await descubrirEquipo(servicioId, empresaId))
     if (!equipo) throw await sinGestion()
 
     const guardada = (await db
@@ -407,7 +403,7 @@ export async function estadoEquipo(
     }
 
     const olt = equipo.smartolt_external_id && gestion.ftth && config.smartolt ? config.smartolt : null
-    const acs = equipo.acs_device_id && gestion.tr069 && config.genieacs ? config.genieacs : null
+    const acs = equipo.acs_device_id && gestion.tr069 ? acsEmpresa.genieacs : null
     if (!olt && !acs) throw await sinGestion()
 
     const errores: string[] = []

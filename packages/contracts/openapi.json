@@ -32929,6 +32929,238 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/acs": {
+      "get": {
+        "operationId": "acsVer",
+        "summary": "ACS (GenieACS) de la empresa activa, sin la clave",
+        "description": "Un ACS por empresa, independiente de SmartOLT. `clave` como `***` (o null). `operativo` = encendido, con URL y la última prueba en ok: de ahí sale `tr069` de `capacidades.aprovisionamiento`. `version` 0 = nunca guardado.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ACS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigAcs"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso acs.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "acs.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "acsConfigurar",
+        "summary": "Guardar el ACS (GenieACS) de la empresa activa",
+        "description": "Clave: omitida = se conserva, null = se borra, texto = se reemplaza; se guarda cifrada y nunca vuelve. Cambiar URL, usuario, clave o certificado borra la última prueba. `activo: true` exige URL (422). `version` 0 la primera vez; desactualizada: 409. Emite `equipos.config_cambiada`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "URL del NBI de GenieACS (o del proxy que lo protege)"
+                  },
+                  "usuario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "clave": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
+                  },
+                  "ca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "description": "Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra"
+                  },
+                  "pppoe_por_acs": {
+                    "description": "Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar (solo con el ACS operativo)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ACS guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigAcs"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso acs.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "acs.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/acs/probar": {
+      "post": {
+        "operationId": "acsProbar",
+        "summary": "Probar la conexión con el ACS de la empresa activa (configuración guardada)",
+        "description": "Una búsqueda de un dispositivo en el NBI con la autenticación guardada. No llama a SmartOLT. Guarda el resultado y no falla si el ACS no responde: devuelve su error.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PruebaAcs"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso acs.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "acs.probar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/equipos": {
       "get": {
         "operationId": "equiposConfigVer",
@@ -112924,6 +113156,84 @@
           }
         }
       },
+      "ConfigAcs": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "activo",
+          "operativo",
+          "url",
+          "usuario",
+          "clave",
+          "ca",
+          "probado_en",
+          "prueba_ok",
+          "prueba_error",
+          "pppoe_por_acs",
+          "version"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "operativo": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usuario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clave": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***"
+            ]
+          },
+          "ca": {
+            "type": "boolean"
+          },
+          "probado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "prueba_ok": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "prueba_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pppoe_por_acs": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "ConfigEquipos": {
         "type": "object",
         "required": [
@@ -138301,6 +138611,35 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PruebaAcs": {
+        "type": "object",
+        "required": [
+          "ok",
+          "latencia_ms",
+          "error",
+          "config"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": {
+            "$ref": "#/components/schemas/ConfigAcs"
           }
         }
       },

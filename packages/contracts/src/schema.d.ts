@@ -4299,6 +4299,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/acs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ACS (GenieACS) de la empresa activa, sin la clave
+         * @description Un ACS por empresa, independiente de SmartOLT. `clave` como `***` (o null). `operativo` = encendido, con URL y la última prueba en ok: de ahí sale `tr069` de `capacidades.aprovisionamiento`. `version` 0 = nunca guardado.
+         */
+        get: operations["acsVer"];
+        /**
+         * Guardar el ACS (GenieACS) de la empresa activa
+         * @description Clave: omitida = se conserva, null = se borra, texto = se reemplaza; se guarda cifrada y nunca vuelve. Cambiar URL, usuario, clave o certificado borra la última prueba. `activo: true` exige URL (422). `version` 0 la primera vez; desactualizada: 409. Emite `equipos.config_cambiada`.
+         */
+        put: operations["acsConfigurar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/acs/probar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probar la conexión con el ACS de la empresa activa (configuración guardada)
+         * @description Una búsqueda de un dispositivo en el NBI con la autenticación guardada. No llama a SmartOLT. Guarda el resultado y no falla si el ACS no responde: devuelve su error.
+         */
+        post: operations["acsProbar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integraciones/equipos": {
         parameters: {
             query?: never;
@@ -16672,6 +16716,22 @@ export interface components {
             /** @description 0 sin configurar */
             version: number;
         };
+        ConfigAcs: {
+            empresa_id: number;
+            activo: boolean;
+            operativo: boolean;
+            url: string | null;
+            usuario: string | null;
+            /** @enum {string|null} */
+            clave: "***" | null;
+            ca: boolean;
+            /** Format: date-time */
+            probado_en: string | null;
+            prueba_ok: boolean | null;
+            prueba_error: string | null;
+            pppoe_por_acs: boolean;
+            version: number;
+        };
         ConfigEquipos: {
             empresa_id: number;
             activo: boolean;
@@ -23040,6 +23100,12 @@ export interface components {
             registrado_por: number | null;
             /** Format: date-time */
             created_at: string;
+        };
+        PruebaAcs: {
+            ok: boolean;
+            latencia_ms: number | null;
+            error: string | null;
+            config: components["schemas"]["ConfigAcs"];
         };
         PruebaConexion: {
             router_id: number;
@@ -44874,6 +44940,154 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    acsVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ACS */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigAcs"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso acs.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    acsConfigurar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    activo?: boolean;
+                    /** @description URL del NBI de GenieACS (o del proxy que lo protege) */
+                    url?: string | null;
+                    usuario?: string | null;
+                    /** @description Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve */
+                    clave?: string | null;
+                    /** @description Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra */
+                    ca?: string | null;
+                    /** @description Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar (solo con el ACS operativo) */
+                    pppoe_por_acs?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description ACS guardado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigAcs"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso acs.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    acsProbar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado de la prueba */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PruebaAcs"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso acs.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
