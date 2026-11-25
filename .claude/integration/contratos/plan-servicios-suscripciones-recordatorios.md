@@ -1,409 +1,495 @@
-# Plan: tipos de servicio, suscripciones y recordatorios por lugar (ArgosIsp)
+# Plan v2: tipos de servicio, suscripciones, cobro automático y recordatorios por lugar (ArgosIsp)
 
-Leí el worktree `/home/user/wt-plan-servicios` (rama `lider/plan-servicios-suscripciones`) sin modificar nada. Todo lo de abajo sale de lectura de código y contratos; no ejecuté pruebas. Donde algo no lo verifiqué, lo digo.
+Versión 2 (25 nov 2026), completa: reemplaza a la v1 del archivo `.claude/integration/contratos/plan-servicios-suscripciones-recordatorios.md` (sha da63c834). Incorpora las respuestas del PM del §6. Solo leí código, contratos y documentación pública; no ejecuté pruebas ni edité nada.
 
 ## 0. Lo esencial
 
-- **Tipos de servicio:** hoy no existe el concepto. Todo servicio exige router y plan con velocidad. Propongo `tipo_servicio` (internet, tv, mixto, telefonia, otro) con una tabla de capacidades en código. El lote caro es permitir servicios sin router.
-- **Suscripciones:** ya existen casi completas con el nombre «adicionales». Recomiendo evolucionarlos, no crear un módulo paralelo.
-- **Recordatorios:** hoy son 3 filas globales fijas, solo relativas al vencimiento de la factura, con plantillas globales. Faltan «corte próximo», «promesa por vencer», canales por regla y cualquier personalización por lugar.
-- **Lugar:** la zona vive en el cliente (`core.clientes.zona_id`), no en el servicio. Recomiendo zona > empresa > global.
-- **Tres ambigüedades del pedido** que cambian el alcance: qué quiso decir el PM con «suscripciones» (P1), qué es «lugar» (P7) y si lo de «por lugar» incluye precios (P8).
+- **Qué cambió respecto a la v1:**
+  - Desaparece el tipo de servicio `otro` y la cola «Cortes en campo».
+  - Entra la suscripción independiente como entidad propia (carril I).
+  - Entra el cobro automático con tarjeta (carril D).
+  - El corte de TV va por SmartOLT (CATV) y, si no se puede, por aviso a Iris.
+  - El carril R queda en espera.
+- **SmartOLT sí permite cortar el CATV**, pero los endpoints se llaman `disable_catv` y `enable_catv`. Los nombres `disable_onu_catv` / `enable_onu_catv` no existen en la especificación oficial.
+- **Recurrente sí permite tokenizar y cobrar después** sin que Argos vea la tarjeta: checkout `mode: "setup"` y `POST /api/one_time_payments` con `payment_method_id`.
+- **La factura de una suscripción independiente no necesita cambiar el modelo de facturas:** `billing.facturas.servicio_id` ya es anulable y `clave_unica` es texto libre (los cargos únicos ya usan `cargo-<uuid>`).
+- **Dependencias externas que bloquean lotes:**
+  - cuenta y Sandbox de Recurrente con «cobros únicos» habilitados (D2 en adelante);
+  - fusión de la rama `agente/a6-olt-acs` (T3b);
+  - contrato Iris 0.15.0 (T3a).
 
 ## 1. Diagnóstico
 
 ### 1.1 Tipos de servicio
+- `core.servicios` (`apps/api/database/migrations/1760900000005_crear_servicios.ts`): `router_id` y `plan_id` son `NOT NULL`. `user_ppp` y `pass_ppp` ya son anulables (migración `1792161790085_…`).
+- `network.planes`: `bajada_kbps NOT NULL CHECK (> 0)`. `planes.tipo` es comercial (`residencial`, `empresarial`, `dedicado`; `apps/api/app/network/tipos_plan.ts`), no tipo de servicio.
+- `apps/api/app/core/actions/crear_servicio.ts` y `crearServicioValidator` (`apps/api/app/core/validators.ts:396`) exigen router y plan.
+- Acoplamiento al router: 156 archivos de `apps/api/app` mencionan `router_id`; unas 134 referencias a `s.router_id`; alrededor de 10 joins internos a `network.routers`. El alcance ACL por router filtra por `s.router_id` (`apps/api/app/core/consultas/servicios.ts:206`).
+- Facturación: concepto fijo «Servicio de internet …» (`apps/api/app/billing/actions/emitir_factura.ts`, ~línea 186). Cuenta `4.1.01` para la línea `servicio` (`apps/api/app/billing/facturas.ts:75`). `facturas_lineas.cuenta_codigo` ya existe y manda sobre el tipo.
+- Corte: decide `apps/api/app/billing/actions/evaluar_estado_servicio.ts`; aplica `apps/api/app/core/actions/cambiar_estado_servicio.ts`. La ejecución es solo de red (aaa, coa, routeros).
 
-- `core.servicios` (`apps/api/database/migrations/1760900000005_crear_servicios.ts`): `router_id` y `plan_id` son `NOT NULL`. `user_ppp` y `pass_ppp` ya son anulables (migración `1792161790085_create_core_servicios_tipo_conexions_table.ts`).
-- `network.planes`: `bajada_kbps integer NOT NULL CHECK (> 0)`. `network.planes.tipo` existe pero es comercial (`residencial`, `empresarial`, `dedicado`; `apps/api/app/network/tipos_plan.ts`), no es tipo de servicio.
-- `apps/api/app/core/actions/crear_servicio.ts` y `crearServicioValidator` (`apps/api/app/core/validators.ts:396`) exigen `router_id` y `plan_id`. El tipo de conexión se toma del router.
-- Acoplamiento al router: 156 archivos de `apps/api/app` mencionan `router_id` y hay unas 134 referencias a `s.router_id` o `servicio.router_id`. Conté alrededor de 10 joins internos a `network.routers` y 11 a `network.planes`. El alcance del ACL por router filtra por `s.router_id` (`apps/api/app/core/consultas/servicios.ts:206`).
-- Facturación: el concepto está escrito a mano como «Servicio de internet …» en `apps/api/app/billing/actions/emitir_factura.ts` (línea ~186). La cuenta de ingreso de la línea `servicio` es `4.1.01 INGRESOS_INTERNET` (`cuentaIngresoDeLinea` en `apps/api/app/billing/facturas.ts:75`). `billing.facturas_lineas.cuenta_codigo` ya existe y manda sobre el tipo de línea; eso permite cuentas por tipo sin tocar el esquema de líneas.
-- Corte: `apps/api/app/billing/actions/evaluar_estado_servicio.ts` decide y `apps/api/app/core/actions/cambiar_estado_servicio.ts` aplica. Si el plan no es «limitable», ya se queda `activo` hasta cortar. La ejecución real del corte es solo de red (aaa, coa, routeros por `servicio.estado_cambiado`).
-- Lo que ya sirve para TV: los adicionales tipo IPTV con identificador, credencial y bloqueo al suspender (`.claude/integration/contratos/adicionales.md`), los adicionales incluidos por plan (`network.planes_adicionales`) y el comodato de equipos por servicio (`apps/api/app/inventario`).
-- Contratos: no hay ninguno sobre tipos de servicio. `contratos/instalacion.md` asume PPPoE e IP al activar.
+### 1.2 SmartOLT y CATV
+- En `origin/main` la integración está en `apps/api/app/integraciones/equipos/` (`smartolt.ts`, `equipos.ts`, `cola.ts`, `capacidades.ts`): una sola configuración por empresa. No hay ninguna llamada de CATV.
+- En `origin/agente/a6-olt-acs` (contrato `.claude/integration/contratos/equipos-olt-acs.md`, lotes 1 a 5 marcados «Hecho» en esa rama):
+  - `integraciones.smartolt_instancias` (subdominio, token cifrado, `activo`, `prueba_ok`; «operativa» = activo y probado);
+  - `integraciones.smartolt_olts` (ligada a `network.olts`);
+  - `equipos_servicio.smartolt_instancia_id` junto a `smartolt_external_id` (`argos<servicio_id>`);
+  - regla §4.2 para elegir la instancia de un servicio;
+  - evento `equipos.config_cambiada`.
+- API de SmartOLT. Fuente: especificación oficial OpenAPI «SmartOLT API 1.0», <https://www.smartolt.com/openapi.json>, leída el 25 nov 2026; documentación para personas en <https://api.smartolt.com/>.
 
-### 1.2 Suscripciones
+| Operación | Endpoint | Lo que dice la especificación |
+| --- | --- | --- |
+| Cortar CATV de una ONU | `POST /api/onu/disable_catv/{onu_external_id}` | 200 `{ status: true, response: "CATV disabled" }`. 400 si no hay ONU con ese id, si «CATV not supported by ONU-Type» o si la OLT no pudo. Restricción literal: no usar para «repeteadly disabling the same ONTs multiple times per week» |
+| Reconectar CATV | `POST /api/onu/enable_catv/{onu_external_id}` | 200 `"CATV enabled"`; mismos 400 |
+| Modo asíncrono | cuerpo `async=1` en ambos | Responde `"queued": true`: aceptado, no ejecutado. El resultado se lee con `check_bulk_task_status`. Si la ONU ya tiene acciones en cola, una petición sin `async` también se encola. 409 `onu_busy` si otra petición cambia la ONU a la vez |
+| Por lotes | `POST /api/onu/bulk_disable_catv` y `bulk_enable_catv` (`onus_external_ids` separados por coma) | Máximo 50 ids, o 10 000 con `async=1`. 400 si ya hay otra llamada al mismo método en curso. Cada ONU omitida trae su motivo |
+| Estado | `GET /api/onu/get_onus_catv_statuses?olt_id=&board=&port=&zone=` | Por ONU: `unique_external_id`, `sn`, `catv_status` = `Enabled`, `Disabled` o `CATV not supported by ONU-Type` |
+| Límites (del contrato `equipos-olt-acs.md` §2) | por cuenta | 1 000 llamadas por hora y 15 por segundo; las asíncronas tienen presupuesto aparte |
 
-- Adicionales (`apps/api/app/core/adicionales.ts`, acciones `*adicional*` en `apps/api/app/core/actions/`, contrato `adicionales.md`):
-  - catálogo por empresa (`core.adicionales`, con `tipo` `general` | `ip_publica`);
-  - asignación por servicio con modalidad `incluido`, `cortesia` o `cobrado`, precio, alta y baja con fecha;
-  - `primer_periodo` `prorrateado` | `sin_costo` y `cobrado_desde`;
-  - bloqueo al suspender, con historial y eventos `servicio.adicional_*` y `adicional.bloqueado/desbloqueado`.
-- Cobro ya implementado: `lineasAdicionales` en `emitir_factura.ts` genera una línea por asignación y periodo, idempotente, tipo `otro`, que hoy cae en `4.1.03`. Entra en la factura mensual del servicio, así que FEL y libro ya la cubren.
-- Lo que falta para llamarlo suscripción: pausa de una suscripción (solo existe la pausa del servicio entero, `apps/api/app/billing/pausas.ts`), baja programada a fin de periodo, ciclo distinto del mensual, categoría, cuenta de ingreso propia y una vista de todas las suscripciones.
-- Hay un tercer mecanismo recurrente: `billing.conceptos_recurrentes`. `emitir_factura.ts:195` lo lee, pero no encontré ninguna acción ni ruta que lo escriba (solo lo citan `core/eliminacion.ts` y `billing/panel/indicadores.ts`). Parece heredado.
-- No se puede cobrar algo recurrente a un cliente sin servicio: la factura se identifica por `servicio_id + periodo`.
-- Pantallas: `apps/web/app/pages/adicionales/index.vue`, `motivos.vue` y los modales `Adicional*.vue`. En el portal no encontré los adicionales en `cuenta.vue` ni `index.vue`.
+- También existen `enable_onu_voip_port` y `disable_onu_voip_port`; sirven a telefonía si entra más adelante.
 
-### 1.3 Recordatorios
+### 1.3 Suscripciones y adicionales
+- Adicionales (`apps/api/app/core/adicionales.ts`, contrato `adicionales.md`): catálogo por empresa, asignación por servicio (`incluido`, `cortesia`, `cobrado`), `primer_periodo`, bloqueo al suspender, eventos. Cobro en `lineasAdicionales` de `emitir_factura.ts` (línea tipo `otro`, hoy `4.1.03`).
+- Falta: pausa por asignación, baja programada, categoría, cuenta propia y vista general.
+- `billing.conceptos_recurrentes`: se lee al emitir (`emitir_factura.ts:195`), pero no encontré quién lo escriba.
+- No existe ninguna entidad recurrente ligada al cliente sin servicio.
+- Facturas sin servicio ya existen: `apps/api/app/billing/actions/emitir_cargo_unico.ts` emite con `servicio_id` opcional y `clave_unica = cargo-<uuid>`. `billing.facturas.servicio_id` es anulable y `clave_unica` es `text UNIQUE` (`1760900000008_crear_billing.ts`).
+- `billing.promesas.servicio_id` es `NOT NULL`: hoy no hay promesa sin servicio.
 
-- `notify.recordatorios` (`1760910000002_notify_recordatorios.ts`): `orden` 1 a 3 único, `dias` de −60 a 60 respecto a `vence_en`, `hora`, `activo`. Es global: `EditarRecordatorio` hace `t.fijarEmpresa(null)`. No tiene canales ni ámbito.
-- Cron: `apps/api/app/notify/recordatorios.ts` y `actions/programar_recordatorios.ts`. Procesa todo lo pendiente, con origen único `recordatorio:<orden>:factura:<id>`. Solo cubre facturas.
-- Plantillas: `notify.plantillas` con `UNIQUE (evento, canal)` y sin `empresa_id`, es decir, globales. Eventos `recordatorio.1` a `.3`.
-- WhatsApp: el cuerpo es el código de Iris. Los tres recordatorios usan `factura_por_vencer` o `factura_vencida` (`apps/api/app/notify/plantillas_base.ts:393`).
-- Canales: salen por todos los que el cliente tenga. Lo único por empresa son los interruptores y credenciales de `notify.configuracion_canales` (patrón `hereda`, `apps/api/app/notify/configuracion.ts`).
-- No existen recordatorios de «corte próximo» ni de «promesa por vencer» (lo busqué en el código).
-- Iris §6.3 no tiene códigos para esos dos avisos. A52 (leer las plantillas de WhatsApp de Iris, §6.7) está «acordado; pendiente en Argos» (`iris.md:1352`; `apps/api/app/integraciones/iris/README.md:497`).
-- Reglas de Iris que limitan el diseño: máximo 3 avisos automáticos por cliente y día, y silencio de 21:00 a 07:00 (§6.5).
-- Pantallas: `apps/web/app/pages/notificaciones/index.vue` y `configuracion/notificaciones.vue`. Tablero: `OperConfigNotificaciones.dc.html`.
+### 1.4 Cobro con tarjeta
+- Contrato `.claude/integration/contratos/pago-en-linea.md`; código en `apps/api/app/billing/pasarelas/` (`pasarela.ts` interfaz, `recurrente.ts`, `falsa.ts`, `cobros.ts`) y acciones `crear_cobro_pasarela.ts`, `procesar_webhook_pasarela.ts`, `conciliar_pasarela.ts`.
+- Lo que existe: checkout de pago único en Recurrente, webhook con firma Svix e idempotente, pago con asiento y comisión, retención de IVA de la emisora, reembolsos, contracargos como diferencia, conciliación diaria.
+- Lo que no existe: tokenización, método guardado, cliente en la pasarela ni cargo sin presencia del cliente. `pagos.metodo` ya admite `debito` en el modelo base, pero no hay flujo. El débito automático está en la fase 2 de `PLAN.md` (punto 8).
+- Pendientes ya anotados en el contrato:
+  - no hay cuenta ni Sandbox de Recurrente (bloqueo externo en `STATUS.md`);
+  - una sola llave por instalación (multiempresa pendiente);
+  - la facturación electrónica propia de Recurrente debe estar apagada.
+- Recurrente, guía «Guardar y reutilizar métodos de pago» (<https://docs.recurrente.com/guias-espanol/guias/guardar-y-reutilizar-metodos-de-pago.md>, leída el 25 nov 2026):
+  - `POST /api/customers` devuelve `cus_…`.
+  - `POST /api/checkouts` con `mode: "setup"` y `customer_id` tokeniza sin cobrar (autorización de monto cero). La tarjeta se escribe solo en la página de Recurrente.
+  - Resultado: webhook `setup_intent.succeeded` con `data.checkout.payment_method.id` (`pay_m_…`), o `setup_intent.cancelled`. Alternativa: `GET /api/checkouts/{id}`.
+  - `GET /api/customers/{id}/payment_methods` devuelve `last4`, `network`, vencimiento y `status`.
+  - Cobro: `POST /api/one_time_payments` con `customer_id`, `payment_method_id`, `items[]` y cabecera `Idempotency-Key`; responde `{ id: "on_…", status: "paid" }`.
+  - Si el banco rechaza, no se reusa la misma `Idempotency-Key`: un intento nuevo lleva clave nueva.
+  - Requiere «cobros únicos» habilitados en la cuenta.
+  - «Los webhooks reales solo se envían para eventos de producción»: la tokenización completa se valida con llave LIVE.
+  - Recurrente también ofrece suscripciones propias; no las propongo, porque el monto de Argos varía y la factura la certifica Argos.
 
-### 1.4 Por lugar
-
-- La zona está en el cliente; el servicio no tiene zona. Zonas y routers tienen `empresa_sugerida_id`.
-- Precio: `planes.precio` global o `costo_override` por servicio. No hay precio por zona.
-- Reglas de cobro: plantilla de facturación por servicio, más excepciones por servicio (`core.servicios_excepciones`). Hay una sola plantilla por defecto global (`apps/api/app/core/plantilla_por_defecto.ts`).
+### 1.5 Recordatorios y lugar (carril en espera)
+- `notify.recordatorios`: 3 filas globales fijas respecto a `vence_en`. Plantillas globales `recordatorio.1..3` (`notify.plantillas`, `UNIQUE (evento, canal)`). Cron en `apps/api/app/notify/actions/programar_recordatorios.ts`.
+- En WhatsApp el cuerpo es el código de Iris. No hay «corte próximo» ni «promesa por vencer». A52 está pendiente en Argos.
+- La zona vive en el cliente. No hay precio ni reglas por zona.
 
 ## 2. Modelo propuesto
 
 ### 2.1 Tipos de servicio
+- `network.planes.tipo_servicio` y `core.servicios.tipo_servicio`: `internet` (por defecto), `tv`, `mixto`. `telefonia` es opcional (P-N6). Un trigger exige que el del servicio coincida con el del plan.
+- `network.planes.precio_tv numeric(14,2) NULL`: solo en mixto, para desglosar la factura. Velocidades anulables salvo en tipos con internet.
+- `core.servicios.router_id` anulable, con CHECK: obligatorio en `internet` y `mixto`. `core.servicios.puntos smallint NULL` (televisores).
+- Capacidades en código (`apps/api/app/core/tipos_servicio.ts`, nuevo):
 
-**Tablas y columnas**
-- `network.planes.tipo_servicio text NOT NULL DEFAULT 'internet'` con CHECK (`internet`, `tv`, `mixto`, `telefonia`, `otro`).
-- `network.planes.precio_tv numeric(14,2) NULL`: solo en `mixto`, es la parte de TV dentro del precio, para desglosar la factura.
-- Velocidades anulables, con CHECK: obligatorias cuando el tipo lleva internet.
-- `core.servicios.tipo_servicio`, mismo CHECK y `DEFAULT 'internet'`. Un trigger exige que coincida con el del plan.
-- `router_id` anulable, con CHECK: obligatorio en `internet` y `mixto`.
-- `core.servicios.puntos smallint NULL`: número de televisores o líneas.
-- `core.cortes_campo`: `empresa_id`, `servicio_id`, `tipo` (`corte` | `reconexion`), `estado` (`pendiente` | `ejecutado` | `cancelado`), `motivo`, `solicitado_en`, `ejecutado_en`, `ejecutado_por`, `nota`, `version`. Índice único parcial: un solo pendiente por servicio y tipo.
-- Cuenta nueva de ingresos por TV (y por telefonía, si entra). El código de cuenta va en una versión nueva del paquete fiscal, a confirmar con el contador.
+| Tipo | Router, IP, RADIUS | Velocidad y «limitado» | Corte de la TV |
+| --- | --- | --- | --- |
+| internet | sí | sí | no aplica |
+| tv | no | no | SmartOLT CATV si es gestionable; si no, aviso a Iris |
+| mixto | sí | sí (internet) | internet por red; TV igual que arriba |
 
-**Capacidades** (archivo nuevo `apps/api/app/core/tipos_servicio.ts`, en código, no en base)
+- Migración: todo lo existente queda `internet`.
+- Eventos: `servicio.creado` suma `tipo_servicio` (`router_id` puede ser null). `servicio.config_cambiada` admite `tipo_servicio` en `campos`.
 
-| Tipo | Router, IP, RADIUS | Velocidad y «limitado» | Cómo se corta | OLT/ONU y planta | Equipos en comodato |
-| --- | --- | --- | --- | --- | --- |
-| internet | sí | sí | red (como hoy) | sí | sí |
-| tv | no | no | tarea en campo | solo `planta` como referencia | sí (decodificador) |
-| mixto | sí | sí (parte internet) | red + tarea en campo para la TV | sí | sí |
-| telefonia | no | no | tarea en campo | no | sí |
-| otro (membresía, servicio sin red) | no | no | ninguno; solo cambia el estado | no | opcional |
+### 2.2 Corte de TV
 
-**Migración.** Todos los planes y servicios existentes quedan `internet`. Ninguna prueba ni pantalla actual cambia.
+**Por SmartOLT (sobre el modelo de `equipos-olt-acs.md`)**
+- `integraciones.catv_ordenes`: `empresa_id`, `servicio_id`, `smartolt_instancia_id`, `accion` (`cortar` | `reconectar`), `estado` (`pendiente`, `en_curso`, `aplicado`, `fallido`, `cancelada`, `derivada`), `origen_outbox_id` único, `intentos`, `error`, `tarea_smartolt`, `aplicado_en`, `version`.
+- `integraciones.equipos_servicio.catv_estado` (`habilitado` | `deshabilitado` | `no_soportado` | null): lo último que confirmó SmartOLT. Se borra cuando cambia el equipo del servicio, por evento y sin TTL.
+- **CATV gestionable** = el servicio tiene `smartolt_external_id`, su instancia está operativa y `catv_estado` no es `no_soportado`.
+- Eventos nuevos: `catv.estado_cambiado` (`servicio_id`, `empresa_id`, `cliente_id`, `de`, `a`, `orden_id`) y `catv.fallido` (`servicio_id`, `empresa_id`, `orden_id`, `accion`, `error`).
+- Permisos: `servicios.ver_equipo` (existe en la rama) para ver el estado; `catv.reintentar` (admin, soporte) para reintentar una orden fallida.
+- Endpoints: `GET /servicios/:id/catv` (estado y última orden) y `POST /servicios/:id/catv/reintentar`.
+
+**Sin CATV gestionable: aviso a Iris (aditivo, contrato 0.15.0)**
+- `core.solicitudes_corte_manual`: `empresa_id`, `servicio_id`, `componente` (`tv`), `accion` (`corte` | `reconexion`), `estado` (`solicitada`, `en_curso`, `resuelta`, `cancelada`, `sin_iris`), `motivo`, `iris_ticket_numero`, `resuelta_en`, `version`. Único parcial: una abierta por servicio y acción. Es un registro de estado; no hay pantalla de cola.
+- Webhooks Argos → Iris (solo a conectores ≥ 0.15.0), ambos con `solicitud_id`, `servicio_id`, `empresa_id`, `cliente_id`, `componente`, `accion`, `motivo` y sin datos personales:
+  - `servicio.corte_manual_solicitado`;
+  - `servicio.corte_manual_cancelado`.
+- Webhook Iris → Argos, por el receptor existente `/integraciones/iris/webhook`: `corte_manual.estado_cambiado` (`solicitud_id`, `empresa_id`, `estado` = `en_curso` | `resuelta` | `cancelada`, `ticket_numero`, `ocurrido_en`). Se deduplica por `X-Webhook-Id`.
+- Sin conector de Iris o con contrato anterior: la solicitud queda `sin_iris`, se ve en la ficha del servicio y sale una alerta interna de notify.
+
+### 2.3 Adicionales (suscripción dentro de la factura del servicio)
+- `core.adicionales`: `categoria` (`streaming`, `canales_premium`, `ip_publica`, `seguro_equipo`, `membresia`, `otro`), `cuenta_codigo text NULL` (null = `4.1.03`) y `admite_independiente boolean DEFAULT false`.
+- `core.servicios_adicionales.baja_programada date NULL`.
+- `core.servicios_adicionales_pausas`: `asignacion_id`, `empresa_id`, `desde`, `hasta`, `motivo`, `estado`, `terminada_en`, `version`.
+- Eventos: `servicio.adicional_pausado` y `servicio.adicional_reanudado`.
+- Permisos: `servicios.pausar_adicional` y `servicios.reanudar_adicional`.
+- Endpoints: `POST /servicios/:id/adicionales/:asignacionId/pausar` y `/reanudar`; `efectiva: "ahora" | "fin_periodo"` en `quitar`; `GET /adicionales/asignaciones` (lista general).
+
+### 2.4 Suscripciones independientes (entidad propia)
+
+**Tablas (schema `billing`, dueño A3)**
+- `billing.suscripciones`:
+  - `empresa_id NOT NULL`, `cliente_id NOT NULL`, `codigo` (lo pone la base);
+  - `producto_id NULL → core.adicionales` (catálogo con `admite_independiente`);
+  - `descripcion`, `precio numeric(14,2) > 0`, `cantidad`, `ciclo_meses` (1, 3, 6 o 12; por defecto 1);
+  - `plantilla_facturacion_id NOT NULL` (da ciclo, día, gracia, mora, `facturas_para_cortar` y `certificar_al`);
+  - `inicio date`, `primer_periodo` (`prorrateado` | `completo` | `sin_costo`);
+  - `estado` (`activa`, `pausada`, `suspendida`, `cancelada`), `suspension_manual bool`;
+  - `baja_programada date NULL`, `cancelada_en`, `motivo_cancelacion`, `identificador`, `notas`, `version`.
+  - Un trigger exige que producto y plantilla sean de la misma empresa.
+- `billing.suscripciones_pausas`: `suscripcion_id`, `desde`, `hasta`, `motivo`, `estado`, `terminada_en`, `version`.
+- `billing.facturas.suscripcion_id bigint NULL`, con CHECK: nunca `servicio_id` y `suscripcion_id` a la vez. `facturas.tipo` suma `suscripcion`.
+
+**Idempotencia.** `clave_unica = 'sus-<suscripcion_id>-<YYYY-MM-DD del periodo>'`. No choca con `<servicio_id>-<periodo>` (empieza con dígito) ni con `cargo-<uuid>`. Se inserta con `ON CONFLICT DO NOTHING`, igual que hoy.
 
 **Eventos**
-- `servicio.creado` suma `tipo_servicio`; `router_id` puede ser null.
-- `servicio.config_cambiada` admite `tipo_servicio` en `campos`.
-- Nuevos: `servicio.corte_campo_solicitado`, `servicio.corte_campo_ejecutado` y `servicio.corte_campo_cancelado`, con `corte_campo_id`, `servicio_id`, `empresa_id`, `cliente_id`, `tipo`, `motivo`.
-- Los consumidores de red (`consumidor_aaa`, routeros, coa) ignoran los tipos sin red.
+- `suscripcion.creada` (`suscripcion_id`, `empresa_id`, `cliente_id`, `producto_id`).
+- `suscripcion.cambiada` (`campos[]`).
+- `suscripcion.estado_cambiada` (`de`, `a`, `motivo`).
+- `factura.*`, `pago.*` y `nota_credito.*` suman `suscripcion_id` (null en las demás).
 
-**Permisos:** `cortes_campo.ver` y `cortes_campo.ejecutar` (admin, soporte, tecnico), `cortes_campo.cancelar` (admin).
-
-**Endpoints**
-- `POST /servicios` acepta el tipo que deriva del plan.
-- `GET /servicios?tipo_servicio=` y `GET /planes?tipo_servicio=`.
-- `GET /cortes-campo`, `POST /cortes-campo/:id/ejecutar`, `POST /cortes-campo/:id/cancelar`.
-
-**Pantallas**
-- Alta: se elige el tipo antes que el router. En tv, telefonia y otro se ocultan router, IP, PPPoE e IPv6.
-- Formulario de plan por tipo.
-- Ficha del servicio sin los bloques de red.
-- Filtro por tipo en la lista de servicios.
-- Cola nueva «Cortes en campo».
-- Portal: etiqueta del tipo, sin velocidad.
-
-### 2.2 Suscripciones (evolución de los adicionales)
-
-Los nombres de tablas y eventos siguen siendo «adicional». En el panel y el portal se llama «Suscripciones».
-
-**Columnas en `core.adicionales`**
-- `categoria` (`streaming`, `canales_premium`, `ip_publica`, `seguro_equipo`, `membresia`, `otro`).
-- `cuenta_codigo text NULL`: cuenta de ingreso; null significa `4.1.03` como hoy.
-- `ciclo_meses smallint DEFAULT 1` (opcional, lote S4).
-
-**Columnas en `core.servicios_adicionales`:** `baja_programada date NULL`.
-
-**Tabla nueva `core.servicios_adicionales_pausas`:** `asignacion_id`, `empresa_id`, `desde`, `hasta`, `motivo`, `estado`, `terminada_en`, `version`. Misma regla que la pausa del servicio.
-
-**Eventos nuevos:** `servicio.adicional_pausado` y `servicio.adicional_reanudado`. `servicio.adicional_cambiado` suma `baja_programada` en `campos`.
-
-**Permisos:** `servicios.pausar_adicional` y `servicios.reanudar_adicional` (admin, soporte). El resto son los actuales.
+**Permisos:** `suscripciones.ver`, `.crear`, `.editar`, `.pausar`, `.reanudar`, `.suspender`, `.reactivar`, `.cancelar`, `.emitir`. Admin, todos. Soporte: ver, crear, pausar, reanudar. Cajero y contabilidad: ver. Lectura: ver.
 
 **Endpoints**
-- `POST /servicios/:id/adicionales/:asignacionId/pausar` y `/reanudar`.
-- `baja_programada` en el `quitar` existente (`efectiva: "ahora" | "fin_periodo"`).
-- `GET /suscripciones?categoria=&estado=&empresas=`: lista de todas las asignaciones `cobrado`, con el total mensual.
+- `GET /suscripciones`, `POST /suscripciones`, `GET /suscripciones/:id`, `PUT /suscripciones/:id`.
+- `POST /suscripciones/:id/pausar | reanudar | suspender | reactivar | cancelar`.
+- `POST /suscripciones/generar` (manual del cron).
+- `GET /clientes/:id/suscripciones`.
 
-**Membresía sin servicio de red:** se resuelve con un servicio de tipo `otro` (2.1). No hace falta otro camino de facturación.
+### 2.5 Cobro automático con tarjeta
 
-**`billing.conceptos_recurrentes`:** se deja como está y se congela. Convertirlo es opcional.
+**Tablas**
+- `billing.pasarela_clientes`: `empresa_id`, `cliente_id`, `proveedor`, `id_proveedor` (`cus_…`); único por empresa, cliente y proveedor.
+- `billing.metodos_pago`:
+  - `empresa_id`, `cliente_id`, `proveedor`, `token_cifrado` (el `pay_m_…`, con `#shared/cifrado`; en auditoría `***`);
+  - `marca`, `ultimos4`, `vence_mes`, `vence_anio`;
+  - `estado` (`pendiente`, `activo`, `revocado`, `vencido`), `checkout_id`;
+  - `consentimiento_en`, `consentimiento_version`, `consentimiento_canal`, `version`.
+  - Nunca el número, el CVV ni el nombre impreso.
+- `billing.debitos_automaticos`: `empresa_id`, `cliente_id`, `metodo_pago_id`, `alcance` (`cliente` | `servicio` | `suscripcion`), `servicio_id`, `suscripcion_id`, `momento` (`al_emitir` | `al_vencer`), `activo`, `desactivado_motivo`, `version`.
+- `billing.debito_intentos` (solo inserción más cambio de estado): `factura_id`, `metodo_pago_id`, `cobro_id → billing.pasarela_cobros`, `intento_n`, `clave_idempotencia`, `estado` (`pendiente`, `pagado`, `rechazado`, `error`), `codigo_error`, `proximo_intento_en`. `UNIQUE (factura_id, intento_n)`.
 
-### 2.3 Recordatorios
+**Interfaz del adaptador** (`pasarelas/pasarela.ts`), tres operaciones opcionales; un proveedor que no las tenga responde 503 `debito_no_soportado`:
+- `crearTokenizacion`;
+- `cobrarMetodoGuardado`;
+- `consultarMetodo`.
 
-**Tabla `notify.recordatorios`, ampliada** (misma tabla; se quita el `UNIQUE` y el CHECK de `orden`)
-- `empresa_id NULL`, `zona_id NULL` (el ámbito sale de estas dos columnas).
-- `disparador` (`factura_por_vencer`, `factura_vencida`, `corte_proximo`, `promesa_por_vencer`).
-- `dias` (con signo, respecto al ancla del disparador), `hora`.
-- `canales text[]` (vacío = todos los disponibles).
-- `nombre`, `evento_plantilla`, `clave_origen`, `activo`, `version`.
+**Eventos**
+- `metodo_pago.guardado` y `metodo_pago.revocado` (`metodo_pago_id`, `empresa_id`, `cliente_id`, `marca`, `ultimos4`).
+- `debito.activado` y `debito.desactivado`.
+- `debito.fallido` (`factura_id`, `empresa_id`, `cliente_id`, `intento_n`, `codigo_error`, `reintenta`).
+- El éxito sale como el `pago.registrado` de siempre.
 
-**Tabla `notify.recordatorios_ambitos`:** `empresa_id`, `zona_id`, `personalizado bool`. Marca que un ámbito no hereda.
-
-**Plantillas:** se reusa `notify.plantillas` sin cambiar su esquema. Cada regla nueva usa el evento `recordatorio.r<id>`, con una plantilla por canal. En WhatsApp el cuerpo sigue siendo un código de Iris.
-
-**Migración**
-- Las 3 filas actuales quedan como reglas globales. `disparador` se asigna por el signo de `dias`.
-- `evento_plantilla` sigue siendo `recordatorio.<orden>` y `clave_origen = <orden>`.
-- Así el origen `recordatorio:<orden>:factura:<id>` no cambia y nada ya enviado se repite.
-
-**Evento:** `notificaciones.config_cambiada` con `campos: ['recordatorios']` y `zona_id`. No hace falta caché: el cron lee de la base.
-
-**Permisos:** los actuales `notificaciones.ver` y `notificaciones.editar`. Las acciones nuevas `notificaciones.crear_recordatorio` y `notificaciones.eliminar_recordatorio` van con su permiso (regla 2).
+**Permisos:** `debitos.ver`, `debitos.enviar_enlace`, `debitos.desactivar`, `debitos.reintentar` (admin, cajero, soporte). Activar es solo del cliente, desde el portal.
 
 **Endpoints**
-- `GET /notificaciones/recordatorios?empresa_id=&zona_id=` devuelve el conjunto efectivo y de quién hereda.
-- `POST /notificaciones/recordatorios`, `PUT /:id`, `POST /:id/desactivar`.
-- `POST /notificaciones/recordatorios/personalizar`: copia el conjunto del padre al ámbito.
-- `POST /notificaciones/recordatorios/restablecer`: vuelve a heredar.
-- `GET /notificaciones/plantillas-whatsapp`: lectura de Iris (A52).
+- Portal: `POST /portal/metodos-pago/iniciar`, `GET /portal/metodos-pago`, `POST /portal/metodos-pago/:id/quitar`, `POST /portal/debito/activar | desactivar`.
+- Panel: `GET /clientes/:id/debito`, `POST /clientes/:id/debito/enviar-enlace`, `POST /debitos/:id/desactivar`, `POST /facturas/:id/debito/reintentar`.
 
-**Pedido a Iris (contrato 0.15.0):** códigos `corte_proximo` (`monto`, `moneda`, `fecha_corte`) y `promesa_por_vencer` (`monto`, `moneda`, `vence_en`).
-
-### 2.4 Por lugar
-
-**Jerarquía recomendada:** zona (del cliente) > empresa > global.
-- Un ámbito marcado «personalizado» sustituye entero el conjunto del padre; no se mezclan reglas.
-- Por servicio solo hay exclusión («no enviar recordatorios»). Es opcional y se guarda como excepción en `core.servicios_excepciones`.
-
-**Qué se personaliza en este alcance:** el conjunto de recordatorios (días, hora, canales, texto de correo y Telegram, código de Iris).
-
-**Opcional, fuera del alcance base:** plantilla de facturación por defecto por zona o empresa, y precio de plan por zona.
+### 2.6 Recordatorios por lugar (EN ESPERA)
+Se conserva el modelo de la v1 sin cambios, pendiente de la aclaración del PM:
+- `notify.recordatorios` ampliada con `empresa_id`, `zona_id`, `disparador`, `canales[]`, `evento_plantilla` y `clave_origen`.
+- `notify.recordatorios_ambitos`.
+- Jerarquía zona > empresa > global, con sustitución completa del conjunto.
+- A52 y dos códigos nuevos de Iris (`corte_proximo`, `promesa_por_vencer`).
 
 ## 3. Reglas de negocio e impacto
 
-### 3.1 Tipos de servicio
+### 3.1 Tipos de servicio y corte
+- **Facturación.** Misma plantilla y mismo IVA. El concepto sale del tipo. El mixto emite dos líneas (internet con `4.1.01`; TV con cuenta nueva a confirmar con el contador). Prorrateo y descuentos de lealtad van sobre la línea de internet.
+- **Decisión de estado.** `evaluarEstadoServicio` sigue siendo la única. En tv no existe «limitado».
+- **Mixto con deuda (decisión del PM): se corta todo.** Al pasar a `suspendido`, el internet se corta por red como hoy y la TV por SmartOLT. En `limitado` no se toca el CATV, lo que respeta la restricción de SmartOLT de no deshabilitar la misma ONT varias veces por semana.
+- **Flujo del corte de TV.** Un consumidor de `servicio.estado_cambiado` en `integraciones/equipos`, idempotente por id de outbox, crea la orden. El worker existente la ejecuta con lock por pedido.
+  - Gestionable: llama a `disable_catv` o `enable_catv`.
+  - 400 «CATV not supported»: marca `no_soportado`, deja la orden `derivada` y crea la solicitud a Iris.
+  - 409 `onu_busy` o `queued: true`: no se da por hecho; se confirma con `check_bulk_task_status` o con `get_onus_catv_statuses`.
+- **Corridas masivas.** El worker agrupa por instancia y usa `bulk_disable_catv` con `async=1` para no agotar las 1 000 llamadas por hora.
+- **Reactivación.** Viaja por evento. Una orden de corte aún pendiente se cancela: nunca hubo corte. Una aplicada genera la reconexión. Lo mismo con la solicitud a Iris (`servicio.corte_manual_cancelado`).
+- **Alta.** El tv va sin router, IP ni PPPoE. `pendiente_instalacion` y `activar-instalacion` funcionan igual, sin IPAM. Los decodificadores usan el comodato actual.
+- **FEL y libro.** Sin cambios de mecanismo; solo descripción y cuenta por línea. Cualquier tratamiento fiscal distinto para TV debe confirmarlo el contador (no lo verifiqué).
+- **ACL.** Un usuario con alcance por router no ve servicios sin router. Hay que documentarlo.
+- **Iris.** `tipo_servicio` en la ficha y en los webhooks es aditivo (0.15.0).
 
-- **Facturación**
-  - Misma plantilla, mismo ciclo e IVA incluido.
-  - El concepto sale del tipo: «Servicio de televisión por cable …», y así con cada uno.
-  - El mixto emite dos líneas: internet (precio − `precio_tv`, cuenta 4.1.01) y TV (`precio_tv`, cuenta de TV). El prorrateo y los descuentos de lealtad se aplican a la línea de internet, como hoy.
-  - Sin `precio_tv` sale una sola línea, como hoy.
-- **Corte**
-  - `evaluarEstadoServicio` sigue siendo la única que decide el estado.
-  - En tv y telefonia nunca hay «limitado» (hoy ya ocurre así cuando el plan no es limitable).
-  - Al pasar a `suspendido`, `CambiarEstadoServicio` crea en la misma transacción un `cortes_campo` pendiente y emite el evento. No hay CoA.
-- **Reactivación**
-  - Si el corte en campo seguía `pendiente`, se cancela solo: el cliente nunca quedó sin señal.
-  - Si estaba `ejecutado`, se crea una tarea de `reconexion`.
-  - Viaja por evento, no por cron.
-- **Mixto con deuda**
-  - Una sola factura y una sola deuda. Se corta todo: internet por red al instante y TV por tarea en campo.
-  - La variante «solo internet» queda como pregunta al PM (P4).
-- **Alta**
-  - En los tipos sin red no hay router, IP ni PPPoE.
-  - `pendiente_instalacion` y `activar-instalacion` funcionan igual, sin IPAM.
-  - Los decodificadores se asignan con el comodato actual.
-- **FEL:** misma certificación; solo cambia la descripción del ítem. Si la TV o la telefonía llevan otro tratamiento fiscal, hay que confirmarlo con el contador; no lo verifiqué.
-- **Libro:** asiento igual, con la cuenta de ingreso por línea. El auditor suma el invariante «ingresos por cuenta = líneas por cuenta».
-- **Iris:** el campo `tipo_servicio` en la ficha y los webhooks es aditivo (0.15.0). Sin ese contrato, Iris no ve diferencia. Que Iris convierta los cortes en campo en órdenes es opcional.
-- **Portal:** un servicio sin red no muestra velocidad ni sesión. La página de corte por red no le aplica.
-- **ACL:** un usuario con alcance por router no ve servicios sin router. Hay que documentarlo; el alcance por zona sí funciona.
+### 3.2 Adicionales
+Como en la v1:
+- Pausa: no se cobra el periodo que empieza en pausa. Tope: `ajustes_cobro.pausa_tope_dias`.
+- Baja inmediata sin reembolso, o programada a fin de periodo.
+- Bloqueo al suspender el servicio.
+- Cuenta de ingreso por línea.
 
-### 3.2 Suscripciones
+### 3.3 Suscripciones independientes
+- **Emisión.** El cron `suscripciones.generar` procesa todo lo pendiente hasta ahora, por lotes y con lock. Una factura por suscripción y periodo de `ciclo_meses`, con una línea «<nombre> del … al …», tipo `otro` y la cuenta del producto. Reusa `emitirDocumento`, igual que el cargo único sin servicio.
+- **Qué no se emite.** Periodos en pausa, anteriores a `inicio`, posteriores a la cancelación, con la suscripción `suspendida` (recomendado, P-N2) o de monto cero (bonificación, nunca factura de Q0).
+- **Vencimiento y mora.** `vence_en = periodo + dias_gracia` de la plantilla. Hoy `vencer_factura.ts` toma la configuración por servicio; hay que darle el camino por suscripción. No verifiqué el detalle.
+- **FEL.** La regla de `certificar_al` de su plantilla y los datos fiscales del cliente. Sin cambios en `fiscal`.
+- **Libro.** CxC del cliente contra ingreso (cuenta del producto) más IVA; `empresa_id` de la suscripción. Los anticipos del cliente en esa empresa se aplican como hoy.
+- **Qué se suspende si no paga.**
+  - No hay nada de red. `suscripciones.evaluar_estado` es la única que decide: con facturas vencidas de esa suscripción ≥ `facturas_para_cortar` pasa a `suspendida` y emite `suscripcion.estado_cambiada`.
+  - La llaman el cron de corte, `registrarPago` y `anularPago`. El pago la reactiva en la misma transacción.
+  - La suspensión manual solo se quita con `reactivar`.
+  - Quien presta el servicio actúa con el evento. Mandarlo a Iris es opcional y aditivo.
+  - La deuda de una suscripción no corta los servicios de red del cliente, y al revés (recomendado, P-N1).
+- **Promesas.** No aplican en esta ronda: `billing.promesas.servicio_id` es obligatorio.
+- **Baja.** Inmediata o programada a fin de periodo; sin reembolso del periodo ya facturado (nota de crédito manual si hace falta).
+- **Portal.** «Mis suscripciones» (nombre, precio, ciclo, estado, próximo cobro) y sus facturas en la cuenta. Se pagan con el pago en línea existente (`{ facturas: [ids] }`). Ni alta ni baja desde el portal; nunca credenciales.
+- **Notify.** `factura.emitida` y `factura.vencida` con `servicio_id` null ya ocurren con cargos únicos. Hay que agregar la variable `suscripcion.*` y el aviso de `suscripcion.estado_cambiada`.
 
-- **Alta:** como hoy. `primer_periodo` es prorrateado por defecto, o sin costo.
-- **Pausa:** el periodo cuyo inicio cae dentro de la pausa no se cobra (misma regla que `pausas.ts`). Tope: el de `ajustes_cobro.pausa_tope_dias`.
-- **Baja**
-  - Inmediata, como hoy: el periodo ya facturado no se devuelve.
-  - Programada: sigue activa hasta `baja_programada`. Un job repetible, con lock, la da de baja mediante la acción existente `quitar`.
-- **Servicio suspendido:** como hoy, la suscripción se bloquea y no se cobra el periodo que empieza bloqueada.
-- **Impuestos y FEL:** línea gravable con IVA incluido, como hoy, dentro de la factura del servicio. No hay documento aparte.
-- **Libro:** `cuenta_codigo` del catálogo en la línea; sin ella, `4.1.03`.
-- **Ciclo de varios meses (opcional):** se cobra cuando toca según `cobrado_desde`. El ingreso anual cobrado por adelantado debería diferirse (existe `registrar_diferimiento`); confirmar con el contador.
-
-### 3.3 Recordatorios
-
-- **Anclas**
-  - Factura: `vence_en`, como hoy.
-  - Promesa: `billing.promesas.vence_en`, con estado `activa`.
-  - Corte próximo: el día en que la siguiente factura por vencer llevaría las vencidas a `facturas_para_cortar`, con vencimiento efectivo y `corte_desde`. Lo calcula una función pública nueva de billing; notify no reimplementa la regla.
-- **Exclusiones:** servicio `pendiente_instalacion`, suspendido manual, sin plantilla o ya suspendido. En corte próximo, también promesa activa.
-- **Idempotencia:** origen único `recordatorio:<clave_origen>:<factura|promesa>:<id>`. Si el cron se detuvo, manda solo el último que toca por disparador (como hoy).
-- **Canales:** la intersección de `canales` de la regla con los disponibles del cliente y los interruptores de la empresa.
-- **WhatsApp**
-  - El texto no se edita en Argos. Por lugar solo se elige el código.
-  - Sin plantilla aprobada, el envío queda `omitido` (`canal_no_disponible`) y sale por correo o Telegram.
-  - El panel avisa si un ámbito supera 3 recordatorios el mismo día o si la hora cae en el silencio de Iris.
-- **Multiempresa:** con una sola empresa y sin ámbitos personalizados, el comportamiento es idéntico al actual.
+### 3.4 Cobro automático
+- **Sin datos de tarjeta en Argos.** El cliente escribe la tarjeta solo en el checkout alojado de Recurrente. Argos guarda el token cifrado, la marca, los últimos 4 y el vencimiento. El panel nunca captura tarjetas: solo envía el enlace.
+- **Consentimiento.** Antes de redirigir, el portal muestra y registra el texto (versión, fecha, canal) con frecuencia, monto variable, momento del cargo y cómo cancelar. El texto legal lo aprueba el PM (P-N4).
+- **Qué se cobra.** El saldo pendiente de cada factura dentro del alcance del débito (servicio, suscripción o todo el cliente), en el `momento` elegido.
+- **Qué nunca se cobra.** Facturas `por_certificar`, anuladas, sustituidas, con saldo 0, con promesa activa o de un pago en disputa, ni montos bajo el mínimo de la pasarela (Q5.00).
+- **Idempotencia.** El cron `debitos.cobrar` procesa todo lo pendiente, con lock.
+  - Crea primero el `pasarela_cobros` y el `debito_intentos`; el `UNIQUE (factura_id, intento_n)` impide dos cargos entre réplicas.
+  - Luego llama a la pasarela con `Idempotency-Key = argos:debito:<factura_id>:<intento_n>`.
+  - El pago se registra con la misma acción interna del webhook, idempotente por cobro. Webhook y conciliación quedan de respaldo.
+- **Rechazo.** El intento queda `rechazado`, sale `debito.fallido` y un aviso al cliente con enlace para pagar o cambiar la tarjeta. La factura sigue su vencimiento y corte normales. Reintento con clave nueva según la política (P-N3). Tras N rechazos seguidos o `setup_intent.cancelled`, el débito se desactiva solo, con evento.
+- **Reactivación.** El pago del débito llama a `evaluarEstadoServicio` o a `suscripciones.evaluar_estado`, como cualquier pago.
+- **Contracargo.** Usa el camino actual (`pago.disputa_abierta`) y además desactiva el débito de ese método.
+- **Libro.** El mismo asiento del pago en línea (banco neto + `5.1.02` comisión / CxC, retención de IVA de la emisora). `pagos.metodo`: `debito`.
+- **FEL.** Argos certifica con INFILE. La facturación electrónica de Recurrente debe seguir apagada: la guía dice que `one_time_payments` puede certificar FEL en cuentas que la usan.
+- **Multiempresa.** Método y débito llevan `empresa_id`. Hoy hay una llave por instalación: con varios NIT hace falta llave por empresa o cuentas conectadas (`X-ACCOUNT-ID`), pendiente 5 de `pago-en-linea.md`.
+- **Depende de la pasarela:**
+  1. Cuenta y Sandbox, que hoy no existen.
+  2. «Cobros únicos» habilitados en la cuenta.
+  3. Forma exacta del webhook de un `one_time_payment` con método guardado y de `setup_intent.*`. La guía muestra `eventType` y `data.checkout.payment_method`; el resto hay que verlo en el Sandbox.
+  4. Los webhooks reales de tokenización solo salen en producción.
+  5. Cómo se revoca un método: no encontré el endpoint en la guía.
+  6. Si un cargo sin presencia puede pedir 3-D Secure y qué responde entonces.
+  7. El comercio no almacena tarjetas; el alcance PCI que resulte para el comercio no lo verifiqué.
 
 ## 4. Lotes ordenados
 
-Tres carriles independientes (T, S, R) después del lote 0. Las migraciones se fusionan de una en una.
+Carriles: T (tipos y corte), S (adicionales), I (suscripciones independientes), D (débito), R (en espera). Las migraciones se fusionan de una en una.
 
-### Lote 0 · Contratos y decisiones (líder)
-- **Archivos:** nuevo `.claude/integration/contratos/tipos-servicio.md`; nuevo `.claude/integration/contratos/recordatorios.md`; `adicionales.md`; `eventos.md`; catálogo de `CLAUDE.md`; `modelo-datos.md`; solicitudes en `iris.md` §5.2.
-- **Complejidad:** baja. **Dependencias:** respuestas del PM (P1 a P8). **Tablero:** no.
+### Lote 0 · Contratos (líder)
+- **Archivos:** este plan; nuevos `contratos/tipos-servicio.md`, `contratos/suscripciones.md`, `contratos/debito-automatico.md`; `adicionales.md`; `pago-en-linea.md`; `equipos-olt-acs.md` (sección CATV); `iris.md` (0.15.0: `tipo_servicio`, corte manual); `eventos.md`; catálogo de `CLAUDE.md`; `modelo-datos.md`.
+- **Complejidad:** baja. **Dependencias:** P-N1 a P-N6.
 
 ### T1 · Modelo de tipo de servicio (A1)
-- **Archivos:** migración nueva; `apps/api/app/core/tipos_servicio.ts` (nuevo); `core/validators.ts`; `core/esquemas.ts`; `core/consultas/servicios.ts`; `network/consultas/planes.ts`; `network/validators.ts`; acciones de plan; `shared/eventos.ts`; `packages/contracts` regenerado.
-- **Cambios:** columnas, trigger, filtros y evento. Solo `internet` y `mixto`, ambos con router.
+- **Archivos:** migración; `apps/api/app/core/tipos_servicio.ts` (nuevo); `core/validators.ts`; `core/esquemas.ts`; `core/consultas/servicios.ts`; `network/consultas/planes.ts`; `network/validators.ts`; acciones de plan; `shared/eventos.ts`; `packages/contracts`.
 - **Pruebas**
-  - Tras la migración, todos los planes y servicios son `internet`.
-  - Un servicio con tipo distinto al de su plan da 422.
-  - Los filtros de lista funcionan.
-  - Un plan mixto con `precio_tv` ≥ precio da 422.
-  - La suite existente no cambia.
-- **Complejidad:** media. **Dependencias:** L0. **Tablero:** no.
+  - Tras migrar, todo es `internet`.
+  - Tipo distinto al del plan da 422.
+  - Plan mixto con `precio_tv` ≥ precio da 422.
+  - Los filtros funcionan.
+  - La suite actual no cambia.
+- **Complejidad:** media. **Dependencias:** L0.
 
-### T2 · Servicios sin red: tv, telefonia, otro (A1 + A2)
-- **Archivos:** migración (`router_id` anulable y sus CHECK); `core/actions/crear_servicio.ts`; `editar_servicio.ts`; `activar_instalacion_servicio.ts`; `core/asignaciones_servicio.ts`; `core/aaa.ts`; `core/consumidor_aaa.ts`; `network/routeros/*`; `network/sesiones/*`; `services/coa`; `core/acl.ts`; todas las consultas con join a routers.
-- **Cambios:** crear y editar sin router ni IP; los consumidores de red ignoran estos tipos; joins a `LEFT`.
+### T2 · Servicio de TV sin router (A1 + A2)
+- **Archivos:** migración (`router_id` anulable y CHECK); `core/actions/crear_servicio.ts`; `editar_servicio.ts`; `activar_instalacion_servicio.ts`; `core/asignaciones_servicio.ts`; `core/aaa.ts`; `core/consumidor_aaa.ts`; `network/routeros/*`; `network/sesiones/*`; `services/coa`; `core/acl.ts`; consultas con join a routers.
 - **Pruebas**
-  - Crear un servicio tv sin router devuelve 201, sin clave AAA en Redis y sin comandos en `audit.red`.
-  - Aparece en `GET /servicios`, en la ficha del cliente, en reportes y en la exportación a Iris.
-  - Un servicio internet sin router da 422.
-  - Activar la instalación de un tv no pide IP.
-  - Un usuario con alcance por router no lo ve; uno con alcance por zona sí.
-  - `eliminar` y `retirar` funcionan.
-- **Complejidad:** alta. **Dependencias:** T1. **Tablero:** no.
+  - Crear un tv sin router devuelve 201, sin clave AAA y sin filas en `audit.red`.
+  - Aparece en la lista, en la ficha del cliente, en reportes y en la exportación a Iris.
+  - Internet sin router da 422.
+  - Activar la instalación no pide IP.
+  - Alcance por router no lo ve; por zona sí.
+  - Retirar y eliminar funcionan.
+- **Complejidad:** alta. **Dependencias:** T1.
 
-### T3 · Corte en campo (A1)
-- **Archivos:** migración `core.cortes_campo`; `core/actions/cambiar_estado_servicio.ts`; acciones nuevas `ejecutar_corte_campo.ts` y `cancelar_corte_campo.ts`; `core/permisos.ts`; rutas nuevas.
+### T3a · Corte manual avisado a Iris (A1 + integraciones Iris)
+- **Archivos:** migración `core.solicitudes_corte_manual`; acción nueva `core/actions/solicitar_corte_manual.ts` (anidada, no por API); `integraciones/iris/envios.ts` (lista de eventos ≥ 0.15.0); `integraciones/iris/configuracion.ts`; receptor de webhooks de Iris; alerta en `notify/alertas.ts`; `contratos/iris.md`.
 - **Pruebas**
-  - Un tv que pasa a suspendido crea un pendiente y su evento en la misma transacción.
-  - Suspender dos veces no duplica.
-  - Pagar con el corte pendiente lo cancela y no crea reconexión.
-  - Pagar con el corte ejecutado crea la reconexión.
-  - Un mixto hace CoA y además crea la tarea.
-  - Un internet no crea nada.
-  - Ejecutar con `version` vieja da 409.
-- **Complejidad:** media. **Dependencias:** T2. **Tablero:** no.
+  - Tv no gestionable suspendido: una solicitud y un webhook a un conector 0.15.0.
+  - Conector 0.14.x: no recibe el evento y la solicitud queda `sin_iris`, con alerta.
+  - Pago antes de resolver: `servicio.corte_manual_cancelado`.
+  - Pago con corte `resuelta`: solicitud de `reconexion`.
+  - Webhook `corte_manual.estado_cambiado` repetido no cambia nada.
+  - `solicitud_id` de otra empresa: 404.
+- **Complejidad:** media. **Dependencias:** T2 y acuerdo con Iris (el evento sale igual; Iris lo consume cuando llegue a 0.15.0).
+
+### T3b · Corte y reconexión de CATV por SmartOLT (A6)
+- **Archivos:** migración `integraciones.catv_ordenes` y `equipos_servicio.catv_estado`; `integraciones/equipos/smartolt.ts` (`deshabilitarCatv`, `habilitarCatv`, por lotes, `estadoCatv`, estado de tarea); consumidor nuevo de `servicio.estado_cambiado`; `integraciones/equipos/cola.ts`; acciones `aplicar_catv.ts` y `reintentar_catv.ts`; `capacidades.ts`; rutas; `tests/integraciones/equipos_simulado.ts`.
+- **Pruebas (con el SmartOLT simulado)**
+  - Mixto suspendido: Disconnect y `disable_catv` a la instancia correcta; la otra instancia recibe 0 peticiones.
+  - Reactivado: `enable_catv` y `catv.estado_cambiado`.
+  - Evento duplicado: una sola orden.
+  - 400 «CATV not supported»: `no_soportado` y solicitud a Iris.
+  - `queued: true`: no queda `aplicado` hasta confirmar la tarea.
+  - 409 `onu_busy` y 429: reintento.
+  - Instancia no operativa: deriva a Iris.
+  - Paso a `limitado`: 0 llamadas.
+  - 120 cortes de una instancia: una llamada por lotes.
+  - El token no aparece en auditoría.
+- **Complejidad:** alta. **Dependencias:** T1, T3a y la fusión de `agente/a6-olt-acs`.
 
 ### T4 · Facturación, libro y FEL por tipo (A3 + auditor)
-- **Archivos:** `billing/actions/emitir_factura.ts`; `billing/facturas.ts`; `billing/configuracion.ts` (`leerServicio`); `ledger/plan_cuentas.ts`; paquete fiscal (versión nueva); `fiscal` (descripción del ítem); `billing/reportes/*`; `apps/api/tests/contabilidad/`.
+- **Archivos:** `billing/actions/emitir_factura.ts`; `billing/facturas.ts`; `billing/configuracion.ts`; `ledger/plan_cuentas.ts`; versión nueva del paquete fiscal; descripción del ítem en `fiscal`; `billing/reportes/*`; `apps/api/tests/contabilidad/`.
 - **Pruebas**
-  - La factura de un tv lleva el concepto de TV y la cuenta de TV.
-  - El mixto emite dos líneas que suman el precio, cada una con su IVA.
-  - Mixto prorrateado y mixto con descuento de lealtad.
-  - Instalar el paquete fiscal dos veces no agrega nada.
-  - La factura de un servicio internet queda idéntica byte a byte a la actual.
-  - Los invariantes del auditor pasan.
-- **Complejidad:** alta. **Dependencias:** T1 (el mixto), T2 (el tv). **Tablero:** no.
+  - Factura de tv con su concepto y su cuenta.
+  - Mixto: dos líneas que suman el precio, prorrateado y con descuento de lealtad.
+  - Instalar el paquete dos veces no agrega nada.
+  - Factura de internet idéntica a la actual.
+  - Invariantes del auditor en verde.
+- **Complejidad:** alta. **Dependencias:** T1 (mixto), T2 (tv), cuenta confirmada por el contador.
 
 ### T5 · Panel y portal (A4 + A5)
-- **Archivos:** `apps/web/app/pages/servicios/nuevo.vue` y el asistente de alta; `servicios/[id]/index.vue`; `servicios/index.vue`; `planes/nuevo.vue`; `planes/[id]`; página nueva `cortes-campo`; `apps/portal/app/pages/index.vue` y `cuenta.vue`.
+- **Archivos:** `apps/web/app/pages/servicios/nuevo.vue` y el asistente de alta; `servicios/[id]/index.vue` (bloque «TV»: estado CATV, última orden, solicitud a Iris con su ticket, «Reintentar»); `servicios/index.vue`; `planes/nuevo.vue`; `planes/[id]`; portal `index.vue` y `cuenta.vue`.
 - **Pruebas**
-  - El alta de un tv no muestra router ni IP.
-  - La ficha no tiene bloques de red.
-  - La cola de cortes ejecuta con su permiso.
+  - Alta de tv sin router ni IP.
+  - La ficha muestra el estado CATV o «Corte pendiente en Iris TK-…».
+  - Un error del endpoint se ve con «Reintentar», nunca como un estado inventado.
   - 390 y 1280 px, claro y oscuro.
-  - Errores con «Reintentar».
   - `pnpm verificar:permisos` pasa.
-- **Complejidad:** media. **Dependencias:** T2, T3. **Tablero:** sí, antes de empezar (variantes de `FlujoAlta`, `NuevoAltaCliente` y `OperServicioFicha`; tablero nuevo de «Cortes en campo»).
+- **Complejidad:** media. **Dependencias:** T2, T3a, T3b. **Tablero:** sí (variantes de `FlujoAlta`, `NuevoAltaCliente`, `OperServicioFicha`). Ya no hay tablero de cola.
 
 ### T6 · Bordes (A6)
-- **Archivos:** `notify/variables.ts` y `plantillas_base.ts` (textos sin «internet» fijo; aviso de corte de TV); `importacion/origenes/mikrowisp.ts` (todo se importa como internet); datos de demostración.
-- **Pruebas:** el aviso de corte de un tv no menciona velocidad; la importación no cambia.
+- **Archivos:** `notify/variables.ts` y `plantillas_base.ts` (textos por tipo); `importacion/origenes/mikrowisp.ts` (todo se importa como internet); datos de demostración.
 - **Complejidad:** baja. **Dependencias:** T2.
 
-### S1 · Catálogo de suscripciones (A1 + A3)
-- **Archivos:** migración; `core/adicionales.ts`; `crear_adicional.ts`; `editar_adicional.ts`; validadores; `lineasAdicionales` en `emitir_factura.ts`; contrato `adicionales.md`.
+### S1 · Catálogo de adicionales ampliado (A1 + A3)
+- **Archivos:** migración; `core/adicionales.ts`; `crear_adicional.ts`; `editar_adicional.ts`; validadores; `lineasAdicionales` en `emitir_factura.ts`; `adicionales.md`.
 - **Pruebas**
-  - Un adicional con `cuenta_codigo` genera la línea con esa cuenta y el asiento cuadra.
-  - Sin cuenta va a `4.1.03`, como hoy.
-  - Una cuenta inexistente o de otro tipo da 422.
-  - Los existentes quedan con categoría `otro`, o `ip_publica` si lo eran.
-- **Complejidad:** media. **Dependencias:** L0. **Tablero:** no.
+  - Línea con `cuenta_codigo` y asiento cuadrado.
+  - Sin cuenta: `4.1.03`.
+  - Cuenta inexistente: 422.
+  - Los existentes quedan `otro` o `ip_publica`.
+- **Complejidad:** media. **Dependencias:** L0.
 
-### S2 · Pausa y baja programada (A1 + A3)
-- **Archivos:** migración; acciones `pausar_adicional_servicio.ts` y `reanudar_adicional_servicio.ts`; `quitar_adicional_servicio.ts`; job en `core/jobs.ts`; `emitir_factura.ts`.
+### S2 · Pausa y baja programada de adicionales (A1 + A3)
+- **Archivos:** migración; `pausar_adicional_servicio.ts` y `reanudar_adicional_servicio.ts` (nuevas); `quitar_adicional_servicio.ts`; `core/jobs.ts`; `emitir_factura.ts`.
 - **Pruebas**
-  - Un periodo que empieza en pausa no cobra; el siguiente sí.
-  - Pausar un `incluido` da 422.
-  - Una pausa mayor al tope da 422.
-  - La baja programada cobra el periodo en curso y no el siguiente.
-  - Correr el job dos veces no duplica.
-  - Retirar el servicio termina la pausa.
+  - Periodo en pausa no cobra; el siguiente sí.
+  - Pausar un `incluido`: 422.
+  - Pausa sobre el tope: 422.
+  - Baja programada cobra el periodo en curso y no el siguiente.
+  - El job dos veces no duplica.
 - **Complejidad:** media. **Dependencias:** S1.
 
-### S3 · Panel y portal de suscripciones (A1, A4, A5)
-- **Archivos:** `GET /suscripciones` (consulta en `core`); `apps/web/app/pages/adicionales/index.vue`; página nueva de lista; `AdicionalServicioModal.vue`; portal «Mis suscripciones» (nunca la credencial).
-- **Pruebas**
-  - La lista se filtra por empresa, categoría y estado.
-  - El total mensual coincide con la suma de precios activos.
-  - Pausar desde la ficha funciona.
-  - El portal no expone la credencial.
-- **Complejidad:** media. **Dependencias:** S2. **Tablero:** sí (lista de suscripciones y modal ampliado).
+### S3 · Panel de adicionales (A4)
+- **Archivos:** `apps/web/app/pages/adicionales/index.vue`; `AdicionalModal.vue`; `AdicionalServicioModal.vue`; pestaña «En servicios» de la página de I4.
+- **Complejidad:** baja a media. **Dependencias:** S2. **Tablero:** el mismo de I4.
 
-### S4 · Opcional: ciclo de varios meses y conversión de `conceptos_recurrentes`
-- **Complejidad:** alta (diferimiento). **Dependencias:** S2 y el contador.
-
-### R1 · Modelo de reglas y resolución por ámbito (A6)
-- **Archivos:** migración; `notify/actions/programar_recordatorios.ts`; `editar_recordatorio.ts`; acciones nuevas (crear, desactivar, personalizar, restablecer); `notify/consultas.ts`; `notify/validators.ts`; `notify/esquemas.ts`; `notify/catalogo.ts` (variables por disparador para eventos `recordatorio.r<id>`); `start/routes/notify.ts`; `notify/README.md`.
+### I1 · Modelo y ciclo de vida de la suscripción independiente (A3)
+- **Archivos:** migración (`billing.suscripciones`, pausas, `facturas.suscripcion_id`, tipo); `billing/suscripciones.ts` (nuevo); acciones nuevas en `billing/actions/` (`crear_suscripcion`, `editar_suscripcion`, `pausar_suscripcion`, `reanudar_suscripcion`, `cancelar_suscripcion`); `billing/validators.ts`; `billing/esquemas.ts`; ruta nueva `start/routes/suscripciones.ts`; `core/permisos.ts`; `core/eliminacion.ts` (un cliente con suscripciones no se elimina).
 - **Pruebas**
-  - Tras migrar, las mismas facturas reciben los mismos recordatorios y ninguno ya enviado se repite.
-  - Una zona personalizada usa su conjunto; otra zona hereda de la empresa; una empresa sin conjunto usa el global.
-  - Una regla con `canales=['correo']` no crea envío por Telegram.
-  - Correr el cron dos veces no duplica.
-  - Con dos reglas atrasadas, manda solo la última.
-  - Un servicio pendiente queda excluido.
-  - Con una sola empresa, nada cambia.
-- **Complejidad:** alta. **Dependencias:** L0. **Tablero:** no.
+  - Crear con producto de otra empresa: 422.
+  - Producto sin `admite_independiente`: 422.
+  - Edición con `version` vieja: 409.
+  - Cancelar dos veces: 422.
+  - La lista se filtra por empresa activa y alcance.
+  - Cada acción deja auditoría y evento.
+  - `Idempotency-Key` repetida devuelve la misma respuesta.
+- **Complejidad:** media. **Dependencias:** S1 (catálogo).
 
-### R2 · Disparadores corte próximo y promesa por vencer (A3 + A6)
-- **Archivos:** función nueva en `billing/cortes.ts` o `billing/vencimiento.ts` (interfaz pública); `programar_recordatorios.ts`; `notify/variables.ts`; `plantillas_base.ts`.
+### I2 · Emisión, FEL, libro y mora (A3 + auditor)
+- **Archivos:** acciones nuevas `emitir_factura_suscripcion.ts` y `generar_facturas_suscripciones.ts`; `billing/periodos.ts` (ciclo de N meses); `billing/jobs.ts`; `billing/emision.ts`; `billing/actions/vencer_factura.ts` y `vencer_facturas.ts`; `billing/estado_cuenta.ts`; `billing/reportes/*`; `tests/contabilidad/`.
 - **Pruebas**
-  - Con `cortar=2`, una vencida y otra que vence en 3 días, el aviso «−3» sale.
-  - Con promesa activa no sale.
-  - Con suspensión manual no sale.
-  - Con `corte_desde` futuro, el ancla se mueve.
-  - Una promesa activa que vence mañana recibe su aviso «−1»; una cumplida no.
-  - Sin código de Iris, el envío de WhatsApp queda `omitido` y los demás canales salen.
-- **Complejidad:** alta. **Dependencias:** R1.
+  - Correr el cron dos veces: una sola factura con clave `sus-<id>-<periodo>`.
+  - Dos réplicas a la vez: una factura.
+  - Tras una caída de 3 meses emite los 3 periodos.
+  - Pausada, cancelada o anterior a `inicio`: no emite.
+  - Ciclo de 3 meses: una factura cada 3.
+  - Primer periodo prorrateado.
+  - Monto cero: bonificación.
+  - `certificar_al = emitir` con FEL obligatoria: nace `por_certificar`.
+  - Asiento con la cuenta del producto y la empresa correcta.
+  - La factura vence y recibe mora según su plantilla.
+  - No cuenta para el corte de ningún servicio.
+  - Invariantes: CxC = facturas pendientes; saldo del cliente = auxiliar.
+- **Complejidad:** alta. **Dependencias:** I1.
 
-### R3 · Plantillas de WhatsApp de Iris, A52 (A6 + integraciones)
-- **Archivos:** `integraciones/iris/*` (cliente del GET de §6.7 y `configuracion.ts`); ruta `GET /notificaciones/plantillas-whatsapp`; validación del código al guardar una regla.
+### I3 · Estado por mora y pagos (A3)
+- **Archivos:** acciones nuevas `evaluar_estado_suscripcion.ts`, `suspender_suscripcion.ts`, `reactivar_suscripcion.ts`; `registrar_pago.ts`; `anular_pago.ts`; `ejecutar_corte.ts`; `aprobar_comprobante.ts`.
 - **Pruebas**
-  - Conector apagado: lista vacía con el motivo, nunca un error 500.
-  - Empresa fuera del alcance: 403 visible.
-  - Un código sin plantilla aprobada muestra una advertencia y no bloquea.
-- **Complejidad:** media. **Dependencias:** R1; los códigos nuevos dependen de Iris.
+  - Vencidas ≥ umbral: `suspendida`, con evento, y no emite el periodo siguiente.
+  - El pago la reactiva en la misma transacción.
+  - Anular ese pago la vuelve a suspender.
+  - La suspensión manual no se quita con un pago.
+  - Un servicio del mismo cliente no cambia de estado.
+  - Cobro repartido entre empresas con una factura de suscripción.
+- **Complejidad:** media. **Dependencias:** I2.
 
-### R4 · Panel de recordatorios (A4)
-- **Archivos:** `apps/web/app/pages/notificaciones/index.vue`; `configuracion/notificaciones.vue`; componentes nuevos (selector de ámbito, editor de regla, vista previa).
+### I4 · Panel, portal y avisos (A4 + A5 + A6)
+- **Archivos:** página nueva `apps/web/app/pages/suscripciones/` (pestañas «Independientes» y «En servicios»); pestaña en la ficha del cliente; composable `useSuscripciones`; portal `cuenta.vue` y página nueva «Mis suscripciones»; consultas en `apps/api/app/portal/`; `notify/variables.ts`, `plantillas_base.ts` y `catalogo.ts`.
 - **Pruebas**
-  - Cambiar de ámbito muestra de quién hereda.
-  - Personalizar copia el conjunto; restablecer pide confirmación.
-  - La vista previa funciona por canal.
-  - Aparece el aviso de límite y de silencio de Iris.
+  - El total mensual coincide con la suma de activas.
+  - El portal no muestra suscripciones de otro cliente (404).
+  - Pagar en línea la factura de una suscripción la reactiva.
+  - El aviso de factura de suscripción no menciona plan ni velocidad.
   - 390 y 1280 px, claro y oscuro.
-- **Complejidad:** media. **Dependencias:** R1 a R3. **Tablero:** sí (actualizar `OperConfigNotificaciones`).
+- **Complejidad:** media. **Dependencias:** I3. **Tablero:** sí (lista, ficha y alta de suscripción; bloque del portal).
 
-### R5 · Opcional: más cosas por lugar
-- Plantilla de facturación por defecto por zona o empresa: media.
-- Precio de plan por zona: alta, porque toca `leerServicio` y todo lo que lee el precio.
-- Exclusión de recordatorios por servicio: baja.
+### D1 · Tokenización: modelo, adaptador y webhook (A3)
+- **Archivos:** migración (`pasarela_clientes`, `metodos_pago`); `billing/pasarelas/pasarela.ts`; `recurrente.ts`; `falsa.ts`; acciones nuevas `iniciar_metodo_pago.ts`, `registrar_metodo_pago.ts`, `revocar_metodo_pago.ts`; `procesar_webhook_pasarela.ts`; `shared/enmascarar` (token); `pago-en-linea.md`.
+- **Pruebas (con la pasarela falsa)**
+  - Iniciar devuelve URL y método `pendiente`.
+  - Webhook de éxito: `activo` con últimos 4 y evento.
+  - Webhook repetido no duplica.
+  - Cancelado: no queda activo.
+  - Firma inválida: 401.
+  - El token no aparece en respuestas, auditoría ni eventos.
+  - `url_retorno` fuera de los orígenes permitidos: 422.
+  - La prueba real con Sandbox se salta sola sin llave.
+- **Complejidad:** media. **Dependencias:** L0. Verificarlo contra Recurrente depende de la cuenta.
 
-**Orden sugerido:** L0 → (T1, S1, R1 en paralelo) → (T2, S2, R2) → (T3, T4, S3, R3) → (T5, T6, R4). Para ejecutores: modelo alto en T2, T4, R1 y R2; medio en el resto; bajo en L0 y T6.
+### D2 · Cargo recurrente (A3 + auditor)
+- **Archivos:** migración (`debitos_automaticos`, `debito_intentos`); acciones nuevas `activar_debito.ts`, `desactivar_debito.ts`, `cobrar_debitos.ts`, `cobrar_factura_debito.ts`, `reintentar_debito.ts`; `billing/jobs.ts`; `billing/cobros.ts`; `registrar_pago.ts` (método `debito`); `conciliar_pasarela.ts`.
+- **Pruebas**
+  - Factura emitida con débito `al_emitir`: un cargo, pago, asiento con comisión y reactivación del servicio.
+  - Cron dos veces y dos réplicas: un solo cargo.
+  - Rechazo: `debito.fallido`, la factura sigue pendiente y el reintento usa otra clave.
+  - N rechazos desactivan el débito.
+  - Promesa activa, `por_certificar` o monto bajo Q5: no cobra.
+  - Timeout de la pasarela: se reintenta con la misma clave y no duplica.
+  - Contracargo desactiva el débito.
+  - Pago manual antes del cron: no cobra.
+  - Dos empresas: nunca un cargo que mezcle facturas de dos NIT.
+  - Invariantes del auditor.
+- **Complejidad:** alta. **Dependencias:** D1; cuenta de Recurrente con cobros únicos para la verificación real; I2 si debe cubrir suscripciones.
 
-**Riesgos principales**
-- T2: regresiones silenciosas por joins a routers.
-- T4: cuenta nueva en el paquete fiscal y revisión del auditor.
-- R1: no repetir envíos al migrar.
-- Dependencia externa: códigos nuevos de Iris.
+### D3 · Portal, panel y avisos (A5 + A4 + A6)
+- **Archivos:** portal, página nueva «Pago automático» (consentimiento, tarjeta `•••• 4242`, cambiar, quitar); `apps/api/app/portal/` (rutas); ficha del cliente en el panel (estado, enviar enlace, desactivar, historial de intentos); plantillas de notify (`debito.fallido`, tarjeta por vencer); walled garden para el checkout de tokenización.
+- **Pruebas**
+  - Sin aceptar el consentimiento no se inicia.
+  - El portal nunca tiene un campo de tarjeta.
+  - Volver con `estado=cancelado` muestra el error con «Intentar de nuevo».
+  - El panel no puede activar el débito por el cliente.
+  - 390 y 1280 px, claro y oscuro.
+- **Complejidad:** media. **Dependencias:** D2. **Tablero:** sí (portal y bloque de la ficha).
 
-## 5. Preguntas para el PM
+### R1 a R5 · Recordatorios por lugar (EN ESPERA)
+No arrancan hasta que el PM aclare qué significa «personalizado según el lugar»; preguntó si se refería a Firebase. Se conservan como en la v1:
+- **R1:** reglas y ámbitos en `notify`, complejidad alta.
+- **R2:** disparadores corte próximo y promesa por vencer, alta.
+- **R3:** A52, plantillas de WhatsApp de Iris, media.
+- **R4:** panel, media, con tablero.
+- **R5:** opcionales por lugar.
 
-1. **¿Qué es «módulo de suscripciones»?** (a) Cobros recurrentes extra dentro de la factura mensual, como canales premium, IP pública o seguro. (b) Cobro automático con tarjeta, el débito automático de Recurrente, que está en fase 2. (c) Ambos. *Recomendado: (a) ahora; (b) aparte.*
-2. **¿Los adicionales actuales pasan a llamarse «Suscripciones» y se amplían, en vez de crear un módulo nuevo?** *Recomendado: sí.*
-3. **¿Qué tipos entran ahora?** *Recomendado: internet, TV por cable, mixto y «otro»; telefonía solo si ya se vende.*
-4. **Mixto con deuda: ¿se corta todo o solo internet?** *Recomendado: todo; internet al instante y TV por tarea en campo.*
-5. **Corte de TV: ¿lista de tareas en el panel de Argos, u orden de trabajo en Iris?** *Recomendado: lista en Argos ahora; Iris después.*
-6. **Baja de una suscripción a mitad de mes: ¿se devuelve algo?** *Recomendado: no; sigue activa hasta fin de periodo o se corta sin reembolso.*
-7. **«Lugar»: ¿zona del cliente, router o empresa?** *Recomendado: zona > empresa > global; el router no.*
-8. **¿Por lugar solo recordatorios, o también precios y reglas de cobro?** *Recomendado: solo recordatorios ahora; plantilla por defecto por zona como opcional; precios por zona no.*
-9. **Recordatorio de promesa por vencer cuando la promesa nació en Iris: ¿lo manda Argos?** *Recomendado: sí, por correo y Telegram; por WhatsApp solo cuando Iris tenga la plantilla.*
-10. **¿La TV y las suscripciones van a cuentas de ingreso propias?** *Recomendado: sí, con códigos confirmados por el contador.*
-11. **¿Suscripciones con ciclo trimestral o anual?** *Recomendado: solo mensual ahora.*
+Si la respuesta es notificaciones push (Firebase), el carril cambia de forma: sería un canal nuevo de `notify` y no reglas por zona.
 
-### Critical Files for Implementation
-- /home/user/wt-plan-servicios/apps/api/app/core/actions/crear_servicio.ts
-- /home/user/wt-plan-servicios/apps/api/app/core/actions/cambiar_estado_servicio.ts
-- /home/user/wt-plan-servicios/apps/api/app/billing/actions/emitir_factura.ts
-- /home/user/wt-plan-servicios/apps/api/app/core/adicionales.ts
-- /home/user/wt-plan-servicios/apps/api/app/notify/actions/programar_recordatorios.ts
+**Orden sugerido:** L0 → (T1, S1, D1 en paralelo) → (T2, I1, S2) → (T3a, I2, T4, D2) → (T3b, I3) → (T5, T6, I4, S3, D3).
+
+**Modelo del ejecutor:** alto en T2, T3b, T4, I2 y D2; medio en el resto; bajo en L0 y T6.
+
+**Riesgos**
+- Joins a routers en T2.
+- Límites y restricción semanal de SmartOLT en T3b.
+- Cuenta nueva del paquete fiscal en T4.
+- Doble cargo en D2.
+- Dependencias externas: Recurrente, Iris 0.15.0 y la rama `a6-olt-acs`.
+
+## 5. Preguntas nuevas para el PM
+
+1. **P-N1. ¿La deuda de una suscripción independiente corta también los servicios de internet o TV del mismo cliente?** *Recomendado: no; cada una se suspende por su propia deuda.*
+2. **P-N2. Suscripción independiente suspendida por mora: ¿sigue facturando los periodos siguientes?** *Recomendado: no; se reanuda al pagar.*
+3. **P-N3. Cargo rechazado: ¿cuántos reintentos automáticos?** *Recomendado: uno a los 3 días y, después, solo cuando el cliente cambie la tarjeta; tras 3 rechazos seguidos se desactiva.*
+4. **P-N4. ¿Quién redacta y aprueba el texto de consentimiento del cobro automático?** *Recomendado: el PM con su asesor legal; Argos guarda la versión aceptada.*
+5. **P-N5. ¿Cuándo se hace el cargo: al emitir la factura o el día que vence?** *Recomendado: al emitir, con opción «al vencer» por cliente.*
+6. **P-N6. ¿Entra telefonía ahora?** *Recomendado: no; SmartOLT tiene puerto VoIP y se puede sumar después con el mismo patrón del CATV.*
+7. **P-N7. ¿Cada empresa (NIT) tendrá su propia cuenta de Recurrente?** *Recomendado: sí, llave por empresa; sin eso el débito solo sirve con una empresa.*
+8. **P-N8. Servicio de solo TV por coaxial (sin ONU): ¿existe en la operación?** *Recomendado: confirmar; si no existe, T2 se reduce y todo tv tendría ONU.*
+9. **P-N9 (carril R). ¿«Según el lugar» es zona o empresa, o se refería a notificaciones push con Firebase?** *Sin recomendación: decide el alcance del carril.*
+
 ## 6. Respuestas del PM (25 nov 2026)
 
-- **P1 Suscripciones: ambas.** (a) Cobros extra mensuales dentro de la factura del servicio (evolución de los adicionales) **y** (b) suscripciones **propias, sin servicio de red**, que emiten **su propia factura** mientras estén activas (servicios prestados a empresas o clientes que lo requieran), **y** (c) cobro automático con tarjeta (débito recurrente). Esto reemplaza la idea de «servicio tipo `otro`» para membresías: la suscripción independiente es una entidad propia ligada al cliente.
-- **P4 Mixto con deuda: se corta todo.** SmartOLT también permite cortar el CATV (puerto CATV de la ONU): en fibra con CATV, la TV se corta y reconecta por SmartOLT, igual que el internet. Solo sin SmartOLT/CATV va a campo.
-- **P5 Corte en campo: Argos solo avisa a Iris.** Iris lleva los tickets y órdenes. No hay cola de «Cortes en campo» en Argos: Argos emite el evento (y lo manda a Iris, cambio de contrato aditivo) y muestra el estado que Iris devuelva.
-- **P7/P8 «Recordatorios personalizados según el lugar»:** pendiente de aclarar con el PM (preguntó si se refería a Firebase). El carril R no arranca hasta que responda.
+- **P1 Suscripciones: ambas.** Cobros extra dentro de la factura del servicio, suscripciones propias sin servicio de red con su propia factura, y cobro automático con tarjeta. Sustituye la idea de servicio tipo `otro`.
+- **P4 Mixto con deuda: se corta todo.** En fibra con CATV, la TV se corta y reconecta por SmartOLT; solo sin SmartOLT o sin CATV va a campo.
+- **P5 Corte en campo: Argos solo avisa a Iris.** Iris lleva tickets y órdenes; no hay cola en Argos; Argos muestra el estado que Iris devuelva.
+- **P7/P8 Recordatorios por lugar:** pendiente de aclarar. El carril R no arranca.
+
+### Critical Files for Implementation
+- /home/user/wt-plan-servicios/apps/api/app/billing/actions/emitir_factura.ts
+- /home/user/wt-plan-servicios/apps/api/app/billing/actions/emitir_cargo_unico.ts
+- /home/user/wt-plan-servicios/apps/api/app/billing/pasarelas/pasarela.ts
+- /home/user/wt-plan-servicios/apps/api/app/integraciones/equipos/smartolt.ts
+- /home/user/wt-plan-servicios/apps/api/app/core/actions/cambiar_estado_servicio.ts
