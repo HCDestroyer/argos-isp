@@ -29501,6 +29501,23 @@
                     ],
                     "maxLength": 100
                   },
+                  "codigo_postal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{5}$",
+                    "description": "Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001"
+                  },
+                  "cajas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto"
+                  },
                   "por_defecto": {
                     "description": "Establecimiento con el que se emite (uno por empresa)",
                     "type": "boolean"
@@ -29713,6 +29730,23 @@
                       "null"
                     ],
                     "maxLength": 100
+                  },
+                  "codigo_postal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{5}$",
+                    "description": "Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001"
+                  },
+                  "cajas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto"
                   },
                   "activo": {
                     "type": "boolean"
@@ -120499,6 +120533,8 @@
           "direccion",
           "municipio",
           "departamento",
+          "codigo_postal",
+          "cajas",
           "activo",
           "por_defecto",
           "version",
@@ -120538,6 +120574,22 @@
               "string",
               "null"
             ]
+          },
+          "codigo_postal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{5}$",
+            "description": "Código postal del RTU; null = el DTE sale con 01001"
+          },
+          "cajas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Cajas cuyos cobros certifican con este establecimiento (P1)"
           },
           "activo": {
             "type": "boolean"

@@ -18538,6 +18538,10 @@ export interface components {
             direccion: string | null;
             municipio: string | null;
             departamento: string | null;
+            /** @description Código postal del RTU; null = el DTE sale con 01001 */
+            codigo_postal: string | null;
+            /** @description Cajas cuyos cobros certifican con este establecimiento (P1) */
+            cajas: number[];
             activo: boolean;
             por_defecto: boolean;
             version: number;
@@ -42924,6 +42928,10 @@ export interface operations {
                     direccion?: string | null;
                     municipio?: string | null;
                     departamento?: string | null;
+                    /** @description Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001 */
+                    codigo_postal?: string | null;
+                    /** @description Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto */
+                    cajas?: number[];
                     /** @description Establecimiento con el que se emite (uno por empresa) */
                     por_defecto?: boolean;
                     /** @description Empresa; por defecto la activa (X-Empresa-Id) */
@@ -43046,6 +43054,10 @@ export interface operations {
                     direccion?: string | null;
                     municipio?: string | null;
                     departamento?: string | null;
+                    /** @description Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001 */
+                    codigo_postal?: string | null;
+                    /** @description Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto */
+                    cajas?: number[];
                     activo?: boolean;
                     /** @description Establecimiento con el que se emite (uno por empresa) */
                     por_defecto?: boolean;

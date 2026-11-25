@@ -8,6 +8,7 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { frasesVigentes } from '#fiscal/frases'
+import { establecimientoPara } from '#fiscal/establecimientos'
 import { UNIDAD_MEDIDA } from '#fiscal/fel/xml_gt'
 import { valorParametro } from '#fiscal/parametros'
 import { datosFiscalesEmpresas } from '#fiscal/instalador_localizacion'
@@ -458,22 +459,14 @@ export interface DatosNuevoDte {
 }
 
 export async function insertarDte(trx: TransactionClientContract, datos: DatosNuevoDte): Promise<DteFila> {
-    const establecimiento = (await trx
-        .from('fiscal.establecimientos')
-        .where('empresa_id', datos.empresa_id)
-        .where('activo', true)
-        .orderBy([
-            { column: 'por_defecto', order: 'desc' },
-            { column: 'id', order: 'asc' },
-        ])
-        .select('id')
-        .first()) as { id: number } | null
+    // nota: el del origen; factura: el de la caja que la cobró; si no, el por defecto (P1)
+    const establecimientoId = await establecimientoPara(trx, datos)
     const [fila] = (await trx
         .insertQuery()
         .table('fiscal.dte')
         .insert({
             empresa_id: datos.empresa_id,
-            establecimiento_id: establecimiento?.id ?? null,
+            establecimiento_id: establecimientoId,
             documento_tipo: datos.documento_tipo,
             documento_id: datos.documento_id,
             tipo_dte: datos.tipo_dte,
@@ -719,7 +712,7 @@ export async function dteParaEnviar(cliente: QueryClientContract, dte: DteFila):
         ? ((await cliente
               .from('fiscal.establecimientos')
               .where('id', dte.establecimiento_id)
-              .select('codigo', 'nombre', 'direccion', 'municipio', 'departamento')
+              .select('codigo', 'nombre', 'direccion', 'municipio', 'departamento', 'codigo_postal')
               .first()) as Record<string, string | number | null> | null)
         : null
     const fiscales = await datosFiscalesEmpresas([dte.empresa_id], cliente).then((r) => r.get(dte.empresa_id))
@@ -755,7 +748,8 @@ export async function dteParaEnviar(cliente: QueryClientContract, dte: DteFila):
             direccion: String(establecimiento?.direccion ?? empresa.direccion_fiscal ?? 'Ciudad'),
             municipio: String(establecimiento?.municipio ?? empresa.municipio ?? 'Guatemala'),
             departamento: String(establecimiento?.departamento ?? empresa.departamento ?? 'Guatemala'),
-            codigo_postal: '01001',
+            // sin código postal en el establecimiento: 01001 (el panel avisa que falta)
+            codigo_postal: String(establecimiento?.codigo_postal ?? '01001'),
             correo: empresa.correo ?? null,
             afiliacion_iva: dte.tipo_dte === 'FPEQ' || dte.tipo_dte === 'FCAP' ? 'PEQ' : 'GEN',
         },

@@ -709,6 +709,22 @@ Pruebas:
 - Playwright `tests/e2e/fiscal.spec.ts`: crear «Sucursal Xela» con zona, verla en la lista; ficha
   del DTE con su establecimiento; 1280 px y 390 px.
 
+#### Ejecución del lote 4 (25-nov-2026, con P1 del PM)
+
+Hecho: `fiscal.establecimientos.codigo_postal` y `ledger.cajas.establecimiento_id` (migración); el
+establecimiento asigna sus cajas (`cajas[]` en crear y editar, una caja asignada a otro se mueve, diff
+de cada caja en `audit.cambios`; 422 en `cajas.N` si es de otra empresa); `establecimientoPara`
+(nota → el del DTE de origen; factura → el de la caja del último pago vigente aplicado; si no, el por
+defecto); el XML lleva el código postal del establecimiento (01001 si falta); panel con «Código
+postal» y «Cajas que cobran por esta sucursal». Desvíos: (1) sin ningún establecimiento activo se
+conserva el comportamiento anterior (código de la empresa o 1) en vez de 422
+`establecimiento_requerido`: las empresas de `tests/contabilidad` no tienen establecimiento y
+certifican; queda el aviso `faltantes: establecimiento` y la decisión para el líder; (2) no se
+agregó `establecimiento { id, codigo, nombre }` a `Dte` ni la fila en `DteFicha` y la cola (sigue
+`establecimiento_id`); (3) la NCRE de una factura cobrada por completo no se puede emitir (regla
+existente «sin saldo pendiente»): con «primero se cobra», una NCRE sobre un DTE ya pagado necesita
+una regla de anticipo que no existe (para el PM y el contador).
+
 ### Lote 5 · Adaptador de INFILE según su documentación
 
 Todo en `apps/api/app/fiscal/fel/` (B6). Sin red en las pruebas: se prueba con `fetch` sustituido.

@@ -149,6 +149,12 @@ solo informan. Guardar la configuración no exige credenciales (decisión del PM
 `POST /fel/credenciales/:ambiente/probar` acepta `?proveedor=` (por defecto el guardado). El bloque
 `fel` del tablero agrega `alerta_configuracion` («FEL activa sin credenciales»), aparte de `alerta`
 (FEL desactivada), que sigue alimentando el consejo y el panel financiero.
+
+**Establecimiento de cada DTE (decisión del PM P1, 25-nov-2026; `fel-establecimientos.md` lote 4).**
+`fiscal.establecimientos.codigo_postal` y `ledger.cajas.establecimiento_id` (se asigna desde el
+establecimiento con `cajas[]`). El DTE toma: una NCRE o NDEB, el establecimiento del DTE de origen;
+una factura, el de la caja del último pago vigente que se le aplicó; lo demás (cron, Iris, API,
+pasarela), el por defecto. Sin ninguno activo, el comportamiento anterior (pendiente de decisión).
 ### 3.7 Cierres, bloqueos, libros y declaraciones
 
 | Tabla                        | Columnas clave                                                                                                                                                                                                                                                                                                                        | Restricciones                                                                                                                                                                         |

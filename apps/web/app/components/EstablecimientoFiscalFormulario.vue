@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Problem } from '@argosisp/contracts'
+import type { Problem, Schema } from '@argosisp/contracts'
 import type { FormSubmitEvent } from '@nuxt/ui'
 
 /**
@@ -16,7 +16,17 @@ const emit = defineEmits<{ guardado: [establecimiento: EstablecimientoFiscal, nu
 
 const formulario = useTemplateRef('formulario')
 const idFormulario = useId()
-const estado = reactive<EntradaEstablecimiento>({ codigo: '', nombre: '', direccion: '', municipio: '', departamento: '', por_defecto: false, activo: true })
+const estado = reactive<EntradaEstablecimiento>({ codigo: '', nombre: '', direccion: '', municipio: '', departamento: '', codigo_postal: '', cajas: [], por_defecto: false, activo: true })
+
+/* Cajas de la empresa (P1: la factura sale de la sucursal de la caja que la cobra). */
+const cajas = shallowRef<Schema<'Caja'>[]>([])
+const itemsCajas = computed(() => cajas.value
+    .filter(c => props.establecimiento ? c.empresa_id === props.establecimiento.empresa_id : true)
+    .map(c => ({ label: c.nombre, value: c.id })))
+onMounted(async () => {
+    const resultado = await useCajas().listar()
+    cajas.value = resultado.ok ? resultado.data : []
+})
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
@@ -31,6 +41,8 @@ function reiniciar() {
     estado.direccion = e?.direccion ?? ''
     estado.municipio = e?.municipio ?? ''
     estado.departamento = e?.departamento ?? ''
+    estado.codigo_postal = e?.codigo_postal ?? ''
+    estado.cajas = [...(e?.cajas ?? [])]
     estado.por_defecto = e?.por_defecto ?? false
     estado.activo = e?.activo ?? true
     problema.value = null
@@ -53,7 +65,7 @@ async function guardar(evento: FormSubmitEvent<SalidaEstablecimiento>) {
     enviando.value = true
     problema.value = null
     const d = evento.data
-    const cambios = { nombre: d.nombre, direccion: d.direccion, municipio: d.municipio, departamento: d.departamento, por_defecto: d.por_defecto, activo: d.activo }
+    const cambios = { nombre: d.nombre, direccion: d.direccion, municipio: d.municipio, departamento: d.departamento, codigo_postal: d.codigo_postal, cajas: d.cajas, por_defecto: d.por_defecto, activo: d.activo }
     const api = useEstablecimientosFiscales()
     const resultado = props.establecimiento
         ? await api.editar(props.establecimiento.id, { ...cambios, version: props.establecimiento.version })
@@ -144,7 +156,36 @@ async function guardar(evento: FormSubmitEvent<SalidaEstablecimiento>) {
                             class="w-full"
                         />
                     </UFormField>
+                    <UFormField
+                        label="Código postal"
+                        name="codigo_postal"
+                        hint="Opcional"
+                        help="El del RTU. Sin él, el DTE sale con 01001."
+                    >
+                        <UInput
+                            v-model="estado.codigo_postal"
+                            inputmode="numeric"
+                            maxlength="5"
+                            class="w-full font-mono"
+                            data-prueba="establecimiento-codigo-postal"
+                        />
+                    </UFormField>
                 </div>
+                <UFormField
+                    label="Cajas que cobran por esta sucursal"
+                    name="cajas"
+                    help="Las facturas cobradas en estas cajas salen por este establecimiento; las demás (cron, Iris, API), por el establecimiento por defecto."
+                >
+                    <USelectMenu
+                        v-model="estado.cajas"
+                        :items="itemsCajas"
+                        value-key="value"
+                        multiple
+                        placeholder="Ninguna"
+                        class="w-full"
+                        data-prueba="establecimiento-cajas"
+                    />
+                </UFormField>
                 <UFormField
                     name="por_defecto"
                     :help="establecimiento?.por_defecto ? 'Es el por defecto: para cambiarlo, marca otro como por defecto.' : 'Con él se emiten los DTE; el anterior deja de serlo.'"

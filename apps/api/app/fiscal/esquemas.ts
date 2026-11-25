@@ -314,6 +314,14 @@ export const EstablecimientoFiscal = definirEsquema(
         direccion: nulable(texto),
         municipio: nulable(texto),
         departamento: nulable(texto),
+        codigo_postal: {
+            ...nulable({ ...texto, pattern: '^[0-9]{5}$' }),
+            description: 'Código postal del RTU; null = el DTE sale con 01001',
+        },
+        cajas: {
+            ...lista(id),
+            description: 'Cajas cuyos cobros certifican con este establecimiento (P1)',
+        },
         activo: booleano,
         por_defecto: booleano,
         version: { type: 'integer', minimum: 1 },
