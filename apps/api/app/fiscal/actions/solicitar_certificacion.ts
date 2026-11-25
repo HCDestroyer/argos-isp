@@ -174,6 +174,7 @@ export default class SolicitarCertificacion extends DomainAction<
         const hoy = hoyGuatemala()
         let tipoDte = await tipoFacturaDte(empresaId, hoy, t.trx)
         let referencia = null
+        let receptorOrigen: DteFila['receptor'] | null = null
         if (factura.tipo === 'mora') {
             const origen = factura.factura_origen_id
                 ? await dteVigente(t.trx, 'factura', factura.factura_origen_id)
@@ -189,6 +190,8 @@ export default class SolicitarCertificacion extends DomainAction<
             }
             tipoDte = 'NDEB'
             referencia = referenciaA(origen!, `Recargo por mora de la factura ${factura.factura_origen_id}`)
+            // NDEB: el receptor del DTE de origen (debe coincidir con el registrado en la SAT)
+            receptorOrigen = origen!.receptor
         }
 
         // H5/H11: todo documento con notas internas (aviso o no) se certifica por el neto
@@ -202,9 +205,11 @@ export default class SolicitarCertificacion extends DomainAction<
                 'Factura en cero',
             )
         }
-        const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor, {
-            ambiente: config.ambiente,
-        })
+        const receptor =
+            receptorOrigen ??
+            (await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor, {
+                ambiente: config.ambiente,
+            }))
         const falta = await receptorFaltante(empresaId, receptor, aTexto(neto.total), hoy, t.trx)
         if (falta && !input.automatico) {
             const limite = await valorParametro<string>(empresaId, 'consumidor_final_limite', hoy, t.trx)

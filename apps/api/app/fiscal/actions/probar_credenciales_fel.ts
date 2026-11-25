@@ -45,7 +45,16 @@ export default class ProbarCredencialesFel extends DomainAction<
         }
         let resultado
         try {
-            resultado = await proveedor.probarCredenciales(cred, input.ambiente)
+            const empresa = (await t.trx
+                .from('core.empresas')
+                .where('id', empresaId)
+                .select('nit')
+                .first()) as {
+                nit: string | null
+            } | null
+            resultado = await proveedor.probarCredenciales(cred, input.ambiente, {
+                nit_emisor: empresa?.nit ?? null,
+            })
         } catch (error) {
             throw new FelProveedorNoDisponible(`${codigo} no respondió: ${(error as Error).message}`)
         }

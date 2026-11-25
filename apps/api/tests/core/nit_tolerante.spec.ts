@@ -9,6 +9,7 @@ import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import { configuracionFel } from '#fiscal/fel/configuracion'
 import { crearClienteFila } from '#tests/core/fabricas'
 import { dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { sacarDeLaColaFel } from '#tests/contabilidad/ayudas_contabilidad'
 
 /**
  * NIT tolerante (`contratos/fel-establecimientos.md` R1, lote 1): letras, dígitos y guiones; el
@@ -150,7 +151,11 @@ test.group('NIT tolerante: empresas y clientes', (group) => {
 })
 
 test.group('NIT tolerante: FEL', (group) => {
-    group.each.teardown(() => soloEmpresaPrincipal())
+    group.each.teardown(async () => {
+        // el DTE de producción (INFILE) no debe quedar en la cola de otras suites
+        await sacarDeLaColaFel()
+        await soloEmpresaPrincipal()
+    })
 
     test('producción con NIT de empresa que no cuadra: 422 nit_emisor_invalido; pruebas: 200', async ({
         client,

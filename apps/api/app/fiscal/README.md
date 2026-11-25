@@ -84,11 +84,11 @@ Lecturas (`libros.ver`): `GET /libros/diario`, `/libros/mayor`, `/libros/ventas`
 - `fiscal.obligaciones` es el calendario: una fila por (empresa, impuesto, periodo); la generación la concilia (vencimiento nuevo, `no_aplica` con motivo y de vuelta) con `version` y `audit.cambios` (`obligacion_fiscal`); nada se borra. `fiscal.feriados` (global) y `fiscal.alertas` son de solo inserción.
 - Cron `fiscal:calendario` (job `calendario` del `fiscal:worker`, cada hora y al arrancar, con lock): `fiscal.generar_calendario` y `fiscal.emitir_alertas`, todo lo pendiente hasta hoy. `ConsumidorCalendario` (billing-worker) regenera la empresa al recibir `fiscal.parametros_cambiados` de régimen, banderas, `inicio_libros` o plazos.
 
-| Acción (permiso)                               | Ruta                    | Qué hace                                                                                                        |
-| ---------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `fiscal.generar_calendario` (sistema)          | cron, consumidor        | Genera y concilia las obligaciones de todo lo pendiente hasta el periodo en curso                               |
+| Acción (permiso)                               | Ruta                    | Qué hace                                                                                                                                                                                |
+| ---------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fiscal.generar_calendario` (sistema)          | cron, consumidor        | Genera y concilia las obligaciones de todo lo pendiente hasta el periodo en curso                                                                                                       |
 | `fiscal.emitir_alertas` (sistema)              | cron                    | `fiscal.vencimiento_proximo` (umbrales 7, 3, 1, 0) y `fiscal.limite_pc` (umbrales de `pc_alertas` más el 100 %, obligatorio; con `aviso_pc_activo` apagado, solo el 100 %), sin repetir |
-| `fiscal.agregar_feriado` (`fiscal.configurar`) | `POST /fiscal/feriados` | Agrega o retira un feriado (global) y recalcula el calendario de todas las empresas                             |
+| `fiscal.agregar_feriado` (`fiscal.configurar`) | `POST /fiscal/feriados` | Agrega o retira un feriado (global) y recalcula el calendario de todas las empresas                                                                                                     |
 
 Lecturas: `GET /fiscal/obligaciones` y `/fiscal/obligaciones/:id` (`declaraciones.ver`), `GET /fiscal/feriados?anio=` (`fiscal.ver`).
 

@@ -8,6 +8,7 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { frasesVigentes } from '#fiscal/frases'
+import { UNIDAD_MEDIDA } from '#fiscal/fel/xml_gt'
 import { valorParametro } from '#fiscal/parametros'
 import { datosFiscalesEmpresas } from '#fiscal/instalador_localizacion'
 import type {
@@ -524,7 +525,7 @@ function lineaDte(numero: number, l: LineaDocumento): LineaDte {
         bien_o_servicio: l.tipo === 'producto' ? 'B' : 'S',
         descripcion: l.concepto,
         cantidad: dec(l.cantidad).toString(),
-        unidad: 'UNI',
+        unidad: UNIDAD_MEDIDA,
         precio_unitario: aTexto(dec(l.precio_unitario)),
         precio: aTexto(precio),
         descuento: aTexto(descuento),
@@ -774,7 +775,8 @@ export function dteCertificado(dte: DteFila): DteCertificado {
         autorizacion: dte.autorizacion ?? '',
         serie: dte.serie,
         numero: dte.numero,
-        fecha_emision: DateTime.fromJSDate(dte.certificado_en ?? dte.fecha_emision)
+        // la FechaHoraEmision que llevó el DTE (no la de certificación): la anulación debe coincidir
+        fecha_emision: DateTime.fromJSDate(dte.fecha_emision)
             .setZone(ZONA_NEGOCIO)
             .toISO({ suppressMilliseconds: true })!,
         emisor_nit: '',
