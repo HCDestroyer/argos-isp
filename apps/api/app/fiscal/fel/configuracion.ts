@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { cifrar, descifrar } from '#shared/cifrado'
+import { nitValido } from '#core/nit_cui'
 import {
     camposProveedor,
     proveedorFel,
@@ -92,6 +93,56 @@ export function modoEmision(config: ConfiguracionFel, certificarAl: CertificarAl
     if (certificarAl === 'pagar') return 'aviso'
     if (config.modo === 'opcional') return 'sin_fel'
     return config.contingencia_activa ? 'contingencia' : 'por_certificar'
+}
+
+/**
+ * Lo que falta para certificar con el proveedor y el ambiente **guardados**
+ * (`contratos/fel-establecimientos.md` lote 2). `lista` es false con `proveedor`, `credenciales` o
+ * `establecimiento`; `credenciales_sin_probar` (sin prueba o con la última prueba rechazada) y
+ * `nit_emisor` (NIT de la empresa sin módulo 11) solo informan: activar la FEL sin credenciales
+ * probadas se permite con un aviso (decisión del PM, P7).
+ */
+export const FALTANTES_FEL = [
+    'proveedor',
+    'credenciales',
+    'credenciales_sin_probar',
+    'establecimiento',
+    'nit_emisor',
+] as const
+export type FaltanteFel = (typeof FALTANTES_FEL)[number]
+const FALTANTES_QUE_BLOQUEAN: readonly FaltanteFel[] = ['proveedor', 'credenciales', 'establecimiento']
+
+export async function estadoFel(
+    empresaId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<{ lista: boolean; faltantes: FaltanteFel[] }> {
+    const config = await configuracionFel(empresaId, cliente)
+    const faltantes: FaltanteFel[] = []
+    if (!config.proveedor) {
+        faltantes.push('proveedor')
+    } else {
+        const cred = (await cliente
+            .from('fiscal.fel_credenciales')
+            .where({ empresa_id: empresaId, proveedor: config.proveedor, ambiente: config.ambiente })
+            .select('probada_en', 'resultado_prueba')
+            .first()) as { probada_en: Date | null; resultado_prueba: { ok?: boolean } | null } | null
+        if (!cred) {
+            faltantes.push('credenciales')
+        } else if (!cred.probada_en || cred.resultado_prueba?.ok !== true) {
+            faltantes.push('credenciales_sin_probar')
+        }
+    }
+    const establecimiento = await cliente
+        .from('fiscal.establecimientos')
+        .where({ empresa_id: empresaId, activo: true })
+        .select('id')
+        .first()
+    if (!establecimiento) faltantes.push('establecimiento')
+    const empresa = (await cliente.from('core.empresas').where('id', empresaId).select('nit').first()) as {
+        nit: string | null
+    } | null
+    if (!empresa?.nit || !nitValido(empresa.nit)) faltantes.push('nit_emisor')
+    return { lista: !faltantes.some((f) => FALTANTES_QUE_BLOQUEAN.includes(f)), faltantes }
 }
 
 export function cifrarCredenciales(datos: CredencialesFel): string {

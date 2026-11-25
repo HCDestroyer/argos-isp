@@ -80,6 +80,16 @@ export const AMBIENTES_FEL: Record<AmbienteFel, string> = {
     produccion: 'Producción',
 }
 
+/** Faltantes que impiden certificar (`ConfiguracionFel.faltantes`, `fel-establecimientos.md` lote 2). */
+export type FaltanteFel = Schema<'ConfiguracionFel'>['faltantes'][number]
+
+/** Texto de cada faltante que bloquea (`lista = false`), con el certificador y el ambiente guardados. */
+export const TEXTOS_FALTANTE_FEL: Record<'proveedor' | 'credenciales' | 'establecimiento', (certificador: string, ambiente: string) => string> = {
+    proveedor: () => 'Falta elegir el certificador y guardarlo.',
+    credenciales: (certificador, ambiente) => `Faltan las credenciales de ${certificador} para ${ambiente}.`,
+    establecimiento: () => 'La empresa no tiene establecimiento activo (Configuración › Fiscal › Establecimientos).',
+}
+
 export type ProveedorFelCatalogo = Schema<'ProveedorFelCatalogo'>
 
 /** Nombre del certificador según `GET /fel/proveedores`; sin catálogo, su código. */

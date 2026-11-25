@@ -54,7 +54,7 @@ import {
     LoteCertificacion,
     SolicitudCertificacion,
 } from '#fiscal/esquemas'
-import { configuracionFel, vistaCredenciales } from '#fiscal/fel/configuracion'
+import { configuracionFel, estadoFel, vistaCredenciales } from '#fiscal/fel/configuracion'
 import { intentosDeDte, listarDte, pdfDeDte, verDte, xmlDeDte } from '#fiscal/fel/dte'
 import { catalogoProveedores } from '#fiscal/fel/proveedor'
 import ConfigurarFel from '#fiscal/actions/configurar_fel'
@@ -359,7 +359,11 @@ const fiscal: Ruta[] = [
 */
 
 async function vistaConfiguracion(empresaId: number) {
-    return { ...(await configuracionFel(empresaId)), credenciales: await vistaCredenciales(empresaId) }
+    return {
+        ...(await configuracionFel(empresaId)),
+        ...(await estadoFel(empresaId)),
+        credenciales: await vistaCredenciales(empresaId),
+    }
 }
 
 async function dteConAcceso(ctx: HttpContext, id: number) {
@@ -398,7 +402,7 @@ function fel(): Ruta[] {
             permiso: 'fel.ver',
             query: v.consultaEmpresaValidator,
             descripcion:
-                'Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.',
+                'Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.',
             respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
             handler: async (ctx, { query }) =>
                 vistaConfiguracion(await empresaConsulta(ctx, query.empresa_id)),
@@ -457,13 +461,17 @@ function fel(): Ruta[] {
             etiqueta: 'fel',
             permiso: 'fel.configurar',
             parametros: AMBIENTE,
-            query: v.consultaEmpresaValidator,
+            query: v.probarCredencialesFelValidator,
             descripcion:
-                'No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.',
+                'No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.',
             respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: CredencialesFel },
             handler: (ctx, { query, params }) =>
                 new ProbarCredencialesFel().execute(
-                    { empresa_id: query.empresa_id, ambiente: params.ambiente as 'pruebas' | 'produccion' },
+                    {
+                        empresa_id: query.empresa_id,
+                        proveedor: query.proveedor,
+                        ambiente: params.ambiente as 'pruebas' | 'produccion',
+                    },
                     ctx.contextoAccion(),
                 ),
         }),

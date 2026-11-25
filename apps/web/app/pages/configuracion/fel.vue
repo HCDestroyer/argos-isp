@@ -131,12 +131,48 @@ const ambienteCredenciales = ref<AmbienteFel>('pruebas')
 const probando = ref<AmbienteFel | null>(null)
 const problemaPrueba = ref<{ ambiente: AmbienteFel, problema: Problem } | null>(null)
 
-function credencialesDe(ambiente: AmbienteFel): CredencialesFel | null {
-    return configuracion.value?.credenciales.find(c => c.ambiente === ambiente) ?? null
-}
-
 /** Certificador con el que se guardan las credenciales: el elegido (aunque no esté guardado aún). */
 const proveedorCredenciales = computed(() => delCatalogo(estado.proveedor ?? configuracion.value?.proveedor ?? null))
+
+/** Credenciales del certificador de la tarjeta en ese ambiente (nunca las de otro certificador). */
+function credencialesDe(ambiente: AmbienteFel): CredencialesFel | null {
+    const codigo = proveedorCredenciales.value?.codigo
+    return configuracion.value?.credenciales.find(c => c.ambiente === ambiente && c.proveedor === codigo) ?? null
+}
+
+/** Nombres de otros certificadores con credenciales guardadas en ese ambiente. */
+function otrasCredenciales(ambiente: AmbienteFel): string[] {
+    const codigo = proveedorCredenciales.value?.codigo
+    return (configuracion.value?.credenciales ?? [])
+        .filter(c => c.ambiente === ambiente && c.proveedor !== codigo)
+        .map(c => etiquetaProveedor(c.proveedor, catalogo.value))
+}
+
+/** Reemplaza la fila de ese certificador y ambiente (no la de otro certificador del mismo ambiente). */
+function conCredenciales(fila: CredencialesFel) {
+    if (configuracion.value) {
+        configuracion.value = {
+            ...configuracion.value,
+            credenciales: [...configuracion.value.credenciales.filter(c => !(c.ambiente === fila.ambiente && c.proveedor === fila.proveedor)), fila],
+        }
+    }
+}
+
+/** Proveedor o ambiente elegidos sin guardar: las credenciales aún no se usan al certificar. */
+const certificadorSinGuardar = computed(() => configuracion.value !== null
+    && (estado.proveedor !== configuracion.value.proveedor || estado.ambiente !== configuracion.value.ambiente))
+
+/** Lo que falta para certificar (`faltantes` de la API), en texto, con dónde se corrige. */
+const faltantesTexto = computed(() => {
+    const actual = configuracion.value
+    if (!actual || actual.lista || actual.modo === 'desactivada') {
+        return []
+    }
+    const certificador = etiquetaProveedor(actual.proveedor, catalogo.value)
+    return actual.faltantes
+        .filter(f => f === 'proveedor' || f === 'credenciales' || f === 'establecimiento')
+        .map(f => TEXTOS_FALTANTE_FEL[f](certificador, AMBIENTES_FEL[actual.ambiente]))
+})
 
 function abrirCredenciales(ambiente: AmbienteFel) {
     ambienteCredenciales.value = ambiente
@@ -144,9 +180,9 @@ function abrirCredenciales(ambiente: AmbienteFel) {
 }
 
 function alGuardarCredenciales(guardadas: CredencialesFel) {
-    if (configuracion.value) {
-        configuracion.value = { ...configuracion.value, credenciales: [...configuracion.value.credenciales.filter(c => c.ambiente !== guardadas.ambiente), guardadas] }
-    }
+    conCredenciales(guardadas)
+    // `lista` y `faltantes` dependen de las credenciales: se releen
+    void cargar()
     toast.add({ title: `Credenciales de ${AMBIENTES_FEL[guardadas.ambiente].toLowerCase()} guardadas`, description: 'Cifradas; pruébalas antes de certificar.', icon: 'i-lucide-key-round', color: 'success' })
 }
 
@@ -156,15 +192,14 @@ async function probar(ambiente: AmbienteFel) {
     }
     probando.value = ambiente
     problemaPrueba.value = null
-    const resultado = await useFel().probarCredenciales(ambiente, empresaId.value)
+    const codigo = proveedorCredenciales.value?.codigo
+    const resultado = await useFel().probarCredenciales(ambiente, empresaId.value, esProveedorFel(codigo) ? codigo : undefined)
     probando.value = null
     if (!resultado.ok) {
         problemaPrueba.value = { ambiente, problema: problemaFelLegible(resultado.problema) }
         return
     }
-    if (configuracion.value) {
-        configuracion.value = { ...configuracion.value, credenciales: configuracion.value.credenciales.map(c => (c.ambiente === ambiente ? resultado.data : c)) }
-    }
+    conCredenciales(resultado.data)
     const prueba = resultado.data.resultado_prueba
     toast.add({
         title: prueba?.ok ? 'Credenciales válidas' : 'El certificador rechazó las credenciales',
@@ -240,6 +275,35 @@ onMounted(() => {
                     :description="AVISO_FEL_DESACTIVADA"
                     data-prueba="fel-desactivada"
                 />
+                <UAlert
+                    v-if="faltantesTexto.length"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-circle-alert"
+                    title="Todavía no se puede certificar"
+                    data-prueba="fel-faltantes"
+                >
+                    <template #description>
+                        <ul class="list-disc ps-4">
+                            <li
+                                v-for="texto in faltantesTexto"
+                                :key="texto"
+                            >
+                                {{ texto }}
+                            </li>
+                        </ul>
+                    </template>
+                    <template #actions>
+                        <UButton
+                            v-if="configuracion.faltantes.includes('establecimiento')"
+                            label="Establecimientos"
+                            to="/configuracion/fiscal"
+                            color="neutral"
+                            variant="outline"
+                            size="sm"
+                        />
+                    </template>
+                </UAlert>
                 <ProblemaAlerta
                     v-if="problemaCatalogo"
                     :problema="problemaCatalogo"
@@ -252,7 +316,20 @@ onMounted(() => {
                         <ConfiguracionBloque
                             titulo="Certificador"
                             icono="i-lucide-shield-check"
+                            :descripcion="empresa ? `${empresa.nombre_comercial} · NIT ${empresa.nit ?? '—'}` : undefined"
                         >
+                            <ConfiguracionFila
+                                v-if="configuracion.faltantes.includes('nit_emisor')"
+                                etiqueta="NIT"
+                            >
+                                <UBadge
+                                    label="NIT sin verificar"
+                                    color="warning"
+                                    variant="subtle"
+                                    icon="i-lucide-badge-alert"
+                                    data-prueba="nit-sin-verificar"
+                                />
+                            </ConfiguracionFila>
                             <ConfiguracionFila etiqueta="Estado">
                                 <UBadge
                                     :label="MODOS_FEL[configuracion.modo].etiqueta"
@@ -389,10 +466,19 @@ onMounted(() => {
                         </ConfiguracionBloque>
 
                         <ConfiguracionBloque
-                            titulo="Credenciales"
+                            :titulo="proveedorCredenciales ? `Credenciales de ${proveedorCredenciales.nombre}` : 'Credenciales'"
                             icono="i-lucide-key-round"
                             descripcion="Cifradas y de solo escritura: la API nunca las devuelve. Aquí se ve si están guardadas y su última prueba."
                         >
+                            <UAlert
+                                v-if="certificadorSinGuardar && puede('fel.configurar')"
+                                color="info"
+                                variant="subtle"
+                                icon="i-lucide-info"
+                                description="Guarda el certificador para que estas credenciales se usen al certificar."
+                                class="mt-2"
+                                data-prueba="credenciales-sin-guardar"
+                            />
                             <div
                                 v-for="ambiente in AMBIENTES"
                                 :key="ambiente"
@@ -410,6 +496,13 @@ onMounted(() => {
                                         data-prueba="credenciales-estado"
                                     />
                                 </div>
+                                <p
+                                    v-if="otrasCredenciales(ambiente).length"
+                                    class="text-xs text-muted"
+                                    data-prueba="credenciales-otras"
+                                >
+                                    También hay credenciales guardadas de {{ otrasCredenciales(ambiente).join(', ') }}.
+                                </p>
                                 <dl
                                     v-if="credencialesDe(ambiente)"
                                     class="grid gap-x-4 gap-y-2 sm:grid-cols-2"

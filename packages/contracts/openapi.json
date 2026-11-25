@@ -27944,7 +27944,7 @@
       "get": {
         "operationId": "felConfiguracion",
         "summary": "Configuración FEL de la empresa (sin secretos)",
-        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
+        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
         "tags": [
           "fel"
         ],
@@ -28312,7 +28312,7 @@
       "post": {
         "operationId": "felProbarCredenciales",
         "summary": "Probar las credenciales contra el certificador",
-        "description": "No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
+        "description": "No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
         "tags": [
           "fel"
         ],
@@ -28349,6 +28349,19 @@
                 "null"
               ],
               "minimum": 1
+            }
+          },
+          {
+            "name": "proveedor",
+            "in": "query",
+            "required": false,
+            "description": "Certificador cuyas credenciales se prueban; por defecto el guardado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "infile",
+                "falso"
+              ]
             }
           }
         ],
@@ -106370,7 +106383,8 @@
               "proveedor",
               "contingencia_activa",
               "dte_pendientes",
-              "alerta"
+              "alerta",
+              "alerta_configuracion"
             ],
             "properties": {
               "modo": {
@@ -106421,6 +106435,13 @@
                   "null"
                 ],
                 "description": "«FEL es obligatoria para su régimen» si está desactivada"
+              },
+              "alerta_configuracion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "«FEL activa sin credenciales»: modo distinto de desactivada sin proveedor, credenciales del proveedor y ambiente guardados o establecimiento activo (lista = false de GET /fel/configuracion)"
               }
             },
             "description": "Estado de la FEL (solo con estado ok)"
@@ -113232,6 +113253,8 @@
           "contingencia_desde",
           "version",
           "updated_at",
+          "lista",
+          "faltantes",
           "credenciales"
         ],
         "properties": {
@@ -113291,11 +113314,30 @@
             ],
             "format": "date-time"
           },
+          "lista": {
+            "type": "boolean",
+            "description": "Lista para certificar con el proveedor y ambiente guardados: hay proveedor, credenciales de ese proveedor y ambiente y un establecimiento activo. No bloquea guardar: es aviso (P7)"
+          },
+          "faltantes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "proveedor",
+                "credenciales",
+                "credenciales_sin_probar",
+                "establecimiento",
+                "nit_emisor"
+              ]
+            },
+            "description": "Lo que falta: proveedor, credenciales y establecimiento impiden certificar (lista = false); credenciales_sin_probar (sin prueba o la última rechazada) y nit_emisor (NIT de la empresa sin dígito verificador válido) solo informan"
+          },
           "credenciales": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CredencialesFel"
-            }
+            },
+            "description": "Las credenciales guardadas de cada proveedor y ambiente (una fila por proveedor + ambiente)"
           }
         }
       },

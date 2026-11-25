@@ -139,6 +139,16 @@ Caja | Banco | 2.1.03 Proveedores haber  total − retenciones
 | `fiscal.dte_intentos`      | `dte_id`, `operacion` (`certificar`, `anular`, `consultar`), `enviado_en`, `respuesta` jsonb (sin credenciales), `resultado`, `duracion_ms`                                                                                                                                                                                                                                                                                                                                                                                                                    | Solo inserción; es la bitácora ante el certificador (como `audit.red`)                     |
 | `fiscal.tipos_dte`         | `pais`, `codigo`, `nombre`, `regimenes[]`, `afecta_iva`, `requiere_referencia`, `fuente`                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Catálogo del paquete                                                                       |
 
+
+**Certificador por empresa, proveedor y ambiente (`fel-establecimientos.md` lote 2, 25-nov-2026).**
+`fiscal.fel_credenciales` es una fila por (`empresa_id`, `proveedor`, `ambiente`) y
+`GET /fel/configuracion` devuelve todas; además `lista` y `faltantes[]` (`proveedor`,
+`credenciales`, `credenciales_sin_probar`, `establecimiento`, `nit_emisor`) calculados con el proveedor
+y el ambiente **guardados**: los tres primeros impiden certificar (`lista = false`), los otros dos
+solo informan. Guardar la configuración no exige credenciales (decisión del PM, P7: aviso).
+`POST /fel/credenciales/:ambiente/probar` acepta `?proveedor=` (por defecto el guardado). El bloque
+`fel` del tablero agrega `alerta_configuracion` («FEL activa sin credenciales»), aparte de `alerta`
+(FEL desactivada), que sigue alimentando el consejo y el panel financiero.
 ### 3.7 Cierres, bloqueos, libros y declaraciones
 
 | Tabla                        | Columnas clave                                                                                                                                                                                                                                                                                                                        | Restricciones                                                                                                                                                                         |

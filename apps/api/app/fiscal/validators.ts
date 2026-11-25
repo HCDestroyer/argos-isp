@@ -166,6 +166,17 @@ export const agregarFraseValidator = vine.compile(
 
 export const consultaEmpresaValidator = vine.compile(vine.object({ empresa_id: empresaOpcional() }))
 
+/** `POST /fel/credenciales/:ambiente/probar`: `proveedor` opcional (por defecto el guardado). */
+export const probarCredencialesFelValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        proveedor: vine
+            .enum(['infile', 'falso'] as const)
+            .optional()
+            .meta({ description: 'Certificador cuyas credenciales se prueban; por defecto el guardado' }),
+    }),
+)
+
 export const configurarFelValidator = vine.compile(
     vine.object({
         empresa_id: empresaOpcional(),

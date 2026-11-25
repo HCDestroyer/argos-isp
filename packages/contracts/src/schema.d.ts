@@ -3552,7 +3552,7 @@ export interface paths {
         };
         /**
          * Configuración FEL de la empresa (sin secretos)
-         * @description Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.
+         * @description Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.
          */
         get: operations["felConfiguracion"];
         /**
@@ -3598,7 +3598,7 @@ export interface paths {
         put?: never;
         /**
          * Probar las credenciales contra el certificador
-         * @description No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.
+         * @description No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.
          */
         post: operations["felProbarCredenciales"];
         delete?: never;
@@ -14949,6 +14949,8 @@ export interface components {
                 }[];
                 /** @description «FEL es obligatoria para su régimen» si está desactivada */
                 alerta: string | null;
+                /** @description «FEL activa sin credenciales»: modo distinto de desactivada sin proveedor, credenciales del proveedor y ambiente guardados o establecimiento activo (lista = false de GET /fel/configuracion) */
+                alerta_configuracion: string | null;
             } | null;
         };
         BloqueIncobrables: {
@@ -16755,6 +16757,11 @@ export interface components {
             version: number;
             /** Format: date-time */
             updated_at: string | null;
+            /** @description Lista para certificar con el proveedor y ambiente guardados: hay proveedor, credenciales de ese proveedor y ambiente y un establecimiento activo. No bloquea guardar: es aviso (P7) */
+            lista: boolean;
+            /** @description Lo que falta: proveedor, credenciales y establecimiento impiden certificar (lista = false); credenciales_sin_probar (sin prueba o la última rechazada) y nit_emisor (NIT de la empresa sin dígito verificador válido) solo informan */
+            faltantes: ("proveedor" | "credenciales" | "credenciales_sin_probar" | "establecimiento" | "nit_emisor")[];
+            /** @description Las credenciales guardadas de cada proveedor y ambiente (una fila por proveedor + ambiente) */
             credenciales: components["schemas"]["CredencialesFel"][];
         };
         ConfiguracionIa: {
@@ -42209,6 +42216,8 @@ export interface operations {
             query?: {
                 /** @description Empresa; por defecto la activa (X-Empresa-Id) */
                 empresa_id?: number | null;
+                /** @description Certificador cuyas credenciales se prueban; por defecto el guardado */
+                proveedor?: "infile" | "falso";
             };
             header?: never;
             path: {

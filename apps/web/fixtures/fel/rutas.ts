@@ -90,9 +90,30 @@ export function configuracionFel(empresaId: number): ConfiguracionFel {
         version: 0,
         updated_at: null,
     }
+    const credenciales = bd.fel.credenciales.filter(c => c.vista.empresa_id === empresaId)
+    // Como `estadoFel` de la API: lo que falta para certificar con el proveedor y ambiente guardados.
+    const faltantes: ConfiguracionFel['faltantes'] = []
+    const propias = credenciales.find(c => c.vista.proveedor === guardada.proveedor && c.vista.ambiente === guardada.ambiente)
+    if (!guardada.proveedor) {
+        faltantes.push('proveedor')
+    }
+    else if (!propias) {
+        faltantes.push('credenciales')
+    }
+    else if (!propias.vista.resultado_prueba?.ok) {
+        faltantes.push('credenciales_sin_probar')
+    }
+    if (!bd.fiscal.establecimientos.some(e => e.empresa_id === empresaId && e.activo)) {
+        faltantes.push('establecimiento')
+    }
+    if (bd.empresas.find(e => e.id === empresaId)?.nit_valido !== true) {
+        faltantes.push('nit_emisor')
+    }
     return {
         ...guardada,
-        credenciales: bd.fel.credenciales.filter(c => c.vista.empresa_id === empresaId).map(c => structuredClone(c.vista)),
+        lista: !faltantes.some(f => f === 'proveedor' || f === 'credenciales' || f === 'establecimiento'),
+        faltantes,
+        credenciales: credenciales.map(c => structuredClone(c.vista)),
     }
 }
 
@@ -411,7 +432,8 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
             }
             const momento = ahora()
             const visibles = Object.fromEntries(campos.visibles.filter(c => typeof credenciales[c] === 'string' && String(credenciales[c]).trim()).map(c => [c, String(credenciales[c]).trim()]))
-            const existente = bd.fel.credenciales.find(c => c.vista.empresa_id === empresa && c.vista.ambiente === ambiente)
+            // única por empresa + proveedor + ambiente, como `fiscal.fel_credenciales`
+            const existente = bd.fel.credenciales.find(c => c.vista.empresa_id === empresa && c.vista.proveedor === proveedor && c.vista.ambiente === ambiente)
             const vista: Schema<'CredencialesFel'> = {
                 id: existente?.vista.id ?? bd.fel.credenciales.reduce((m, c) => Math.max(m, c.vista.id), 0) + 1,
                 empresa_id: empresa,
@@ -440,10 +462,11 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
             if (typeof empresa !== 'number') {
                 return empresa
             }
-            const configuracion = configuracionFel(empresa)
-            const guardada = bd.fel.credenciales.find(c => c.vista.empresa_id === empresa && c.vista.ambiente === ambiente)
-            if (!configuracion.proveedor || !guardada) {
-                return problemaTipado(422, 'fel_no_configurada', 'FEL no configurada', configuracion.proveedor ? `No hay credenciales de ${String(ambiente)} guardadas` : 'La empresa no tiene certificador FEL configurado', [{ field: 'empresa_id', message: 'Sin certificador o credenciales', rule: 'fel_no_configurada' }])
+            // `proveedor` opcional (por defecto el guardado): se prueba lo recién guardado
+            const proveedor = solicitud.query.get('proveedor') ?? configuracionFel(empresa).proveedor
+            const guardada = bd.fel.credenciales.find(c => c.vista.empresa_id === empresa && c.vista.proveedor === proveedor && c.vista.ambiente === ambiente)
+            if (!proveedor || !guardada) {
+                return problemaTipado(422, 'fel_no_configurada', 'FEL no configurada', proveedor ? `No hay credenciales de ${proveedor} para el ambiente ${String(ambiente)}` : 'La empresa no tiene certificador FEL configurado', [{ field: 'empresa_id', message: 'Sin certificador o credenciales', rule: 'fel_no_configurada' }])
             }
             const momento = ahora()
             guardada.vista.probada_en = momento
@@ -451,7 +474,7 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
             guardada.vista.resultado_prueba = guardada.rechaza
                 ? { ok: false, detalle: 'Credenciales rechazadas (simulado)' }
                 : { ok: true, detalle: 'Credenciales válidas (proveedor falso)' }
-            registrarAccion(solicitud, 'fel.probar_credenciales', { tipo: 'empresa', id: empresa }, { ambiente })
+            registrarAccion(solicitud, 'fel.probar_credenciales', { tipo: 'empresa', id: empresa }, { ambiente, proveedor })
             return { status: 200, cuerpo: structuredClone(guardada.vista) }
         }),
 
