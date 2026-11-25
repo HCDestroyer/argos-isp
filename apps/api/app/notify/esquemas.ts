@@ -303,7 +303,10 @@ export const AvisoPagoWhatsapp = definirEsquema(
         cliente_id: id,
         empresa_id: id,
         canal: objeto({
-            activo: { type: 'boolean', description: 'Interruptor de WhatsApp en la configuración de la empresa del pago' },
+            activo: {
+                type: 'boolean',
+                description: 'Interruptor de WhatsApp en la configuración de la empresa del pago',
+            },
             disponible: {
                 type: 'boolean',
                 description: 'Encendido y con el conector Iris activo con contrato ≥ 0.6.0',
@@ -312,7 +315,8 @@ export const AvisoPagoWhatsapp = definirEsquema(
         }),
         plantilla_activa: {
             type: 'boolean',
-            description: 'La plantilla `whatsapp` de `pago.registrado` o `comprobante.aprobado` (`pago_recibido`) está activa',
+            description:
+                'La plantilla `whatsapp` de `pago.registrado` o `comprobante.aprobado` (`pago_recibido`) está activa',
         },
         envio: {
             ...nulable(
@@ -328,7 +332,8 @@ export const AvisoPagoWhatsapp = definirEsquema(
                     created_at: instante,
                 }),
             ),
-            description: 'Último envío por WhatsApp (Iris) de este pago; null si aún no se programa o no corresponde',
+            description:
+                'Último envío por WhatsApp (Iris) de este pago; null si aún no se programa o no corresponde',
         },
     }),
 )

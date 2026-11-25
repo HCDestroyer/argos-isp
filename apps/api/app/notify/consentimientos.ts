@@ -461,7 +461,17 @@ export async function verAvisoPagoWhatsapp(pagoId: number): Promise<VistaAvisoPa
         .whereIn('evento', ['pago.registrado', 'comprobante.aprobado'])
         .whereRaw(`variables->'pago'->>'id' = ?`, [String(pagoId)])
         .orderBy('id', 'desc')
-        .select('id', 'evento', 'estado', 'error', 'motivo', 'enviado_en', 'entregado_en', 'leido_en', 'created_at')
+        .select(
+            'id',
+            'evento',
+            'estado',
+            'error',
+            'motivo',
+            'enviado_en',
+            'entregado_en',
+            'leido_en',
+            'created_at',
+        )
         .first()) as Record<string, unknown> | null
     return {
         pago_id: pagoId,

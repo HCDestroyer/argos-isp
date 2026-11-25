@@ -48,13 +48,19 @@ test.group('notify · aviso de un pago por WhatsApp', (group) => {
         await fijarCanal(false, false)
         const pagoId = await crearPagoDe(await crearCliente())
         const { token } = await usuarioConRoles(['cajero'])
-        const r = await estado(client.get(`/api/v1/notificaciones/pagos/${pagoId}/whatsapp`).bearerToken(token), 200)
+        const r = await estado(
+            client.get(`/api/v1/notificaciones/pagos/${pagoId}/whatsapp`).bearerToken(token),
+            200,
+        )
         assert.isFalse(r.body().canal.disponible)
         assert.isString(r.body().canal.motivo)
         assert.isNull(r.body().envio)
     })
 
-    test('canal activo: devuelve el último envío del pago y no el de otro pago', async ({ client, assert }) => {
+    test('canal activo: devuelve el último envío del pago y no el de otro pago', async ({
+        client,
+        assert,
+    }) => {
         await fijarCanal(true, true)
         const clienteId = await crearCliente()
         const pagoId = await crearPagoDe(clienteId)
@@ -70,7 +76,10 @@ test.group('notify · aviso de un pago por WhatsApp', (group) => {
         })
         await db.table('notify.envios').multiInsert([fila(otroId, 'fallido', 1), fila(pagoId, 'encolado', 2)])
         const { token } = await usuarioConRoles(['cajero'])
-        const r = await estado(client.get(`/api/v1/notificaciones/pagos/${pagoId}/whatsapp`).bearerToken(token), 200)
+        const r = await estado(
+            client.get(`/api/v1/notificaciones/pagos/${pagoId}/whatsapp`).bearerToken(token),
+            200,
+        )
         assert.isTrue(r.body().canal.disponible)
         assert.equal(r.body().envio.estado, 'encolado')
         assert.equal(r.body().pago_id, pagoId)
@@ -81,6 +90,9 @@ test.group('notify · aviso de un pago por WhatsApp', (group) => {
         await estado(client.get('/api/v1/notificaciones/pagos/2000000000/whatsapp').bearerToken(token), 404)
         const sin = await usuarioConRoles(['tecnico'])
         const pagoId = await crearPagoDe(await crearCliente())
-        await estado(client.get(`/api/v1/notificaciones/pagos/${pagoId}/whatsapp`).bearerToken(sin.token), 403)
+        await estado(
+            client.get(`/api/v1/notificaciones/pagos/${pagoId}/whatsapp`).bearerToken(sin.token),
+            403,
+        )
     })
 })
