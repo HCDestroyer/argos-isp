@@ -401,3 +401,9 @@ Tres carriles independientes (T, S, R) después del lote 0. Las migraciones se f
 - /home/user/wt-plan-servicios/apps/api/app/billing/actions/emitir_factura.ts
 - /home/user/wt-plan-servicios/apps/api/app/core/adicionales.ts
 - /home/user/wt-plan-servicios/apps/api/app/notify/actions/programar_recordatorios.ts
+## 6. Respuestas del PM (25 nov 2026)
+
+- **P1 Suscripciones: ambas.** (a) Cobros extra mensuales dentro de la factura del servicio (evolución de los adicionales) **y** (b) suscripciones **propias, sin servicio de red**, que emiten **su propia factura** mientras estén activas (servicios prestados a empresas o clientes que lo requieran), **y** (c) cobro automático con tarjeta (débito recurrente). Esto reemplaza la idea de «servicio tipo `otro`» para membresías: la suscripción independiente es una entidad propia ligada al cliente.
+- **P4 Mixto con deuda: se corta todo.** SmartOLT también permite cortar el CATV (puerto CATV de la ONU): en fibra con CATV, la TV se corta y reconecta por SmartOLT, igual que el internet. Solo sin SmartOLT/CATV va a campo.
+- **P5 Corte en campo: Argos solo avisa a Iris.** Iris lleva los tickets y órdenes. No hay cola de «Cortes en campo» en Argos: Argos emite el evento (y lo manda a Iris, cambio de contrato aditivo) y muestra el estado que Iris devuelva.
+- **P7/P8 «Recordatorios personalizados según el lugar»:** pendiente de aclarar con el PM (preguntó si se refería a Firebase). El carril R no arranca hasta que responda.
