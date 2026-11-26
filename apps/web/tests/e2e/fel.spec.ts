@@ -104,9 +104,9 @@ test('integridad del libro: con la cadena rota, el cierre del mes lo explica y l
     await page.evaluate(() => localStorage.removeItem('argos_fixtures_cadena_rota'))
 })
 
-test('Configuración → FEL: cambiar de empresa recarga el certificador, el modo y las credenciales de la otra', async ({ page }) => {
+test('Ajustes → Factura electrónica (FEL): cambiar de empresa recarga el certificador, el modo y las credenciales de la otra', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'FEL', /\/configuracion\/fel/)
+    await ir(page, 'Factura electrónica (FEL)', /\/configuracion\/fel/)
     await elegirEmpresa(page, /ArgosNet/)
     await expect(page.locator('[data-prueba="fel-modo"]')).toHaveText('Obligatoria')
     await expect(page.locator('[data-credenciales="pruebas"]')).toContainText('argosnet')
