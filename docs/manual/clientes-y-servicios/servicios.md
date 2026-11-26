@@ -63,6 +63,7 @@ Arriba ves el usuario, el estado, el tipo de conexión, «Promesa activa» si la
 - **Configuración efectiva:** lo que de verdad aplica: el plan como queda en su router y la plantilla de cobro con las excepciones del servicio, marcadas como «Excepción».
 - **Planes temporales:** mejoras de plan por unos días.
 - **Adicionales:** streaming, IPTV y otros que acompañan al internet.
+- **Promociones** (pestaña): la promoción de velocidad que tiene ahora, con «Quitar», y las anteriores; «Agregar a una promoción» y «Nueva promoción». Ver [Promociones de velocidad](../red/promociones-de-velocidad.md#en-la-ficha-del-servicio).
 - **Equipos** (con `inventario.ver`), **Historial de sesiones**, **Historial de asignaciones** (cada tramo con router, plan, IPv4 y prefijos, desde y hasta cuándo), facturas, promesas e **Historial del servicio** (bitácora).
 
 ## Acciones
