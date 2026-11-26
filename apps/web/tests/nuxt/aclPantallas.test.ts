@@ -343,8 +343,14 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'LibroBorradores.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'CarteraGestionModal.vue': { permisos: ['gestiones_cobro.registrar'], desde: ['pages/cartera/index.vue'] },
     'ReporteEnvioModal.vue': { permisos: ['reportes.programar_envio'], desde: ['pages/reportes/[reporte].vue'] },
-    // SmartOLT y GenieACS: la página de integraciones se abre con cualquiera de sus permisos y monta la tarjeta con `equipos.ver`.
-    'ConfiguracionEquipos.vue': { permisos: ['equipos.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
+    // SmartOLT y ACS por separado: la página de integraciones se abre con cualquiera de sus permisos y monta la
+    // lista de SmartOLT con `smartolt.ver` y el ACS con `acs.ver` (según `?ver=`, que solo lista lo permitido).
+    'ConfiguracionSmartOlt.vue': { permisos: ['smartolt.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
+    'ConfiguracionAcs.vue': { permisos: ['acs.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
+    // El formulario de una instancia lo montan sus dos páginas (`smartolt.crear_instancia` y `smartolt.editar_instancia`).
+    'SmartOltFormulario.vue': { permisos: ['smartolt.crear_instancia', 'smartolt.editar_instancia'], desde: ['pages/configuracion/integraciones/smartolt/nueva.vue', 'pages/configuracion/integraciones/smartolt/[id]/editar.vue'], exentos: { 'pages/configuracion/integraciones/smartolt/nueva.vue': ['smartolt.editar_instancia'], 'pages/configuracion/integraciones/smartolt/[id]/editar.vue': ['smartolt.crear_instancia'] } },
+    // Ficha del servicio › Equipo: la pestaña solo con `servicios.ver_equipo`.
+    'ServicioEquipoGestion.vue': { permisos: ['servicios.ver_equipo'], desde: ['pages/servicios/[id]/index.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'ServicioCambiarEquipo.vue': { permisos: ['servicios.cambiar_equipo'], desde: ['pages/servicios/[id]/index.vue'] },
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
@@ -368,6 +374,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'TrasladoDocumentoModal.vue': { permisos: ['inventario.adjuntar_documento_traslado'], desde: ['pages/inventario/traslados/[id].vue'] },
     // Contrato Iris 0.6.0: el WhatsApp de la ficha con `notificaciones.ver`; rechazar con causa con `comprobantes.rechazar`.
     'ClienteWhatsapp.vue': { permisos: ['notificaciones.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    // Comprobante por WhatsApp tras cobrar (vía Iris): lee el estado del envío con `pagos.ver`.
+    'ReciboWhatsapp.vue': { permisos: ['pagos.ver'], desde: ['pages/cobro/index.vue'] },
     // Contraseña del portal (A5): la tarjeta lee con el `clientes.ver` de la ficha; «Restaurar» lo comprueba con `puede()`.
     'ClientePortal.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['components/ComprobanteRevision.vue'] },

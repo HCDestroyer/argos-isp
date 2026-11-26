@@ -3,7 +3,7 @@ import type { Schema } from '@argosisp/contracts'
 /**
  * Datos de los ajustes y pantallas «Pendientes del backend» (A1, A3 y A6; rutas de
  * `apps/api/start/routes/operacion_pm.ts` y vecinas): ajustes de operación, de cobro y del panel
- * financiero, correos externos de reportes, bancos de origen por empresa, SmartOLT/GenieACS por
+ * financiero, correos externos de reportes, bancos de origen por empresa, SmartOLT (instancias) y ACS por
  * empresa, recuperación de contraseña, verificación de intentos de recuperación y vínculos de los
  * técnicos de Iris. Valores de fábrica iguales a los de la API.
  */
@@ -21,11 +21,10 @@ export interface VerificacionIntento {
     motivo_decision: string | null
 }
 
-/** Secretos guardados (la API los cifra y nunca los devuelve). */
-export interface SecretosEquipos {
-    smartolt_token: string | null
-    genieacs_clave: string | null
-    genieacs_ca: string | null
+/** Secretos del ACS guardados (la API los cifra y nunca los devuelve). */
+export interface SecretosAcs {
+    clave: string | null
+    ca: string | null
 }
 
 export interface OperacionPmFixtures {
@@ -44,8 +43,15 @@ export interface OperacionPmFixtures {
     bancosMeta: Record<number, { orden: number, version: number }>
     /** Bancos ocultos por empresa (decisión 23). */
     bancosOcultos: Record<number, number[]>
-    equipos: Record<number, Schema<'ConfigEquipos'>>
-    secretosEquipos: Record<number, SecretosEquipos>
+    /** Instancias de SmartOLT (todas las empresas; `empresa_id` null = compartida) con sus OLT. */
+    smartolt: Schema<'InstanciaSmartOlt'>[]
+    /** Token de cada instancia (la API lo cifra y nunca lo devuelve). */
+    tokensSmartolt: Record<number, string>
+    /** El ACS de cada empresa. */
+    acs: Record<number, Schema<'ConfigAcs'>>
+    secretosAcs: Record<number, SecretosAcs>
+    /** Instancias con equipos gestionados o pedidos en curso (`409 instancia_en_uso` al eliminar). */
+    smartoltEnUso: number[]
     /** Enlaces de recuperación vigentes (token → usuario) y los ya usados. */
     enlaces: Record<string, number>
     /** Solicitudes de enlace por correo (límite de la API: 429 `demasiadas_solicitudes`). */
@@ -93,20 +99,25 @@ export const CORREO_LIMITADO_FIXTURE = 'limite@argos.test'
 /** Unidad por recuperar con intentos (la 5 de `inventario/equipos.ts`). */
 export const UNIDAD_CON_INTENTOS = 5
 
-function configEquiposVacia(empresaId: number): Schema<'ConfigEquipos'> {
+/** El ACS de una empresa que nunca lo guardó (`version` 0), como la API. */
+export function acsVacio(empresaId: number): Schema<'ConfigAcs'> {
     return {
         empresa_id: empresaId,
         activo: false,
-        smartolt: { url: null, token: null, probado_en: null, prueba_ok: null, prueba_error: null },
-        genieacs: { url: null, usuario: null, clave: null, ca: false, probado_en: null, prueba_ok: null, prueba_error: null },
+        operativo: false,
+        url: null,
+        usuario: null,
+        clave: null,
+        ca: false,
+        probado_en: null,
+        prueba_ok: null,
+        prueba_error: null,
+        prueba_latencia_ms: null,
+        probado_por: null,
         pppoe_por_acs: false,
-        perfiles: [],
-        capacidades: { ftth: false, wireless: false, tr069: false },
         version: 0,
     }
 }
-
-export { configEquiposVacia }
 
 export function operacionPmInicial(): OperacionPmFixtures {
     return {
@@ -173,8 +184,11 @@ export function operacionPmInicial(): OperacionPmFixtures {
         ],
         bancosMeta: {},
         bancosOcultos: { 1: [] },
-        equipos: {},
-        secretosEquipos: {},
+        smartolt: [],
+        tokensSmartolt: {},
+        acs: {},
+        secretosAcs: {},
+        smartoltEnUso: [],
         enlaces: { [TOKEN_RECUPERACION_FIXTURE]: 1 },
         solicitudes: { [CORREO_LIMITADO_FIXTURE]: 99 },
         verificaciones: {

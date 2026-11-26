@@ -70,3 +70,7 @@ Pendiente del PM (sin esto no se activa en producción):
 4. Confirmar con el contador si `details.fee` trae el IVA de la comisión (hoy todo `fee` va a `5.1.02`) y si la retención de la emisora es `RET_IVA_TAR` (hoy así, a `1.1.05`).
 5. Multiempresa: una llave por instalación. Si cada empresa (NIT) tiene su cuenta de Recurrente, hace falta la llave por empresa (o `X-ACCOUNT-ID` de cuentas conectadas); hoy el adaptador usa una sola cuenta.
 
+
+## Cuentas de pasarela por empresa y proveedor (plan v3, lote D0)
+
+Hoy la pasarela se configura por entorno (`PASARELA_PROVEEDOR`, `RECURRENTE_*`): un proveedor y una llave por instalación. El plan v3 lo reemplaza por `billing.pasarela_cuentas` (una cuenta por empresa y proveedor, credenciales cifradas, webhook `POST /pasarela/webhook/:proveedor/:clave_publica`) y por una interfaz común con `capacidades`. Contrato completo en `debito-automatico.md` §2 y §3. Compatibilidad: sin cuentas en la base, y con la ruta `POST /pasarela/webhook/:proveedor` actual, el pago en línea funciona como se describe arriba.
