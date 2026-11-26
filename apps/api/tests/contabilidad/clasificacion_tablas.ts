@@ -116,6 +116,9 @@ export const INMUTABLES: Record<string, string> = {
     'lealtad.sorteos_requisitos': 'marca del checklist legal; vale la última por clave (lealtad §8)',
     'lealtad.sorteos_archivos':
         'evidencias, imágenes de premios, acta y constancias con su SHA-256; el archivo vive en disco (lealtad §15.4)',
+    // B1 (plan de contabilidad §5.7): entregas de efectivo de las cajas de cobros y su recepción
+    'ledger.entregas': 'entrega de efectivo de una caja de cobros (B1, §5.7)',
+    'ledger.entregas_recepciones': '«Recibí» o «No lo recibí» de una entrega (B1)',
     // servicios adicionales (`contratos/adicionales.md`, A1)
     'core.servicios_adicionales_bloqueos':
         'historial de bloqueos de adicionales por la suspensión del servicio',
@@ -124,13 +127,14 @@ export const INMUTABLES: Record<string, string> = {
 /** Solo cambian una vez: al cerrarse. Un trigger rechaza UPDATE/DELETE de la fila ya cerrada. */
 export const CIERRE_UNICO: Record<string, string> = {
     'ledger.cajas_turnos':
-        'se abre con INSERT y se cierra con un UPDATE; cerrado, ya no cambia (hallazgo H3)',
+        'se abre con INSERT y se cierra con un UPDATE; cerrado, ya no cambia (hallazgo H3; B1: fondo_esperado tampoco cambia al cerrar)',
 }
 
 /** La aplicación las actualiza: configuración o contadores, con `version` y `audit.cambios`. */
 export const MUTABLES: Record<string, string> = {
     'ledger.cuentas': 'plan de cuentas: renombrar o desactivar (con movimientos no se borra: FK)',
-    'ledger.cajas': 'catálogo de cajas (nombre, cajero, activa)',
+    'ledger.cajas': 'catálogo de cajas (nombre, cajero, activa; B1: tipo y fondo_fijo)',
+    'ledger.cajas_ajustes': 'ajustes de cajas y custodia por empresa con version y audit.cambios (B1)',
     'ledger.bancos': 'catálogo de bancos del libro',
     'ledger.egresos_categorias': 'catálogo de categorías de egreso',
     'ledger.diarios': 'configuración de diarios por empresa (§10.7)',

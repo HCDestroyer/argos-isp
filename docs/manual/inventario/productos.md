@@ -111,4 +111,4 @@ No hay botón para volver a activarlo. Si lo necesitas otra vez, crea un tipo nu
 
 - [Existencias](./existencias.md)
 - [Equipos por serie y comodato](./equipos.md)
-- [Configuración del inventario](./configuracion.md)
+- [Ajustes del inventario](./configuracion.md)

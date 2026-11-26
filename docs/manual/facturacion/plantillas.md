@@ -17,7 +17,7 @@ Para entender cómo se usan estas reglas en el día a día, lee [El ciclo de cob
 - **Editar:** `plantillas.editar` (`admin`, `contabilidad`). Sin este permiso, el botón de cada fila es un ojo y la plantilla se abre en solo lectura.
 - **Asignar a servicios sin plantilla:** `plantillas.asignar_sin_plantilla` (`admin`, `contabilidad`).
 
-Se llega desde **Configuración → Facturación y cobro → Plantillas de facturación**.
+Se llega desde **Ajustes → Facturación y cobro → Plantillas de facturación**.
 
 ## Qué ves
 

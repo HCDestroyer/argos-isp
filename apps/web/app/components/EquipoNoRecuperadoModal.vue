@@ -109,7 +109,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 <USwitch
                     v-model="estado.cobrar"
                     label="Cobrar al cliente «Equipo no devuelto»"
-                    description="Cargo único en la cuenta del cliente del servicio."
+                    description="Se factura en la cuenta del cliente del servicio."
                 />
                 <UFormField
                     v-if="estado.cobrar"

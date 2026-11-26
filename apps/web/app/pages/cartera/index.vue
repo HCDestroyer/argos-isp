@@ -200,6 +200,25 @@ const elegidos = computed(() => filasPorCobrar.value.filter(f => seleccion.value
 const elegidosFacturas = computed(() => elegidos.value.reduce((n, f) => n + f.facturas, 0))
 const elegidosMonto = computed(() => elegidos.value.reduce((suma, f) => suma.plus(f.vencido), new Decimal(0)))
 
+/* Gestión de cobro (llamada, visita…): la de una fila o la de los clientes elegidos. */
+const gestionAbierta = ref(false)
+const clientesGestion = shallowRef<{ id: number, nombre: string }[]>([])
+const elegidosConCliente = computed(() => elegidos.value.flatMap(f => (f.grupo_id ? [{ id: f.grupo_id, nombre: f.grupo }] : [])))
+
+function abrirGestion(clientes: { id: number, nombre: string }[]) {
+    clientesGestion.value = clientes
+    gestionAbierta.value = true
+}
+
+function alRegistrarGestion(hechas: GestionCobroRegistrada[]) {
+    toast.add({
+        title: hechas.length === 1 ? 'Gestión registrada' : `${hechas.length} gestiones registradas`,
+        description: 'Queda como evidencia de la gestión de cobro.',
+        icon: 'i-lucide-check',
+        color: 'success',
+    })
+}
+
 function accionesCliente(fila: FilaPorCobrar): AccionFila[] {
     if (!fila.grupo_id) {
         return []
@@ -211,6 +230,9 @@ function accionesCliente(fila: FilaPorCobrar): AccionFila[] {
     }
     if (puede('pagos.registrar')) {
         acciones.push({ etiqueta: 'Cobrar a este cliente', icono: ICONOS.cobrar, to: `/cobro?cliente=${fila.grupo_id}`, soloMenu: true, grupo: 'Cobro' })
+    }
+    if (puede('gestiones_cobro.registrar')) {
+        acciones.push({ etiqueta: 'Registrar gestión', icono: 'i-lucide-phone', alElegir: () => abrirGestion([{ id: fila.grupo_id!, nombre: fila.grupo }]), grupo: 'Cobro' })
     }
     if (puede('cartera.castigar')) {
         acciones.push({ etiqueta: 'Castigar…', icono: 'i-lucide-triangle-alert', color: 'error', alElegir: () => (castigando.value = true), soloMenu: true })
@@ -313,33 +335,34 @@ onMounted(() => {
                         modo="barra"
                     />
                 </div>
-                <ContaKpi
-                    titulo="Con promesa activa"
+                <ContaIndicador
+                    clave="con-promesa"
                     icono="i-lucide-hand"
                     :valor="resumen ? formatearQuetzales(resumen.promesas_activas.monto) : null"
                     :detalle="resumen ? `${resumen.promesas_activas.cantidad} promesas · no se cortan` : undefined"
                     :problema="problemaResumen"
                     @reintentar="cargarResumen"
                 />
-                <ContaKpi
+                <ContaIndicador
+                    clave="no-se-cobrara"
                     titulo="Castigado este año"
                     icono="i-lucide-triangle-alert"
                     tono="tono-error"
                     :valor="castigadoAnio ? formatearQuetzales(castigadoAnio.monto) : null"
                     :detalle="castigadoAnio ? `${castigadoAnio.cantidad} castigos` : undefined"
-                    :sin-api="castigadoAnio === null && !castigos.cargando.value && castigos.haySiguiente.value ? 'Hay más castigos de los que caben en una página: el total del año llega con la API del panel.' : undefined"
+                    :sin-datos="castigadoAnio === null && !castigos.cargando.value && castigos.haySiguiente.value ? 'Hay más castigos de los que caben en una página: el total del año llega con la API del panel.' : undefined"
                     :problema="castigos.problema.value"
                     @reintentar="recargarCastigos"
                 />
-                <ContaKpi
-                    titulo="Estimación disponible"
+                <ContaIndicador
+                    clave="estimacion-incobrables"
                     icono="i-lucide-shield-check"
                     tono="tono-exito"
                     :valor="estimacion"
                     detalle="cuenta 1.1.12 del libro"
                     :problema="problemaEstimacion"
-                    :sin-api="puede('libro.ver') ? undefined : 'Necesita permiso para ver el libro.'"
-                    ayuda="Lo reservado para cuentas que no se van a cobrar (estimación para incobrables); se calcula al cierre del año."
+                    :sin-datos="puede('libro.ver') ? undefined : 'Necesita permiso para ver el libro.'"
+                    titulo-sin-datos="Sin permiso"
                     @reintentar="cargarEstimacion"
                 />
             </div>
@@ -609,7 +632,7 @@ onMounted(() => {
                         <span data-prueba="seleccion-cartera">{{ elegidos.length }} {{ elegidos.length === 1 ? 'cliente elegido' : 'clientes elegidos' }} · {{ elegidosFacturas }} facturas · {{ formatearQuetzales(elegidosMonto) }} vencidos</span>
                     </template>
                     <template v-else-if="pestana === 'cobrar'">
-                        Las gestiones de cobro (llamadas y visitas) se anotan aquí y son la prueba para castigar; llegan con su API.
+                        Las gestiones de cobro (llamadas y visitas) se anotan aquí y son la prueba para castigar.
                     </template>
                     <template v-else>
                         Un castigo no se deshace desde el panel: usa primero la estimación (1.1.12) y luego el gasto.
@@ -621,15 +644,14 @@ onMounted(() => {
                 >
                     <span class="flex items-center gap-2">
                         <UButton
-                            v-if="puede('gestiones_cobro.registrar')"
-                            title="Llega con la API de gestiones de cobro"
+                            v-if="puede('gestiones_cobro.registrar') && elegidosConCliente.length"
                             label="Registrar gestión"
                             icon="i-lucide-phone"
                             color="neutral"
                             variant="outline"
                             class="rounded-full"
-                            disabled
                             data-prueba="registrar-gestion"
+                            @click="abrirGestion(elegidosConCliente)"
                         />
                         <UButton
                             v-if="puede('cartera.castigar')"
@@ -649,6 +671,12 @@ onMounted(() => {
             v-if="puede('cartera.provisionar')"
             v-model:open="provisionando"
             @hecho="alProvisionar"
+        />
+        <CarteraGestionModal
+            v-if="puede('gestiones_cobro.registrar')"
+            v-model:open="gestionAbierta"
+            :clientes="clientesGestion"
+            @hecho="alRegistrarGestion"
         />
         <CarteraCastigoModal
             v-if="puede('cartera.castigar')"

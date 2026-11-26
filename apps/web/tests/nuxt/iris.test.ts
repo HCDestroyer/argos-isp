@@ -10,7 +10,7 @@ import PaginaIris from '~/pages/configuracion/integraciones/iris.vue'
 import PaginaIntegraciones from '~/pages/configuracion/integraciones/index.vue'
 import { esperar } from '../ayudas/esperar'
 
-/** Configuración → Integraciones → Iris (`contratos/iris.md` §1 y §2.3). */
+/** Ajustes → Integraciones → Iris (`contratos/iris.md` §1 y §2.3). */
 
 const conApp = (componente: Component) => defineComponent({
     render: () => h(UApp, null, { default: () => h(componente) }),
@@ -238,9 +238,9 @@ describe('iris · pantalla', () => {
         expect(puede(obtenerSeccion('integraciones').permiso)).toBe(false)
     })
 
-    it('menú: Configuración → Iris con el permiso iris.ver', () => {
-        const seccion = SECCIONES_PANEL.find(s => s.id === 'integracion-iris')
-        expect(seccion).toMatchObject({ ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' })
+    it('Ajustes → Integraciones → Iris: Iris vive dentro de Integraciones (sin entrada propia en el menú)', () => {
+        expect(SECCIONES_PANEL.find(s => s.id === 'integracion-iris')).toBeUndefined()
+        expect(ubicacionConfiguracion('/configuracion/integraciones/iris')).toMatchObject({ seccion: { etiqueta: 'Comunicación e integraciones' }, pagina: { id: 'integraciones' } })
         expect(grupoDeRuta('/configuracion/integraciones/iris')?.id).toBe('configuracion')
     })
 })

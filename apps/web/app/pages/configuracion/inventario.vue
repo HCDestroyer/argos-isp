@@ -14,7 +14,7 @@ import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
  */
 definePageMeta({ permiso: 'inventario.configurar' })
 
-useHead({ title: 'Inventario · Configuración · ArgosIsp' })
+useHead({ title: 'Inventario · Ajustes · ArgosIsp' })
 
 const toast = useToast()
 const { puede } = usePermisos()
@@ -175,9 +175,6 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
 <template>
     <ConfiguracionMarco
         id="configuracion-inventario"
-        titulo="Inventario"
-        descripcion="Firma al recibir y lectura de compras con IA"
-        volver="/configuracion/portal-corte"
         empresas
     >
         <div class="flex w-full max-w-3xl flex-col gap-4">

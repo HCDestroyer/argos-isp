@@ -31,12 +31,15 @@ function idQuery(valor: unknown): number {
  * estado de resultados en Reportes, el cierre y el ejercicio en «Periodos y cierres» y la integridad
  * en su página; los enlaces viejos (`?tab=`) llevan allá.
  */
-const pestanas: PestanaConta[] = [
+const pendientesAprobar = ref<number | null>(null)
+
+const pestanas = computed<PestanaConta[]>(() => [
     { label: 'Diario', value: 'diario', icon: 'i-lucide-list' },
     { label: 'Mayor', value: 'mayor', icon: 'i-lucide-book' },
     { label: 'Auxiliar de cliente', value: 'auxiliar', icon: 'i-lucide-user' },
     { label: 'Plan de cuentas', value: 'cuentas', icon: 'i-lucide-network' },
-]
+    { label: 'Por aprobar', value: 'aprobar', icon: 'i-lucide-user-check', contador: pendientesAprobar.value || null },
+])
 
 const REDIRECCIONES: Record<string, string> = {
     balance: '/reportes/balance',
@@ -54,7 +57,7 @@ if (REDIRECCIONES[tabInicial]) {
 }
 
 /** Pestañas con su propio filtro (el plan de cuentas no usa los del diario y el mayor). */
-const PROPIAS = ['cuentas']
+const PROPIAS = ['cuentas', 'aprobar']
 
 const pestana = ref(['mayor', 'auxiliar', ...PROPIAS].includes(tabInicial) ? tabInicial : tabInicial === 'diarios' ? 'cuentas' : 'diario')
 const desde = ref(FECHA.test(textoQuery(route.query.desde)) ? textoQuery(route.query.desde) : '')
@@ -240,6 +243,37 @@ function alRevertir() {
     void diario.recargar()
 }
 
+/* Asiento de ajuste a mano y asientos por aprobar (decisión 10 del PM). */
+const toast = useToast()
+const asientoAbierto = ref(false)
+const borradorElegido = shallowRef<BorradorAsiento | null>(null)
+const porAprobar = useTemplateRef('porAprobar')
+
+async function cargarPendientes() {
+    const resultado = await useLibro().borradores('pendiente')
+    pendientesAprobar.value = resultado.ok ? resultado.data.data.length : null
+}
+
+function alRegistrarAsiento(resultado: AsientoManual) {
+    if (resultado.estado === 'pendiente_aprobacion') {
+        toast.add({ title: 'Asiento enviado a aprobación', description: 'Otra persona debe aprobarlo; hasta entonces no toca el libro.', icon: 'i-lucide-user-check', color: 'info' })
+        pestana.value = 'aprobar'
+        borradorElegido.value = resultado.borrador
+        void cargarPendientes()
+        return
+    }
+    toast.add({ title: 'Asiento registrado', description: resultado.asiento_id ? `Asiento #${resultado.asiento_id} en el libro` : undefined, icon: 'i-lucide-check', color: 'success' })
+    if (pestana.value === 'diario') {
+        void diario.recargar()
+    }
+}
+
+async function alDecidirBorrador(borrador: BorradorAsiento) {
+    borradorElegido.value = borrador
+    await porAprobar.value?.recargar()
+    void cargarPendientes()
+}
+
 const columnasDiario: TableColumn<Asiento>[] = [
     { accessorKey: 'fecha', header: 'Fecha', meta: SOLO_ANCHO },
     { id: 'numero', header: 'Número', meta: SOLO_ESCRITORIO },
@@ -286,11 +320,15 @@ onMounted(async () => {
         await cargarCuentas()
         void lineasMayor.recargar()
     }
+    else if (PROPIAS.includes(pestana.value)) {
+        void cargarCuentas()
+    }
     else {
         void cargarCuentas()
         void diario.recargar()
     }
     void cargarIntegridad()
+    void cargarPendientes()
     // Sin `clientes.ver` el filtro por cliente sigue por id, sin pedir su nombre (revisión de ACL).
     if (clienteId.value && puede('clientes.ver')) {
         const resultado = await useClientes().ver(clienteId.value)
@@ -325,15 +363,21 @@ onMounted(async () => {
         <template #accion-principal>
             <UButton
                 v-if="puede('libro.registrar_asiento')"
-                title="Llega con la API del asiento manual con aprobación"
                 label="Asiento de ajuste"
                 icon="i-lucide-plus"
                 size="lg"
                 class="glow-brand rounded-full px-5"
-                disabled
                 data-prueba="asiento-ajuste"
+                @click="asientoAbierto = true"
             />
         </template>
+
+        <AsientoManualSlideover
+            v-if="puede('libro.registrar_asiento')"
+            v-model:open="asientoAbierto"
+            :cuentas="cuentas"
+            @hecho="alRegistrarAsiento"
+        />
 
         <ContaCuerpo>
             <ContaIsla
@@ -381,7 +425,7 @@ onMounted(async () => {
                         @elegido="alElegirCliente"
                     />
                     <UInput
-                        v-else
+                        v-else-if="pestana === 'cuentas'"
                         v-model="busquedaCuenta"
                         icon="i-lucide-search"
                         placeholder="Código o nombre de la cuenta…"
@@ -652,6 +696,15 @@ onMounted(async () => {
                     </template>
                 </template>
 
+                <!-- Asientos por aprobar (borradores). -->
+                <LibroBorradores
+                    v-else-if="pestana === 'aprobar'"
+                    ref="porAprobar"
+                    :elegido="borradorElegido"
+                    @elegir="borradorElegido = $event"
+                    @pendientes="pendientesAprobar = $event"
+                />
+
                 <!-- Plan de cuentas y diarios. -->
                 <div
                     v-else
@@ -693,7 +746,19 @@ onMounted(async () => {
                 </div>
 
                 <template
-                    v-if="pestana === 'diario' && elegido"
+                    v-if="pestana === 'aprobar' && borradorElegido"
+                    #lateral
+                >
+                    <LibroBorradorDetalle
+                        :key="borradorElegido.id"
+                        :borrador="borradorElegido"
+                        :cuentas="cuentas"
+                        @cerrar="borradorElegido = null"
+                        @decidido="alDecidirBorrador"
+                    />
+                </template>
+                <template
+                    v-else-if="pestana === 'diario' && elegido"
                     #lateral
                 >
                     <ContaAsientoDetalle
@@ -722,6 +787,9 @@ onMounted(async () => {
                         <template v-else>
                             Ningún asiento se edita ni se borra: los errores se corrigen con un reverso.
                         </template>
+                    </template>
+                    <template v-else-if="pestana === 'aprobar'">
+                        Un borrador no toca el libro hasta que otra persona lo aprueba; al aprobarlo se registra como cualquier asiento.
                     </template>
                     <template v-else-if="pestana === 'auxiliar'">
                         El saldo no es un campo: es la suma de estos movimientos. Un cliente con servicios en dos empresas tiene un auxiliar por empresa.

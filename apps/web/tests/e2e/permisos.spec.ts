@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, menu } from './ayudas'
+import { abrirAjustes, entrar, menu } from './ayudas'
 
 /**
  * Prueba obligatoria 1 del brief de A4: "Login y navegación por permiso (cajero no ve routers)".
@@ -29,7 +29,10 @@ test('el cajero no ve Routers y la ruta lo manda a sin permiso', async ({ page }
 test('el administrador ve Routers, Bitácora y Libro', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     const lateral = await menu(page)
-    for (const seccion of ['Routers', 'Planes', 'Bitácora', 'Libro contable', 'Usuarios', 'Facturas', 'Pagos']) {
+    for (const seccion of ['Routers', 'Planes', 'Bitácora', 'Libro contable', 'Facturas', 'Pagos', 'Ajustes']) {
         await expect(lateral.getByRole('link', { name: seccion, exact: true })).toBeVisible()
     }
+    // Usuarios vive en Ajustes (grupo «Usuarios y seguridad»), no en el menú.
+    await abrirAjustes(page)
+    await expect(page.locator('[data-prueba="indice-ajustes"]').getByRole('link', { name: 'Usuarios', exact: true })).toBeVisible()
 })

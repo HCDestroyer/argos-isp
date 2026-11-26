@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.27.0](https://github.com/HCDestroyer/argos-isp/compare/v1.26.0...v1.27.0) (2026-11-26)
+
+
+### Funcionalidades
+
+* **equipos:** SmartOLT con varias instancias y OLT, y ACS por empresa independiente ([#332](https://github.com/HCDestroyer/argos-isp/issues/332)) ([53f25a9](https://github.com/HCDestroyer/argos-isp/commit/53f25a9c99ce95da18c4a6f40533840088d997ca))
+* **fiscal:** aviso de pequeño contribuyente apagado avisa solo el 100 % ([#323](https://github.com/HCDestroyer/argos-isp/issues/323)) ([47aefae](https://github.com/HCDestroyer/argos-isp/commit/47aefaeef20e78de1ee12d0b81217a86f6e5dc28))
+* **fiscal:** FEL por empresa, modos que se cumplen, NIT con letras, establecimiento por caja y caja sin factura ([#331](https://github.com/HCDestroyer/argos-isp/issues/331)) ([68b152a](https://github.com/HCDestroyer/argos-isp/commit/68b152a0b6ad5468244ff6266518d248eacae641))
+* **ledger:** B1 · cajas de cobro con fondo fijo, custodia con «Recibí» y depósito desde la custodia (corrige E1) ([#346](https://github.com/HCDestroyer/argos-isp/issues/346)) ([c0efe35](https://github.com/HCDestroyer/argos-isp/commit/c0efe35065d3d1d961a4f52c184aba14d3325d05))
+* **ledger:** B2 · GET /contabilidad/inicio (qué toca hoy, pasos del mes e indicadores) ([#339](https://github.com/HCDestroyer/argos-isp/issues/339)) ([9eeb0a3](https://github.com/HCDestroyer/argos-isp/commit/9eeb0a30c3c541119766a8a15d879052ae43aa32))
+* **ledger:** B3 · conciliación con tope configurable, motivos de diferencia y aprobación ([#341](https://github.com/HCDestroyer/argos-isp/issues/341)) ([ad5b8c6](https://github.com/HCDestroyer/argos-isp/commit/ad5b8c66a8a743ee4e4dc4a9e6ed40a42c580c01))
+* **web:** acción principal en la isla del teléfono, barra de guardar fija y CampoFecha dd/mm/aaaa ([#329](https://github.com/HCDestroyer/argos-isp/issues/329)) ([1203577](https://github.com/HCDestroyer/argos-isp/commit/1203577fa5877b469d7e087728e2071b56150371))
+* **web:** Ajustes en 8 grupos con buscador, página de tarjetas y panel de la cuenta en el teléfono ([#345](https://github.com/HCDestroyer/argos-isp/issues/345)) ([e78e6c8](https://github.com/HCDestroyer/argos-isp/commit/e78e6c82868351ec0f4be8307cd8f4496a685376))
+* **web:** aviso de pequeño contribuyente en Configuración › Fiscal; el 100 % se avisa siempre ([#324](https://github.com/HCDestroyer/argos-isp/issues/324)) ([3d5d122](https://github.com/HCDestroyer/argos-isp/commit/3d5d12214ccf8be86f846da97d66c9a146a92c66))
+* **web:** el comprobante por WhatsApp tras cobrar sale por Iris, sin enlace wa.me ([#327](https://github.com/HCDestroyer/argos-isp/issues/327)) ([af74b53](https://github.com/HCDestroyer/argos-isp/commit/af74b53bf4a1980a58037101435328c3d9e90d3a))
+* **web:** P2–P4 de contabilidad · funciones apagadas encendidas, indicador con ayuda y «Nueva factura» a la vista ([#342](https://github.com/HCDestroyer/argos-isp/issues/342)) ([2e594cc](https://github.com/HCDestroyer/argos-isp/commit/2e594cced0c8e5774d7097df3433a021f1fba174))
+* **web:** promociones de velocidad en Red › Planes y scroll del formulario del plan ([#328](https://github.com/HCDestroyer/argos-isp/issues/328)) ([1cfb9a9](https://github.com/HCDestroyer/argos-isp/commit/1cfb9a9ef0d293f1c71e2b7ed44e71b3f43a22b7))
+
+
+### Correcciones
+
+* **aaa:** el agrupador de consultas no se parte bajo carga ([#344](https://github.com/HCDestroyer/argos-isp/issues/344)) ([4595806](https://github.com/HCDestroyer/argos-isp/commit/459580668748ad46a3b0c10c14daa933c4ecaf8b))
+* **infra:** prueba de WireGuard sin falsos fallos por SIGPIPE con pipefail ([#348](https://github.com/HCDestroyer/argos-isp/issues/348)) ([e846047](https://github.com/HCDestroyer/argos-isp/commit/e8460473171b9e7ece546615b9111d18f8d6887f))
+* **portal:** la barra de acción fija ya no tapa el último control en el teléfono ([#326](https://github.com/HCDestroyer/argos-isp/issues/326)) ([d4d8adb](https://github.com/HCDestroyer/argos-isp/commit/d4d8adb6d0f7e5b04146be8c94287d9c708c8c6d))
+* **web:** botón de ayuda centrado y de tamaño fijo ([#330](https://github.com/HCDestroyer/argos-isp/issues/330)) ([06234f7](https://github.com/HCDestroyer/argos-isp/commit/06234f751e2867b7ab5a62f3793aa0365c908aed))
+* **web:** el menú lateral ya no se corta abajo ([#334](https://github.com/HCDestroyer/argos-isp/issues/334)) ([d86d560](https://github.com/HCDestroyer/argos-isp/commit/d86d5602e8ce5051972c5d9054bc3750bb87bac5))
+* **web:** SmartOLT · recargar las OLT ligadas antes de avisar y bloquear el selector mientras liga ([#349](https://github.com/HCDestroyer/argos-isp/issues/349)) ([48ca638](https://github.com/HCDestroyer/argos-isp/commit/48ca638a0c880260cb58663e69e7421196103640))
+
 ## [1.26.0](https://github.com/HCDestroyer/argos-isp/compare/v1.25.0...v1.26.0) (2026-11-23)
 
 

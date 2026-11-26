@@ -81,7 +81,7 @@ const sinProgramar = computed(() => activo.value && aviso.value?.envio === null 
                     <ULink
                         to="/configuracion/notificaciones"
                         class="underline"
-                    >Configuración › Notificaciones</ULink>.
+                    >Ajustes → Canales de aviso</ULink>.
                 </template>
             </p>
             <p

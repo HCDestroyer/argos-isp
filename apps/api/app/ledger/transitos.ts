@@ -20,9 +20,15 @@ export type TipoTransito = 'deposito' | 'traslado'
 export interface DepositoVista {
     id: number
     empresa_id: number
-    caja_id: number
-    caja_nombre: string
-    turno_id: number
+    /** caja de la que salió (null en un depósito desde la custodia sin caja) */
+    caja_id: number | null
+    caja_nombre: string | null
+    /** turno del que salió el efectivo (null si salió de la custodia, B1) */
+    turno_id: number | null
+    /** B1: `turno` (efectivo de un turno abierto) o `custodia` (de quien dijo «Recibí») */
+    origen: 'turno' | 'custodia'
+    custodio_id: number | null
+    custodio_nombre: string | null
     cuenta_id: number
     cuenta_codigo: string
     cuenta_nombre: string
@@ -63,7 +69,7 @@ function acreditado(cliente: QueryClientContract, tipo: TipoTransito, alias: str
 function consultaDepositos(cliente: QueryClientContract) {
     return cliente
         .from('ledger.depositos as d')
-        .join('ledger.cajas as cj', 'cj.id', 'd.caja_id')
+        .leftJoin('ledger.cajas as cj', 'cj.id', 'd.caja_id')
         .join('ledger.cuentas as c', 'c.id', 'd.cuenta_id')
         .select(
             'd.id',
@@ -71,6 +77,11 @@ function consultaDepositos(cliente: QueryClientContract) {
             'd.caja_id',
             'cj.nombre as caja_nombre',
             'd.turno_id',
+            'd.origen',
+            'd.custodio_id',
+            cliente.raw(
+                '(SELECT u.nombre FROM core.usuarios u WHERE u.id = d.custodio_id) AS custodio_nombre',
+            ),
             'd.cuenta_id',
             'c.codigo as cuenta_codigo',
             'c.nombre as cuenta_nombre',
@@ -163,6 +174,32 @@ export async function depositosDelTurno(cliente: QueryClientContract, turnoId: n
     return fila.total
 }
 
+/** Condición SQL: el depósito `alias` aún no se acreditó en el banco (o su acreditación se reatribuyó). */
+export const SQL_DEPOSITO_SIN_ACREDITAR = (alias: string) =>
+    `NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = ${alias}.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))`
+
+export interface DepositosEnCamino {
+    cantidad: number
+    monto: string
+    /** fecha (YYYY-MM-DD) del depósito más viejo que el banco aún no muestra; null si no hay */
+    mas_viejo: string | null
+}
+
+/** Depósitos de caja sin acreditar de las empresas (el aviso «el banco aún no los muestra» del inicio de contabilidad). */
+export async function depositosEnCamino(
+    empresas: number[],
+    cliente: QueryClientContract = db.connection(),
+): Promise<DepositosEnCamino> {
+    const { rows } = (await cliente.rawQuery(
+        `SELECT count(*)::int AS cantidad, coalesce(sum(d.monto), 0)::numeric(14,2)::text AS monto,
+                to_char(min(d.fecha), 'YYYY-MM-DD') AS mas_viejo
+           FROM ledger.depositos d
+          WHERE d.empresa_id = ANY(?::bigint[]) AND ${SQL_DEPOSITO_SIN_ACREDITAR('d')}`,
+        [empresas],
+    )) as { rows: Array<{ cantidad: number; monto: string; mas_viejo: string | null }> }
+    return rows[0]!
+}
+
 export interface ResumenTransito {
     empresa_id: number
     /** saldo de 1.1.11 en el libro de la empresa */
@@ -198,7 +235,7 @@ export async function resumenFondosEnTransito(
         const pendientes = (await cliente.rawQuery(
             `SELECT tipo, count(*)::int AS n, coalesce(sum(monto), 0)::text AS monto FROM (
                  SELECT 'deposito' AS tipo, d.monto FROM ledger.depositos d
-                  WHERE d.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = d.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))
+                  WHERE d.empresa_id = ? AND ${SQL_DEPOSITO_SIN_ACREDITAR('d')}
                  UNION ALL
                  SELECT 'traslado', t.monto FROM ledger.traslados t
                   WHERE t.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'traslado' AND x.documento_id = t.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))
