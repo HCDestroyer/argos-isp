@@ -69,6 +69,18 @@ export default class AplicarReglasConciliacion extends DomainAction<
                         x.from('ledger.conciliaciones_anulaciones as a').whereRaw('a.conciliacion_id = k.id'),
                     ),
             )
+            // B3: una línea con una diferencia esperando aprobación queda apartada
+            .whereNotExists((q) =>
+                q
+                    .from('billing.diferencias_conciliacion as d')
+                    .whereRaw('d.linea_id = l.id')
+                    .where('d.requiere_aprobacion', true)
+                    .whereNotExists((x) =>
+                        x
+                            .from('billing.diferencias_conciliacion_decisiones as dd')
+                            .whereRaw('dd.diferencia_id = d.id'),
+                    ),
+            )
             .orderBy('l.orden')
             .select('l.id', 'l.cuenta_id', 'l.descripcion', 'l.referencia', 'l.monto')) as Array<{
             id: number

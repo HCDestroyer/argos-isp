@@ -33,6 +33,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
     sorteo: { etiqueta: 'Premio de sorteo', icono: 'i-lucide-ticket' },
     bonificacion: { etiqueta: 'Bonificación', icono: 'i-lucide-badge-percent' },
+    diferencia_conciliacion: { etiqueta: 'Diferencia al conciliar', icono: 'i-lucide-git-compare' },
 }
 
 interface OrigenVisual {

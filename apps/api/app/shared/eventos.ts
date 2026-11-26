@@ -1302,6 +1302,54 @@ export interface CatalogoEventos {
         monto: Dinero
     }
     /**
+     * Plan de contabilidad B3 (§5.8): una diferencia al conciliar pasó del tope de quien concilia (o
+     * su motivo siempre pide aprobación) y espera a otro usuario con `bancos.aprobar_diferencia`. No
+     * hay asiento todavía. `aprobadores`: usuarios que pueden aprobarla (para avisarles).
+     */
+    'banco.diferencia_pendiente': {
+        diferencia_id: number
+        empresa_id: number
+        cuenta_id: number
+        linea_id: number
+        sentido: 'menos' | 'mas'
+        monto: Dinero
+        /** ⊂ motivo, tope_linea, tope_dia */
+        razones: string[]
+        solicitado_por: number | null
+        aprobadores: number[]
+    }
+    /** B3: otro usuario aprobó la diferencia; ya tiene su asiento y la línea quedó conciliada. */
+    'banco.diferencia_aprobada': {
+        diferencia_id: number
+        empresa_id: number
+        cuenta_id: number
+        linea_id: number
+        conciliacion_id: number
+        monto: Dinero
+        solicitado_por: number | null
+        aprobado_por: number
+    }
+    /** B3: la diferencia no entra al libro; la línea queda libre. */
+    'banco.diferencia_rechazada': {
+        diferencia_id: number
+        empresa_id: number
+        cuenta_id: number
+        linea_id: number
+        monto: Dinero
+        solicitado_por: number | null
+        rechazado_por: number | null
+        motivo: string
+    }
+    /**
+     * B3: cambió el tope de quien concilia (`motivo_id` null, campos ⊂ tope_linea, tope_dia) o un
+     * motivo de diferencia de la empresa (campos: solo nombres, nunca valores).
+     */
+    'banco.diferencias_config_cambiada': {
+        empresa_id: number
+        motivo_id: number | null
+        campos: string[]
+    }
+    /**
      * Se creó o editó una cuenta bancaria propia (contrato Iris 0.8.0 §7.8, pedido A26). Al crear,
      * `creada: true` y `campos` = todo lo que se guardó; al editar, solo los campos que cambiaron.
      * `activa` es el valor después del cambio. `campos`: solo nombres, nunca valores. Las cuentas
@@ -2215,6 +2263,10 @@ export const EVENTOS = [
     'caja.depositada',
     'banco.extracto_importado',
     'banco.conciliado',
+    'banco.diferencia_pendiente',
+    'banco.diferencia_aprobada',
+    'banco.diferencia_rechazada',
+    'banco.diferencias_config_cambiada',
     'cuenta_bancaria.cambiada',
     'gestion_cobro.registrada',
     'gestion_cobro.adjunto_agregado',
