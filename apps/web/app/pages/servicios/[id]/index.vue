@@ -45,6 +45,7 @@ const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
 const historialAsignaciones = useTemplateRef<{ recargar: () => Promise<void> }>('asignaciones')
 const historialSesiones = useTemplateRef<{ recargar: () => Promise<void> }>('historialSesiones')
 const codigoCorte = useTemplateRef<{ recargar: () => Promise<void> }>('codigoCorte')
+const promocionesServicio = useTemplateRef<{ abrirAgregar: () => void }>('promocionesServicio')
 
 useHead(() => ({ title: `${servicio.value ? etiquetaServicio(servicio.value) : 'Servicio'} · ArgosIsp` }))
 
@@ -337,7 +338,7 @@ function alEliminar() {
 const precio = computed(() => servicio.value?.precio_mensual ?? null)
 
 /* Pestañas (tablero OperServicioFicha). */
-const PESTANAS_SERVICIO = ['resumen', 'red', 'facturas', 'contactos', 'bitacora', 'corte'] as const
+const PESTANAS_SERVICIO = ['resumen', 'red', 'facturas', 'contactos', 'promociones', 'bitacora', 'corte'] as const
 type PestanaServicio = typeof PESTANAS_SERVICIO[number]
 
 const pestana = computed<PestanaServicio>({
@@ -356,6 +357,8 @@ const pestanas = computed<TabsItem[]>(() => [
     ...(puede('facturas.ver') ? [{ label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt' }] : []),
     // Los contactos se leen con `contactos.buscar` (y el cliente con `clientes.ver`).
     ...(puede('clientes.ver') && puede('contactos.buscar') ? [{ label: 'Contactos', value: 'contactos', icon: 'i-lucide-users' }] : []),
+    // Promociones de velocidad (decisión del PM 18): se leen con `servicios.ver`.
+    { label: 'Promociones', value: 'promociones', icon: 'i-lucide-zap' },
     ...(puede('bitacora.ver') ? [{ label: 'Bitácora', value: 'bitacora', icon: 'i-lucide-history' }] : []),
     { label: 'Portal de corte', value: 'corte', icon: 'i-lucide-octagon-pause' },
 ])
@@ -447,6 +450,19 @@ watch(servicio, (actual, anterior) => {
     }
 })
 
+/* «Agregar a una promoción» del menú Más (tablero OperServicioFicha): abre la pestaña y su ventana. */
+const puedeAgregarPromocion = computed(() => puede('promociones_velocidad.asignar') && puede('promociones_velocidad.ver') && servicio.value?.estado !== 'retirado')
+function abrirAgregarPromocion() {
+    pestana.value = 'promociones'
+    // La pestaña se pinta cuando cambia `?pestana=`: se abre la ventana en cuanto existe.
+    const parar = watch(promocionesServicio, (componente) => {
+        if (componente) {
+            componente.abrirAgregar()
+            queueMicrotask(() => parar())
+        }
+    }, { immediate: true })
+}
+
 /* Acciones en una sola fila: Cobrar, la principal de estado y el resto en «Más». */
 const accionPrincipal = computed(() => accionesEstado.value[0] ?? null)
 
@@ -472,6 +488,7 @@ function gruposMas(conPrincipal: boolean): DropdownMenuItem[][] {
     ]
     const red: DropdownMenuItem[] = [
         ...accionesRed.value.map(a => ({ label: a.etiqueta, icon: a.icono, onSelect: () => abrirAccion(a) })),
+        ...(puedeAgregarPromocion.value ? [{ label: 'Agregar a una promoción', icon: 'i-lucide-zap', onSelect: abrirAgregarPromocion }] : []),
         ...(puedeSincronizarRouter.value ? [{ label: 'Sincronizar con el router', icon: 'i-lucide-refresh-cw', onSelect: () => { sincronizarRouterAbierto.value = true } }] : []),
         ...(puedeEditar.value ? [{ label: 'Editar servicio', icon: ICONOS.editar, onSelect: () => { editando.value = true } }] : []),
         ...(puedeCambiarEmpresa.value ? [{ label: 'Cambiar empresa', icon: 'i-lucide-building-2', onSelect: () => { cambiarEmpresaAbierto.value = true } }] : []),
@@ -1483,6 +1500,14 @@ onMounted(cargar)
                     v-else-if="pestana === 'contactos' && puede('clientes.ver') && puede('contactos.buscar')"
                     :cliente-id="servicio.cliente_id"
                     :servicios="serviciosCliente"
+                />
+
+                <!-- Promociones de velocidad (decisiones del PM 18 y 34). -->
+                <ServicioPromociones
+                    v-else-if="pestana === 'promociones'"
+                    ref="promocionesServicio"
+                    :servicio="servicio"
+                    @cambiada="lineaTiempo?.recargar()"
                 />
 
                 <!-- Bitácora. -->
