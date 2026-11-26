@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm verificar:permisos)",
+      "Bash(pnpm --filter @argosisp/api typecheck)",
+      "Bash(pnpm --filter @argosisp/api lint)",
+      "Bash(pnpm --filter @argosisp/web typecheck)",
+      "Bash(pnpm --filter @argosisp/web lint)",
+      "Bash(pnpm --filter @argosisp/portal typecheck)",
+      "Bash(pnpm --filter @argosisp/portal lint)",
+      "Bash(gh api -X POST repos/HCDestroyer/argos-isp/actions/runs/*/approve)"
+    ]
+  }
+}
