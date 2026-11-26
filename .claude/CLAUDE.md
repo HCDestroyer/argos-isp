@@ -218,6 +218,8 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `cobros.liquidados` | ledger | liquidacion_id, empresa_id, proveedor, bruto, comision, neto, pagos[] |
 | `caja.depositada` | ledger | deposito_id, empresa_id, caja_id, cuenta_bancaria_id, cuenta_id, monto |
 | `banco.extracto_importado` / `banco.conciliado` | ledger | extracto_id o conciliacion_id, empresa_id, cuenta_bancaria_id, cuenta_id, lineas, monto; conciliado: linea_id |
+| `banco.diferencia_pendiente` / `banco.diferencia_aprobada` / `banco.diferencia_rechazada` | ledger (conciliación) | diferencia_id, empresa_id, cuenta_id, linea_id, monto; pendiente: sentido (`menos` \| `mas`), razones[] (`motivo`, `tope_linea`, `tope_dia`), solicitado_por, aprobadores[]; aprobada: conciliacion_id, solicitado_por, aprobado_por; rechazada: solicitado_por, rechazado_por, motivo |
+| `banco.diferencias_config_cambiada` | ledger (conciliación) | empresa_id, motivo_id (null = cambió el tope), campos[] (solo nombres) |
 | `cartera.castigada` | ledger | castigo_id, empresa_id, cliente_id, facturas[], monto |
 | `compra.registrada` / `compra.anulada` | ledger | compra_id, empresa_id, proveedor_id, total, iva, periodo_iva |
 | `activo.dado_de_baja` | ledger | activo_id, empresa_id, motivo, valor_libros |
