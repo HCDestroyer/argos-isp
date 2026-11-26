@@ -592,10 +592,12 @@ async function teDeben(ctx: Contexto): Promise<IndicadorInicio> {
     const m61 = dec(String(reporte.totales.dias_61_90 ?? '0'))
     const m90 = dec(String(reporte.totales.dias_mas_90 ?? '0'))
     const masDe60 = m61.plus(m90)
+    // Conteo de facturas (no es dinero)
+    const { facturas: numFacturas } = reporte.totales
     return indicador({
         estado: m90.gt(0) ? 'urgente' : masDe60.gt(0) ? 'atencion' : 'bien',
         valor: aTexto(total),
-        cantidad: Number(reporte.totales.facturas ?? 0),
+        cantidad: Number(numFacturas ?? 0),
         monto_alerta: aTexto(masDe60),
     })
 }
@@ -604,10 +606,12 @@ async function debesAProveedores(ctx: Contexto): Promise<IndicadorInicio> {
     if (!(await existe(ctx.c, 'ledger.compras', ctx.empresas))) return indicador({ estado: 'sin_datos' })
     const reporte = await cuentasPorPagar({}, ctx.empresas, false)
     const vencido = dec(String(reporte.totales.vencido ?? '0'))
+    // Conteo de compras (no es dinero)
+    const { compras: numCompras } = reporte.totales
     return indicador({
         estado: vencido.gt(0) ? 'atencion' : 'bien',
         valor: aTexto(String(reporte.totales.total ?? '0')),
-        cantidad: Number(reporte.totales.compras ?? 0),
+        cantidad: Number(numCompras ?? 0),
         monto_alerta: aTexto(vencido),
     })
 }
