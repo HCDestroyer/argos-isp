@@ -19,7 +19,7 @@ Los planes de internet que vendes: velocidad, velocidad cuando el servicio está
 
 ## Lista de planes
 
-Abre **Red → Planes**.
+Abre **Red → Planes**. Arriba de la lista, la pestaña **Promociones de velocidad** lleva a las [promociones](promociones-de-velocidad.md).
 
 | Columna                      | Qué muestra                                                                                            |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -95,3 +95,4 @@ Cómo se aplica el plan en cada router. Lo vacío hereda del plan o de la config
 - [Conceptos: planes](../../guia/conceptos.md#planes)
 - [Ficha del router: control de velocidad](ficha-del-router.md#control-de-velocidad)
 - [Adicionales](../clientes-y-servicios/adicionales.md)
+- [Promociones de velocidad](promociones-de-velocidad.md): la otra pestaña de Red → Planes

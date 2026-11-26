@@ -51,6 +51,7 @@ import { redAccesoInicial, sembrarServidoresServicios, type RedAccesoFixtures } 
 import { nodosPortal } from './nodosPortal/datos'
 import { portalCorteInicial } from './portalCorte/datos'
 import { operacionPmInicial, type OperacionPmFixtures } from './operacionPm/datos'
+import { asignacionesIniciales, promocionesIniciales } from './promociones/datos'
 import { portalContrasenasIniciales, type PortalContrasenasFixture } from './portalContrasena/datos'
 import { contactosIniciales } from './contactos/datos'
 import { fotosIniciales, revisionesIniciales, servicioPendienteTitular, type FotosRevision } from './titularesEmpresa/datos'
@@ -239,6 +240,8 @@ interface BaseFixtures {
     equipos: EquiposFixtures
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
+    /** Promociones de velocidad (A1, decisiones del PM 18 y 34) y sus servicios. */
+    promociones: { promociones: Schema<'PromocionVelocidad'>[], asignaciones: Schema<'PromocionServicio'>[] }
     /** Inicio de la facturación y `facturar_desde` por servicio (emisión manual de periodos, A3). */
     facturacionServicios: Record<number, FacturacionServicioFixture>
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
@@ -426,6 +429,7 @@ function inicial(): BaseFixtures {
         empresas,
         usuarios,
         planesTemporales: [],
+        promociones: promocionesYAsignaciones(),
         facturacionServicios,
         nodosPortal,
         portalCorte: portalCorteInicial(),
@@ -529,6 +533,11 @@ function inicial(): BaseFixtures {
     datos.cuentas.push(...structuredClone(cuentasFase4))
     datos.asientos.push(...asientosBonificaciones())
     return datos
+}
+
+function promocionesYAsignaciones(): BaseFixtures['promociones'] {
+    const promociones = promocionesIniciales()
+    return { promociones, asignaciones: asignacionesIniciales(promociones) }
 }
 
 export const bd: BaseFixtures = inicial()

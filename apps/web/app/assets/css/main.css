@@ -679,6 +679,18 @@
             0 0 0 1px var(--ax-borde),
             0 6px 16px -8px rgb(0 0 0 / 0.6);
     }
+
+    /*
+     * El cuerpo de `PanelPagina` (`.panel-cuerpo`) es una columna flex que se desplaza. Un hijo
+     * directo con `overflow-hidden` (la tarjeta del formulario de un plan, las listas de Lealtad o
+     * Notificaciones) tiene `min-height: auto` = 0 y se encogía al alto de la pantalla: su contenido
+     * quedaba recortado y no había nada que desplazar (falla de Red › Planes, 25 nov 2026). Aquí no
+     * se encogen; los que llenan la pantalla con su propio scroll siguen usando `min-h-0 flex-1`,
+     * que está en la capa de utilidades y gana.
+     */
+    .panel-cuerpo > * {
+        flex-shrink: 0;
+    }
 }
 
 /*
