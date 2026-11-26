@@ -98,7 +98,19 @@ import { readFile } from 'node:fs/promises'
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
-import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import { descriptorPasarela, nombresProveedores, proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import {
+    configDeCuenta,
+    empresaDeCuentaPasarela,
+    listarCuentasPasarela,
+    verCuentaPasarela,
+    type FilaCuentaPasarela,
+} from '#billing/pasarelas/cuentas'
+import CrearCuentaPasarela from '#billing/actions/crear_cuenta_pasarela'
+import EditarCuentaPasarela from '#billing/actions/editar_cuenta_pasarela'
+import ProbarCuentaPasarela from '#billing/actions/probar_cuenta_pasarela'
+import ActivarCuentaPasarela from '#billing/actions/activar_cuenta_pasarela'
+import DesactivarCuentaPasarela from '#billing/actions/desactivar_cuenta_pasarela'
 import {
     dimensionesDeCobroPasarela,
     listarCobrosPasarela,
@@ -136,6 +148,9 @@ import {
 import {
     SimulacionPromesa,
     CobroPasarela,
+    CuentaPasarela,
+    ProveedorPasarela,
+    ResultadoProbarCuentaPasarela,
     ConciliacionPasarela,
     ResultadoWebhookPasarela,
     ArchivoComprobante,
@@ -1386,11 +1401,27 @@ function cabecerasPlanas(ctx: HttpContext): Record<string, string | undefined> {
     )
 }
 
-/** La pasarela falsa solo existe si es la configurada (nunca en producción sin pedirla). */
-async function pasarelaFalsa() {
+/**
+ * La pasarela falsa (laboratorio): vale si es la del entorno (`PASARELA_PROVEEDOR=falsa`) o si el
+ * cobro es de una cuenta `falsa` (D0). Con cuenta, firma con el secreto de ESA cuenta y entrega el
+ * webhook por la ruta de su `clave_publica`. Nunca en producción sin pedirla.
+ */
+async function pasarelaFalsa(idProveedor?: string) {
+    const { PasarelaFalsa, secretoFalsa } = await import('#billing/pasarelas/falsa')
+    if (idProveedor) {
+        const cuenta = (await db
+            .from('billing.pasarela_cobros as pc')
+            .join('billing.pasarela_cuentas as c', 'c.id', 'pc.pasarela_cuenta_id')
+            .where({ 'pc.proveedor': 'falsa', 'pc.id_proveedor': idProveedor })
+            .select('c.*')
+            .first()) as FilaCuentaPasarela | null
+        if (cuenta) {
+            const secreto = configDeCuenta(cuenta).webhookSecreto ?? secretoFalsa()
+            return { falsa: new PasarelaFalsa(secreto), clave: cuenta.clave_publica as string | null }
+        }
+    }
     if (proveedorConfigurado() !== 'falsa') throw new NoEncontrado('La pasarela falsa no está activa')
-    const { PasarelaFalsa } = await import('#billing/pasarelas/falsa')
-    return new PasarelaFalsa()
+    return { falsa: new PasarelaFalsa(), clave: null as string | null }
 }
 
 /** Lado del proveedor + webhook firmado por el mismo camino que uno real. */
@@ -1399,7 +1430,7 @@ async function simularEnFalsa(
     idProveedor: string,
     cuerpo: { estado?: 'pagado' | 'fallido'; monto?: string; notificar?: boolean },
 ) {
-    const falsa = await pasarelaFalsa()
+    const { falsa, clave } = await pasarelaFalsa(idProveedor)
     const webhook = await falsa.simularPago(idProveedor, { estado: cuerpo.estado, monto: cuerpo.monto })
     if (cuerpo.notificar === false) {
         return {
@@ -1412,7 +1443,7 @@ async function simularEnFalsa(
         }
     }
     return new ProcesarWebhookPasarela().execute(
-        { proveedor: 'falsa', cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
+        { proveedor: 'falsa', clave_publica: clave, cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
         ctx.contextoAccion('webhook'),
     )
 }
@@ -1475,12 +1506,35 @@ const pasarelaRutas: Ruta[] = [
         permiso: null,
         parametros: { proveedor: { type: 'string' } },
         descripcion:
-            'Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
+            'Ruta anterior a las cuentas de pasarela: vale para la cuenta sembrada del entorno (o el entorno, sin cuentas). Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
         respuesta: { status: 200, descripcion: 'Webhook procesado', esquema: ResultadoWebhookPasarela },
         handler: (ctx, { params }) =>
             new ProcesarWebhookPasarela().execute(
                 {
                     proveedor: String(params.proveedor),
+                    cuerpo: ctx.request.raw() ?? '',
+                    cabeceras: cabecerasPlanas(ctx),
+                },
+                ctx.contextoAccion('webhook'),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/webhook/:proveedor/:clave_publica',
+        operacion: 'pasarelaWebhookCuenta',
+        resumen: 'Webhook de una cuenta de pasarela (firmado con el secreto de esa cuenta)',
+        etiqueta: 'pagos',
+        seguridad: 'publico',
+        permiso: null,
+        parametros: { proveedor: { type: 'string' }, clave_publica: { type: 'string' } },
+        descripcion:
+            'La URL lleva la clave_publica de la cuenta: se verifica con el secreto de ESA cuenta (el de otra da 401). Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
+        respuesta: { status: 200, descripcion: 'Webhook procesado', esquema: ResultadoWebhookPasarela },
+        handler: (ctx, { params }) =>
+            new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: String(params.proveedor),
+                    clave_publica: String(params.clave_publica),
                     cuerpo: ctx.request.raw() ?? '',
                     cabeceras: cabecerasPlanas(ctx),
                 },
@@ -1497,7 +1551,7 @@ const pasarelaRutas: Ruta[] = [
         cuerpo: v.conciliarPasarelaValidator,
         idempotente: true,
         descripcion:
-            'Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.',
+            'Lo mismo que el cron diario (06:30 Guatemala, día anterior), que recorre todas las cuentas de pasarela activas; aquí una cuenta (cuenta_id, obligatoria si hay varias activas: 422 cuenta_requerida). Solo reporta diferencias: no registra ni anula pagos.',
         respuesta: { status: 200, descripcion: 'Conciliación', esquema: ConciliacionPasarela },
         handler: (ctx, { cuerpo }) => new ConciliarPasarela().execute(cuerpo, ctx.contextoAccion()),
     }),
@@ -1528,7 +1582,7 @@ const pasarelaRutas: Ruta[] = [
         descripcion: 'Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón "Pagar (simulado)".',
         respuesta: { status: 200, descripcion: 'Página HTML', esquema: { type: 'string' } },
         handler: async (ctx, { params }) => {
-            const falsa = await pasarelaFalsa()
+            const { falsa } = await pasarelaFalsa(String(params.cobro))
             const cobro = await falsa.consultar(String(params.cobro))
             const id = escaparHtml(cobro.id_proveedor)
             ctx.response.header('Content-Type', 'text/html; charset=utf-8')
@@ -1574,11 +1628,149 @@ const pasarelaRutas: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             const idProveedor = String(params.cobro)
             await simularEnFalsa(ctx, idProveedor, cuerpo)
-            const falsa = await pasarelaFalsa()
+            const { falsa } = await pasarelaFalsa(idProveedor)
             const retorno =
                 (await falsa.urlDeRetorno(idProveedor)) ??
                 `/api/v1/pasarela/falsa/${encodeURIComponent(idProveedor)}`
             return redirigir(retorno)
+        },
+    }),
+    // --- cuentas de pasarela por empresa y proveedor (D0; contratos/debito-automatico.md §2) ---
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarelas/proveedores',
+        operacion: 'pasarelasProveedores',
+        resumen: 'Adaptadores de pasarela disponibles, con sus capacidades y lo que piden',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.ver',
+        descripcion:
+            'Por cada adaptador: capacidades (el resto del sistema mira esto, nunca el nombre), las credenciales que pide (se guardan cifradas) y sus opciones. La pasarela falsa es solo de laboratorio.',
+        respuesta: { status: 200, descripcion: 'Adaptadores', esquema: lista(ProveedorPasarela) },
+        handler: async () => {
+            const salida = []
+            for (const nombre of nombresProveedores()) {
+                const d = await descriptorPasarela(nombre)
+                salida.push({
+                    nombre: d.nombre,
+                    titulo: d.titulo,
+                    laboratorio: d.laboratorio,
+                    capacidades: d.capacidades,
+                    credenciales: d.credenciales,
+                    requiere_webhook_secreto: d.requiere_webhook_secreto,
+                    opciones: d.opciones,
+                })
+            }
+            return salida
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarelas/cuentas',
+        operacion: 'pasarelasCuentas',
+        resumen: 'Cuentas de pasarela por empresa y proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.ver',
+        query: v.listarCuentasPasarelaValidator,
+        descripcion:
+            'Nunca devuelve credenciales ni el secreto del webhook: solo los nombres de las credenciales guardadas y `tiene_webhook_secreto`.',
+        respuesta: { status: 200, descripcion: 'Cuentas', esquema: lista(CuentaPasarela) },
+        handler: (ctx, { query }) => listarCuentasPasarela(empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas',
+        operacion: 'pasarelasCrearCuenta',
+        resumen: 'Crear la cuenta de pasarela de una empresa para un proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        cuerpo: v.crearCuentaPasarelaValidator,
+        idempotente: true,
+        descripcion:
+            'Una por (empresa, proveedor): 409 cuenta_pasarela_duplicada. Nace inactiva y sin probar. Las credenciales y el secreto del webhook se guardan cifrados y no vuelven. 422 debito_no_soportado si el adaptador no permite cargos con token. Emite pasarela.config_cambiada (solo nombres de campos).',
+        respuesta: { status: 201, descripcion: 'Cuenta creada', esquema: CuentaPasarela },
+        handler: (ctx, { cuerpo }) => new CrearCuentaPasarela().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/pasarelas/cuentas/:id',
+        operacion: 'pasarelasEditarCuenta',
+        resumen: 'Editar una cuenta de pasarela',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        cuerpo: v.editarCuentaPasarelaValidator,
+        idempotente: true,
+        descripcion:
+            'Con version (409 si cambió). Las credenciales enviadas reemplazan a las guardadas; las omitidas se conservan. Cambiar credenciales, secreto, modo u opciones deja prueba_ok = false.',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new EditarCuentaPasarela().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarelas/cuentas/:id',
+        operacion: 'pasarelasVerCuenta',
+        resumen: 'Ver una cuenta de pasarela',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.ver',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return verCuentaPasarela(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas/:id/probar',
+        operacion: 'pasarelasProbarCuenta',
+        resumen: 'Probar las credenciales de una cuenta con el proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.probar',
+        idempotente: true,
+        descripcion:
+            'Una llave mala no es un error HTTP: responde 200 con ok = false, deja prueba_ok = false y no activa. Una prueba buena tampoco activa (usa /activar).',
+        respuesta: { status: 200, descripcion: 'Resultado', esquema: ResultadoProbarCuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new ProbarCuentaPasarela().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas/:id/activar',
+        operacion: 'pasarelasActivarCuenta',
+        resumen: 'Activar una cuenta de pasarela (exige una prueba buena)',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        idempotente: true,
+        descripcion:
+            '422 cuenta_sin_prueba si la última prueba no salió bien. Si la empresa no tenía cuenta predeterminada para un uso, esta pasa a serlo.',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new ActivarCuentaPasarela().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas/:id/desactivar',
+        operacion: 'pasarelasDesactivarCuenta',
+        resumen: 'Desactivar una cuenta de pasarela',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        idempotente: true,
+        descripcion:
+            'Deja de crear cobros; sus webhooks siguen valiendo para los cobros ya hechos. Si era la única de la empresa, la empresa queda sin pago en línea (no vuelve al entorno).',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new DesactivarCuentaPasarela().execute({ id }, ctx.contextoAccion())
         },
     }),
 ]

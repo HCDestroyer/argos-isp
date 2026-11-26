@@ -78,8 +78,69 @@ export interface EntradaWebhook {
     ahora?: Date
 }
 
+/**
+ * Lo que un adaptador sabe hacer. El resto del sistema mira esto, nunca el nombre del proveedor.
+ * D0 declara lo que hoy existe (pago en línea); D1 activa tokenización y cargo con token.
+ */
+export interface CapacidadesPasarela {
+    pago_en_linea: boolean
+    /** cómo guarda la tarjeta: página del proveedor, o no la guarda */
+    tokenizacion: 'checkout_alojado' | 'ninguna'
+    /** cargo sin el cliente presente, con monto libre */
+    cargo_con_token: boolean
+    revocar_metodo: boolean
+    /** avisa por webhook el resultado de la tokenización y del cargo */
+    webhooks: { tokenizacion: boolean; cargo: boolean }
+    /** monto mínimo que acepta el proveedor (string decimal) */
+    minimo: string
+}
+
+/** Un dato que el adaptador pide a la cuenta (las credenciales se guardan cifradas). */
+export interface CampoCuenta {
+    clave: string
+    etiqueta: string
+    requerida: boolean
+}
+
+export interface OpcionCuenta {
+    clave: string
+    etiqueta: string
+    tipo: 'texto' | 'numero'
+}
+
+/** Configuración con la que se construye un adaptador: la de una cuenta, o la del entorno. */
+export interface ConfigCuenta {
+    /** null = salió del entorno (respaldo sin cuentas) */
+    cuentaId: number | null
+    empresaId: number | null
+    modo: 'pruebas' | 'produccion' | null
+    /** claves declaradas por el adaptador (`DescriptorPasarela.credenciales`), ya descifradas */
+    credenciales: Record<string, string>
+    webhookSecreto: string | null
+    /** opciones no secretas declaradas por el adaptador */
+    opciones: Record<string, unknown>
+}
+
+/** Qué es un adaptador y qué pide, sin construirlo (lo usa `GET /pasarelas/proveedores`). */
+export interface DescriptorPasarela {
+    nombre: string
+    titulo: string
+    capacidades: CapacidadesPasarela
+    credenciales: CampoCuenta[]
+    requiere_webhook_secreto: boolean
+    opciones: OpcionCuenta[]
+    /** solo laboratorio: no se crea una cuenta en producción */
+    laboratorio: boolean
+    construir(config: ConfigCuenta): Pasarela
+    /** configuración equivalente del entorno (respaldo y siembra); null si el entorno no la trae */
+    desdeEntorno(): ConfigCuenta | null
+}
+
 export interface Pasarela {
     readonly nombre: string
+    readonly capacidades: CapacidadesPasarela
+    /** Comprueba las credenciales con el proveedor; lanza si no sirven (`ErrorPruebaPasarela`). */
+    probar(): Promise<{ detalle: string; ambiente?: 'pruebas' | 'produccion' }>
     crearCobro(entrada: EntradaCrearCobro): Promise<CobroCreado>
     verificarWebhook(entrada: EntradaWebhook): NotificacionPasarela
     consultar(idProveedor: string): Promise<EstadoEnProveedor>
@@ -90,6 +151,9 @@ export class FirmaInvalida extends Problema {
         super(401, 'firma_invalida', 'Firma inválida', detalle)
     }
 }
+
+/** Las credenciales no sirven o el proveedor no respondió (lo registra `pasarela.probar_cuenta`). */
+export class ErrorPruebaPasarela extends Error {}
 
 export class PasarelaNoConfigurada extends Problema {
     constructor(detalle = 'No hay pasarela de pago en línea configurada (PASARELA_PROVEEDOR)') {
@@ -169,26 +233,45 @@ export function proveedorConfigurado(): string | null {
     return env.get('NODE_ENV') === 'production' ? null : 'falsa'
 }
 
-const registro = new Map<string, () => Promise<Pasarela>>([
+const registro = new Map<string, () => Promise<DescriptorPasarela>>([
     [
         'falsa',
         async () => {
-            const { PasarelaFalsa } = await import('#billing/pasarelas/falsa')
-            return new PasarelaFalsa()
+            const { descriptorFalsa } = await import('#billing/pasarelas/falsa')
+            return descriptorFalsa
         },
     ],
     [
         'recurrente',
         async () => {
-            const { PasarelaRecurrente } = await import('#billing/pasarelas/recurrente')
-            return new PasarelaRecurrente()
+            const { descriptorRecurrente } = await import('#billing/pasarelas/recurrente')
+            return descriptorRecurrente
         },
     ],
 ])
 
-/** Adaptador por nombre (el del webhook) o el configurado. 503 si no existe. */
-export async function pasarela(nombre: string | null = proveedorConfigurado()): Promise<Pasarela> {
+/** Nombres de los adaptadores disponibles. */
+export function nombresProveedores(): string[] {
+    return [...registro.keys()]
+}
+
+/** Descriptor de un adaptador por nombre. 503 si no existe. */
+export async function descriptorPasarela(nombre: string | null): Promise<DescriptorPasarela> {
     const fabrica = nombre ? registro.get(nombre) : undefined
     if (!fabrica) throw new PasarelaNoConfigurada(nombre ? `La pasarela ${nombre} no existe` : undefined)
     return fabrica()
+}
+
+/**
+ * Adaptador por nombre construido con la configuración de una cuenta. Sin `config` usa el entorno
+ * (`PASARELA_PROVEEDOR`, `RECURRENTE_*`): es el respaldo mientras no existan cuentas. 503 si no existe.
+ */
+export async function pasarela(
+    nombre: string | null = proveedorConfigurado(),
+    config?: ConfigCuenta,
+): Promise<Pasarela> {
+    const descriptor = await descriptorPasarela(nombre)
+    const base = config ?? descriptor.desdeEntorno()
+    if (!base) throw new PasarelaNoConfigurada(`Faltan las variables de entorno de la pasarela ${nombre}`)
+    return descriptor.construir(base)
 }

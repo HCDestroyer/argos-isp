@@ -941,6 +941,17 @@ export interface CatalogoEventos {
     /** se rechazó con `motivo`; la referencia queda libre para subirlo de nuevo */
     'comprobante.rechazado': PayloadComprobante
 
+    /**
+     * billing (A3, D0): cambió una cuenta de pasarela (alta, edición, prueba, activación). `campos`
+     * son columnas, nunca valores: las credenciales y el secreto del webhook no viajan.
+     */
+    'pasarela.config_cambiada': {
+        pasarela_cuenta_id: number
+        empresa_id: number
+        proveedor: string
+        campos: string[]
+    }
+
     // ledger (A3)
     'caja.cerrada': {
         caja_id: number
@@ -2044,6 +2055,7 @@ export const EVENTOS = [
     'instalacion.fallida',
     'equipo.wifi_resuelto',
     'notificaciones.config_cambiada',
+    'pasarela.config_cambiada',
     'portal.config_cambiada',
     'portal.codigo_corte_emitido',
     'fiscal.localizacion_instalada',
