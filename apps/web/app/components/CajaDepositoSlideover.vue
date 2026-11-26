@@ -175,9 +175,8 @@ async function enviar(evento: FormSubmitEvent<SalidaDeposito>) {
                         name="fecha"
                         required
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             :max="hoy"
                             class="w-full"
                         />

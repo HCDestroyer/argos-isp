@@ -56,7 +56,7 @@ onMounted(cargar)
         titulo="Reporte de conciliación"
         icono="i-lucide-scale"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('bancos.conciliar')"
                 :to="enlace('/bancos/extractos')"
@@ -64,7 +64,6 @@ onMounted(cargar)
                 label="Conciliar"
                 size="lg"
                 class="glow-brand rounded-full px-5"
-                :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Conciliar estados de cuenta"
             />
         </template>
@@ -76,10 +75,8 @@ onMounted(cargar)
                     con-todas
                     aria-label="Cuenta"
                 />
-                <UInput
+                <CampoFecha
                     v-model="fecha"
-                    type="date"
-                    icon="i-lucide-calendar"
                     :max="hoy"
                     aria-label="Al día"
                     class="w-full"

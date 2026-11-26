@@ -133,16 +133,14 @@ onMounted(async () => {
                         class="w-full"
                         data-prueba="filtro-factura"
                     />
-                    <UInput
+                    <CampoFecha
                         v-model="desde"
-                        type="date"
                         :max="hasta || undefined"
                         aria-label="Desde (fecha contable)"
                         class="w-full lg:w-44"
                     />
-                    <UInput
+                    <CampoFecha
                         v-model="hasta"
-                        type="date"
                         :min="desde || undefined"
                         aria-label="Hasta (fecha contable)"
                         class="w-full lg:w-44"

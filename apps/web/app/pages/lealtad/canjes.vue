@@ -88,7 +88,7 @@ function nombreCliente(id: number): string {
         icono="i-lucide-gift"
         descripcion="Lo que los clientes cambiaron por sus puntos, desde el panel o el portal"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('lealtad.canjear') && puede('clientes.ver')"
                 label="Canjear puntos"

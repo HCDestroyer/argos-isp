@@ -110,9 +110,8 @@ onMounted(() => void verificar())
                 label="Desde (fecha contable)"
                 name="desde"
             >
-                <UInput
+                <CampoFecha
                     v-model="estado.desde"
-                    type="date"
                     class="w-full"
                 />
             </UFormField>
@@ -120,9 +119,8 @@ onMounted(() => void verificar())
                 label="Hasta"
                 name="hasta"
             >
-                <UInput
+                <CampoFecha
                     v-model="estado.hasta"
-                    type="date"
                     class="w-full"
                 />
             </UFormField>

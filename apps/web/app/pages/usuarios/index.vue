@@ -236,6 +236,9 @@ const menuFila = useMenuFila(accionesUsuario)
                 size="lg"
                 class="boton-flotante"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('usuarios.crear')"
                 label="Nuevo usuario"

@@ -124,9 +124,8 @@ function confirmarRetiro(evento: FormSubmitEvent<{ vigente_desde: string, motivo
                     name="vigente_desde"
                     required
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="retiro.vigente_desde"
-                        type="date"
                         class="w-full"
                     />
                 </UFormField>
@@ -219,9 +218,8 @@ function confirmarRetiro(evento: FormSubmitEvent<{ vigente_desde: string, motivo
                     name="vigente_desde"
                     required
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.vigente_desde"
-                        type="date"
                         class="w-full"
                     />
                 </UFormField>
@@ -240,9 +238,8 @@ function confirmarRetiro(evento: FormSubmitEvent<{ vigente_desde: string, motivo
                         label="Fecha de la resolución"
                         name="resolucion_fecha"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.resolucion_fecha"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>

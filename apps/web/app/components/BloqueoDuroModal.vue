@@ -98,9 +98,8 @@ async function enviar(evento: FormSubmitEvent<Entrada>) {
                     required
                     :help="vigentes.duro ? `El duro vigente es ${formatearFecha(vigentes.duro)}: solo avanza.` : 'Aún no hay bloqueo duro.'"
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.hasta"
-                        type="date"
                         :max="hoy"
                         :min="vigentes.duro ?? undefined"
                         class="w-full"

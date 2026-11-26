@@ -104,12 +104,24 @@ Pedido del PM (como la barra del portal; tablero `MarcoMovil` en `.claude/diseno
   cuenta; los accesos y los avisos se mudan a la isla.
 - `--ax-isla-reserva` (`main.css`) es el alto que la isla le quita a la pantalla (0 en escritorio):
   el contenedor que se desplaza (`.panel-cuerpo`) termina encima de la isla, así que nada queda
-  debajo y la barra de los formularios (`FormularioAcciones`, `sticky bottom-0`) se detiene encima
-  sola; también lo usan la acción fija de cada pantalla (`PanelBarraAccion`) y los avisos
-  emergentes (`toaster` en `app.config.ts`).
+  debajo; también lo usan las barras fijas (`PanelBarraAccion`) y los avisos emergentes (`toaster`
+  en `app.config.ts`, que suben además el alto de la barra, `--ax-barra-accion`).
 - **Acción principal fija** (`PanelBarraAccion`, por ejemplo «Promesa» y «Cobrar Q …» de la ficha del
-  cliente): otra isla de vidrio justo encima de la de navegación, sin taparla; el contenido gana su
-  aire. Desde `lg` va en su lugar, dentro del flujo.
+  cliente): otra isla de vidrio justo encima de la de navegación, sin taparla. La barra publica su
+  alto real en `--ax-barra-accion` y el contenido lo reserva abajo, así que se puede desplazar hasta
+  el último campo o la última fila. Desde `lg` va en su lugar, dentro del flujo.
+- **Cómo la adopta una pantalla:** el botón principal va en el slot `#accion-principal` de
+  `PanelPagina` (o de `ConfiguracionMarco`), siempre con su texto (nada de `label: 'hidden
+  sm:inline'`); las demás acciones siguen en `#acciones`. En escritorio sale a la derecha del
+  encabezado; en el teléfono, en la isla fija a lo ancho. Si el botón queda fuera por permiso, la
+  isla no aparece. Un componente de acciones compartido (`InventarioAcciones`,
+  `ContaComprasAcciones`) envuelve su botón principal en `PanelBarraAccion estirar`.
+- **«Descartar / Guardar»:** `FormularioAcciones` y el `#pie` de `ConfiguracionMarco` son la misma
+  isla fija en el teléfono (la primaria a lo ancho, la nota corta arriba en dos renglones) y, en
+  escritorio, la barra pegada al final del formulario o de la tarjeta. Dentro de un panel lateral
+  se pega al final del panel.
+- **Fechas:** `CampoFecha` (nunca `UInput type="date"`, que sale en «mm/dd/yyyy»): se escribe en
+  dd/mm/aaaa con las barras solas y trae su calendario; recibe y devuelve `YYYY-MM-DD`.
 
 ## Encabezado (`PanelPagina`)
 
@@ -166,7 +178,8 @@ rol; sin permiso, el acceso no aparece.
 | `EstadoServicioBadge`, `EstadoPagoBadge`… | Estados con color + icono + texto |
 | `AvisosBoton` | Campana de la barra superior (en el teléfono, Avisos va en la isla) |
 | `PanelIslaMovil` | Navegación del teléfono: isla abajo con Inicio, 2 accesos, Avisos y «Más» |
-| `PanelBarraAccion` | Acción principal fija de una pantalla en el teléfono, encima de la isla |
+| `PanelBarraAccion` | Acción principal fija de una pantalla en el teléfono, encima de la isla (casi siempre por `#accion-principal` de `PanelPagina`) |
+| `CampoFecha` | Fecha en dd/mm/aaaa con calendario; valor `YYYY-MM-DD` para la API y zod |
 
 `app.config.ts` unifica: tarjetas (radio 12 px, borde `--ax-borde`), tablas (cabecera en versalitas
 sobre `--ax-panel`, filas con línea fina, hover suave, sin cebra), ítem activo del menú, botones en

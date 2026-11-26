@@ -247,9 +247,8 @@ async function enviar(evento: FormSubmitEvent<SalidaSorteo>) {
                             label="Participan desde"
                             name="inscripcion_desde"
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="estado.inscripcion_desde"
-                                type="date"
                                 class="w-full"
                             />
                         </UFormField>
