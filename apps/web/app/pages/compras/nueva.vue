@@ -258,9 +258,8 @@ onMounted(cargarCatalogos)
                                 name="fecha_documento"
                                 required
                             >
-                                <UInput
+                                <CampoFecha
                                     v-model="estado.fecha_documento"
-                                    type="date"
                                     :max="hoy"
                                     class="w-full"
                                 />
@@ -673,9 +672,8 @@ onMounted(cargarCatalogos)
                                     name="vence_en"
                                     :help="proveedor ? `Vacío: ${proveedor.dias_credito} días de crédito del proveedor.` : 'Vacío: los días de crédito del proveedor.'"
                                 >
-                                    <UInput
+                                    <CampoFecha
                                         v-model="estado.vence_en"
-                                        type="date"
                                         class="w-full"
                                     />
                                 </UFormField>

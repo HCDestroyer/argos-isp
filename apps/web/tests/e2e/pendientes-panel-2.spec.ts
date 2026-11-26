@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, ir, verDatosCliente } from './ayudas'
+import { entrar, ir, llenarFecha, verDatosCliente } from './ayudas'
 
 /**
  * Pendientes de la prioridad 2, segunda tanda (modo fixtures, escritorio y teléfono): premio y
@@ -77,7 +77,7 @@ test('conciliar la pasarela y certificar en lote', async ({ page }) => {
     await expect(page.locator('[data-conciliacion="2"]')).toContainText('El monto no coincide', { timeout: 15_000 })
     await page.locator('[data-prueba="conciliar-pasarela"]').click()
     const conciliar = page.getByRole('dialog', { name: 'Conciliar un día' })
-    await campo(conciliar, 'conciliar-fecha').fill('2026-10-20')
+    await llenarFecha(conciliar.locator('[data-prueba="conciliar-fecha"]'), '2026-10-20')
     await conciliar.locator('[data-prueba="conciliar-confirmar"]').click()
     await expect(conciliar).toBeHidden()
     await expect(page.locator('[data-conciliacion="3"]')).toContainText('Concilia')
@@ -89,8 +89,8 @@ test('conciliar la pasarela y certificar en lote', async ({ page }) => {
     if (await lote.locator('[data-prueba="lote-empresa"]').isVisible()) {
         await elegir(page, lote, 'lote-empresa', 'ArgosNet')
     }
-    await campo(lote, 'lote-desde').fill('2026-01-01')
-    await campo(lote, 'lote-hasta').fill('2026-12-31')
+    await llenarFecha(lote.locator('[data-prueba="lote-desde"]'), '2026-01-01')
+    await llenarFecha(lote.locator('[data-prueba="lote-hasta"]'), '2026-12-31')
     await lote.locator('[data-prueba="lote-certificar"]').click()
     await expect(lote.locator('[data-prueba="resultado-lote"]')).toContainText('enviada')
 })

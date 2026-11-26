@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, llenarFecha, menu } from './ayudas'
 
 /**
  * Calendario fiscal y feriados (A3, fase 7 PR A) en modo fixtures, en escritorio y teléfono. Hoy es el
@@ -36,7 +36,7 @@ test('mes con vencidas en rojo y el día corrido; un feriado recalcula el vencim
     await page.locator('[data-prueba="abrir-feriado"]').click()
     const dialogo = page.getByRole('dialog', { name: 'Agregar feriado' })
     await expect(dialogo.locator('[data-prueba="feriado-aviso-recalculo"]')).toContainText('Recalcula el calendario de todas las empresas')
-    await dialogo.locator('[data-prueba="feriado-fecha"]').fill('2026-10-20')
+    await llenarFecha(dialogo.locator('[data-prueba="feriado-fecha"]'), '2026-10-20')
     await dialogo.locator('[data-prueba="feriado-nombre"]').fill('Día de la Revolución')
     await dialogo.locator('[data-prueba="feriado-motivo"]').fill('Decreto 19-2018, confirmado por el contador')
     await dialogo.getByRole('button', { name: 'Agregar y recalcular' }).click()

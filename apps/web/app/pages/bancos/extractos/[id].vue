@@ -302,6 +302,9 @@ onMounted(cargar)
                 :ui="{ base: 'rounded-xl' }"
                 data-prueba="conciliacion-periodo"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('bancos.importar_extracto_archivo')"
                 label="Importar estado de cuenta"
@@ -309,8 +312,6 @@ onMounted(cargar)
                 color="neutral"
                 variant="outline"
                 class="rounded-xl"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Importar estado de cuenta"
                 data-prueba="importar-extracto"
                 @click="importarAbierto = true"
             />

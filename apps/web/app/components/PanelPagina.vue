@@ -17,6 +17,12 @@ const route = useRoute()
  *   acciones a la derecha.
  * - `tituloOculto` (Inicio): la pantalla pinta su propio saludo; el título queda solo para lectores
  *   de pantalla.
+ *
+ * Acción principal (tablero MarcoMovil): el slot `#accion-principal` lleva el botón principal de la
+ * pantalla («Nuevo servicio», «Cobrar», «Importar estado de cuenta»), siempre con su texto. En
+ * escritorio va a la derecha del encabezado, después de `#acciones`; bajo `lg` sale como isla fija
+ * justo encima de la isla de navegación (`PanelBarraAccion`) y el contenido reserva su alto. Las
+ * demás acciones siguen en `#acciones`. Si el botón queda fuera por permiso, la isla no aparece.
  */
 const props = withDefaults(defineProps<{
     id: string
@@ -159,10 +165,17 @@ const migas = computed<BreadcrumbItem[]>(() => {
                     </p>
                 </div>
                 <div
-                    v-if="$slots.acciones"
-                    class="flex shrink-0 flex-wrap items-center gap-2"
+                    v-if="$slots.acciones || hayContenido($slots['accion-principal']?.())"
+                    class="panel-acciones flex shrink-0 flex-wrap items-center gap-2"
                 >
                     <slot name="acciones" />
+                    <PanelBarraAccion
+                        v-if="hayContenido($slots['accion-principal']?.())"
+                        estirar
+                        data-prueba="accion-principal"
+                    >
+                        <slot name="accion-principal" />
+                    </PanelBarraAccion>
                 </div>
             </div>
             <!-- Ficha o subpágina: migas encima, título con su icono a la izquierda y las acciones de la
@@ -190,13 +203,29 @@ const migas = computed<BreadcrumbItem[]>(() => {
                     </h1>
                 </div>
                 <div
-                    v-if="$slots.acciones"
-                    class="flex shrink-0 flex-wrap items-center gap-2"
+                    v-if="$slots.acciones || hayContenido($slots['accion-principal']?.())"
+                    class="panel-acciones flex shrink-0 flex-wrap items-center gap-2"
                 >
                     <slot name="acciones" />
+                    <PanelBarraAccion
+                        v-if="hayContenido($slots['accion-principal']?.())"
+                        estirar
+                        data-prueba="accion-principal"
+                    >
+                        <slot name="accion-principal" />
+                    </PanelBarraAccion>
                 </div>
             </div>
             <slot />
+            <!-- Con encabezado propio (o sin título visible) la acción principal va al final del cuerpo:
+                 en el teléfono es la misma isla fija; en escritorio, la pantalla decide dónde la quiere. -->
+            <PanelBarraAccion
+                v-if="(tituloOculto || encabezadoPropio) && hayContenido($slots['accion-principal']?.())"
+                estirar
+                data-prueba="accion-principal"
+            >
+                <slot name="accion-principal" />
+            </PanelBarraAccion>
         </template>
     </UDashboardPanel>
 </template>

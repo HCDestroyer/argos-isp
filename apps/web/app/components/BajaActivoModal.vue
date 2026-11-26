@@ -96,9 +96,8 @@ async function enviar(evento: FormSubmitEvent<EntradaBajaActivo>) {
                         name="fecha"
                         help="Vacía: hoy."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             :min="activo.fecha_alta"
                             :max="hoy"
                             class="w-full"

@@ -138,7 +138,7 @@ const idFormulario = useId()
         descripcion="Cómo se ve Argos para todos: panel y portal del cliente"
         sin-tarjeta
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puedeEditar && apariencia"
                 type="submit"

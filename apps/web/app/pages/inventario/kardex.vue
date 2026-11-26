@@ -177,16 +177,14 @@ function alHacer() {
                     aria-label="Filtros del kardex"
                 >
                     <UFormField label="Desde">
-                        <UInput
+                        <CampoFecha
                             v-model="desde"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>
                     <UFormField label="Hasta">
-                        <UInput
+                        <CampoFecha
                             v-model="hasta"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>

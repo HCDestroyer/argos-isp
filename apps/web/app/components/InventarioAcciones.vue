@@ -97,15 +97,21 @@ function alHacer(o: OperacionInventario) {
                 data-prueba="inventario-registrar"
             />
         </UDropdownMenu>
-        <UButton
+        <!-- La acción principal: en el teléfono, isla fija encima de la navegación (tablero MarcoMovil). -->
+        <PanelBarraAccion
             v-if="puede('productos.crear') && puedeAbrir('/inventario/productos')"
-            :to="enlace('/inventario/productos?nuevo=1')"
-            icon="i-lucide-plus"
-            label="Nuevo producto"
-            size="lg"
-            class="glow-brand rounded-full px-5"
-            data-prueba="inventario-nuevo-producto"
-        />
+            estirar
+            data-prueba="accion-principal"
+        >
+            <UButton
+                :to="enlace('/inventario/productos?nuevo=1')"
+                icon="i-lucide-plus"
+                label="Nuevo producto"
+                size="lg"
+                class="glow-brand rounded-full px-5"
+                data-prueba="inventario-nuevo-producto"
+            />
+        </PanelBarraAccion>
         <MovimientoInventarioModal
             v-model:open="abierta"
             :operacion="operacion"

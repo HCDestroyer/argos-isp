@@ -81,9 +81,8 @@ async function enviar(evento: FormSubmitEvent<EntradaProvision>) {
                         name="fecha"
                         :help="estado.anio === anioActual ? 'Vacío: hoy.' : 'Vacío: 31 de diciembre.'"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             :max="hoy"
                             class="w-full"
                         />

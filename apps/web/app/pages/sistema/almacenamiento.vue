@@ -65,7 +65,7 @@ function porcentajeDe(bytes: number, total: number): number {
         titulo="Sistema"
         descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('sistema.recalcular_almacenamiento')"
                 label="Recalcular"

@@ -43,7 +43,7 @@ onMounted(cargar)
         :titulo="activo ? `Activo #${activo.id}` : 'Activo fijo'"
         icono="i-lucide-boxes"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="activo && activo.estado === 'vigente' && puede('activos.dar_de_baja')"
                 label="Dar de baja"

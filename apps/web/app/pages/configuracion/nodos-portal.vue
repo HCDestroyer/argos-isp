@@ -87,7 +87,7 @@ function alRevocar(nodo: NodoPortal) {
         descripcion="Portales del cliente instalados en otro sitio"
         volver="/configuracion/portal-corte"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 label="Agregar nodo"
                 icon="i-lucide-plus"
