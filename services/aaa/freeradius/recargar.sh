@@ -47,6 +47,12 @@ recargar() {
     if ! salida="$(freeradius -C 2>&1)"; then
         log "configuración inválida tras regenerar clients.d ($motivo); sigue la anterior"
         printf '%s\n' "$salida" | tail -n 5 >&2
+        # Última línea de la rama: radiusd no se tocó. Quien espere este log sabe que ya terminó.
+        if kill -0 "$HIJO" 2> /dev/null; then
+            log "radiusd sigue en pie (pid $HIJO) con los clientes anteriores ($motivo)"
+        else
+            log "radiusd ya no está en pie (pid $HIJO) tras una configuración inválida ($motivo)"
+        fi
         return 0
     fi
     log "recargando clientes ($motivo)"

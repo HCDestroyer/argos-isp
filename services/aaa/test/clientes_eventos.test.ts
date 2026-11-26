@@ -334,15 +334,47 @@ describe(
             assert.equal(estado.stdout.trim(), '0 true', 'se reinició radiusd, no el contenedor')
         })
 
+        /** PID de radiusd dentro del contenedor (cambia si el script lo reinicia). */
+        async function pidRadiusd(): Promise<string> {
+            const r = await exec('docker', [
+                'exec',
+                contenedor,
+                'sh',
+                '-c',
+                'pidof freeradius || pgrep -x freeradius',
+            ])
+            return r.stdout.trim()
+        }
+
         it('una configuración inválida no tumba a radiusd: sigue con la anterior', async () => {
             // Cliente con la misma IP que mikrotik-lab de clients.conf: FreeRADIUS no arranca con eso.
+            const pidAntes = await pidRadiusd()
+            const avisos = await exec('docker', ['logs', contenedor]).then(
+                (l) => (l.stderr + l.stdout).match(/radiusd sigue en pie/g)?.length ?? 0,
+            )
             await escribirClientes({ routers: [router('192.0.2.250')], clave: CLAVE, dir })
             assert.equal(await avisarRecarga(dir, 'prueba-invalida'), 'avisado')
+            // El script escribe esta línea al terminar la rama inválida, con radiusd sin tocar.
             await hasta(async () => {
                 const logs = await exec('docker', ['logs', contenedor])
-                return /configuración inválida/.test(logs.stderr + logs.stdout)
+                const texto = logs.stderr + logs.stdout
+                return (
+                    /configuración inválida/.test(texto) &&
+                    (texto.match(/radiusd sigue en pie/g)?.length ?? 0) > avisos
+                )
             }, 30_000)
-            assert.equal(await responde(), true, 'sigue el cliente cargado antes')
+            const diag = async () => {
+                const logs = await exec('docker', ['logs', '--tail', '30', contenedor])
+                const estado = await exec('docker', [
+                    'inspect',
+                    '-f',
+                    '{{.State.Status}} {{.RestartCount}}',
+                    contenedor,
+                ])
+                return `${estado.stdout.trim()}\n${logs.stderr + logs.stdout}`
+            }
+            assert.equal(await responde(), true, `sigue el cliente cargado antes\n${await diag()}`)
+            assert.equal(await pidRadiusd(), pidAntes, 'radiusd no se reinició')
         })
     },
 )
