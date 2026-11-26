@@ -211,28 +211,29 @@ onMounted(reintentar)
                 class="grid grid-cols-2 gap-3 xl:grid-cols-[1fr_1fr_1fr_1.4fr]"
                 data-prueba="kpis-fiscal"
             >
-                <ContaKpi
+                <ContaIndicador
+                    clave="iva-mes"
                     titulo="IVA del mes a hoy"
                     icono="i-lucide-receipt"
                     tono="tono-aviso"
                     :valor="!tablero ? null : ivaMes?.totales.a_pagar ? formatearQuetzales(ivaMes.totales.a_pagar) : (bloques?.iva.estado === 'no_aplica' ? 'No aplica' : 'Sin calcular')"
                     :detalle="ivaMes?.totales.debito ? `débito ${formatearQuetzales(ivaMes.totales.debito)} · crédito ${formatearQuetzales(ivaMes.totales.credito ?? '0')}` : (bloques?.iva.motivo ?? undefined)"
-                    ayuda="IVA que se pagaría si el mes terminara hoy: débito de las ventas menos el crédito de las compras."
                 />
-                <ContaKpi
-                    titulo="ISR estimado del año"
+                <ContaIndicador
+                    clave="isr-estimado"
                     icono="i-lucide-calculator"
                     tono="tono-marca"
                     :valor="!tablero ? null : isrAnual ? formatearQuetzales(isrAnual.isr_proyectado) : (bloques?.isr.estado === 'no_aplica' ? 'No aplica' : 'Sin datos')"
                     :detalle="isrAnual ? `proyectado con ${isrAnual.meses_transcurridos} meses` : (bloques?.isr.motivo ?? undefined)"
-                    ayuda="Impuesto sobre la renta del año proyectado con lo que va del libro."
                 />
-                <ContaKpi
-                    titulo="Vencidas"
+                <ContaIndicador
+                    clave="obligaciones-vencidas"
                     icono="i-lucide-triangle-alert"
                     :tono="vencidas ? 'tono-error' : 'tono-exito'"
                     :valor="!tablero ? null : vencidas === null ? 'Sin datos' : String(vencidas)"
-                    :detalle="vencidas ? 'obligaciones sin presentar' : 'todo al día'"
+                    :estado="vencidas === null ? undefined : vencidas ? 'urgente' : 'bien'"
+                    :etiqueta-estado="vencidas === null ? undefined : vencidas ? 'Sin presentar' : 'Al día'"
+                    :detalle="vencidas ? 'obligaciones con fecha límite pasada' : undefined"
                 />
                 <div
                     class="surface-card col-span-2 flex min-w-0 flex-col gap-2 rounded-2xl p-4 xl:col-span-1"
