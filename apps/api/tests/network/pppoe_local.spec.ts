@@ -413,7 +413,9 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         await sondear()
         const sesion = await db
             .from('network.sesiones')
-            .where({ servicio_id: servicio.id, origen: 'sondeo' })
+            // Con el router: otro router de una prueba anterior puede reportar el mismo usuario y su
+            // sesión queda cerrada como «Sesion-Reemplazada»; esta prueba mira la de su router.
+            .where({ servicio_id: servicio.id, origen: 'sondeo', router_id: routerId })
             .firstOrFail()
         assert.containsSubset(sesion, {
             router_id: routerId,
@@ -480,7 +482,7 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         await sondear()
         const sesion = await db
             .from('network.sesiones')
-            .where({ servicio_id: servicio.id, origen: 'sondeo' })
+            .where({ servicio_id: servicio.id, origen: 'sondeo', router_id: routerId })
             .firstOrFail()
         const requestId = unico('req')
         await estado(
