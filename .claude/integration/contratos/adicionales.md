@@ -126,3 +126,11 @@ Bloqueo por la suspensión del servicio:
   - **Implementado por A3** (rama `a3/decisiones-pm`, `facturas.emitir`): cada línea guarda `facturas_lineas.adicional_periodo` (el periodo que cobra) y no se repite en otra factura viva para la misma asignación y periodo (índice único por factura, asignación y periodo). La fuente del cobro es `cobrado_desde` (no `alta_en`). Un periodo cuyo inicio (medianoche de Guatemala) cae con la asignación bloqueada (último registro de `core.servicios_adicionales_bloqueos` antes de ese instante, o `bloqueo`/`bloqueado_en`) no cobra el adicional; reactivar a mitad de un periodo no lo cobra en ese periodo. El prorrateo se divide entre los días del ciclo (`dias_ciclo`) del periodo de `cobrado_desde`; si ese periodo aún no se facturaba, va en su propia factura. El plan del servicio suspendido se factura como siempre.
 - **A4 (pantallas)**: catálogo y motivos (admin), adicionales en la ficha del servicio, lista del plan en la ficha del plan. La credencial solo con el botón "Ver" (`servicios.ver_credencial_adicional`); la cortesía solo si el usuario tiene `servicios.adicional_cortesia`.
 - **A5 (portal)**: mostrar al cliente sus adicionales activos (nombre, modalidad, identificador). **Nunca la credencial**. Leer con `listarAsignaciones` de `#core/adicionales` (o pedir a A1 un endpoint del portal).
+
+## Ampliación del plan v3 (26 nov 2026): categoría, cuenta, pausa y suscripciones
+
+Detalle y decisiones en `suscripciones.md` §1 y §2. Resumen de lo que cambia aquí (lotes S1 y S2):
+
+- `core.adicionales` suma `categoria` (`streaming`, `canales_premium`, `ip_publica`, `seguro_equipo`, `membresia`, `otro`), `cuenta_codigo` (null = `4.1.03`; cuenta de ingreso existente, si no 422) y `admite_suscripcion` (false por defecto). `tipo` no cambia.
+- `core.servicios_adicionales` suma `baja_programada` y la pausa (`core.servicios_adicionales_pausas`); eventos `servicio.adicional_pausado` y `servicio.adicional_reanudado`; permisos `servicios.pausar_adicional` y `servicios.reanudar_adicional`.
+- El adicional sigue siendo una **línea dentro de la factura del servicio**. Lo que se vende aparte, con su propia factura y su propia suerte, es una suscripción (`suscripciones.md`).
