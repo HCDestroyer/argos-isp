@@ -19977,6 +19977,92 @@
         "x-implementado": true
       }
     },
+    "/api/v1/contabilidad/inicio": {
+      "get": {
+        "operationId": "contabilidadInicio",
+        "summary": "Inicio de contabilidad: qué toca hoy, pasos del mes e indicadores",
+        "description": "De la empresa activa (con `empresas=todas` y alcance global, todas sumadas). `tareas`: lo que espera por alguien, solo lo que el rol puede atender (cada una pide el permiso de su acción) y solo con pendientes. `pasos`: 7 pasos del mes calculados con datos (nunca casillas a mano). `indicadores`: Te deben (reportes.ver), Debes a proveedores (compras.ver), Dinero disponible (libro.ver) e Impuestos del mes (declaraciones.ver), con las mismas consultas de la cartera por antigüedad, las cuentas por pagar, el efectivo del panel y el borrador de la declaración. Sin datos que lo respondan, `sin_datos`; sin permiso, `sin_permiso`; si una consulta falla, `error` con su problema y sin cifras: nunca ceros inventados.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "periodo",
+            "in": "query",
+            "required": false,
+            "description": "Mes YYYY-MM de los pasos del mes (por defecto el mes en curso de Guatemala; uno futuro = el actual)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inicio de contabilidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InicioContabilidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contabilidad.ver_inicio",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contabilidad.ver_inicio",
+        "x-implementado": true
+      }
+    },
     "/api/v1/contactos/{id}": {
       "put": {
         "operationId": "contactosEditar",
@@ -83668,6 +83754,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
                         "cuentas_bancarias.editar",
@@ -84145,6 +84232,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
                         "cuentas_bancarias.editar",
@@ -100598,6 +100686,7 @@
                             "comprobantes.reconexion_temporal",
                             "comprobantes.registrar",
                             "comprobantes.ver",
+                            "contabilidad.ver_inicio",
                             "contactos.buscar",
                             "contactos.gestionar",
                             "cuentas_bancarias.editar",
@@ -126426,6 +126515,553 @@
           }
         }
       },
+      "InicioContabilidad": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "periodo",
+          "generado_en",
+          "empresas",
+          "consolidado",
+          "pendientes",
+          "tareas",
+          "tareas_con_error",
+          "pasos",
+          "paso_actual",
+          "indicadores"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodo": {
+            "type": "string",
+            "description": "Mes de los pasos (YYYY-MM)"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nombre"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "consolidado": {
+            "type": "boolean"
+          },
+          "pendientes": {
+            "type": "integer",
+            "description": "Suma de las cantidades de `tareas`"
+          },
+          "tareas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "cantidad",
+                "monto",
+                "fecha",
+                "proveedores",
+                "urgencia",
+                "permiso"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string",
+                  "enum": [
+                    "comprobantes_por_revisar",
+                    "lineas_banco_sin_pareja",
+                    "depositos_en_camino",
+                    "compras_por_revisar",
+                    "facturas_por_certificar",
+                    "asientos_por_aprobar",
+                    "compras_por_pagar",
+                    "obligaciones_proximas",
+                    "turnos_abiertos_anteriores"
+                  ],
+                  "description": "Qué espera por alguien"
+                },
+                "cantidad": {
+                  "type": "integer",
+                  "description": "Siempre mayor que cero: las tareas sin pendientes no se devuelven"
+                },
+                "monto": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Monto asociado si la tarea mueve dinero"
+                },
+                "fecha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date",
+                  "description": "Más antigua o más cercana (comprobantes, depósitos, turnos, vencimientos); en lineas_banco_sin_pareja, la del último estado de cuenta"
+                },
+                "proveedores": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Solo en compras_por_pagar"
+                },
+                "urgencia": {
+                  "type": "string",
+                  "enum": [
+                    "alta",
+                    "media",
+                    "baja"
+                  ]
+                },
+                "permiso": {
+                  "type": "string",
+                  "description": "Permiso de la acción que resuelve la tarea"
+                }
+              }
+            },
+            "description": "Qué toca hoy: solo lo que el rol puede atender y solo con pendientes, lo más urgente primero"
+          },
+          "tareas_con_error": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "error"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "error": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "pasos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "numero",
+                "clave",
+                "estado",
+                "cantidad",
+                "fecha",
+                "error"
+              ],
+              "properties": {
+                "numero": {
+                  "type": "integer",
+                  "description": "1 a 7, en el orden del mes"
+                },
+                "clave": {
+                  "type": "string",
+                  "enum": [
+                    "facturar",
+                    "cobrar_y_cerrar_cajas",
+                    "compras_y_gastos",
+                    "conciliar_bancos",
+                    "revisar_el_mes",
+                    "declarar_impuestos",
+                    "cerrar_el_mes"
+                  ]
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "listo",
+                    "pendiente",
+                    "sin_datos",
+                    "error"
+                  ],
+                  "description": "Calculado de los datos. sin_datos = no hay con qué decidirlo (sin extractos, sin obligación fiscal, sin cajas); error = la consulta falló (sin cifras)"
+                },
+                "cantidad": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Pendientes (pendiente) o hechos (listo) según el paso; null si no aplica"
+                },
+                "fecha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Solo con estado error"
+                }
+              }
+            },
+            "description": "Los 7 pasos del mes, calculados"
+          },
+          "paso_actual": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Primer paso pendiente; null si ninguno lo está"
+          },
+          "indicadores": {
+            "type": "object",
+            "required": [
+              "te_deben",
+              "debes_proveedores",
+              "dinero_disponible",
+              "impuestos_mes"
+            ],
+            "properties": {
+              "te_deben": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              },
+              "debes_proveedores": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              },
+              "dinero_disponible": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              },
+              "impuestos_mes": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "InicioRol": {
         "type": "object",
         "required": [
@@ -130205,6 +130841,7 @@
           "comprobantes.reconexion_temporal",
           "comprobantes.registrar",
           "comprobantes.ver",
+          "contabilidad.ver_inicio",
           "contactos.buscar",
           "contactos.gestionar",
           "cuentas_bancarias.editar",
@@ -130574,6 +131211,7 @@
           "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
           "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
+          "Ver el inicio de contabilidad: qué toca hoy, los pasos del mes y los indicadores (cada dato pide además su permiso)",
           "Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)",
           "Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)",
           "Crear y editar cuentas bancarias propias",
@@ -147928,6 +148566,7 @@
               "comprobantes.reconexion_temporal",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_inicio",
               "contactos.buscar",
               "contactos.gestionar",
               "cuentas_bancarias.editar",
@@ -148468,6 +149107,7 @@
               "comprobantes.reconectar",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_inicio",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
               "declaraciones.ajustar",
@@ -148597,6 +149237,7 @@
               "clientes.ver",
               "compras.ver",
               "comprobantes.ver",
+              "contabilidad.ver_inicio",
               "cuentas_bancarias.ver",
               "declaraciones.ver",
               "documentos.ver",
