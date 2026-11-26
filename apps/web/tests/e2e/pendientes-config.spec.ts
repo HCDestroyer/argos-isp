@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { elegirEmpresa, entrar, ir, llenarFecha } from './ayudas'
+import { elegirEmpresa, entrar, ir, irAjuste, llenarFecha } from './ayudas'
 
 /**
  * «Pendientes del backend» en el panel (tableros OperLogin, OperConfigRed, OperConfigCobro,
@@ -84,8 +84,8 @@ test('facturación y cobro: reglas por empresa, impresión por caja y bancos de 
     await expect(aviso(page, 'Reglas de cobro guardadas')).toBeVisible()
     await expect(page.locator('[data-prueba="reglas-cobro-pie"]')).toContainText('último cambio')
 
-    await page.getByRole('tab', { name: 'Bancos de origen' }).click()
-    await expect(page).toHaveURL(/\/configuracion\/bancos-origen/)
+    // Sin pestañas entre ajustes: la lista de Ajustes (o «‹ Ajustes» en el teléfono) lleva a otro.
+    await irAjuste(page, 'Bancos de origen', /\/configuracion\/bancos-origen/)
     await page.locator('[data-prueba="agregar-banco"]').click()
     await page.getByRole('dialog').getByLabel('Nombre').fill('Banco Nexa Plus')
     await page.getByRole('dialog').getByRole('button', { name: 'Agregar banco' }).click()

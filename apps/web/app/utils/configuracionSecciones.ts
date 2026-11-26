@@ -187,7 +187,7 @@ function inicioDePalabra(base: string, termino: string): number {
 /**
  * Busca en las pantallas permitidas, sin tildes ni mayúsculas y por inicio de palabra: nombre,
  * descripción, palabras de lo que hay dentro y grupo. Primero lo que coincide por nombre; después,
- * en el orden del catálogo.
+ * lo que tiene justo esa palabra y el resto, en el orden del catálogo.
  */
 export function buscarAjustes(grupos: SeccionConfiguracion[], texto: string): ResultadoAjuste[] {
     const termino = normalizarBusqueda(texto.trim())
@@ -210,7 +210,9 @@ export function buscarAjustes(grupos: SeccionConfiguracion[], texto: string): Re
             }
         }
     }
-    return [...resultados.filter(r => r.campo === 'etiqueta'), ...resultados.filter(r => r.campo !== 'etiqueta')]
+    // Primero por nombre; luego la que tiene justo esa palabra («correo» → Canales de aviso); luego el resto.
+    const orden = (r: ResultadoAjuste) => (r.campo === 'etiqueta' ? 0 : r.fragmento !== null && normalizarBusqueda(r.fragmento) === termino ? 1 : 2)
+    return resultados.map((r, i) => ({ r, i })).sort((a, b) => orden(a.r) - orden(b.r) || a.i - b.i).map(({ r }) => r)
 }
 
 /**

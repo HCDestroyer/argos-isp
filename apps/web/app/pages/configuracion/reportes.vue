@@ -81,8 +81,6 @@ onMounted(cargarPanel)
 <template>
     <ConfiguracionMarco
         id="configuracion-reportes"
-        titulo="Reportes"
-        descripcion="Cómo se cuentan las bajas en los reportes"
         empresas
     >
         <UAlert

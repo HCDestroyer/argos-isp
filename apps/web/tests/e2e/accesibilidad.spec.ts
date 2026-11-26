@@ -20,6 +20,8 @@ const PANTALLAS = [
     ['reportes', '/reportes'],
     ['reporte de cartera', '/reportes/cartera-vencida'],
     ['migración de router', '/routers/migracion?router=1'],
+    // Ajustes: la página de tarjetas (la lista de la izquierda va en cada ajuste de abajo).
+    ['ajustes (tarjetas por grupo)', '/configuracion'],
     // Multiempresa (dos empresas en los fixtures).
     ['empresas', '/configuracion/empresas'],
     ['sugerencias por zona y router', '/configuracion/empresas?tab=sugerencias'],

@@ -106,7 +106,8 @@ describe('Ajustes · catálogo único', () => {
     it('el buscador ignora tildes y mayúsculas y busca por lo que hay dentro', () => {
         const todos = SECCIONES_CONFIGURACION
         const ids = (texto: string) => buscarAjustes(todos, texto).map(r => r.pagina.id)
-        expect(ids('correo').sort()).toEqual(['empresa', 'empresas', 'notificaciones', 'notificaciones-plantillas'])
+        // Canales de aviso primero (tablero AjustesEscritorio: «Enter» lo abre).
+        expect(ids('correo')).toEqual(['notificaciones', 'empresas', 'empresa', 'notificaciones-plantillas'])
         expect(ids('mora')).toEqual(['plantillas'])
         expect(ids('LOGO').sort()).toEqual(['apariencia', 'empresas'])
         expect(ids('nit')).toContain('empresas')

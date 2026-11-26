@@ -160,7 +160,8 @@ describe('portal de corte · pantalla', () => {
         expect(texto).toContain('Mantener la sesión y cambiar velocidad (CoA)')
         expect(enBody('portal-corte-aviso-routers')?.textContent).toContain('reescribe las reglas de corte en todos los routers')
         expect(enBody('portal-corte-empresas')?.getAttribute('href')).toBe('/configuracion/empresas')
-        expect(texto).not.toMatch(/entorno|ROUTERS_SERVICIO|COA_SUSPENDER|origen/)
+        // Solo la pantalla: la lista de Ajustes de la izquierda nombra «Bancos de origen».
+        expect(enBody('tarjeta-configuracion')?.textContent).not.toMatch(/entorno|ROUTERS_SERVICIO|COA_SUSPENDER|origen/)
         expect(enBody('portal-corte-guardar')?.textContent).toContain('Guardar estos valores')
     })
 

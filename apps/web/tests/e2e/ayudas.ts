@@ -120,6 +120,26 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
     }
 }
 
+/** Abre la página de Ajustes desde el menú (una sola entrada «Ajustes»). */
+export async function abrirAjustes(page: Page): Promise<void> {
+    await ir(page, 'Ajustes', /\/configuracion$/)
+    await expect(page.locator('[data-prueba="indice-ajustes"]')).toBeVisible()
+}
+
+/**
+ * Va a un ajuste: desde la página de Ajustes (tarjetas en la computadora, lista en el teléfono) o,
+ * si ya está dentro de un ajuste en la computadora, desde la lista de la izquierda. Un clic.
+ */
+export async function irAjuste(page: Page, nombre: string, url: RegExp): Promise<void> {
+    const lateral = page.locator('[data-prueba="navegacion-ajustes"]')
+    if (!(await lateral.isVisible())) {
+        await abrirAjustes(page)
+    }
+    const contenedor = (await lateral.isVisible()) ? lateral : page.locator('[data-prueba="indice-ajustes"]')
+    await contenedor.getByRole('link', { name: nombre, exact: true }).click()
+    await expect(page).toHaveURL(url, { timeout: 20_000 })
+}
+
 /** Abre una pestaña de la ficha del router («Resumen», «Conexión», «Red e IPs», «Velocidad»…). */
 export async function pestanaRouter(page: Page, nombre: string): Promise<void> {
     await page.locator('[data-prueba="pestanas-router"]').getByRole('tab', { name: nombre }).click()

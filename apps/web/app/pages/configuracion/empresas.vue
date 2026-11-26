@@ -125,8 +125,6 @@ const pais = computed(() => (empresa.value?.pais === 'GT' ? 'Guatemala · GTQ' :
 <template>
     <ConfiguracionMarco
         id="empresas"
-        titulo="Empresa y fiscal"
-        descripcion="Los datos legales con los que se factura y se declara"
         empresas
     >
         <template #acciones>

@@ -175,9 +175,6 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
 <template>
     <ConfiguracionMarco
         id="configuracion-inventario"
-        titulo="Inventario"
-        descripcion="Firma al recibir y lectura de compras con IA"
-        volver="/configuracion/portal-corte"
         empresas
     >
         <div class="flex w-full max-w-3xl flex-col gap-4">

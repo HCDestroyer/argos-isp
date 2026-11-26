@@ -92,9 +92,6 @@ onMounted(cargar)
 <template>
     <ConfiguracionMarco
         id="portal-contrasena"
-        titulo="Contraseña del portal"
-        descripcion="La que recibe un cliente nuevo para entrar a su portal"
-        volver="/configuracion/portal-corte"
         empresas
     >
         <div class="flex w-full max-w-3xl flex-col gap-4">

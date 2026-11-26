@@ -88,8 +88,6 @@ onMounted(() => {
 <template>
     <ConfiguracionMarco
         id="integraciones"
-        titulo="Integraciones"
-        descripcion="Los sistemas con los que Argos habla, con su estado y lo que se les permite"
         sin-tarjeta
     >
         <div class="grid min-w-0 gap-3.5 lg:min-h-0 lg:flex-1 xl:grid-cols-[22rem_minmax(0,1fr)]">

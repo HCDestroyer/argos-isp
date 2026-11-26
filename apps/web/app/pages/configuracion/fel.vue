@@ -203,8 +203,6 @@ onMounted(() => {
 <template>
     <ConfiguracionMarco
         id="configuracion-fel"
-        titulo="Empresa y fiscal"
-        descripcion="Los datos legales con los que se factura y se declara"
         empresas
     >
         <UAlert
