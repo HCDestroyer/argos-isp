@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createServer as crearHttps } from 'node:https'
 import type { AddressInfo, Server } from 'node:net'
+import db from '@adonisjs/lucid/services/db'
+import { cifrar } from '#shared/cifrado'
 
 /**
  * SmartOLT y GenieACS simulados: un servidor HTTP local por sistema que registra cada petición y
@@ -132,4 +134,136 @@ export function dispositivoTr098(id: string, serie: string, ssid = 'Casa', lastI
             LANDevice: { 1: { WLANConfiguration: { 1: { SSID: p(ssid) } } } },
         },
     }
+}
+
+// ── Configuración de pruebas: instancia de SmartOLT y ACS por separado ─────────────────────────
+
+export interface PerfilPrueba {
+    smartolt_olt_id: string
+    plan_id?: number | null
+    authorization_preset_id: number
+    pon_type?: 'gpon' | 'epon'
+}
+
+/**
+ * SmartOLT y ACS **ya configurados y probados** para las pruebas, sin pasar por la API (las acciones
+ * de configuración tienen sus propias pruebas). Cada simulado de SmartOLT es una instancia (su propio
+ * puerto: «subdominio»); si la URL ya está registrada en otra empresa, la instancia pasa a compartida
+ * (`empresa_id` null), como hace la migración. Devuelve el id de la instancia (o null).
+ */
+export async function configurarEquipos(opciones: {
+    empresaId?: number
+    smartolt?: {
+        url: string
+        token?: string
+        nombre?: string
+        compartida?: boolean
+        activo?: boolean
+        probado?: boolean
+        perfiles?: PerfilPrueba[]
+    } | null
+    acs?: {
+        url: string
+        usuario?: string | null
+        clave?: string | null
+        activo?: boolean
+        probado?: boolean
+        pppoe_por_acs?: boolean
+    } | null
+}): Promise<{ instanciaId: number | null }> {
+    const empresaId = opciones.empresaId ?? 1
+    const ahora = new Date()
+    let instanciaId: number | null = null
+    if (opciones.smartolt) {
+        const so = opciones.smartolt
+        const probado = so.probado ?? true
+        const existente = await db
+            .from('integraciones.smartolt_instancias')
+            .whereRaw('lower(url) = lower(?)', [so.url])
+            .first()
+        if (existente) {
+            instanciaId = Number(existente.id)
+            if (existente.empresa_id !== null && Number(existente.empresa_id) !== empresaId) {
+                await db
+                    .from('integraciones.smartolt_instancias')
+                    .where('id', instanciaId)
+                    .update({ empresa_id: null })
+            }
+        } else {
+            const [fila] = await db
+                .table('integraciones.smartolt_instancias')
+                .insert({
+                    empresa_id: so.compartida ? null : empresaId,
+                    nombre: so.nombre ?? `SmartOLT ${new URL(so.url).port || 'principal'}`,
+                    url: so.url,
+                    token_cifrado: cifrar(so.token ?? 'token-smartolt-secreto-123'),
+                    activo: so.activo ?? true,
+                    probado_en: probado ? ahora : null,
+                    prueba_ok: probado ? true : null,
+                })
+                .returning('id')
+            instanciaId = Number(fila.id)
+        }
+        for (const p of so.perfiles ?? []) {
+            await db
+                .knexQuery()
+                .table('integraciones.smartolt_olts')
+                .insert({ instancia_id: instanciaId, smartolt_olt_id: p.smartolt_olt_id, origen: 'manual' })
+                .onConflict(['instancia_id', 'smartolt_olt_id'])
+                .ignore()
+            const ref = await db
+                .from('integraciones.smartolt_olts')
+                .where({ instancia_id: instanciaId, smartolt_olt_id: p.smartolt_olt_id })
+                .firstOrFail()
+            await db.table('integraciones.equipos_perfiles').insert({
+                smartolt_olt_ref_id: ref.id,
+                plan_id: p.plan_id ?? null,
+                authorization_preset_id: p.authorization_preset_id,
+                pon_type: p.pon_type ?? 'gpon',
+            })
+        }
+    }
+    if (opciones.acs) {
+        const a = opciones.acs
+        const probado = a.probado ?? true
+        await db
+            .knexQuery()
+            .table('integraciones.acs_config')
+            .insert({
+                empresa_id: empresaId,
+                activo: a.activo ?? true,
+                url: a.url,
+                usuario: a.usuario ?? null,
+                clave_cifrada: a.clave ? cifrar(a.clave) : null,
+                probado_en: probado ? ahora : null,
+                prueba_ok: probado ? true : null,
+                pppoe_por_acs: a.pppoe_por_acs ?? false,
+            })
+            .onConflict('empresa_id')
+            .merge()
+    }
+    return { instanciaId }
+}
+
+/** Borra la configuración de equipos de todas las empresas (entre pruebas). */
+export async function limpiarEquipos() {
+    await db.from('integraciones.equipos_perfiles').delete()
+    await db.from('integraciones.smartolt_olts').delete()
+    await db.from('integraciones.smartolt_instancias').delete()
+    await db.from('integraciones.acs_config').delete()
+}
+
+/** Apaga SmartOLT y el ACS de una empresa (sus instancias propias y su ACS). */
+export async function apagarEquipos(empresaId: number) {
+    await db
+        .from('integraciones.smartolt_instancias')
+        .where('empresa_id', empresaId)
+        .update({ activo: false })
+    await db.from('integraciones.acs_config').where('empresa_id', empresaId).update({ activo: false })
+}
+
+/** Borra SmartOLT (instancias propias) y el ACS de una empresa. */
+export async function borrarEquiposDe(empresaId: number) {
+    await db.from('integraciones.smartolt_instancias').where('empresa_id', empresaId).delete()
+    await db.from('integraciones.acs_config').where('empresa_id', empresaId).delete()
 }

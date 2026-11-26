@@ -5,8 +5,23 @@ import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, empre
 
 type Consentimiento = Schema<'ConsentimientoWhatsapp'>
 
+export const CLAVE_WHATSAPP_ACTIVO = 'argos_fixtures_whatsapp_activo'
+
+function forzadoActivo(): boolean {
+    try {
+        return globalThis.localStorage?.getItem(CLAVE_WHATSAPP_ACTIVO) === '1'
+    }
+    catch {
+        return false
+    }
+}
+
 /** Como `estadoWhatsappIris` (A6): interruptor de la configuración y conector Iris con contrato ≥ 0.6.0. */
 function canal(): Schema<'WhatsappCliente'>['canal'] {
+    // Para Playwright: `localStorage.argos_fixtures_whatsapp_activo = '1'` enciende el canal sin recorrer la configuración.
+    if (forzadoActivo()) {
+        return { activo: true, disponible: true, motivo: null }
+    }
     const activo = bd.notificaciones.global.whatsapp.activo
     const conector = bd.iris.conector
     const contratoOk = conector.contrato !== null && conector.contrato.localeCompare('0.6.0', undefined, { numeric: true }) >= 0
@@ -23,7 +38,46 @@ function canal(): Schema<'WhatsappCliente'>['canal'] {
     return { activo, disponible: motivo === null, motivo }
 }
 
+/** Como `verAvisoPagoWhatsapp`: el primer sondeo ve el envío en cola; los siguientes, entregado. */
+function avisoDePago(pagoId: number, clienteId: number, empresaId: number): Schema<'AvisoPagoWhatsapp'> {
+    const canalPago = canal()
+    const plantillaActiva = bd.plantillasNotificacion.some(p => p.canal === 'whatsapp' && p.evento === 'pago.registrado' && p.activa)
+    const lecturas = (bd.whatsapp.lecturasPago[pagoId] ?? 0) + 1
+    bd.whatsapp.lecturasPago[pagoId] = lecturas
+    const hora = ahora()
+    const envia = canalPago.disponible && plantillaActiva
+    return {
+        pago_id: pagoId,
+        cliente_id: clienteId,
+        empresa_id: empresaId,
+        canal: canalPago,
+        plantilla_activa: plantillaActiva,
+        envio: envia
+            ? {
+                    id: pagoId,
+                    evento: 'pago.registrado',
+                    estado: lecturas === 1 ? 'encolado' : 'enviado',
+                    error: null,
+                    motivo: null,
+                    enviado_en: lecturas === 1 ? null : hora,
+                    entregado_en: lecturas === 1 ? null : hora,
+                    leido_en: null,
+                    created_at: hora,
+                }
+            : null,
+    }
+}
+
 export const rutasWhatsapp: RutasFixture = {
+    'GET /api/v1/notificaciones/pagos/:id/whatsapp': conPermiso('pagos.ver', (solicitud) => {
+        const pagoId = idDe(solicitud)
+        const pago = pagoId === null ? undefined : bd.pagos.find(p => p.id === pagoId)
+        if (!pago) {
+            return noEncontrado('el pago')
+        }
+        return { status: 200, cuerpo: avisoDePago(pago.id, pago.cliente_id, pago.empresa_id) }
+    }),
+
     'GET /api/v1/notificaciones/whatsapp/clientes/:id': conPermiso('notificaciones.ver', (solicitud) => {
         const clienteId = idDe(solicitud)
         if (clienteId === null || !bd.clientes.some(c => c.id === clienteId)) {

@@ -1,7 +1,12 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ConflictoVersion, ReglaNegocio } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { camposAuditables, verEstablecimiento, type EstablecimientoVista } from '#fiscal/establecimientos'
+import {
+    asignarCajas,
+    camposAuditables,
+    verEstablecimiento,
+    type EstablecimientoVista,
+} from '#fiscal/establecimientos'
 
 /**
  * `fiscal.editar_establecimiento` (`PUT /fiscal/establecimientos/:id`, permiso `fiscal.configurar`,
@@ -21,6 +26,8 @@ export interface EntradaEditarEstablecimiento {
     direccion?: string | null
     municipio?: string | null
     departamento?: string | null
+    codigo_postal?: string | null
+    cajas?: number[]
     activo?: boolean
     por_defecto?: boolean
 }
@@ -54,6 +61,7 @@ export default class EditarEstablecimiento extends DomainAction<
             direccion: limpio(input.direccion, actual.direccion),
             municipio: limpio(input.municipio, actual.municipio),
             departamento: limpio(input.departamento, actual.departamento),
+            codigo_postal: limpio(input.codigo_postal, actual.codigo_postal),
             activo: input.activo ?? actual.activo,
             por_defecto: input.por_defecto ?? actual.por_defecto,
         }
@@ -101,6 +109,7 @@ export default class EditarEstablecimiento extends DomainAction<
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
+        if (input.cajas !== undefined) await asignarCajas(t, actual, input.cajas)
         const editado = await verEstablecimiento(actual.id, t.trx)
         const campos = await t.registrarCambios(
             { tipo: 'establecimiento', id: actual.id },

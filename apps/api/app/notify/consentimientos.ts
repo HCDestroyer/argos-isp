@@ -8,6 +8,7 @@ import { estadoConectorWhatsapp, type EstadoWhatsapp } from '#notify/whatsapp'
 import { configPara } from '#notify/configuracion'
 import { esTransitorioIris } from '#notify/idempotencia_iris'
 import { enmascararTelefono } from '#notify/contactos'
+import { NoEncontrado } from '#shared/errores'
 
 /**
  * Permisos de contacto por WhatsApp hacia Iris (contrato Iris 0.6.0 §6.4). La acción
@@ -403,5 +404,99 @@ export async function verWhatsappCliente(
               }
             : null,
         ultimo_consentimiento: ultimo ? vista(ultimo) : null,
+    }
+}
+
+// ── Aviso de un pago (pantalla de éxito del cobro) ───────────────────────────────────────────
+
+export interface VistaAvisoPagoWhatsapp {
+    pago_id: number
+    cliente_id: number
+    empresa_id: number
+    canal: { activo: boolean; disponible: boolean; motivo: string | null }
+    /** la plantilla `whatsapp` de `pago.registrado` (`pago_recibido`) está activa */
+    plantilla_activa: boolean
+    envio: {
+        id: number
+        evento: string
+        estado: 'encolado' | 'enviado' | 'fallido' | 'omitido'
+        error: string | null
+        motivo: string | null
+        enviado_en: string | null
+        entregado_en: string | null
+        leido_en: string | null
+        created_at: string
+    } | null
+}
+
+function iso(valor: unknown): string | null {
+    return valor ? new Date(valor as string | Date).toISOString() : null
+}
+
+/**
+ * `GET /notificaciones/pagos/:id/whatsapp`: si el comprobante del pago sale por WhatsApp (Iris) y en
+ * qué estado va el último envío de ese pago. Solo lee; el envío lo programa el consumidor de
+ * `pago.registrado`. `null` en `envio` = aún no se programa (o no corresponde).
+ */
+export async function verAvisoPagoWhatsapp(pagoId: number): Promise<VistaAvisoPagoWhatsapp> {
+    const pago = (await db
+        .from('billing.pagos')
+        .where('id', pagoId)
+        .select('cliente_id', 'empresa_id')
+        .first()) as { cliente_id: number; empresa_id: number } | null
+    if (!pago) throw new NoEncontrado('pago')
+    const config = await configPara(pago.empresa_id)
+    const conector: EstadoWhatsapp = await estadoConectorWhatsapp()
+    const plantilla = await db
+        .from('notify.plantillas')
+        .where('canal', 'whatsapp')
+        .whereIn('evento', ['pago.registrado', 'comprobante.aprobado'])
+        .where('activa', true)
+        .select('id')
+        .first()
+    const envio = (await db
+        .from('notify.envios')
+        .where('cliente_id', pago.cliente_id)
+        .where('canal', 'whatsapp')
+        .whereIn('evento', ['pago.registrado', 'comprobante.aprobado'])
+        .whereRaw(`variables->'pago'->>'id' = ?`, [String(pagoId)])
+        .orderBy('id', 'desc')
+        .select(
+            'id',
+            'evento',
+            'estado',
+            'error',
+            'motivo',
+            'enviado_en',
+            'entregado_en',
+            'leido_en',
+            'created_at',
+        )
+        .first()) as Record<string, unknown> | null
+    return {
+        pago_id: pagoId,
+        cliente_id: pago.cliente_id,
+        empresa_id: pago.empresa_id,
+        canal: {
+            activo: config.whatsapp.activo,
+            disponible: config.whatsapp.activo && conector.disponible,
+            motivo: !config.whatsapp.activo
+                ? 'WhatsApp apagado en la configuración de notificaciones'
+                : conector.motivo,
+        },
+        plantilla_activa: Boolean(plantilla),
+        envio: envio
+            ? {
+                  id: Number(envio.id),
+                  evento: String(envio.evento),
+                  estado: envio.estado as 'encolado' | 'enviado' | 'fallido' | 'omitido',
+                  error: (envio.error as string | null) ?? null,
+                  motivo: (envio.motivo as string | null) ?? null,
+                  enviado_en: iso(envio.enviado_en),
+                  entregado_en: iso(envio.entregado_en),
+                  leido_en: iso(envio.leido_en),
+                  created_at: iso(envio.created_at)!,
+              }
+            : null,
     }
 }

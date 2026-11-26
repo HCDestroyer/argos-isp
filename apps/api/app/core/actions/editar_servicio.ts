@@ -1,3 +1,4 @@
+import { exigirSinNuncaObligatoria } from '#fiscal/fel/configuracion'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirPppoeAdmitido } from '#network/modo_seguridad'
@@ -381,6 +382,8 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                   })
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
+        // FEL obligatoria: `nunca` no existe, ni por la plantilla ni por la excepción (fel-establecimientos R2)
+        await exigirSinNuncaObligatoria(t.trx, { servicioId: id })
 
         const despues = await verServicio(id, t.trx)
         const claveNueva = columnas.pass_ppp !== undefined

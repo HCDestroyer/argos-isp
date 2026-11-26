@@ -31,7 +31,8 @@ export interface CredencialFixture {
 
 export interface FelFixtures {
     /** Configuración por empresa; sin entrada = `desactivada` con `version` 0 (como la API). */
-    configuraciones: Record<number, Omit<ConfiguracionFel, 'credenciales'>>
+    /** lo guardado; `lista`, `faltantes` y `credenciales` se derivan al leer */
+    configuraciones: Record<number, Omit<ConfiguracionFel, 'credenciales' | 'lista' | 'faltantes'>>
     credenciales: CredencialFixture[]
     dte: Dte[]
     /** XML certificado por DTE. */

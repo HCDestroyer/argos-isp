@@ -736,6 +736,8 @@ export const rutasFiscal: RutasFixture = {
             direccion: textoONull(cuerpo.direccion),
             municipio: textoONull(cuerpo.municipio),
             departamento: textoONull(cuerpo.departamento),
+            codigo_postal: textoONull(cuerpo.codigo_postal),
+            cajas: Array.isArray(cuerpo.cajas) ? cuerpo.cajas.filter((c): c is number => typeof c === 'number') : [],
             activo: true,
             por_defecto: porDefecto,
             version: 1,
@@ -765,6 +767,8 @@ export const rutasFiscal: RutasFixture = {
             direccion: 'direccion' in cuerpo ? textoONull(cuerpo.direccion) : actual.direccion,
             municipio: 'municipio' in cuerpo ? textoONull(cuerpo.municipio) : actual.municipio,
             departamento: 'departamento' in cuerpo ? textoONull(cuerpo.departamento) : actual.departamento,
+            codigo_postal: 'codigo_postal' in cuerpo ? textoONull(cuerpo.codigo_postal) : actual.codigo_postal,
+            cajas: Array.isArray(cuerpo.cajas) ? cuerpo.cajas.filter((c): c is number => typeof c === 'number') : actual.cajas,
             activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : actual.activo,
             por_defecto: typeof cuerpo.por_defecto === 'boolean' ? cuerpo.por_defecto : actual.por_defecto,
         }

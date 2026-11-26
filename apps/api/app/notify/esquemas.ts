@@ -375,3 +375,45 @@ export const AsignacionRecordatorioMasiva = definirEsquema(
     'AsignacionRecordatorioMasiva',
     objeto({ plantilla_id: id, asignados: entero, sin_cambios: entero }),
 )
+
+export const AvisoPagoWhatsapp = definirEsquema(
+    'AvisoPagoWhatsapp',
+    objeto({
+        pago_id: id,
+        cliente_id: id,
+        empresa_id: id,
+        canal: objeto({
+            activo: {
+                type: 'boolean',
+                description: 'Interruptor de WhatsApp en la configuración de la empresa del pago',
+            },
+            disponible: {
+                type: 'boolean',
+                description: 'Encendido y con el conector Iris activo con contrato ≥ 0.6.0',
+            },
+            motivo: { ...nulable(texto), description: 'Por qué no está disponible' },
+        }),
+        plantilla_activa: {
+            type: 'boolean',
+            description:
+                'La plantilla `whatsapp` de `pago.registrado` o `comprobante.aprobado` (`pago_recibido`) está activa',
+        },
+        envio: {
+            ...nulable(
+                objeto({
+                    id,
+                    evento: texto,
+                    estado: enumerado(['encolado', 'enviado', 'fallido', 'omitido']),
+                    error: nulable(texto),
+                    motivo: nulable(texto),
+                    enviado_en: nulable(instante),
+                    entregado_en: nulable(instante),
+                    leido_en: nulable(instante),
+                    created_at: instante,
+                }),
+            ),
+            description:
+                'Último envío por WhatsApp (Iris) de este pago; null si aún no se programa o no corresponde',
+        },
+    }),
+)

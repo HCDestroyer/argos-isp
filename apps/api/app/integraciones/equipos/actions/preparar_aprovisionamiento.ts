@@ -1,13 +1,14 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { descifrar } from '#shared/cifrado'
 import type { CausaAprovisionamiento } from '#shared/eventos'
+import { acsDeEmpresa, type AcsEmpresa } from '#integraciones/equipos/acs'
 import {
-    configDeEmpresa,
-    gestionDe,
-    perfilesDeEmpresa,
+    instanciaParaServicio,
+    leerInstancia,
+    oltDeInstancia,
     perfilPara,
-    type ConfigEquipos,
-} from '#integraciones/equipos/configuracion'
+    type InstanciaSmartOlt,
+} from '#integraciones/equipos/smartolt_instancias'
 import { ErrorEquipos } from '#integraciones/equipos/http'
 import * as smartolt from '#integraciones/equipos/smartolt'
 import * as genieacs from '#integraciones/equipos/genieacs'
@@ -97,10 +98,11 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
             })
             return { resultado: 'fallido' }
         }
-        const config = await configDeEmpresa(fila.empresa_id, t.trx)
+        const acs = await acsDeEmpresa(fila.empresa_id, t.trx)
         let pasos = fila.pasos
         const datos = {
             smartolt_external_id: fila.smartolt_external_id,
+            smartolt_instancia_id: fila.smartolt_instancia_id,
             acs_device_id: fila.acs_device_id,
             senal: fila.senal,
         }
@@ -108,18 +110,16 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
             await this.revisarEnUso(t, fila)
             if (estadoPaso(pasos, 'equipo') === 'pendiente') {
                 if (fila.equipo.tipo === 'ont') {
-                    datos.smartolt_external_id = await this.autorizarOnt(
-                        fila,
-                        config,
-                        Number(servicio.plan_id),
-                    )
+                    const r = await this.autorizarOnt(t, fila, Number(servicio.plan_id))
+                    datos.smartolt_external_id = r.externo
+                    datos.smartolt_instancia_id = r.instanciaId
                 }
-                if (this.usaAcs(fila, config)) {
-                    const disp = await this.dispositivo(fila, config)
+                if (this.usaAcs(fila, acs)) {
+                    const disp = await this.dispositivo(fila, acs)
                     datos.acs_device_id = disp.id
-                    if (config.pppoePorAcs && servicio.user_ppp && servicio.pass_ppp) {
+                    if (this.pppoePorAcs(fila, acs) && servicio.user_ppp && servicio.pass_ppp) {
                         const p = genieacs.PARAMETROS[disp.modelo_datos ?? 'tr098']
-                        await this.aplicar(fila, config, disp, 'equipo', [
+                        await this.aplicar(fila, acs, disp, 'equipo', [
                             [p.pppUsuario, servicio.user_ppp],
                             [p.pppClave, descifrar(servicio.pass_ppp)],
                         ])
@@ -128,18 +128,26 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                 pasos = marcarPaso(pasos, 'equipo', 'hecho')
             }
             if (estadoPaso(pasos, 'wifi') === 'pendiente') {
-                const disp = await this.dispositivo(fila, config)
+                const disp = await this.dispositivo(fila, acs)
                 datos.acs_device_id = disp.id
                 const p = genieacs.PARAMETROS[disp.modelo_datos ?? 'tr098']
                 const valores: Array<[string, string]> = []
                 if (fila.wifi_ssid_cifrado) valores.push([p.ssid, descifrar(fila.wifi_ssid_cifrado)])
                 if (fila.wifi_clave_cifrada) valores.push([p.clave, descifrar(fila.wifi_clave_cifrada)])
-                if (valores.length > 0) await this.aplicar(fila, config, disp, 'wifi', valores)
+                if (valores.length > 0) await this.aplicar(fila, acs, disp, 'wifi', valores)
                 pasos = marcarPaso(pasos, 'wifi', 'hecho')
             }
-            if (fila.equipo.tipo === 'ont' && datos.smartolt_external_id && config.smartolt && !datos.senal) {
+            const instancia = datos.smartolt_instancia_id
+                ? await leerInstancia(datos.smartolt_instancia_id, t.trx)
+                : null
+            if (
+                fila.equipo.tipo === 'ont' &&
+                datos.smartolt_external_id &&
+                instancia?.config &&
+                !datos.senal
+            ) {
                 datos.senal = await smartolt
-                    .senal(config.smartolt, datos.smartolt_external_id, fila.servicio_id)
+                    .senal(instancia.config, datos.smartolt_external_id, fila.servicio_id)
                     .catch(() => null)
             }
         } catch (error) {
@@ -153,6 +161,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
             .update({
                 pasos: JSON.stringify(pasos),
                 smartolt_external_id: datos.smartolt_external_id,
+                smartolt_instancia_id: datos.smartolt_instancia_id,
                 acs_device_id: datos.acs_device_id,
                 senal: datos.senal ? JSON.stringify(datos.senal) : null,
                 intentos: fila.intentos + 1,
@@ -164,13 +173,21 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
     }
 
     /** ¿El paso `equipo` pasa por el ACS? */
-    private usaAcs(fila: FilaAprovisionamiento, config: ConfigEquipos): boolean {
-        if (!gestionDe(config).tr069 || !config.genieacs) return false
+    private usaAcs(fila: FilaAprovisionamiento, acs: AcsEmpresa): boolean {
         return (
             fila.equipo.tipo === 'router_tr069' ||
             Boolean(fila.wifi_clave_cifrada || fila.wifi_ssid_cifrado) ||
-            config.pppoePorAcs
+            this.pppoePorAcs(fila, acs)
         )
+    }
+
+    /**
+     * PPPoE por el ACS: se decidió al aceptar (`equipo.pppoe_por_acs`, §4.3). Los pedidos aceptados antes
+     * del lote 2 no lo traen: entonces vale el ajuste actual del ACS si está operativo.
+     */
+    private pppoePorAcs(fila: FilaAprovisionamiento, acs: AcsEmpresa): boolean {
+        if (typeof fila.equipo.pppoe_por_acs === 'boolean') return fila.equipo.pppoe_por_acs
+        return acs.operativo && acs.pppoePorAcs
     }
 
     /** La serie o la MAC ya están en otro servicio (inventario o equipo gestionado). */
@@ -217,27 +234,88 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
         }
     }
 
-    private async autorizarOnt(
+    /**
+     * La instancia de SmartOLT del pedido (§4.2) y la ONT autorizada en ella. La autorización usa la OLT,
+     * la placa y el puerto **que dice SmartOLT** para esa ONT; si no es la OLT esperada por la red de
+     * acceso de Argos, no falla y queda `olt_distinta` en la auditoría.
+     */
+    private async elegirInstancia(
+        t: Transaccion,
         fila: FilaAprovisionamiento,
-        config: ConfigEquipos,
-        planId: number,
-    ): Promise<string> {
-        const so = config.smartolt
-        if (!so) {
+    ): Promise<{
+        instancia: InstanciaSmartOlt
+        oltEsperada: { id: number; smartolt_olt_id: string } | null
+    }> {
+        const serie = fila.equipo.serie!
+        const eleccion = await instanciaParaServicio(
+            { id: fila.servicio_id, empresa_id: fila.empresa_id },
+            (fila.planta as { olt?: string | null } | null) ?? null,
+            {
+                instanciaGuardada: fila.smartolt_instancia_id,
+                cliente: t.trx,
+                buscar: async (inst) => {
+                    const so = inst.config!
+                    const autorizadas = await smartolt.detallesPorSerie(so, serie, fila.servicio_id)
+                    if (autorizadas.some((o) => o.unique_external_id)) return true
+                    return Boolean(await smartolt.buscarSinConfigurar(so, serie, fila.servicio_id))
+                },
+            },
+        )
+        if (eleccion.origen === 'ambigua') {
+            throw new FalloPaso('equipo', 'otro', 'La ONT aparece en más de una instancia de SmartOLT', false)
+        }
+        if (!eleccion.instancia) {
+            if (eleccion.candidatas.length === 0) {
+                throw new FalloPaso(
+                    'equipo',
+                    'olt_sin_respuesta',
+                    'La empresa no tiene una instancia de SmartOLT encendida y probada',
+                    false,
+                    true,
+                )
+            }
+            if (eleccion.errores.length > 0) {
+                throw new FalloPaso(
+                    'equipo',
+                    'olt_sin_respuesta',
+                    `SmartOLT no respondió: ${eleccion.errores.join(' · ')}`,
+                    true,
+                    true,
+                )
+            }
             throw new FalloPaso(
                 'equipo',
-                'otro',
-                'SmartOLT ya no está configurado en la empresa',
+                'equipo_no_encontrado',
+                'La ONT no aparece en ninguna instancia de SmartOLT: revisa que esté conectada y encendida',
+                true,
+            )
+        }
+        if (!eleccion.instancia.operativa || !eleccion.instancia.config) {
+            throw new FalloPaso(
+                'equipo',
+                'olt_sin_respuesta',
+                `La instancia «${eleccion.instancia.nombre}» de SmartOLT está apagada o sin probar`,
                 false,
                 true,
             )
         }
+        return { instancia: eleccion.instancia, oltEsperada: eleccion.oltEsperada }
+    }
+
+    private async autorizarOnt(
+        t: Transaccion,
+        fila: FilaAprovisionamiento,
+        planId: number,
+    ): Promise<{ externo: string; instanciaId: number }> {
+        const { instancia, oltEsperada } = await this.elegirInstancia(t, fila)
+        const so = instancia.config!
+        const instanciaId = instancia.id
         const serie = fila.equipo.serie!
         const externo = smartolt.idExternoOnu(fila.servicio_id)
         try {
             const autorizadas = await smartolt.detallesPorSerie(so, serie, fila.servicio_id)
             const ya = autorizadas.find((o) => o.unique_external_id)
-            if (ya?.unique_external_id === externo) return externo
+            if (ya?.unique_external_id === externo) return { externo, instanciaId }
             if (ya) {
                 throw new FalloPaso(
                     'equipo',
@@ -255,12 +333,18 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                     true,
                 )
             }
-            const perfil = perfilPara(await perfilesDeEmpresa(fila.empresa_id), onu.olt_id, planId)
+            if (oltEsperada && oltEsperada.smartolt_olt_id !== onu.olt_id) {
+                t.anotarAuditoria({
+                    olt_distinta: { esperada: oltEsperada.smartolt_olt_id, real: onu.olt_id },
+                })
+            }
+            const ref = await oltDeInstancia(instanciaId, onu.olt_id, t.trx)
+            const perfil = ref ? await perfilPara(Number(ref.id), planId, t.trx) : null
             if (!perfil) {
                 throw new FalloPaso(
                     'equipo',
                     'perfil_sin_mapear',
-                    `La OLT ${onu.olt_id} de SmartOLT no tiene perfil de autorización para el plan del servicio`,
+                    `La OLT ${onu.olt_id} de la instancia «${instancia.nombre}» de SmartOLT no tiene perfil de autorización para el plan del servicio`,
                     false,
                 )
             }
@@ -285,7 +369,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                 }
                 await smartolt.autorizar(so, { ...entrada, onu_type: onu.onu_type_name }, fila.servicio_id)
             }
-            return externo
+            return { externo, instanciaId }
         } catch (error) {
             if (error instanceof FalloPaso) throw error
             if (error instanceof ErrorEquipos) {
@@ -308,11 +392,17 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
 
     private async dispositivo(
         fila: FilaAprovisionamiento,
-        config: ConfigEquipos,
+        config: AcsEmpresa,
     ): Promise<genieacs.DispositivoAcs> {
         const acs = config.genieacs
-        if (!acs || !gestionDe(config).tr069) {
-            throw new FalloPaso('equipo', 'otro', 'El ACS ya no está configurado en la empresa', false, true)
+        if (!acs || !config.operativo) {
+            throw new FalloPaso(
+                'equipo',
+                'acs_sin_respuesta',
+                'El ACS de la empresa está apagado o sin probar',
+                false,
+                true,
+            )
         }
         try {
             const { serie, mac } = fila.equipo
@@ -341,7 +431,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
 
     private async aplicar(
         fila: FilaAprovisionamiento,
-        config: ConfigEquipos,
+        config: AcsEmpresa,
         disp: genieacs.DispositivoAcs,
         paso: NombrePaso,
         valores: Array<[string, string]>,
@@ -380,7 +470,12 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
         t: Transaccion,
         fila: FilaAprovisionamiento,
         pasos: Paso[],
-        datos: { smartolt_external_id: string | null; acs_device_id: string | null; senal: unknown },
+        datos: {
+            smartolt_external_id: string | null
+            smartolt_instancia_id: number | null
+            acs_device_id: string | null
+            senal: unknown
+        },
         error: FalloPaso,
     ): Promise<ResultadoPreparar> {
         const espera = ESPERAS_REINTENTO_S[fila.intentos]
@@ -391,6 +486,7 @@ export default class PrepararAprovisionamiento extends DomainAction<{ id: number
                 .update({
                     pasos: JSON.stringify(pasos),
                     smartolt_external_id: datos.smartolt_external_id,
+                    smartolt_instancia_id: datos.smartolt_instancia_id,
                     acs_device_id: datos.acs_device_id,
                     intentos: fila.intentos + 1,
                     proximo_intento_en: new Date(Date.now() + espera * 1000),
