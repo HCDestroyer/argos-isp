@@ -45,6 +45,8 @@ const PANTALLAS = [
     ['extracto y conciliación', '/bancos/extractos/1'],
     ['reporte de conciliación', '/bancos/conciliacion'],
     ['cartera', '/cartera'],
+    // Plan de contabilidad P3: indicadores con ayuda «?».
+    ['panel financiero', '/finanzas'],
     ['pago con proveedor de cobro', '/pagos/7003'],
     // Lealtad, fase 1.
     ['lealtad', '/lealtad'],

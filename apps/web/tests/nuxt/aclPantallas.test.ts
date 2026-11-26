@@ -159,7 +159,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Libros legales con folio (fase 6 PR D): leen los folios del libro (`libros.ver`, el de la página).
     'EmitirLibroModal.vue': { permisos: ['libros.emitir', 'libros.ver'], desde: ['pages/libros/index.vue'] },
     'HabilitacionLibroModal.vue': { permisos: ['libros.habilitar', 'libros.ver'], desde: ['pages/libros/habilitaciones.vue'] },
-    'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id]/index.vue', 'pages/clientes/[id]/index.vue'] },
+    // «Nueva factura» (antes CargoUnicoModal): ficha del servicio, del cliente y lista de Facturas.
+    'FacturaNuevaPanel.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id]/index.vue', 'pages/clientes/[id]/index.vue', 'pages/facturas/index.vue'] },
     'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id]/index.vue'] },
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
     'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
@@ -336,6 +337,12 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'IntentoDecidirModal.vue': { permisos: ['inventario.decidir_intento_recuperacion'], desde: ['pages/inventario/por-recuperar/[id].vue'] },
     'BancoOrigenModal.vue': { permisos: ['bancos_origen.crear', 'bancos_origen.editar'], desde: ['pages/configuracion/bancos-origen.vue'] },
     'CorreoExternoModal.vue': { permisos: ['reportes.aprobar_correo_externo'], desde: ['pages/reportes/envios.vue'] },
+    // Plan de contabilidad P2: cada ventana se monta solo con el permiso de su acción.
+    'AsientoManualSlideover.vue': { permisos: ['libro.registrar_asiento'], desde: ['pages/libro/index.vue'] },
+    // «Por aprobar» lista con el `libro.ver` de la página del libro.
+    'LibroBorradores.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'CarteraGestionModal.vue': { permisos: ['gestiones_cobro.registrar'], desde: ['pages/cartera/index.vue'] },
+    'ReporteEnvioModal.vue': { permisos: ['reportes.programar_envio'], desde: ['pages/reportes/[reporte].vue'] },
     // SmartOLT y ACS por separado: la página de integraciones se abre con cualquiera de sus permisos y monta la
     // lista de SmartOLT con `smartolt.ver` y el ACS con `acs.ver` (según `?ver=`, que solo lista lo permitido).
     'ConfiguracionSmartOlt.vue': { permisos: ['smartolt.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },

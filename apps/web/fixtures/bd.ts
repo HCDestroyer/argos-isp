@@ -44,6 +44,7 @@ import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
+import { borradoresIniciales } from './libro/borradores'
 import { promesas } from './promesas/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { implementacionesPlan } from './planes/implementaciones'
@@ -180,6 +181,10 @@ interface BaseFixtures {
     promesas: Schema<'Promesa'>[]
     cuentas: Schema<'Cuenta'>[]
     asientos: Schema<'Asiento'>[]
+    /** Asientos de ajuste por aprobar (`GET /libro/borradores`, A3, decisión 10 del PM). */
+    borradoresAsiento: Schema<'BorradorAsiento'>[]
+    /** Gestiones de cobro registradas desde el panel (`POST /clientes/:id/gestiones-cobro`, A3). */
+    gestionesCobro: Schema<'GestionCobro'>[]
     egresos: Schema<'Egreso'>[]
     cierres: Schema<'CierrePeriodo'>[]
     /* Fase 6 (A3): bloqueos del libro, excepciones y lo que una corrida dejó pendiente por un bloqueo. */
@@ -406,6 +411,8 @@ function inicial(): BaseFixtures {
         promesas,
         cuentas,
         asientos,
+        borradoresAsiento: borradoresIniciales(),
+        gestionesCobro: [],
         egresos,
         cierres,
         bloqueosLibro,

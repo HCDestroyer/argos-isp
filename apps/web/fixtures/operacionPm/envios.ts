@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, empresaActivaDe, empresasDeLista, idDe, noEncontrado, problemaTipado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
 import { texto } from './comun'
 
 type Envio = Schema<'EnvioReporte'>
@@ -44,6 +44,84 @@ export const rutasEnviosReportes: RutasFixture = {
             .slice(0, Number.isInteger(limite) && limite > 0 ? limite : 20)
         return { status: 200, cuerpo: { data } }
     }),
+
+    /**
+     * Programar un envío (A3): la empresa activa o el consolidado (solo con alcance global);
+     * destinatarios usuarios o correos externos aprobados y activos; frecuencia con su día (semanal 1 a
+     * 7, mensual 1 a 28) y hora de Guatemala. 422 `no_compartible` si hay un correo externo y el
+     * reporte lleva datos de clientes (un filtro por cliente).
+     */
+    'POST /api/v1/reportes/envios': conPermiso('reportes.programar_envio', conIdempotencia((solicitud) => {
+        const cuerpo = cuerpoObjeto(solicitud)
+        const nombre = texto(cuerpo.nombre)
+        const reporte = texto(cuerpo.reporte)
+        const errores: { field: string, message: string, rule: string }[] = []
+        if (!nombre) {
+            errores.push({ field: 'nombre', message: 'El campo nombre es obligatorio', rule: 'required' })
+        }
+        if (!reporte) {
+            errores.push({ field: 'reporte', message: 'El campo reporte es obligatorio', rule: 'required' })
+        }
+        if (!['diaria', 'semanal', 'mensual'].includes(String(cuerpo.frecuencia))) {
+            errores.push({ field: 'frecuencia', message: 'Elige cada cuánto', rule: 'enum' })
+        }
+        if (!['pdf', 'xlsx', 'csv'].includes(String(cuerpo.formato))) {
+            errores.push({ field: 'formato', message: 'Elige el formato', rule: 'enum' })
+        }
+        if (typeof cuerpo.hora !== 'number' || cuerpo.hora < 0 || cuerpo.hora > 23) {
+            errores.push({ field: 'hora', message: 'La hora va de 0 a 23', rule: 'range' })
+        }
+        const destinatarios = (cuerpo.destinatarios ?? {}) as { usuarios?: number[], correos_externos?: number[] }
+        const usuarios = destinatarios.usuarios ?? []
+        const correos = destinatarios.correos_externos ?? []
+        if (usuarios.length + correos.length === 0) {
+            errores.push({ field: 'destinatarios', message: 'Al menos un usuario o un correo de la lista aprobada', rule: 'required' })
+        }
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        const filtros = (typeof cuerpo.filtros === 'object' && cuerpo.filtros !== null ? cuerpo.filtros : {}) as Record<string, unknown>
+        if (correos.length && filtros.cliente_id !== undefined) {
+            return problemaTipado(422, 'no_compartible', 'Regla de negocio', 'Este reporte lleva datos de clientes (cliente_id): no se puede enviar a un correo externo')
+        }
+        const consolidado = cuerpo.consolidado === true
+        const empresaId = consolidado ? null : empresaActivaDe(solicitud) ?? 1
+        const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+        let siguiente = Math.max(0, ...bd.operacionPm.envios.flatMap(e => e.destinatarios.map(d => d.id))) + 1
+        const momento = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        momento.setUTCHours(Number(cuerpo.hora) + 6, 0, 0, 0)
+        const envio: Envio = {
+            id: Math.max(0, ...bd.operacionPm.envios.map(e => e.id)) + 1,
+            empresa_id: empresaId,
+            nombre,
+            reporte,
+            filtros,
+            formato: cuerpo.formato as Envio['formato'],
+            frecuencia: cuerpo.frecuencia as Envio['frecuencia'],
+            dia: cuerpo.frecuencia === 'diaria' ? null : typeof cuerpo.dia === 'number' ? cuerpo.dia : 1,
+            hora: Number(cuerpo.hora),
+            activo: true,
+            proximo_en: momento.toISOString(),
+            ultimo_envio_en: null,
+            creado_por: usuario?.id ?? null,
+            destinatarios: [
+                ...usuarios.map((id) => {
+                    const persona = Object.values(usuariosPorToken).find(u => u.id === id)
+                    return { id: siguiente++, tipo: 'usuario' as const, usuario_id: id, correo_externo_id: null, nombre: persona?.nombre ?? null, correo: persona?.email ?? null, retirado: false }
+                }),
+                ...correos.map((id) => {
+                    const correo = bd.operacionPm.correosExternos.find(c => c.id === id)
+                    return { id: siguiente++, tipo: 'correo_externo' as const, usuario_id: null, correo_externo_id: id, nombre: correo?.nombre ?? null, correo: correo?.correo ?? null, retirado: correo ? !correo.activo : false }
+                }),
+            ],
+            version: 1,
+            created_at: ahora(),
+            updated_at: ahora(),
+        }
+        bd.operacionPm.envios.push(envio)
+        registrarAccion(solicitud, 'reportes.programar_envio', { tipo: 'reporte_envio', id: envio.id }, cuerpo)
+        return { status: 201, cuerpo: envio }
+    })),
 
     'PUT /api/v1/reportes/envios/:id': conPermiso('reportes.editar_envio', conIdempotencia((solicitud) => {
         const envio = enviosVisibles(solicitud).find(e => e.id === idDe(solicitud))
