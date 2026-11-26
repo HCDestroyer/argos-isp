@@ -626,7 +626,7 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     // Mejora de plan temporal (A1, `core.servicios_planes_temporales`): se ve en la ficha del servicio.
     plan_temporal: { etiqueta: 'Plan temporal' },
     // Decisiones del PM 18, 30 y 31 (A1).
-    promocion_velocidad: { etiqueta: 'Promoción de velocidad' },
+    promocion_velocidad: { etiqueta: 'Promoción de velocidad', ruta: id => `/planes/promociones/${id}` },
     promocion_servicio: { etiqueta: 'Promoción en un servicio' },
     tramo_promocion: { etiqueta: 'Tramo de promoción' },
     ajustes_operacion: { etiqueta: 'Ajustes de operación' },
