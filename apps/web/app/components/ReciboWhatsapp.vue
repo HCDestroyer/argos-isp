@@ -76,7 +76,7 @@ const sinProgramar = computed(() => activo.value && aviso.value?.envio === null 
                 class="text-xs text-muted"
                 data-prueba="whatsapp-apagado"
             >
-                <template v-if="puede('notificaciones.configurar')">
+                <template v-if="puede('notificaciones.configurar') && puede('notificaciones.ver')">
                     Envío por WhatsApp: actívalo en
                     <ULink
                         to="/configuracion/notificaciones"

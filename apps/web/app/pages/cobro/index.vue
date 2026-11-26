@@ -2096,7 +2096,7 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                         />
                     </div>
                     <ReciboWhatsapp
-                        v-if="pago"
+                        v-if="pago && puede('pagos.ver')"
                         :pago-id="pago.id"
                     />
                     <UButton
