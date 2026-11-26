@@ -251,3 +251,18 @@ export const listarCierresValidator = vine.compile(
         estado: vine.enum(['cerrado', 'reabierto'] as const).optional(),
     }),
 )
+
+export const inicioContabilidadValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        periodo: vine
+            .string()
+            .trim()
+            .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+            .optional()
+            .meta({
+                description:
+                    'Mes YYYY-MM de los pasos del mes (por defecto el mes en curso de Guatemala; uno futuro = el actual)',
+            }),
+    }),
+)
