@@ -23,7 +23,11 @@ const cajas = shallowRef<Schema<'Caja'>[]>([])
 const itemsCajas = computed(() => cajas.value
     .filter(c => props.establecimiento ? c.empresa_id === props.establecimiento.empresa_id : true)
     .map(c => ({ label: c.nombre, value: c.id })))
+const veCajas = computed(() => puede('cajas.ver'))
 onMounted(async () => {
+    if (!veCajas.value) {
+        return
+    }
     const resultado = await useCajas().listar()
     cajas.value = resultado.ok ? resultado.data : []
 })
@@ -172,6 +176,7 @@ async function guardar(evento: FormSubmitEvent<SalidaEstablecimiento>) {
                     </UFormField>
                 </div>
                 <UFormField
+                    v-if="veCajas"
                     label="Cajas que cobran por esta sucursal"
                     name="cajas"
                     help="Las facturas cobradas en estas cajas salen por este establecimiento; las demás (cron, Iris, API), por el establecimiento por defecto."
