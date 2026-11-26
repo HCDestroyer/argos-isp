@@ -1,5 +1,6 @@
 import vine from '@vinejs/vine'
 import { idEntidad, instanteIso } from '#shared/validadores'
+import { reglasPaginacion } from '#shared/paginacion'
 
 /**
  * Validadores de equipos (contrato Iris 0.9.0 §12) y del reenvío de la bienvenida (§12.5). Los
@@ -101,16 +102,15 @@ const secreto = () =>
         .optional()
         .meta({ description: 'Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve' })
 
-export const configurarEquiposValidator = vine.compile(
+/** `PUT /integraciones/acs` (`contratos/equipos-olt-acs.md` §5.1). */
+export const configurarAcsValidator = vine.compile(
     vine.object({
         version: vine.number().withoutDecimals().min(0),
         activo: vine.boolean().optional(),
-        smartolt_url: url().meta({ description: '`https://<subdominio>.smartolt.com`' }),
-        smartolt_token: secreto(),
-        genieacs_url: url().meta({ description: 'URL del NBI de GenieACS (o del proxy que lo protege)' }),
-        genieacs_usuario: vine.string().trim().maxLength(200).nullable().optional(),
-        genieacs_clave: secreto(),
-        genieacs_ca: vine
+        url: url().meta({ description: 'URL del NBI de GenieACS (o del proxy que lo protege)' }),
+        usuario: vine.string().trim().maxLength(200).nullable().optional(),
+        clave: secreto(),
+        ca: vine
             .string()
             .trim()
             .maxLength(20_000)
@@ -118,25 +118,86 @@ export const configurarEquiposValidator = vine.compile(
             .optional()
             .meta({ description: 'Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra' }),
         pppoe_por_acs: vine.boolean().optional().meta({
-            description: 'Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar',
+            description:
+                'Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar (solo con el ACS operativo)',
         }),
-        perfiles: vine
-            .array(
-                vine.object({
-                    smartolt_olt_id: vine.string().trim().minLength(1).maxLength(50),
-                    plan_id: idEntidad().nullable().optional(),
-                    authorization_preset_id: vine.number().withoutDecimals().min(1),
-                    pon_type: vine
-                        .enum(['gpon', 'epon'] as const)
-                        .nullable()
-                        .optional(),
-                }),
-            )
-            .maxLength(500)
-            .optional()
-            .meta({
-                description:
-                    'Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset',
-            }),
     }),
 )
+
+const perfilesInstancia = () =>
+    vine
+        .array(
+            vine.object({
+                smartolt_olt_id: vine.string().trim().minLength(1).maxLength(50),
+                plan_id: idEntidad().nullable().optional(),
+                authorization_preset_id: vine.number().withoutDecimals().min(1),
+                pon_type: vine
+                    .enum(['gpon', 'epon'] as const)
+                    .nullable()
+                    .optional(),
+            }),
+        )
+        .maxLength(500)
+        .optional()
+        .meta({
+            description:
+                'Reemplaza los perfiles de las OLT de esta instancia: OLT de SmartOLT + plan (null = cualquiera) → preset',
+        })
+
+/** `POST /integraciones/smartolt/instancias` (`contratos/equipos-olt-acs.md` §5.1). */
+export const crearInstanciaSmartOltValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(1).maxLength(100),
+        url: vine.string().trim().maxLength(500).meta({ description: '`https://<subdominio>.smartolt.com`' }),
+        token: vine
+            .string()
+            .maxLength(500)
+            .meta({ description: 'Clave de API de esa cuenta (General > API key). Nunca vuelve' }),
+        compartida: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Compartida con todas las empresas (solo con alcance global)' }),
+        empresa_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Empresa dueña (sin `compartida`); por defecto la activa' }),
+        activo: vine.boolean().optional(),
+        nota: vine.string().trim().maxLength(1000).nullable().optional(),
+    }),
+)
+
+/** `PUT /integraciones/smartolt/instancias/:id`. */
+export const editarInstanciaSmartOltValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1),
+        nombre: vine.string().trim().minLength(1).maxLength(100).optional(),
+        url: vine.string().trim().maxLength(500).optional(),
+        token: vine
+            .string()
+            .maxLength(500)
+            .optional()
+            .meta({ description: 'Omitido: se conserva. Nunca vuelve' }),
+        activo: vine.boolean().optional(),
+        nota: vine.string().trim().maxLength(1000).nullable().optional(),
+        compartida: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Pasarla a compartida o devolverla a una empresa (alcance global)' }),
+        empresa_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Empresa dueña (sin `compartida`); con acceso a ella' }),
+        perfiles: perfilesInstancia(),
+    }),
+)
+
+/** `POST /integraciones/smartolt/olts/:id/vincular`. */
+export const vincularOltSmartOltValidator = vine.compile(
+    vine.object({
+        olt_id: idEntidad()
+            .nullable()
+            .meta({ description: 'OLT de la red de acceso de Argos (`network.olts`); null la desvincula' }),
+    }),
+)
+
+export const listarInstanciasSmartOltValidator = vine.compile(vine.object({ ...reglasPaginacion }))

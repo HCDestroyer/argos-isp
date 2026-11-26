@@ -3,7 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import type { ContextoAccion } from '#shared/contexto'
 import { EmpresaRequerida, exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { normalizarNitCui } from '#core/nit_cui'
+import { limpiarDocumento, nitValido, revisarNit } from '#core/nit_cui'
 import { PREFIJO_API } from '#shared/rutas'
 import { instaladorLocalizacion } from '#core/localizacion'
 
@@ -82,13 +82,18 @@ export interface EmpresaCompleta extends DatosEmpresaCompleta {
     logo_tipo: 'image/png' | 'image/svg+xml' | null
     activa: boolean
     principal: boolean
+    /**
+     * Derivado (no es columna): el NIT cuadra con el módulo 11. `false` = se guardó con advertencia
+     * (NIT de pruebas del certificador); la SAT lo rechazaría en producción. null sin NIT.
+     */
+    nit_valido: boolean | null
     version: number
     created_at: string
     updated_at: string
 }
 
 /** Fila interna (con la ruta del logo en el almacenamiento). */
-export interface FilaEmpresa extends Omit<EmpresaCompleta, 'logo_url' | 'principal'> {
+export interface FilaEmpresa extends Omit<EmpresaCompleta, 'logo_url' | 'principal' | 'nit_valido'> {
     logo: string | null
     logo_etag: string | null
 }
@@ -122,6 +127,7 @@ function aVista(fila: FilaEmpresa): EmpresaCompleta {
             fila.codigo_establecimiento === null ? null : Number(fila.codigo_establecimiento),
         logo_url: urlLogoEmpresa(Number(fila.id), etag),
         principal: Number(fila.id) === EMPRESA_PRINCIPAL,
+        nit_valido: fila.nit === null ? null : nitValido(fila.nit),
     }
 }
 
@@ -216,9 +222,14 @@ export async function exigirEmpresaActiva(
     }
 }
 
-/** NIT de una empresa: normalizado (sin guion, mayúsculas); `CF` no es un NIT de emisor. */
+/**
+ * NIT de una empresa: normalizado (sin espacios ni guiones, mayúsculas) con la forma tolerante de
+ * `revisarNit` (`contratos/fel-establecimientos.md` R1): letras y guiones se admiten y el módulo 11
+ * es advertencia (`nit_valido` en la vista). `CF` no es un NIT de emisor.
+ */
 export function normalizarNitEmpresa(valor: string | null | undefined): string | null {
-    const nit = normalizarNitCui(valor, 'nit')
+    if (valor === null || valor === undefined || limpiarDocumento(valor) === '') return null
+    const { nit } = revisarNit(valor, 'nit')
     if (nit === 'CF') {
         throw new ValidacionFallida([
             { field: 'nit', message: 'Una empresa necesita un NIT; CF no aplica', rule: 'nit' },

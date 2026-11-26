@@ -86,6 +86,7 @@ export default class ActivarAprovisionamiento extends DomainAction<{ id: number 
                 modelo: fila.equipo.modelo,
                 unidad_id: unidadId,
                 smartolt_external_id: fila.smartolt_external_id,
+                smartolt_instancia_id: fila.smartolt_external_id ? fila.smartolt_instancia_id : null,
                 acs_device_id: fila.acs_device_id,
                 aprovisionamiento_id: fila.id,
             })

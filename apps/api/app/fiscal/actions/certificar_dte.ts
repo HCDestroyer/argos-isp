@@ -26,7 +26,8 @@ import type { ResultadoCertificacion } from '#fiscal/fel/proveedor'
  *   habla con el certificador el DTE está `enviando` (dentro de esta transacción) y el intento ya
  *   quedó en `fiscal.dte_intentos` por una conexión aparte. Si el proceso cae, el reintento ve ese
  *   intento y **consulta primero** por `identificador`: si ya estaba certificado, lo toma; nunca
- *   certifica dos veces.
+ *   certifica dos veces. Con un certificador `reenvioIdempotente` (INFILE: el mismo `Identificador`
+ *   devuelve el resultado anterior) se reenvía en vez de consultar.
  * - `certificado`: guarda autorización, serie, número y XML; si la factura estaba `por_certificar`
  *   la emite (`facturas.confirmar_emision`, asiento con la fecha de certificación); si era un aviso
  *   de cobro, reclasifica su IVA `2.1.11 / 2.1.02` (§10.1). Evento `dte.certificado`.
@@ -80,7 +81,8 @@ export default class CertificarDte extends DomainAction<EntradaCertificarDte, Re
 
         const inicio = Date.now()
         let resultado: ResultadoCertificacion | null = null
-        if (await huboEnvio(t.trx, dte.id, 'certificar')) {
+        // INFILE: reenviar con el mismo identificador devuelve lo anterior; no se consulta antes
+        if (!proveedor.reenvioIdempotente && (await huboEnvio(t.trx, dte.id, 'certificar'))) {
             const consulta = await proveedor
                 .consultar(dte.identificador, cred, dte.ambiente)
                 .catch((error) => ({

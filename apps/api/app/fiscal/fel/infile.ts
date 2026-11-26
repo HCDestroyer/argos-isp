@@ -1,6 +1,7 @@
 import { xmlAnulacion, xmlDte } from '#fiscal/fel/xml_gt'
 import type {
     AmbienteFel,
+    ContextoPrueba,
     CredencialesFel,
     DteCertificado,
     DteParaEnviar,
@@ -12,44 +13,95 @@ import type {
 } from '#fiscal/fel/proveedor'
 
 /**
- * Adaptador de INFILE (primer certificador; contrato §8.1), escrito contra su documentación
- * pública. Nunca se llama en pruebas: allí se usa el proveedor `falso`.
+ * Adaptador de INFILE (primer certificador; contrato §8.1), según la «Documentación INFILE
+ * (docs.infile.com, sección Guatemala)» que compartió el PM (actualizada el 11-nov-2026;
+ * `contratos/fel-establecimientos.md` B6). Nunca se llama en pruebas: allí se usa el proveedor
+ * `falso` o un `fetch` sustituido.
  *
- * Credenciales (por empresa y ambiente, cifradas en `fiscal.fel_credenciales`): `usuario_firma`,
- * `llave_firma` (token del firmador), `usuario_api`, `llave_api` y, opcional, `correo_copia`.
+ * Credenciales (por empresa, proveedor y ambiente, cifradas en `fiscal.fel_credenciales`):
+ * `usuario_firma`, `llave_firma`, `usuario_api`, `llave_api` y, opcional, `correo_copia`.
  *
- * Operaciones:
- *  - Certificar: "proceso unificado" (firma y certificación en una llamada), `POST
- *    {CERTIFICADOR}/fel/procesounificado/transaccion/v2/xml` con el XML sin firmar y las cabeceras
- *    `UsuarioFirma`, `LlaveFirma`, `UsuarioApi`, `LlaveApi` e `identificador` (nuestro
- *    `fiscal.dte.identificador`: INFILE lo usa para no certificar dos veces el mismo documento).
- *  - Anular: firma con `es_anulacion = 'S'` en `{FIRMADOR}/sign_solicitud_firmas/firma_xml` y envío
- *    a `{CERTIFICADOR}/fel/anulacion/v2/dte/`.
- *  - Consultar por identificador y consultar NIT (`{RECEPTORES}/rest/action`).
- *
- * **Confirmar con INFILE** (anotado en el contrato §16): las URL de pruebas frente a producción (la
- * documentación pública usa las mismas y el ambiente lo da la credencial), la ruta exacta de la
- * consulta por identificador, el texto con que avisa de un identificador ya certificado y si el
- * proceso unificado aplica también a la anulación.
+ * - **Certificar y anular**: el mismo servicio, «proceso unificado»
+ *   `POST {CERTIFICADOR}/fel/procesounificado/transaccion/v2/xml` (`application/xml`) con las
+ *   cabeceras `UsuarioAPI`, `LlaveAPI`, `UsuarioFirma`, `LlaveFirma` e `Identificador`. El cuerpo es
+ *   el `GTDocumento` o el `GTAnulacionDocumento`.
+ * - **Pruebas frente a producción** no es otra URL: es el estado del emisor en INFILE. Con el emisor
+ *   en «Implementación» (sandbox) todo documento vuelve con la alerta de INFILE «Este documento fue
+ *   procesado en nuestro SandBox…». En `pruebas` se marca `sandbox` en el intento; en `produccion`
+ *   el DTE no se da por certificado (`certificado_en_sandbox`).
+ * - **Identificador repetido**: INFILE devuelve `resultado: true` con el resultado de la transacción
+ *   anterior («Documento enviado previamente»). Por eso el reintento reenvía con el mismo
+ *   identificador (`reenvioIdempotente`) en vez de consultar antes; `consultar` queda de respaldo.
+ * - **Errores**: `descripcion_alertas_sat[]` y `descripcion_alertas_infile[]` (`fuente`,
+ *   `categoria`, `numeral`, `validacion`, `mensaje_error`).
+ * - **Consulta de NIT**: `POST {RECEPTORES}/rest/action` con `emisor_codigo`, `emisor_clave` y
+ *   `nit_consulta`. El manual dice que responde `resultado` y `razon_social`; el servicio real
+ *   (ambiente demo, lote 6, 25-nov-2026) responde `{ nit, nombre, mensaje }`: `nombre` vacío con
+ *   `mensaje` «NIT no válido» si no lo encuentra y «Credenciales no registradas» con credenciales
+ *   malas. Se aceptan las dos formas (`leerConsultaNit`).
  */
 
 const CERTIFICADOR = 'https://certificador.feel.com.gt'
-const FIRMADOR = 'https://signer-emisores.feel.com.gt'
 const RECEPTORES = 'https://consultareceptores.feel.com.gt'
 const TIEMPO_MAXIMO_MS = 30_000
 
-interface RespuestaInfile {
+/** Texto de la alerta de INFILE con el emisor en «Implementación» (sandbox). */
+export const ALERTA_SANDBOX = /sandbox/i
+/** Error local de un DTE de producción que INFILE certificó en su sandbox. */
+export const ERROR_SANDBOX = 'certificado_en_sandbox'
+
+export interface AlertaInfile {
+    fuente?: string
+    categoria?: string
+    numeral?: string
+    validacion?: string
+    mensaje_error?: string
+}
+
+export interface RespuestaInfile {
     resultado?: boolean
     fecha?: string
     descripcion?: string
-    cantidad_errores?: number
-    descripcion_errores?: Array<{ mensaje_error?: string; validacion?: string; fuente?: string }>
-    uuid?: string
-    serie?: string
-    numero?: string | number
-    xml_certificado?: string
-    archivo?: string
+    uuid?: string | null
+    serie?: string | null
+    numero?: string | number | null
+    xml_certificado?: string | null
+    saldo?: string | number
+    creditos?: string | number
+    alertas_infile?: boolean
+    alertas_sat?: boolean
+    descripcion_alertas_infile?: Array<AlertaInfile | string>
+    descripcion_alertas_sat?: Array<AlertaInfile | string>
+    control_emision?: unknown
+    informacion_adicional?: unknown
+    /** consulta de NIT */
+    razon_social?: string | null
+    /** consulta de NIT, forma real del servicio */
+    nombre?: string | null
+    mensaje?: string | null
+    /** forma anterior de los errores (compatibilidad) */
+    descripcion_errores?: Array<AlertaInfile | string>
     [clave: string]: unknown
+}
+
+const OBLIGATORIAS = ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api']
+
+/** Lo que dice una consulta de NIT en cualquiera de sus dos formas (manual y servicio real). */
+export type LecturaConsultaNit =
+    | { tipo: 'encontrado'; nombre: string }
+    | { tipo: 'no_encontrado'; mensaje: string | null }
+    | { tipo: 'credenciales'; mensaje: string }
+    | { tipo: 'desconocida'; mensaje: string | null }
+
+export function leerConsultaNit(r: RespuestaInfile): LecturaConsultaNit {
+    const mensaje = (r.mensaje ?? r.descripcion ?? null) || null
+    if (mensaje && /credencial/i.test(mensaje)) return { tipo: 'credenciales', mensaje }
+    const nombre = String(r.razon_social ?? r.nombre ?? '').trim()
+    if (typeof r.resultado === 'boolean') {
+        return r.resultado && nombre ? { tipo: 'encontrado', nombre } : { tipo: 'no_encontrado', mensaje }
+    }
+    if ('nombre' in r) return nombre ? { tipo: 'encontrado', nombre } : { tipo: 'no_encontrado', mensaje }
+    return { tipo: 'desconocida', mensaje }
 }
 
 function requeridas(cred: CredencialesFel, campos: string[]): string | null {
@@ -58,27 +110,61 @@ function requeridas(cred: CredencialesFel, campos: string[]): string | null {
 }
 
 /** Copia de la respuesta sin el XML (va aparte) para la bitácora `fiscal.dte_intentos`. */
-function paraBitacora(r: RespuestaInfile): Record<string, unknown> {
-    const resto = { ...r }
+export function paraBitacora(
+    r: RespuestaInfile,
+    extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+    const resto: Record<string, unknown> = { ...r, ...extra }
     delete resto.xml_certificado
     delete resto.archivo
     return resto
 }
 
-function errores(r: RespuestaInfile): string[] {
-    const lista = (r.descripcion_errores ?? []).map((e) =>
-        [e.fuente, e.validacion, e.mensaje_error].filter(Boolean).join(' · '),
-    )
+/** `fuente · validacion · mensaje_error` de una alerta (o el texto, si INFILE manda solo texto). */
+export function textoAlerta(a: AlertaInfile | string): string {
+    if (typeof a === 'string') return a.trim()
+    return [a.fuente, a.validacion ?? a.numeral, a.mensaje_error]
+        .filter((x) => x !== undefined && x !== null && String(x).trim() !== '')
+        .map((x) => String(x).trim())
+        .join(' · ')
+}
+
+/** Errores de un rechazo: alertas de la SAT, de INFILE y, por compatibilidad, `descripcion_errores`. */
+export function errores(r: RespuestaInfile): string[] {
+    const lista = [
+        ...(r.descripcion_alertas_sat ?? []),
+        ...(r.descripcion_alertas_infile ?? []),
+        ...(r.descripcion_errores ?? []),
+    ]
+        .map(textoAlerta)
+        .filter((t) => t !== '')
     return lista.length ? lista : [r.descripcion ?? 'Rechazado por el certificador']
 }
+
+/** La alerta de sandbox de INFILE (emisor en «Implementación»). */
+export function esSandbox(r: RespuestaInfile): boolean {
+    return (r.descripcion_alertas_infile ?? []).some((a) => ALERTA_SANDBOX.test(textoAlerta(a)))
+}
+
+/** Fecha entre corchetes con que INFILE rechaza anular un documento ya anulado; null si no es eso. */
+export function fechaYaAnulado(r: RespuestaInfile): string | null {
+    const textos = [r.descripcion ?? '', ...errores(r)]
+    for (const t of textos) {
+        if (!/anulad/i.test(t)) continue
+        const fecha = /\[([^\]]+)\]/.exec(t)?.[1]
+        if (fecha) return fecha.trim()
+    }
+    return null
+}
+
+type Envio =
+    | { ok: true; status: number; datos: RespuestaInfile }
+    | { ok: false; temporal: boolean; status: number | null; error: string; datos: RespuestaInfile }
 
 async function enviar(
     url: string,
     init: { cabeceras: Record<string, string>; cuerpo: string },
-): Promise<
-    | { ok: true; datos: RespuestaInfile }
-    | { ok: false; temporal: boolean; error: string; datos: RespuestaInfile }
-> {
+): Promise<Envio> {
     try {
         const respuesta = await fetch(url, {
             method: 'POST',
@@ -94,49 +180,110 @@ async function enviar(
             datos = { descripcion: texto.slice(0, 500) }
         }
         if (respuesta.status >= 500 || respuesta.status === 429) {
-            return { ok: false, temporal: true, error: `HTTP ${respuesta.status}`, datos }
+            return {
+                ok: false,
+                temporal: true,
+                status: respuesta.status,
+                error: `HTTP ${respuesta.status}`,
+                datos,
+            }
         }
-        if (!respuesta.ok) return { ok: false, temporal: false, error: `HTTP ${respuesta.status}`, datos }
-        return { ok: true, datos }
+        if (!respuesta.ok) {
+            return {
+                ok: false,
+                temporal: false,
+                status: respuesta.status,
+                error: `HTTP ${respuesta.status}`,
+                datos,
+            }
+        }
+        return { ok: true, status: respuesta.status, datos }
     } catch (error) {
-        // red, DNS o tiempo agotado: se reintenta (y antes se consulta por identificador)
-        return { ok: false, temporal: true, error: (error as Error).name || 'error de red', datos: {} }
+        // red, DNS o tiempo agotado: se reintenta con el mismo identificador
+        return {
+            ok: false,
+            temporal: true,
+            status: null,
+            error: (error as Error).name || 'error de red',
+            datos: {},
+        }
     }
 }
 
 export class ProveedorFelInfile implements ProveedorFel {
     readonly codigo = 'infile'
     readonly capacidades = { contingencia: false, consultaNit: true, pdf: false }
+    /** Reenviar con el mismo `Identificador` devuelve el resultado anterior (documentado). */
+    readonly reenvioIdempotente = true
 
     private cabeceras(cred: CredencialesFel, identificador: string): Record<string, string> {
         return {
+            'Content-Type': 'application/xml',
+            UsuarioAPI: cred.usuario_api!,
+            LlaveAPI: cred.llave_api!,
             UsuarioFirma: cred.usuario_firma!,
             LlaveFirma: cred.llave_firma!,
-            UsuarioApi: cred.usuario_api!,
-            LlaveApi: cred.llave_api!,
-            identificador: identificador,
-            'Content-Type': 'application/xml',
+            Identificador: identificador,
         }
     }
 
-    async probarCredenciales(cred: CredencialesFel, _ambiente: AmbienteFel): Promise<ResultadoPrueba> {
-        const falta = requeridas(cred, ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api'])
-        if (falta) return { ok: false, detalle: falta }
-        // la consulta de NIT del propio emisor valida usuario y llave del API sin certificar nada
-        const r = await enviar(`${RECEPTORES}/rest/action`, {
+    private async consultaNit(nit: string, cred: CredencialesFel): Promise<Envio> {
+        return enviar(`${RECEPTORES}/rest/action`, {
             cabeceras: { 'Content-Type': 'application/json' },
             cuerpo: JSON.stringify({
                 emisor_codigo: cred.usuario_api,
                 emisor_clave: cred.llave_api,
-                nit_consulta: cred.usuario_api,
+                nit_consulta: nit,
             }),
         })
-        if (!r.ok) return { ok: false, detalle: `INFILE no aceptó las credenciales (${r.error})` }
-        return { ok: true, detalle: 'INFILE respondió con las credenciales del API' }
     }
 
-    async certificar(dte: DteParaEnviar, cred: CredencialesFel): Promise<ResultadoCertificacion> {
-        const falta = requeridas(cred, ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api'])
+    /**
+     * Consulta el NIT de la empresa con usuario y llave del API (no certifica nada). `ok` solo con
+     * HTTP 200 y una respuesta con forma de consulta (`resultado` presente); el detalle trae la razón
+     * social que devolvió INFILE para que se vea que es la empresa.
+     */
+    async probarCredenciales(
+        cred: CredencialesFel,
+        _ambiente: AmbienteFel,
+        contexto: ContextoPrueba = {},
+    ): Promise<ResultadoPrueba> {
+        const falta = requeridas(cred, OBLIGATORIAS)
+        if (falta) return { ok: false, detalle: falta }
+        const nit = contexto.nit_emisor
+        if (!nit) {
+            return {
+                ok: false,
+                detalle: 'La empresa no tiene NIT: agrégalo antes de probar las credenciales',
+            }
+        }
+        const r = await this.consultaNit(nit, cred)
+        if (!r.ok) return { ok: false, detalle: `INFILE no aceptó las credenciales (${r.error})` }
+        const lectura = leerConsultaNit(r.datos)
+        switch (lectura.tipo) {
+            case 'encontrado':
+                return { ok: true, detalle: `INFILE respondió con el NIT ${nit}: ${lectura.nombre}` }
+            case 'no_encontrado':
+                return {
+                    ok: true,
+                    detalle: `INFILE aceptó las credenciales, pero no encontró el NIT ${nit}${lectura.mensaje ? ` (${lectura.mensaje})` : ''}`,
+                }
+            case 'credenciales':
+                return { ok: false, detalle: `INFILE rechazó las credenciales: ${lectura.mensaje}` }
+            default:
+                return {
+                    ok: false,
+                    detalle: `INFILE respondió algo que no es una consulta de NIT: ${lectura.mensaje ?? 'sin descripción'}`,
+                }
+        }
+    }
+
+    async certificar(
+        dte: DteParaEnviar,
+        cred: CredencialesFel,
+        ambiente: AmbienteFel,
+    ): Promise<ResultadoCertificacion> {
+        const falta = requeridas(cred, OBLIGATORIAS)
         if (falta) return { resultado: 'rechazado', errores: [falta], respuesta: {} }
         const r = await enviar(`${CERTIFICADOR}/fel/procesounificado/transaccion/v2/xml`, {
             cabeceras: this.cabeceras(cred, dte.identificador),
@@ -151,76 +298,76 @@ export class ProveedorFelInfile implements ProveedorFel {
         if (!d.resultado || !d.uuid) {
             return { resultado: 'rechazado', errores: errores(d), respuesta: paraBitacora(d) }
         }
+        const sandbox = esSandbox(d)
+        if (sandbox && ambiente === 'produccion') {
+            // un emisor en «Implementación»: el documento no tiene validez fiscal
+            return {
+                resultado: 'rechazado',
+                errores: [ERROR_SANDBOX],
+                respuesta: paraBitacora(d, { sandbox: true }),
+            }
+        }
         return {
             resultado: 'certificado',
             autorizacion: String(d.uuid),
             serie: d.serie ? String(d.serie) : null,
-            numero: d.numero !== undefined ? String(d.numero) : null,
+            numero: d.numero !== undefined && d.numero !== null ? String(d.numero) : null,
             fecha: d.fecha ? new Date(d.fecha) : new Date(),
             xml: d.xml_certificado ? Buffer.from(d.xml_certificado, 'base64').toString('utf8') : xmlDte(dte),
             pdf: null,
-            respuesta: paraBitacora(d),
+            respuesta: paraBitacora(d, sandbox ? { sandbox: true } : {}),
         }
     }
 
     async anular(dte: DteCertificado, motivo: string, cred: CredencialesFel): Promise<ResultadoAnulacion> {
-        const falta = requeridas(cred, ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api'])
+        const falta = requeridas(cred, OBLIGATORIAS)
         if (falta) return { resultado: 'rechazado', errores: [falta], respuesta: {} }
         const fecha = new Date()
-        const xml = xmlAnulacion(dte, motivo, fecha.toISOString())
-        const firma = await enviar(`${FIRMADOR}/sign_solicitud_firmas/firma_xml`, {
-            cabeceras: { 'Content-Type': 'application/json' },
-            cuerpo: JSON.stringify({
-                llave: cred.llave_firma,
-                archivo: Buffer.from(xml, 'utf8').toString('base64'),
-                codigo: dte.identificador,
-                alias: cred.usuario_firma,
-                es_anulacion: 'S',
-            }),
-        })
-        if (!firma.ok || !firma.datos.archivo) {
-            if (!firma.ok && firma.temporal) {
-                return {
-                    resultado: 'error_temporal',
-                    error: firma.error,
-                    respuesta: paraBitacora(firma.datos),
-                }
-            }
-            return {
-                resultado: 'rechazado',
-                errores: errores(firma.datos),
-                respuesta: paraBitacora(firma.datos),
-            }
-        }
-        const r = await enviar(`${CERTIFICADOR}/fel/anulacion/v2/dte/`, {
-            cabeceras: {
-                ...this.cabeceras(cred, `${dte.identificador}-anulacion`),
-                'Content-Type': 'application/json',
-            },
-            cuerpo: JSON.stringify({
-                nit_emisor: dte.emisor_nit,
-                correo_copia: cred.correo_copia ?? '',
-                xml_dte: firma.datos.archivo,
-            }),
+        const r = await enviar(`${CERTIFICADOR}/fel/procesounificado/transaccion/v2/xml`, {
+            cabeceras: this.cabeceras(cred, `${dte.identificador}-anulacion`),
+            // el demo de INFILE rechazó la forma del manual (XSD) y aceptó la de atributos (lote 6)
+            cuerpo: xmlAnulacion(dte, motivo, fecha, 'atributos'),
         })
         if (!r.ok) {
+            const yaAnulado = fechaYaAnulado(r.datos)
+            if (yaAnulado) return this.yaAnulado(yaAnulado, r.datos)
             return r.temporal
                 ? { resultado: 'error_temporal', error: r.error, respuesta: paraBitacora(r.datos) }
                 : { resultado: 'rechazado', errores: errores(r.datos), respuesta: paraBitacora(r.datos) }
         }
         if (!r.datos.resultado) {
+            const yaAnulado = fechaYaAnulado(r.datos)
+            if (yaAnulado) return this.yaAnulado(yaAnulado, r.datos)
             return { resultado: 'rechazado', errores: errores(r.datos), respuesta: paraBitacora(r.datos) }
         }
+        // ya anulado (demo, lote 6): `resultado: true` con «…ya esta anulado…» y el XML de la primera
+        // anulación; es el estado, no un error
+        const yaAnulado = /ya esta anulado|ya está anulado/i.test(r.datos.descripcion ?? '')
         return {
             resultado: 'anulado',
             fecha: r.datos.fecha ? new Date(r.datos.fecha) : fecha,
             xml: r.datos.xml_certificado
                 ? Buffer.from(r.datos.xml_certificado, 'base64').toString('utf8')
                 : null,
-            respuesta: paraBitacora(r.datos),
+            respuesta: paraBitacora(r.datos, yaAnulado ? { ya_anulado: true } : {}),
         }
     }
 
+    /** Ya estaba anulado (INFILE dice la fecha entre corchetes): no es un error, es el estado. */
+    private yaAnulado(fecha: string, datos: RespuestaInfile): ResultadoAnulacion {
+        const instante = new Date(fecha)
+        return {
+            resultado: 'anulado',
+            fecha: Number.isNaN(instante.getTime()) ? new Date() : instante,
+            xml: null,
+            respuesta: paraBitacora(datos, { ya_anulado: fecha }),
+        }
+    }
+
+    /**
+     * Respaldo: el reintento normal reenvía con el mismo identificador (`reenvioIdempotente`). La
+     * ruta de esta consulta no está en la documentación de INFILE: solo se usa si se llama a mano.
+     */
     async consultar(identificador: string, cred: CredencialesFel): Promise<ResultadoConsulta> {
         const r = await enviar(`${CERTIFICADOR}/fel/consulta/dte/v2/identificador_unico`, {
             cabeceras: { 'Content-Type': 'application/json' },
@@ -241,7 +388,7 @@ export class ProveedorFelInfile implements ProveedorFel {
             encontrado: true,
             autorizacion: String(d.uuid),
             serie: d.serie ? String(d.serie) : null,
-            numero: d.numero !== undefined ? String(d.numero) : null,
+            numero: d.numero !== undefined && d.numero !== null ? String(d.numero) : null,
             fecha: d.fecha ? new Date(d.fecha) : new Date(),
             xml: d.xml_certificado ? Buffer.from(d.xml_certificado, 'base64').toString('utf8') : null,
             anulado: d.estado === 'Anulado' || d.anulado === true,
@@ -249,17 +396,17 @@ export class ProveedorFelInfile implements ProveedorFel {
         }
     }
 
+    /**
+     * Consulta de NIT: `{ nombre }` si la SAT lo reconoce, null si INFILE responde «no encontrado».
+     * Un error de red o HTTP **lanza**: no se confunde «no existe» con «no respondió».
+     */
     async consultarNit(nit: string, cred: CredencialesFel): Promise<{ nombre: string } | null> {
-        const r = await enviar(`${RECEPTORES}/rest/action`, {
-            cabeceras: { 'Content-Type': 'application/json' },
-            cuerpo: JSON.stringify({
-                emisor_codigo: cred.usuario_api,
-                emisor_clave: cred.llave_api,
-                nit_consulta: nit,
-            }),
-        })
-        if (!r.ok) return null
-        const nombre = typeof r.datos.nombre === 'string' ? r.datos.nombre : null
-        return nombre ? { nombre } : null
+        const r = await this.consultaNit(nit, cred)
+        if (!r.ok) throw new Error(`INFILE no respondió la consulta de NIT (${r.error})`)
+        const lectura = leerConsultaNit(r.datos)
+        if (lectura.tipo === 'encontrado') return { nombre: lectura.nombre }
+        if (lectura.tipo === 'no_encontrado') return null
+        // credenciales malas o respuesta desconocida: no es «no existe»
+        throw new Error(`La consulta de NIT no se pudo hacer: ${lectura.mensaje ?? 'respuesta inesperada'}`)
     }
 }

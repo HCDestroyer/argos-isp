@@ -48,7 +48,9 @@ const camposPlantilla = {
         .optional()
         .meta({
             description:
-                'Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)',
+                'Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro, el DTE sale al quedar cubierta) o nunca ' +
+                '(a mano; no con FEL obligatoria: 422 certificar_al_incompatible). emitir ya no se usa (primero se cobra ' +
+                'y después se certifica): 422 certificar_al_obsoleto',
         }),
     reglas_promesa: reglasPromesaSchema()
         .optional()

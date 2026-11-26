@@ -128,7 +128,9 @@ export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Pr
     const tipoDte = modo === 'sin_fel' ? null : await tipoFacturaDte(datos.empresa_id, hoyGuatemala(), t.trx)
 
     // receptor al emitir (H29): el libro de ventas no cambia si después se edita el cliente
-    const receptorFactura = await receptorDe(t.trx, datos.cliente_id, datos.receptor)
+    const receptorFactura = await receptorDe(t.trx, datos.cliente_id, datos.receptor, {
+        ambiente: config.ambiente,
+    })
     const insertadas = (await t.trx
         .knexQuery()
         .table('billing.facturas')
@@ -190,7 +192,9 @@ export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Pr
 
     let dte: DteFila | null = null
     if (modo === 'por_certificar' || modo === 'contingencia') {
-        const receptor = await receptorDe(t.trx, datos.cliente_id, datos.receptor)
+        const receptor = await receptorDe(t.trx, datos.cliente_id, datos.receptor, {
+            ambiente: config.ambiente,
+        })
         const falta = await receptorFaltante(
             datos.empresa_id,
             receptor,

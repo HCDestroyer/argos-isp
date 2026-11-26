@@ -23947,7 +23947,7 @@
       "post": {
         "operationId": "dteReintentar",
         "summary": "Reintentar un DTE rechazado o con error temporal",
-        "description": "Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.",
+        "description": "Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT (una NCRE o NDEB conserva el receptor de su documento de origen). Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso, fel_desactivada (con la FEL desactivada no entra nada nuevo a la cola).",
         "tags": [
           "fel"
         ],
@@ -25218,8 +25218,8 @@
                 "properties": {
                   "nit": {
                     "type": "string",
-                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite"
                   },
                   "razon_social": {
                     "type": "string",
@@ -25533,8 +25533,8 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite"
                   },
                   "razon_social": {
                     "type": [
@@ -26600,7 +26600,7 @@
       "post": {
         "operationId": "facturasCertificar",
         "summary": "Pedir la certificación FEL de una factura",
-        "description": "Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.",
+        "description": "Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 409 fel_desactivada (la FEL de la empresa está desactivada); 422 fel_no_configurada (falta certificador o credenciales), receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada. El panel ofrece el botón según fel_accion de la factura (primero se cobra y después se certifica).",
         "tags": [
           "fel"
         ],
@@ -27944,7 +27944,7 @@
       "get": {
         "operationId": "felConfiguracion",
         "summary": "Configuración FEL de la empresa (sin secretos)",
-        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
+        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
         "tags": [
           "fel"
         ],
@@ -28019,7 +28019,7 @@
       "put": {
         "operationId": "felConfigurar",
         "summary": "Configurar proveedor, ambiente y modo FEL",
-        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).",
+        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).",
         "tags": [
           "fel"
         ],
@@ -28312,7 +28312,7 @@
       "post": {
         "operationId": "felProbarCredenciales",
         "summary": "Probar las credenciales contra el certificador",
-        "description": "No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
+        "description": "No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
         "tags": [
           "fel"
         ],
@@ -28349,6 +28349,19 @@
                 "null"
               ],
               "minimum": 1
+            }
+          },
+          {
+            "name": "proveedor",
+            "in": "query",
+            "required": false,
+            "description": "Certificador cuyas credenciales se prueban; por defecto el guardado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "infile",
+                "falso"
+              ]
             }
           }
         ],
@@ -28526,7 +28539,7 @@
       "post": {
         "operationId": "felLote",
         "summary": "Pedir la certificación de varias facturas",
-        "description": "facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.",
+        "description": "facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type (fel_desactivada si la empresa tiene la FEL desactivada; el lote de otras empresas sigue).",
         "tags": [
           "fel"
         ],
@@ -29488,6 +29501,23 @@
                     ],
                     "maxLength": 100
                   },
+                  "codigo_postal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{5}$",
+                    "description": "Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001"
+                  },
+                  "cajas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto"
+                  },
                   "por_defecto": {
                     "description": "Establecimiento con el que se emite (uno por empresa)",
                     "type": "boolean"
@@ -29700,6 +29730,23 @@
                       "null"
                     ],
                     "maxLength": 100
+                  },
+                  "codigo_postal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{5}$",
+                    "description": "Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001"
+                  },
+                  "cajas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto"
                   },
                   "activo": {
                     "type": "boolean"
@@ -32929,11 +32976,11 @@
         "x-implementado": true
       }
     },
-    "/api/v1/integraciones/equipos": {
+    "/api/v1/integraciones/acs": {
       "get": {
-        "operationId": "equiposConfigVer",
-        "summary": "Configuración de SmartOLT y GenieACS de la empresa activa (sin secretos)",
-        "description": "Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en `capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.",
+        "operationId": "acsVer",
+        "summary": "ACS (GenieACS) de la empresa activa, sin la clave",
+        "description": "Un ACS por empresa, independiente de SmartOLT. `clave` como `***` (o null). `operativo` = encendido, con URL y la última prueba en ok: de ahí sale `tr069` de `capacidades.aprovisionamiento`. `version` 0 = nunca guardado.",
         "tags": [
           "integraciones"
         ],
@@ -32947,11 +32994,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Configuración",
+            "description": "ACS",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigEquipos"
+                  "$ref": "#/components/schemas/ConfigAcs"
                 }
               }
             }
@@ -32967,7 +33014,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso equipos.ver",
+            "description": "Sin el permiso acs.ver",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32977,13 +33024,13 @@
             }
           }
         },
-        "x-permiso": "equipos.ver",
+        "x-permiso": "acs.ver",
         "x-implementado": true
       },
       "put": {
-        "operationId": "equiposConfigurar",
-        "summary": "Guardar SmartOLT y GenieACS de la empresa activa",
-        "description": "Secretos: omitido = se conserva, null = se borra, texto = se reemplaza; se guardan cifrados y nunca vuelven. Cambiar URL o secreto borra la última prueba (la capacidad vuelve a false hasta probar). `perfiles` reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; desactualizada: 409.",
+        "operationId": "acsConfigurar",
+        "summary": "Guardar el ACS (GenieACS) de la empresa activa",
+        "description": "Clave: omitida = se conserva, null = se borra, texto = se reemplaza; se guarda cifrada y nunca vuelve. Cambiar URL, usuario, clave o certificado borra la última prueba. `activo: true` exige URL (422). `version` 0 la primera vez; desactualizada: 409. Emite `equipos.config_cambiada`.",
         "tags": [
           "integraciones"
         ],
@@ -33009,23 +33056,7 @@
                   "activo": {
                     "type": "boolean"
                   },
-                  "smartolt_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500,
-                    "description": "`https://<subdominio>.smartolt.com`"
-                  },
-                  "smartolt_token": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500,
-                    "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
-                  },
-                  "genieacs_url": {
+                  "url": {
                     "type": [
                       "string",
                       "null"
@@ -33033,14 +33064,14 @@
                     "maxLength": 500,
                     "description": "URL del NBI de GenieACS (o del proxy que lo protege)"
                   },
-                  "genieacs_usuario": {
+                  "usuario": {
                     "type": [
                       "string",
                       "null"
                     ],
                     "maxLength": 200
                   },
-                  "genieacs_clave": {
+                  "clave": {
                     "type": [
                       "string",
                       "null"
@@ -33048,7 +33079,7 @@
                     "maxLength": 500,
                     "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
                   },
-                  "genieacs_ca": {
+                  "ca": {
                     "type": [
                       "string",
                       "null"
@@ -33057,53 +33088,8 @@
                     "description": "Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra"
                   },
                   "pppoe_por_acs": {
-                    "description": "Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar",
+                    "description": "Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar (solo con el ACS operativo)",
                     "type": "boolean"
-                  },
-                  "perfiles": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "smartolt_olt_id": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 50
-                        },
-                        "plan_id": {
-                          "type": [
-                            "integer",
-                            "null"
-                          ],
-                          "minimum": 1
-                        },
-                        "authorization_preset_id": {
-                          "type": "integer",
-                          "minimum": 1
-                        },
-                        "pon_type": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "enum": [
-                                "gpon",
-                                "epon"
-                              ]
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "smartolt_olt_id",
-                        "authorization_preset_id"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "maxItems": 500,
-                    "description": "Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset"
                   }
                 },
                 "required": [
@@ -33116,11 +33102,11 @@
         },
         "responses": {
           "200": {
-            "description": "Configuración guardada",
+            "description": "ACS guardado",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigEquipos"
+                  "$ref": "#/components/schemas/ConfigAcs"
                 }
               }
             }
@@ -33136,7 +33122,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso equipos.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso acs.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33166,15 +33152,15 @@
             }
           }
         },
-        "x-permiso": "equipos.configurar",
+        "x-permiso": "acs.configurar",
         "x-implementado": true
       }
     },
-    "/api/v1/integraciones/equipos/probar": {
+    "/api/v1/integraciones/acs/probar": {
       "post": {
-        "operationId": "equiposProbar",
-        "summary": "Probar la conexión con SmartOLT y GenieACS (configuración guardada)",
-        "description": "SmartOLT: `GET /api/system/get_olts` (devuelve las OLT para armar los perfiles). GenieACS: una búsqueda de un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema no responde: devuelve su error.",
+        "operationId": "acsProbar",
+        "summary": "Probar la conexión con el ACS de la empresa activa (configuración guardada)",
+        "description": "Una búsqueda de un dispositivo en el NBI con la autenticación guardada. No llama a SmartOLT. Guarda el resultado y no falla si el ACS no responde: devuelve su error.",
         "tags": [
           "integraciones"
         ],
@@ -33192,7 +33178,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PruebaEquipos"
+                  "$ref": "#/components/schemas/PruebaAcs"
                 }
               }
             }
@@ -33208,7 +33194,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso equipos.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso acs.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33218,7 +33204,7 @@
             }
           }
         },
-        "x-permiso": "equipos.probar",
+        "x-permiso": "acs.probar",
         "x-implementado": true
       }
     },
@@ -36973,6 +36959,729 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/instancias": {
+      "get": {
+        "operationId": "smartoltInstanciasListar",
+        "summary": "Instancias (cuentas, subdominios) de SmartOLT de la empresa activa y las compartidas",
+        "description": "Cada instancia con sus OLT (las de `get_olts`), su vínculo con la OLT de Argos y sus perfiles por plan. El token nunca sale (`***`). `operativa` = encendida y con la última prueba en ok. En una compartida, quien no tiene alcance global solo ve las OLT sin vínculo o ligadas a OLT de Argos suyas o compartidas.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de instancias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InstanciaSmartOlt"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "smartoltInstanciasCrear",
+        "summary": "Registrar una instancia de SmartOLT (de la empresa activa o compartida)",
+        "description": "`409 subdominio_duplicado` si esa cuenta ya está registrada en la instalación; `409 instancia_duplicada` si el nombre ya existe en la empresa. `compartida: true` solo con alcance global (`403 empresa_no_permitida`). Nace sin probar. Emite `equipos.config_cambiada`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "`https://<subdominio>.smartolt.com`"
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Clave de API de esa cuenta (General > API key). Nunca vuelve"
+                  },
+                  "compartida": {
+                    "description": "Compartida con todas las empresas (solo con alcance global)",
+                    "type": "boolean"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña (sin `compartida`); por defecto la activa"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "url",
+                  "token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Instancia registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.crear_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.crear_instancia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/instancias/{id}": {
+      "get": {
+        "operationId": "smartoltInstanciasVer",
+        "summary": "Una instancia de SmartOLT con sus OLT (sin el token)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instancia",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "smartoltInstanciasEditar",
+        "summary": "Editar una instancia de SmartOLT (nombre, URL, token, encendido, nota y perfiles)",
+        "description": "Token omitido = se conserva. Cambiar URL o token borra la última prueba. `perfiles` reemplaza los perfiles de las OLT de esta instancia. Una compartida solo con alcance global. `version` desactualizada: 409.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Omitido: se conserva. Nunca vuelve"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  },
+                  "compartida": {
+                    "description": "Pasarla a compartida o devolverla a una empresa (alcance global)",
+                    "type": "boolean"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña (sin `compartida`); con acceso a ella"
+                  },
+                  "perfiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "smartolt_olt_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 50
+                        },
+                        "plan_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "authorization_preset_id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "pon_type": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "gpon",
+                                "epon"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "smartolt_olt_id",
+                        "authorization_preset_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500,
+                    "description": "Reemplaza los perfiles de las OLT de esta instancia: OLT de SmartOLT + plan (null = cualquiera) → preset"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Instancia guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.editar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.editar_instancia",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "smartoltInstanciasEliminar",
+        "summary": "Eliminar una instancia de SmartOLT sin uso (`409 instancia_en_uso`)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Instancia eliminada"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.eliminar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.eliminar_instancia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/instancias/{id}/probar": {
+      "post": {
+        "operationId": "smartoltInstanciasProbar",
+        "summary": "Probar una instancia de SmartOLT y sincronizar sus OLT (una sola llamada a `get_olts`)",
+        "description": "Con lo guardado. No llama a otras instancias. Guarda la prueba y, si responde, la lista de OLT; las nuevas con el mismo nombre que una sola OLT de Argos libre se vinculan solas (`vinculadas_por_nombre`). No falla si SmartOLT no responde: devuelve su error.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PruebaInstanciaSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.probar_instancia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.probar_instancia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/smartolt/olts/{id}/vincular": {
+      "post": {
+        "operationId": "smartoltOltsVincular",
+        "summary": "Ligar una OLT de SmartOLT con la OLT de la red de acceso de Argos (null la desliga)",
+        "description": "`409 olt_ya_vinculada` si esa OLT de Argos ya está ligada a otra; `422 olt_de_otra_empresa` si es de otra empresa que la instancia. De este vínculo sale la instancia de un servicio (por su servidor PPPoE → VLAN → puerto PON → OLT).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "olt_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "OLT de la red de acceso de Argos (`network.olts`); null la desvincula"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OLT ligada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OltSmartOlt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso smartolt.vincular_olt; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "smartolt.vincular_olt",
         "x-implementado": true
       }
     },
@@ -59461,6 +60170,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/pagos/{id}/whatsapp": {
+      "get": {
+        "operationId": "notificacionesPagoWhatsapp",
+        "summary": "Comprobante de un pago por WhatsApp (Iris): canal disponible y estado del envío",
+        "description": "Para la pantalla de éxito del cobro (A4). Con permiso `pagos.ver`, no `notificaciones.ver`: el cajero lo ve. El comprobante lo manda Iris al registrarse el pago (`pago_recibido`); aquí solo se lee. `envio` null = aún no se programa. No muestra el número ni el texto.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aviso del pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvisoPagoWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/plantillas": {
       "get": {
         "operationId": "notificacionesPlantillasListar",
@@ -67014,7 +67796,7 @@
                       "pagar",
                       "nunca"
                     ],
-                    "description": "Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)"
+                    "description": "Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro, el DTE sale al quedar cubierta) o nunca (a mano; no con FEL obligatoria: 422 certificar_al_incompatible). emitir ya no se usa (primero se cobra y después se certifica): 422 certificar_al_obsoleto"
                   },
                   "reglas_promesa": {
                     "type": "object",
@@ -83811,6 +84593,9 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "acs.configurar",
+                        "acs.probar",
+                        "acs.ver",
                         "activos.dar_de_baja",
                         "activos.registrar",
                         "activos.ver",
@@ -83919,9 +84704,6 @@
                         "empresas.desactivar",
                         "empresas.editar",
                         "empresas.ver",
-                        "equipos.configurar",
-                        "equipos.probar",
-                        "equipos.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
                         "facturas.cargo_sin_costo",
@@ -84150,6 +84932,12 @@
                         "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
+                        "smartolt.crear_instancia",
+                        "smartolt.editar_instancia",
+                        "smartolt.eliminar_instancia",
+                        "smartolt.probar_instancia",
+                        "smartolt.ver",
+                        "smartolt.vincular_olt",
                         "sorteos.ejecutar",
                         "sorteos.entregar",
                         "sorteos.exportar",
@@ -84285,6 +85073,9 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "acs.configurar",
+                        "acs.probar",
+                        "acs.ver",
                         "activos.dar_de_baja",
                         "activos.registrar",
                         "activos.ver",
@@ -84393,9 +85184,6 @@
                         "empresas.desactivar",
                         "empresas.editar",
                         "empresas.ver",
-                        "equipos.configurar",
-                        "equipos.probar",
-                        "equipos.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
                         "facturas.cargo_sin_costo",
@@ -84624,6 +85412,12 @@
                         "sistema.ver_crons",
                         "sistema.ver_registro",
                         "sistema.ver_salud",
+                        "smartolt.crear_instancia",
+                        "smartolt.editar_instancia",
+                        "smartolt.eliminar_instancia",
+                        "smartolt.probar_instancia",
+                        "smartolt.ver",
+                        "smartolt.vincular_olt",
                         "sorteos.ejecutar",
                         "sorteos.entregar",
                         "sorteos.exportar",
@@ -94589,6 +95383,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/equipo/gestion": {
+      "get": {
+        "operationId": "serviciosGestionEquipo",
+        "summary": "Qué cuenta y OLT de SmartOLT usa el servicio y qué hace el ACS con él (ficha del servicio)",
+        "description": "Solo lee Argos: no llama a SmartOLT ni al ACS (el estado en vivo es `GET /servicios/:id/equipo`). `origen` dice cómo se elige la cuenta: la guardada, la de la OLT ligada, la única operativa o `sin_buscar` (se busca la serie en `cuentas` al aprovisionar). Para el panel: con el token de Iris, 403.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gestión del equipo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GestionEquipo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver_equipo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver_equipo",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/equipos": {
       "get": {
         "operationId": "serviciosEquipos",
@@ -100662,6 +101529,9 @@
                         "items": {
                           "type": "string",
                           "enum": [
+                            "acs.configurar",
+                            "acs.probar",
+                            "acs.ver",
                             "activos.dar_de_baja",
                             "activos.registrar",
                             "activos.ver",
@@ -100770,9 +101640,6 @@
                             "empresas.desactivar",
                             "empresas.editar",
                             "empresas.ver",
-                            "equipos.configurar",
-                            "equipos.probar",
-                            "equipos.ver",
                             "facturas.anular",
                             "facturas.anular_nota_credito",
                             "facturas.cargo_sin_costo",
@@ -101001,6 +101868,12 @@
                             "sistema.ver_crons",
                             "sistema.ver_registro",
                             "sistema.ver_salud",
+                            "smartolt.crear_instancia",
+                            "smartolt.editar_instancia",
+                            "smartolt.eliminar_instancia",
+                            "smartolt.probar_instancia",
+                            "smartolt.ver",
+                            "smartolt.vincular_olt",
                             "sorteos.ejecutar",
                             "sorteos.entregar",
                             "sorteos.exportar",
@@ -105165,6 +106038,133 @@
           }
         }
       },
+      "AvisoPagoWhatsapp": {
+        "type": "object",
+        "required": [
+          "pago_id",
+          "cliente_id",
+          "empresa_id",
+          "canal",
+          "plantilla_activa",
+          "envio"
+        ],
+        "properties": {
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "object",
+            "required": [
+              "activo",
+              "disponible",
+              "motivo"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean",
+                "description": "Interruptor de WhatsApp en la configuración de la empresa del pago"
+              },
+              "disponible": {
+                "type": "boolean",
+                "description": "Encendido y con el conector Iris activo con contrato ≥ 0.6.0"
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Por qué no está disponible"
+              }
+            }
+          },
+          "plantilla_activa": {
+            "type": "boolean",
+            "description": "La plantilla `whatsapp` de `pago.registrado` o `comprobante.aprobado` (`pago_recibido`) está activa"
+          },
+          "envio": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "evento",
+              "estado",
+              "error",
+              "motivo",
+              "enviado_en",
+              "entregado_en",
+              "leido_en",
+              "created_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "evento": {
+                "type": "string"
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "encolado",
+                  "enviado",
+                  "fallido",
+                  "omitido"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "enviado_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "entregado_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "leido_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Último envío por WhatsApp (Iris) de este pago; null si aún no se programa o no corresponde"
+          }
+        }
+      },
       "BalanceComprobacion": {
         "type": "object",
         "required": [
@@ -107386,7 +108386,8 @@
               "proveedor",
               "contingencia_activa",
               "dte_pendientes",
-              "alerta"
+              "alerta",
+              "alerta_configuracion"
             ],
             "properties": {
               "modo": {
@@ -107437,6 +108438,13 @@
                   "null"
                 ],
                 "description": "«FEL es obligatoria para su régimen» si está desactivada"
+              },
+              "alerta_configuracion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "«FEL activa sin credenciales»: modo distinto de desactivada sin proveedor, credenciales del proveedor y ambiente guardados o establecimiento activo (lista = false de GET /fel/configuracion)"
               }
             },
             "description": "Estado de la FEL (solo con estado ok)"
@@ -111426,7 +112434,7 @@
           },
           "nit_cui_invalido": {
             "type": "boolean",
-            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo"
+            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó), o es un NIT que se guardó con advertencia porque el dígito verificador (módulo 11) no cuadra (NIT de pruebas del certificador); se apaga al corregirlo o cuando la consulta de NIT del certificador lo encuentra"
           },
           "nombre_fiscal": {
             "type": [
@@ -113938,16 +114946,22 @@
           }
         }
       },
-      "ConfigEquipos": {
+      "ConfigAcs": {
         "type": "object",
         "required": [
           "empresa_id",
           "activo",
-          "smartolt",
-          "genieacs",
+          "operativo",
+          "url",
+          "usuario",
+          "clave",
+          "ca",
+          "probado_en",
+          "prueba_ok",
+          "prueba_error",
+          "prueba_latencia_ms",
+          "probado_por",
           "pppoe_por_acs",
-          "perfiles",
-          "capacidades",
           "version"
         ],
         "properties": {
@@ -113958,164 +114972,66 @@
           "activo": {
             "type": "boolean"
           },
-          "smartolt": {
-            "type": "object",
-            "required": [
-              "url",
-              "token",
-              "probado_en",
-              "prueba_ok",
-              "prueba_error"
-            ],
-            "properties": {
-              "url": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "token": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "enum": [
-                  "***"
-                ]
-              },
-              "probado_en": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "prueba_ok": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "prueba_error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
+          "operativo": {
+            "type": "boolean"
           },
-          "genieacs": {
-            "type": "object",
-            "required": [
-              "url",
-              "usuario",
-              "clave",
-              "ca",
-              "probado_en",
-              "prueba_ok",
-              "prueba_error"
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usuario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clave": {
+            "type": [
+              "string",
+              "null"
             ],
-            "properties": {
-              "url": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "usuario": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "clave": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "enum": [
-                  "***"
-                ]
-              },
-              "ca": {
-                "type": "boolean"
-              },
-              "probado_en": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "prueba_ok": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "prueba_error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
+            "enum": [
+              "***"
+            ]
+          },
+          "ca": {
+            "type": "boolean"
+          },
+          "probado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "prueba_ok": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "prueba_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prueba_latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "probado_por": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "pppoe_por_acs": {
             "type": "boolean"
-          },
-          "perfiles": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "smartolt_olt_id",
-                "plan_id",
-                "authorization_preset_id",
-                "pon_type"
-              ],
-              "properties": {
-                "smartolt_olt_id": {
-                  "type": "string"
-                },
-                "plan_id": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "minimum": 1
-                },
-                "authorization_preset_id": {
-                  "type": "integer"
-                },
-                "pon_type": {
-                  "type": "string",
-                  "enum": [
-                    "gpon",
-                    "epon"
-                  ]
-                }
-              }
-            }
-          },
-          "capacidades": {
-            "type": "object",
-            "required": [
-              "ftth",
-              "wireless",
-              "tr069"
-            ],
-            "properties": {
-              "ftth": {
-                "type": "boolean"
-              },
-              "wireless": {
-                "type": "boolean"
-              },
-              "tr069": {
-                "type": "boolean"
-              }
-            }
           },
           "version": {
             "type": "integer"
@@ -114264,6 +115180,8 @@
           "contingencia_desde",
           "version",
           "updated_at",
+          "lista",
+          "faltantes",
           "credenciales"
         ],
         "properties": {
@@ -114323,11 +115241,30 @@
             ],
             "format": "date-time"
           },
+          "lista": {
+            "type": "boolean",
+            "description": "Lista para certificar con el proveedor y ambiente guardados: hay proveedor, credenciales de ese proveedor y ambiente y un establecimiento activo. No bloquea guardar: es aviso (P7)"
+          },
+          "faltantes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "proveedor",
+                "credenciales",
+                "credenciales_sin_probar",
+                "establecimiento",
+                "nit_emisor"
+              ]
+            },
+            "description": "Lo que falta: proveedor, credenciales y establecimiento impiden certificar (lista = false); credenciales_sin_probar (sin prueba o la última rechazada) y nit_emisor (NIT de la empresa sin dígito verificador válido) solo informan"
+          },
           "credenciales": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CredencialesFel"
-            }
+            },
+            "description": "Las credenciales guardadas de cada proveedor y ambiente (una fila por proveedor + ambiente)"
           }
         }
       },
@@ -120464,6 +121401,7 @@
           "logo_tipo",
           "activa",
           "principal",
+          "nit_valido",
           "version",
           "created_at",
           "updated_at"
@@ -120609,6 +121547,13 @@
           "principal": {
             "type": "boolean",
             "description": "La empresa 1 (la de la instalación original)"
+          },
+          "nit_valido": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Derivado: el NIT cuadra con el dígito verificador (módulo 11). false = guardado con advertencia (sirve para pruebas; la SAT lo rechazará en producción y PUT /fel/configuracion a producción responde 422 `nit_emisor_invalido`). null sin NIT"
           },
           "version": {
             "type": "integer",
@@ -121626,6 +122571,8 @@
           "direccion",
           "municipio",
           "departamento",
+          "codigo_postal",
+          "cajas",
           "activo",
           "por_defecto",
           "version",
@@ -121665,6 +122612,22 @@
               "string",
               "null"
             ]
+          },
+          "codigo_postal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{5}$",
+            "description": "Código postal del RTU; null = el DTE sale con 01001"
+          },
+          "cajas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Cajas cuyos cobros certifican con este establecimiento (P1)"
           },
           "activo": {
             "type": "boolean"
@@ -123695,6 +124658,8 @@
           "fel_serie",
           "fel_numero",
           "fel_estado",
+          "fel_modo",
+          "fel_accion",
           "version",
           "created_at",
           "updated_at"
@@ -123802,6 +124767,25 @@
               "null"
             ],
             "description": "Error visible del DTE (SAT, receptor_requerido…)"
+          },
+          "fel_modo": {
+            "type": "string",
+            "enum": [
+              "obligatoria",
+              "opcional",
+              "desactivada"
+            ],
+            "description": "Modo FEL de la empresa de la factura (desactivada sin configuración)"
+          },
+          "fel_accion": {
+            "type": "string",
+            "enum": [
+              "ninguna",
+              "automatica",
+              "al_cobrar",
+              "certificar_opcional"
+            ],
+            "description": "Qué le toca en la FEL (primero se cobra y después se certifica): ninguna (desactivada, anulada, en cero o ya certificada), automatica (DTE en curso, o cubierta con FEL obligatoria), al_cobrar (aviso sin cubrir: se certifica al cobrarla), certificar_opcional (FEL opcional, cubierta y sin DTE)"
           },
           "aviso_cobro": {
             "type": "boolean",
@@ -125301,6 +126285,251 @@
           }
         }
       },
+      "GestionEquipo": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "empresa_id",
+          "smartolt",
+          "acs",
+          "equipo"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "smartolt": {
+            "type": "object",
+            "required": [
+              "disponible",
+              "origen",
+              "instancia",
+              "cuentas",
+              "olt_argos",
+              "olt_smartolt",
+              "puerto_pon",
+              "perfil"
+            ],
+            "properties": {
+              "disponible": {
+                "type": "boolean"
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "guardada",
+                  "olt",
+                  "unica",
+                  "sin_buscar",
+                  "ninguna"
+                ]
+              },
+              "instancia": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "id",
+                  "nombre",
+                  "url",
+                  "operativa",
+                  "compartida"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "operativa": {
+                    "type": "boolean"
+                  },
+                  "compartida": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "cuentas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "nombre"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "nombre": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "olt_argos": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "id",
+                  "nombre"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string"
+                  }
+                }
+              },
+              "olt_smartolt": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "id",
+                  "smartolt_olt_id",
+                  "nombre"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "smartolt_olt_id": {
+                    "type": "string"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "puerto_pon": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "perfil": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "authorization_preset_id",
+                  "pon_type"
+                ],
+                "properties": {
+                  "authorization_preset_id": {
+                    "type": "integer"
+                  },
+                  "pon_type": {
+                    "type": "string",
+                    "enum": [
+                      "gpon",
+                      "epon"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "acs": {
+            "type": "object",
+            "required": [
+              "configurado",
+              "activo",
+              "operativo",
+              "pppoe_por_acs"
+            ],
+            "properties": {
+              "configurado": {
+                "type": "boolean"
+              },
+              "activo": {
+                "type": "boolean"
+              },
+              "operativo": {
+                "type": "boolean"
+              },
+              "pppoe_por_acs": {
+                "type": "boolean"
+              }
+            }
+          },
+          "equipo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "serie",
+              "mac",
+              "modelo",
+              "onu_external_id",
+              "en_acs"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "ont",
+                  "cpe_wireless",
+                  "router_tr069"
+                ]
+              },
+              "serie": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mac": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "modelo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "onu_external_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "en_acs": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
       "GrupoRoutersDuplicados": {
         "type": "object",
         "required": [
@@ -126485,6 +127714,115 @@
               "null"
             ],
             "description": "version de la elección propia (null sin elección)"
+          }
+        }
+      },
+      "InstanciaSmartOlt": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "compartida",
+          "nombre",
+          "nota",
+          "url",
+          "token",
+          "activo",
+          "operativa",
+          "probado_en",
+          "prueba_ok",
+          "prueba_error",
+          "prueba_latencia_ms",
+          "probado_por",
+          "olts_sincronizadas_en",
+          "version",
+          "olts"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "compartida": {
+            "type": "boolean"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "enum": [
+              "***"
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "operativa": {
+            "type": "boolean"
+          },
+          "probado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "prueba_ok": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "prueba_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prueba_latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "probado_por": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "olts_sincronizadas_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "olts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OltSmartOlt"
+            }
           }
         }
       },
@@ -129962,6 +131300,9 @@
         "type": "string",
         "description": "Nombre de un permiso del ACL (= nombre de la acción)",
         "enum": [
+          "acs.configurar",
+          "acs.probar",
+          "acs.ver",
           "activos.dar_de_baja",
           "activos.registrar",
           "activos.ver",
@@ -130070,9 +131411,6 @@
           "empresas.desactivar",
           "empresas.editar",
           "empresas.ver",
-          "equipos.configurar",
-          "equipos.probar",
-          "equipos.ver",
           "facturas.anular",
           "facturas.anular_nota_credito",
           "facturas.cargo_sin_costo",
@@ -130301,6 +131639,12 @@
           "sistema.ver_crons",
           "sistema.ver_registro",
           "sistema.ver_salud",
+          "smartolt.crear_instancia",
+          "smartolt.editar_instancia",
+          "smartolt.eliminar_instancia",
+          "smartolt.probar_instancia",
+          "smartolt.ver",
+          "smartolt.vincular_olt",
           "sorteos.ejecutar",
           "sorteos.entregar",
           "sorteos.exportar",
@@ -130328,6 +131672,9 @@
           "zonas.ver"
         ],
         "x-enum-descriptions": [
+          "Configurar el ACS (GenieACS) de la empresa (URL, usuario, clave, certificado, PPPoE por ACS)",
+          "Probar la conexión con el ACS (GenieACS) de la empresa con la configuración guardada",
+          "Ver la configuración del ACS (GenieACS) de la empresa (sin la clave)",
           "Dar de baja (venta o retiro) un activo fijo con su asiento",
           "Dar de alta activos fijos sin compra y registrar la depreciación pendiente",
           "Ver activos fijos, su depreciación y sus bajas",
@@ -130436,9 +131783,6 @@
           "Desactivar una empresa (no se borra)",
           "Editar los datos fiscales y de contacto de una empresa",
           "Ver las empresas (NIT) de la instalación",
-          "Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin",
-          "Probar la conexión con SmartOLT y GenieACS con la configuración guardada",
-          "Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización",
           "Anular facturas",
           "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)",
           "Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)",
@@ -130667,6 +132011,12 @@
           "Ver las tareas programadas: horario, última y próxima corrida, atrasos, quién las corre e historial",
           "Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos",
           "Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor",
+          "Registrar una instancia (subdominio y token) de SmartOLT; compartida solo con alcance global",
+          "Editar una instancia de SmartOLT (nombre, URL, token, encendido y perfiles por OLT y plan)",
+          "Eliminar una instancia de SmartOLT que ningún equipo ni pedido en curso usa",
+          "Probar la conexión con una instancia de SmartOLT y sincronizar sus OLT",
+          "Ver las instancias de SmartOLT (sin token), sus OLT, a qué OLT de Argos están vinculadas y sus perfiles",
+          "Vincular una OLT de SmartOLT con una OLT de la red de acceso de Argos",
           "Ejecutar un sorteo y cerrar su acta (con checklist legal completo)",
           "Registrar la entrega de un premio de sorteo o marcarlo no reclamado",
           "Exportar la lista de participantes de un sorteo (CSV o XLSX)",
@@ -131142,6 +132492,106 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OltSmartOlt": {
+        "type": "object",
+        "required": [
+          "id",
+          "smartolt_olt_id",
+          "nombre",
+          "hardware",
+          "ip",
+          "presente",
+          "origen",
+          "olt",
+          "perfiles"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "smartolt_olt_id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hardware": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "presente": {
+            "type": "boolean"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "sincronizada",
+              "manual"
+            ]
+          },
+          "olt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "nombre"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "nombre": {
+                "type": "string"
+              }
+            }
+          },
+          "perfiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "plan_id",
+                "authorization_preset_id",
+                "pon_type"
+              ],
+              "properties": {
+                "plan_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "authorization_preset_id": {
+                  "type": "integer"
+                },
+                "pon_type": {
+                  "type": "string",
+                  "enum": [
+                    "gpon",
+                    "epon"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -139579,6 +141029,35 @@
           }
         }
       },
+      "PruebaAcs": {
+        "type": "object",
+        "required": [
+          "ok",
+          "latencia_ms",
+          "error",
+          "config"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": {
+            "$ref": "#/components/schemas/ConfigAcs"
+          }
+        }
+      },
       "PruebaConexion": {
         "type": "object",
         "required": [
@@ -139608,127 +141087,55 @@
           }
         }
       },
-      "PruebaEquipos": {
+      "PruebaInstanciaSmartOlt": {
         "type": "object",
         "required": [
-          "probado_en",
-          "smartolt",
-          "genieacs",
-          "capacidades"
+          "ok",
+          "latencia_ms",
+          "error",
+          "instancia",
+          "vinculadas_por_nombre"
         ],
         "properties": {
-          "probado_en": {
-            "type": "string",
-            "format": "date-time"
+          "ok": {
+            "type": "boolean"
           },
-          "smartolt": {
+          "latencia_ms": {
             "type": [
-              "object",
+              "integer",
               "null"
-            ],
-            "required": [
-              "ok",
-              "latencia_ms",
-              "error"
-            ],
-            "properties": {
-              "ok": {
-                "type": "boolean"
-              },
-              "latencia_ms": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "olts": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "name"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
+            ]
           },
-          "genieacs": {
+          "error": {
             "type": [
-              "object",
+              "string",
               "null"
-            ],
-            "required": [
-              "ok",
-              "latencia_ms",
-              "error"
-            ],
-            "properties": {
-              "ok": {
-                "type": "boolean"
-              },
-              "latencia_ms": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "error": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "olts": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "name"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
+            ]
           },
-          "capacidades": {
-            "type": "object",
-            "required": [
-              "ftth",
-              "wireless",
-              "tr069"
-            ],
-            "properties": {
-              "ftth": {
-                "type": "boolean"
-              },
-              "wireless": {
-                "type": "boolean"
-              },
-              "tr069": {
-                "type": "boolean"
+          "instancia": {
+            "$ref": "#/components/schemas/InstanciaSmartOlt"
+          },
+          "vinculadas_por_nombre": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "smartolt_olt_id",
+                "olt_id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "smartolt_olt_id": {
+                  "type": "string"
+                },
+                "olt_id": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               }
             }
           }
@@ -147764,6 +149171,9 @@
             "nombre": "admin",
             "descripcion": "Acceso total",
             "permisos": [
+              "acs.configurar",
+              "acs.probar",
+              "acs.ver",
               "activos.dar_de_baja",
               "activos.registrar",
               "activos.ver",
@@ -147872,9 +149282,6 @@
               "empresas.desactivar",
               "empresas.editar",
               "empresas.ver",
-              "equipos.configurar",
-              "equipos.probar",
-              "equipos.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
               "facturas.cargo_sin_costo",
@@ -148103,6 +149510,12 @@
               "sistema.ver_crons",
               "sistema.ver_registro",
               "sistema.ver_salud",
+              "smartolt.crear_instancia",
+              "smartolt.editar_instancia",
+              "smartolt.eliminar_instancia",
+              "smartolt.probar_instancia",
+              "smartolt.ver",
+              "smartolt.vincular_olt",
               "sorteos.ejecutar",
               "sorteos.entregar",
               "sorteos.exportar",
@@ -148499,6 +149912,7 @@
             "nombre": "lectura",
             "descripcion": "Solo lectura",
             "permisos": [
+              "acs.ver",
               "activos.ver",
               "adicionales.ver",
               "ajustes_cobro.ver",
@@ -148518,7 +149932,6 @@
               "egresos.ver",
               "empresa.ver",
               "empresas.ver",
-              "equipos.ver",
               "facturas.ver",
               "fel.ver",
               "fiscal.ver",
@@ -148550,6 +149963,7 @@
               "routers.ver",
               "servicios.ver",
               "sesiones.ver",
+              "smartolt.ver",
               "sorteos.ver",
               "tokens.ver",
               "usuarios.ver",

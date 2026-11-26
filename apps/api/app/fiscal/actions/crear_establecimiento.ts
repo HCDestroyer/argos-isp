@@ -1,7 +1,12 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import { empresaFiscal } from '#fiscal/comun'
-import { camposAuditables, verEstablecimiento, type EstablecimientoVista } from '#fiscal/establecimientos'
+import {
+    asignarCajas,
+    camposAuditables,
+    verEstablecimiento,
+    type EstablecimientoVista,
+} from '#fiscal/establecimientos'
 
 /**
  * `fiscal.crear_establecimiento` (`POST /fiscal/establecimientos`, permiso `fiscal.configurar`):
@@ -18,6 +23,8 @@ export interface EntradaCrearEstablecimiento {
     direccion?: string | null
     municipio?: string | null
     departamento?: string | null
+    codigo_postal?: string | null
+    cajas?: number[]
     por_defecto?: boolean
 }
 
@@ -84,10 +91,14 @@ export default class CrearEstablecimiento extends DomainAction<
                 direccion: limpio(input.direccion),
                 municipio: limpio(input.municipio),
                 departamento: limpio(input.departamento),
+                codigo_postal: limpio(input.codigo_postal),
                 activo: true,
                 por_defecto: porDefecto,
             })
             .returning('id')) as Array<{ id: number }>
+        if (input.cajas?.length) {
+            await asignarCajas(t, { id: Number(fila!.id), empresa_id: empresaId }, input.cajas)
+        }
         const creado = await verEstablecimiento(Number(fila!.id), t.trx)
         t.fijarEntidad('establecimiento', creado.id)
         await t.registrarCambios({ tipo: 'establecimiento', id: creado.id }, null, camposAuditables(creado))

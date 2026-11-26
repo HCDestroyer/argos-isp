@@ -4,8 +4,12 @@ import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
-import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
-import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
+import CrearInstanciaSmartOlt from '#integraciones/equipos/actions/crear_instancia_smartolt'
+import EditarInstanciaSmartOlt from '#integraciones/equipos/actions/editar_instancia_smartolt'
+import ProbarInstanciaSmartOlt from '#integraciones/equipos/actions/probar_instancia_smartolt'
+import ConfigurarAcs from '#integraciones/equipos/actions/configurar_acs'
+import ProbarAcs from '#integraciones/equipos/actions/probar_acs'
+import { vistaAcs } from '#integraciones/equipos/acs'
 import {
     procesarAprovisionamiento,
     procesarPendientesEquipos,
@@ -14,7 +18,13 @@ import {
 import { fijarEsperaReintentos } from '#integraciones/equipos/http'
 import { payloadParaIris } from '#integraciones/iris/envios'
 import { avisoAlTitular } from '#notify/contactos'
-import { Simulado, dispositivoTr098, onuSinConfigurar } from '#tests/integraciones/equipos_simulado'
+import {
+    Simulado,
+    borrarEquiposDe,
+    dispositivoTr098,
+    limpiarEquipos,
+    onuSinConfigurar,
+} from '#tests/integraciones/equipos_simulado'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { unicoBdMayusculas } from '#tests/billing/ayudas_billing'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -54,27 +64,31 @@ async function servicioPendiente() {
     return { clienteId, servicioId, planId: Number(planId) }
 }
 
+/** Una instancia de SmartOLT (con sus perfiles) y el ACS de la empresa, guardados y probados por sus acciones. */
 async function configurar(
     so: Simulado,
     acs: Simulado,
     perfiles: Array<Record<string, unknown>> = [],
     empresaId = 1,
 ) {
-    const fila = await db.from('integraciones.equipos_config').where('empresa_id', empresaId).first()
-    await new ConfigurarEquipos().execute(
-        {
-            version: fila?.version ?? 0,
-            activo: true,
-            smartolt_url: so.url,
-            smartolt_token: TOKEN_SO,
-            genieacs_url: acs.url,
-            genieacs_usuario: 'argos',
-            genieacs_clave: CLAVE_ACS,
-            perfiles: perfiles as never,
-        },
-        ctxEmpresa(empresaId),
+    const ctx = ctxEmpresa(empresaId)
+    const inst = await new CrearInstanciaSmartOlt().execute(
+        { nombre: 'SmartOLT', url: so.url, token: TOKEN_SO, activo: true },
+        ctx,
     )
-    return new ProbarEquipos().execute({}, ctxEmpresa(empresaId))
+    if (perfiles.length > 0) {
+        await new EditarInstanciaSmartOlt().execute(
+            { id: inst.id, version: inst.version, perfiles: perfiles as never },
+            ctx,
+        )
+    }
+    await new ProbarInstanciaSmartOlt().execute({ id: inst.id }, ctx)
+    const { version } = await vistaAcs(empresaId)
+    await new ConfigurarAcs().execute(
+        { version, activo: true, url: acs.url, usuario: 'argos', clave: CLAVE_ACS },
+        ctx,
+    )
+    return new ProbarAcs().execute({}, ctx)
 }
 
 /** SmartOLT con una ONT por autorizar y GenieACS con su dispositivo TR-098. */
@@ -153,8 +167,7 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
         acs.limpiar()
     })
     group.each.teardown(async () => {
-        await db.from('integraciones.equipos_perfiles').delete()
-        await db.from('integraciones.equipos_config').delete()
+        await limpiarEquipos()
         await db.from('integraciones.iris_conector').delete()
     })
 
@@ -173,44 +186,65 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
                 ? { status: 200, cuerpo: [] }
                 : { status: 401, cuerpo: 'Unauthorized' },
         )
-        const put = (cuerpo: Record<string, unknown>) =>
-            client
-                .put('/api/v1/integraciones/equipos')
-                .bearerToken(token)
-                .header('X-Empresa-Id', '1')
-                .json(cuerpo)
-        const r = await estado(
-            put({
-                version: 0,
-                activo: true,
-                smartolt_url: `${so.url}/api`,
-                smartolt_token: TOKEN_SO,
-                genieacs_url: acs.url,
-                genieacs_usuario: 'argos',
-                genieacs_clave: CLAVE_ACS,
+        const conToken = <T extends { header: (k: string, v: string) => T; bearerToken: (t: string) => T }>(
+            r: T,
+        ) => r.bearerToken(token).header('X-Empresa-Id', '1')
+        const creada = await estado(
+            conToken(
+                client.post('/api/v1/integraciones/smartolt/instancias').json({
+                    nombre: 'Principal',
+                    url: `${so.url}/api`,
+                    token: TOKEN_SO,
+                    activo: true,
+                }),
+            ),
+            201,
+        )
+        const id = creada.body().id as number
+        const putSo = (cuerpo: Record<string, unknown>) =>
+            conToken(client.put(`/api/v1/integraciones/smartolt/instancias/${id}`).json(cuerpo))
+        const conPerfil = await estado(
+            putSo({
+                version: creada.body().version,
                 perfiles: [{ smartolt_olt_id: '7', plan_id: null, authorization_preset_id: 31 }],
             }),
             200,
         )
-        assert.equal(r.body().smartolt.url, so.url)
-        assert.equal(r.body().smartolt.token, '***')
-        assert.equal(r.body().genieacs.clave, '***')
-        assert.deepEqual(r.body().capacidades, { ftth: false, wireless: false, tr069: false })
-        const fila = await db.from('integraciones.equipos_config').where('empresa_id', 1).first()
-        assert.notInclude(fila.smartolt_token_cifrado, TOKEN_SO)
-        assert.match(fila.genieacs_clave_cifrada, /^v1\./)
-
-        const prueba = await estado(
-            client
-                .post('/api/v1/integraciones/equipos/probar')
-                .bearerToken(token)
-                .header('X-Empresa-Id', '1'),
+        assert.equal(conPerfil.body().url, so.url)
+        assert.equal(conPerfil.body().token, '***')
+        assert.isFalse(conPerfil.body().operativa)
+        const acsGuardado = await estado(
+            conToken(
+                client
+                    .put('/api/v1/integraciones/acs')
+                    .json({ version: 0, activo: true, url: acs.url, usuario: 'argos', clave: CLAVE_ACS }),
+            ),
             200,
         )
-        assert.isTrue(prueba.body().smartolt.ok)
-        assert.deepEqual(prueba.body().smartolt.olts, [{ id: '7', name: 'OLT-Norte' }])
-        assert.isTrue(prueba.body().genieacs.ok)
-        assert.deepEqual(prueba.body().capacidades, { ftth: true, wireless: true, tr069: true })
+        assert.equal(acsGuardado.body().clave, '***')
+        const instancia = await db.from('integraciones.smartolt_instancias').where('empresa_id', 1).first()
+        assert.notInclude(instancia.token_cifrado, TOKEN_SO)
+        const filaAcs = await db.from('integraciones.acs_config').where('empresa_id', 1).first()
+        assert.match(filaAcs.clave_cifrada, /^v1\./)
+
+        const prueba = await estado(
+            conToken(client.post(`/api/v1/integraciones/smartolt/instancias/${id}/probar`)),
+            200,
+        )
+        assert.isTrue(prueba.body().ok)
+        assert.deepEqual(
+            prueba
+                .body()
+                .instancia.olts.map((o: { smartolt_olt_id: string; nombre: string }) => [
+                    o.smartolt_olt_id,
+                    o.nombre,
+                ]),
+            [['7', 'OLT-Norte']],
+        )
+        assert.isNumber(prueba.body().instancia.prueba_latencia_ms)
+        assert.isString(prueba.body().instancia.probado_por)
+        const pruebaAcs = await estado(conToken(client.post('/api/v1/integraciones/acs/probar')), 200)
+        assert.isTrue(pruebaAcs.body().ok)
 
         // capacidades hacia Iris
         const iris = await tokenIris()
@@ -223,30 +257,37 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
         })
 
         // otro token: borra la prueba de SmartOLT; con token malo la prueba falla y no hay ftth
-        const config = await db.from('integraciones.equipos_config').where('empresa_id', 1).first()
-        const v = config.version
-        const otro = await estado(put({ version: v, smartolt_token: 'token-equivocado-999' }), 200)
-        assert.isNull(otro.body().smartolt.prueba_ok)
-        assert.isFalse(otro.body().capacidades.ftth)
+        const v = prueba.body().instancia.version as number
+        const otro = await estado(putSo({ version: v, token: 'token-equivocado-999' }), 200)
+        assert.isNull(otro.body().prueba_ok)
+        assert.isNull(otro.body().prueba_latencia_ms)
+        assert.isFalse(otro.body().operativa)
         const mala = await estado(
-            client
-                .post('/api/v1/integraciones/equipos/probar')
-                .bearerToken(token)
-                .header('X-Empresa-Id', '1'),
+            conToken(client.post(`/api/v1/integraciones/smartolt/instancias/${id}/probar`)),
             200,
         )
-        assert.isFalse(mala.body().smartolt.ok)
-        assert.include(mala.body().smartolt.error, 'Invalid API Key')
-        assert.deepEqual(mala.body().capacidades, { ftth: false, wireless: true, tr069: true })
+        assert.isFalse(mala.body().ok)
+        assert.include(mala.body().error, 'Invalid API Key')
+        const despues = await estado(client.get('/api/v1/integraciones/iris/estado').bearerToken(iris), 200)
+        assert.deepInclude(despues.body().capacidades.aprovisionamiento, {
+            empresa_id: 1,
+            ftth: false,
+            wireless: true,
+            tr069: true,
+        })
         // versión vieja: 409
-        await estado(put({ version: v, activo: false }), 409)
+        await estado(putSo({ version: v, activo: false }), 409)
 
         // ningún secreto en la auditoría ni en audit.red
         const auditoria = JSON.stringify(
-            await db.from('audit.acciones').whereIn('accion', ['equipos.configurar', 'equipos.probar']),
+            await db
+                .from('audit.acciones')
+                .where((q) => q.whereLike('accion', 'smartolt.%').orWhereLike('accion', 'acs.%')),
         )
         const cambios = JSON.stringify(
-            await db.from('audit.cambios').where('entidad_tipo', 'configuracion_equipos'),
+            await db
+                .from('audit.cambios')
+                .whereIn('entidad_tipo', ['instancia_smartolt', 'configuracion_acs']),
         )
         const red = JSON.stringify(await db.from('audit.red').whereIn('tipo', ['smartolt', 'genieacs']))
         for (const texto of [auditoria, cambios, red]) {
@@ -257,7 +298,18 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
 
         // sin permiso
         const { token: lectura } = await usuarioConRoles(['cajero'])
-        await estado(put({ version: 0 }).bearerToken(lectura), 403)
+        await estado(
+            client
+                .post('/api/v1/integraciones/smartolt/instancias')
+                .bearerToken(lectura)
+                .header('X-Empresa-Id', '1')
+                .json({ nombre: 'X', url: so.url, token: TOKEN_SO }),
+            403,
+        )
+        await estado(
+            client.get('/api/v1/integraciones/acs').bearerToken(lectura).header('X-Empresa-Id', '1'),
+            403,
+        )
     })
 
     test('A32: ONT por SmartOLT + Wi-Fi por GenieACS → listo, activo y sin la clave en ningún lado', async ({
@@ -474,11 +526,11 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
             cuerpo: { status: true, response: [] },
         }))
         // solo SmartOLT
-        await new ConfigurarEquipos().execute(
-            { version: 0, activo: true, smartolt_url: so.url, smartolt_token: TOKEN_SO },
+        const inst = await new CrearInstanciaSmartOlt().execute(
+            { nombre: 'SmartOLT', url: so.url, token: TOKEN_SO, activo: true },
             ctxEmpresa(),
         )
-        await new ProbarEquipos().execute({}, ctxEmpresa())
+        await new ProbarInstanciaSmartOlt().execute({ id: inst.id }, ctxEmpresa())
         const { servicioId } = await servicioPendiente()
         const pedir = (cuerpo: Record<string, unknown>) =>
             client
@@ -714,7 +766,7 @@ test.group('Equipos · SmartOLT y GenieACS (A32, A33, A35)', (group) => {
                 .firstOrFail()
             assert.equal(guardado.acs_device_id, `00259E-F670L-${serie}`)
         } finally {
-            await db.from('integraciones.equipos_config').where('empresa_id', e.B).delete()
+            await borrarEquiposDe(e.B)
             await soloEmpresaPrincipal()
         }
     })

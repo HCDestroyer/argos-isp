@@ -87,3 +87,16 @@ test('libro: balance por empresa con el total del grupo', async ({ page }) => {
     await expect(page.locator('[data-prueba="total-grupo"]')).toBeVisible()
     await expect(page.locator('[data-prueba="libro-balance"] section[data-empresa="2"]')).toContainText('Fibra del Sur')
 })
+
+test('alta de empresa con NIT de letras (DEMO-123): avisa el dígito verificador y guarda', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/configuracion/empresas?nueva=1')
+    const dialogo = page.getByRole('dialog')
+    await expect(dialogo).toContainText('Nueva empresa')
+    await dialogo.getByLabel('NIT').fill('DEMO-123')
+    await expect(dialogo.locator('[data-prueba="aviso-nit-empresa"]')).toContainText('sirve para pruebas')
+    await dialogo.getByLabel('Razón social').fill('DEMO COMERCIAL, S.A.')
+    await dialogo.getByLabel('Nombre comercial').fill('Demo pruebas')
+    await page.getByRole('button', { name: 'Crear empresa', exact: true }).click()
+    await expect(page.getByText('Empresa creada', { exact: true })).toBeVisible()
+})
