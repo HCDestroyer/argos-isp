@@ -6,6 +6,7 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
 - `tableros/`: copia de cada tablero (`*.dc.html`) y del índice `canvas.json` (páginas: Propuesta visual, Día a día, Lo nuevo, Inventario y bodegas, Red, Reportes y contabilidad, Operación, Portal del cliente y Pendientes del backend).
 - `generadores/`: los scripts Python que generan los tableros (`c3.py` ficha, `c4.py` alta, `c8.py` cobro POS, `c9.py` cierre de caja, `c10.py` cajas, `c11.py` abrir caja y conciliación, `c12.py` importar extracto, `c13.py` inventario, `red*.py` red, `crons.py` tareas programadas). Escriben en una carpeta temporal; cambia la ruta de `os.chdir` antes de usarlos.
 - `generadores/pend*.py` (página «Pendientes del backend»): cargan `pend_base.py`, que reúne `red_base.py`, `oper_base.py` y los íconos de `conta_base.py` de la misma carpeta sin tocar su `os.chdir`, y escriben en `tableros/` (o en `SALIDA_TABLEROS`). Sus tableros traen modo oscuro con el estado `{"tema":"osc"}` y el botón de la luna.
+- `generadores/conta_plan.py` (página «Contabilidad: propuesta», **pendiente de aprobación del PM**): inicio de contabilidad, conciliación guiada y su configuración de diferencias, cajas y efectivo (cobros, custodia y caja chica), ficha del cliente con «Nueva factura» y tipo de impuesto, y el patrón de indicador con ayuda. Sus imágenes y las del panel de hoy están en `capturas/contabilidad/`. Plan: `.claude/integration/contratos/plan-contabilidad.md`.
 - `herramientas/render.js`: dibuja un tablero en PNG con Playwright para revisarlo: `node render.js <tablero> <png> <ancho> <alto> '<estado json>'` (el estado activa pestañas, pasos y ventanas; ver `renderVals()` de cada tablero).
 
 ## Sistema visual
@@ -82,6 +83,17 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
   - **Envíos programados** (`PendEnviosReportes`): lista con corridas (enviado, omitido y por qué, fallido), pausar y editar; pestaña Correos externos aprobados con aprobar y retirar.
   - **Inventario 0.14.0**: declarar no recuperado con los intentos y su verificación de Iris, decidir los anteriores y el progreso hacia el mínimo (`PendIntentosRecuperacion`); técnicos de Iris con sus vínculos y «Conciliar» (`PendVinculosTecnicos`).
   - **Inicio de sesión** (`OperLogin`, `OperLoginMovil`): recuperar (correo), enviado (misma respuesta exista o no), demasiadas solicitudes, nueva contraseña (cierra las sesiones), listo, enlace vencido y recuperación apagada.
+
+## Menú lateral, Ajustes y perfil (aprobado por el PM el 26 nov 2026)
+
+- Tableros `MenuLateral`, `AjustesEscritorio`, `AjustesMovil` y `PerfilDrawer` (página «Menú lateral, Ajustes y perfil» de `canvas.json`). Generador: `generadores/menu_ajustes.py` (`python3 menu_ajustes.py` escribe en `tableros/`).
+- Imágenes ya dibujadas en `imagenes/menu-ajustes/`; en `antes/`, las capturas del panel real con las que se hizo el diagnóstico.
+- Estados para `render.js`: `{"tema":"osc"}` en los cuatro; `MenuLateral` `{"modo":"expandido"}`; `AjustesEscritorio` `{"v":"buscar"}` y `{"v":"rol"}`; `AjustesMovil` `{"p":"buscar"}` y `{"p":"pagina"}`; `PerfilDrawer` `{"p":"mas"}` y `{"p":"una"}` (una sola empresa).
+- Diagnóstico del corte, auditoría de Ajustes, justificación y lotes: `plan-menu-ajustes.md`. Respuestas del PM: «Respuestas del PM (26 nov 2026)» al final de `decisiones-pm.md`, que mandan sobre el plan donde difieren.
+- Aprobado con un cambio: en la computadora, «Ajustes» abre una **página de tarjetas** por grupo con el buscador arriba (no la última pantalla usada, como dibuja `AjustesEscritorio`). Esa página no tiene tablero propio: sigue la lista agrupada de `AjustesMovil`, con una tarjeta por grupo desde 1024 px. Dentro de cada ajuste sí es `AjustesEscritorio`.
+- Todo se llama «Ajustes»; las rutas siguen en `/configuracion/…`.
+- Cambia respecto a lo aprobado el 21 nov: en los tableros `OperConfig*` la isla de la izquierda listaba secciones y sus pantallas iban en pestañas; ahora la isla lista las pantallas por grupo (`AjustesNavegacion`) y esas pestañas ya no existen. Quedan solo las que dividen una misma pantalla (las tres de «Corte, caídas y retiro»).
+- Implementado en el panel (lotes 1 a 6 de `plan-menu-ajustes.md`): `configuracionSecciones.ts`, `AjustesNavegacion`, `ConfiguracionMarco`, `useMenuCuenta` y `CuentaDrawer`.
 
 ## Portal del cliente
 

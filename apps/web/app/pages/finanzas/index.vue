@@ -19,9 +19,10 @@ useHead({ title: 'Panel financiero · ArgosIsp' })
  *   superado) sale siempre, porque obliga a cambiar de régimen. Una alerta de ese tipo que venga en
  *   la lista se muestra siempre (con el aviso apagado la API solo la manda si superó el límite,
  *   con `datos.aviso_apagado`), y si la revisión del límite falló su error sale con «Reintentar».
- * Lo que la API del panel financiero aún no da (ingreso recurrente con IVA, bajas a 60 días, ingreso
- * por servicio, efectivo por semana y la comparación por empresa) se dice sin cifra inventada; lo
- * construye A3 en `agente/a3-reportes-pm` (`.claude/integration/a4.md`).
+ * Ingreso recurrente, bajas del mes e ingreso por servicio salen de `GET /panel-financiero`: un
+ * bloque con error muestra «No se pudo leer» con «Reintentar» y uno que no aplica (régimen de la
+ * empresa) dice su motivo, nunca una cifra inventada. Lo que la API aún no da (efectivo por semana y
+ * la comparación por empresa) se dice sin cifra inventada (`.claude/integration/a4.md`).
  * En el teléfono solo se consulta (decisión 9): cerrar, declarar o castigar es de la computadora.
  */
 type Resumen = Schema<'ResumenDashboard'>
@@ -42,6 +43,9 @@ const tablero = shallowRef<Tablero | null>(null)
 const problemaTablero = ref<Problem | null>(null)
 const efectivo = shallowRef<{ total: string, bancos: number, cajas: number } | null>(null)
 const problemaEfectivo = ref<Problem | null>(null)
+/** Ingreso recurrente, bajas y por servicio (`GET /panel-financiero`); null mientras carga o si falló. */
+const panel = shallowRef<PanelFinanciero | null>(null)
+const problemaPanel = ref<Problem | null>(null)
 const integridad = shallowRef<Schema<'IntegridadLibro'>[] | null>(null)
 const cierres = shallowRef<Schema<'CierrePeriodo'>[] | null>(null)
 /**
@@ -60,6 +64,16 @@ async function cargarResumen() {
     const r = await useReportes().resumenDashboard()
     resumen.value = r.ok ? r.data : null
     problemaResumen.value = r.ok ? null : r.problema
+}
+
+async function cargarPanel() {
+    if (!puede('panel_financiero.ver')) {
+        return
+    }
+    problemaPanel.value = null
+    const r = await usePanelFinanciero().ver({ todas: eleccion.value === 'todas' })
+    panel.value = r.ok ? r.data : null
+    problemaPanel.value = r.ok ? null : r.problema
 }
 
 async function cargarCartera() {
@@ -144,6 +158,7 @@ async function cargarApagadas() {
 function cargar() {
     void cargarApagadas()
     void cargarResumen()
+    void cargarPanel()
     void cargarCartera()
     void cargarTablero()
     void cargarEfectivo()
@@ -239,6 +254,15 @@ const pequenos = computed(() => (tablero.value?.empresas ?? []).flatMap((e) => {
         supera: datos.supera_limite,
     }]
 }))
+
+/* Ingreso recurrente, bajas y por servicio: la sección de la empresa activa, o el total consolidado. */
+const seccionPanel = computed(() => (eleccion.value === 'todas' ? panel.value?.total ?? null : panel.value?.empresas[0] ?? null))
+const ingresos = computed(() => seccionPanel.value?.ingresos ?? null)
+const bajas = computed(() => seccionPanel.value?.bajas ?? null)
+
+function cifra(entero: number): string {
+    return entero.toLocaleString('es-GT')
+}
 
 /* Indicadores. */
 const cobranza = computed(() => resumen.value?.mes ?? null)
@@ -361,15 +385,20 @@ const TONO_AVISO = {
                 :class="vistaMovil === 'resumen' ? '' : 'max-lg:hidden'"
                 data-prueba="kpis-panel"
             >
-                <ContaKpi
-                    titulo="Ingreso recurrente"
+                <ContaIndicador
+                    clave="ingreso-recurrente"
                     icono="i-lucide-trending-up"
-                    :valor="null"
-                    sin-api="Con IVA, de activos y limitados: llega con la API del panel financiero."
-                    ayuda="Lo que se factura cada mes por los servicios activos y limitados, con IVA, menos descuentos y precios temporales (MRR)."
+                    :valor="ingresos?.estado === 'ok' && ingresos.datos ? formatearQuetzales(ingresos.datos.mrr) : null"
+                    :detalle="ingresos?.datos ? `con IVA · ${cifra(ingresos.datos.servicios)} servicios activos y limitados` : undefined"
+                    :problema="problemaPanel ?? (ingresos?.estado === 'error' ? ingresos.error : null)"
+                    :sin-datos="ingresos?.estado === 'no_aplica' ? (ingresos.motivo ?? 'No aplica a esta empresa') : undefined"
+                    titulo-sin-datos="No aplica"
+                    data-kpi="ingreso-recurrente"
                     class="max-lg:order-3"
+                    @reintentar="cargarPanel"
                 />
-                <ContaKpi
+                <ContaIndicador
+                    clave="cobrado-mes"
                     :titulo="`Cobrado en ${nombreMes || 'el mes'}`"
                     icono="i-lucide-banknote"
                     tono="tono-exito"
@@ -380,49 +409,64 @@ const TONO_AVISO = {
                     class="max-lg:order-1"
                     @reintentar="cargarResumen"
                 />
-                <ContaKpi
-                    titulo="Cartera vencida"
+                <ContaIndicador
+                    clave="cartera-vencida"
                     icono="i-lucide-triangle-alert"
                     tono="tono-error"
+                    to="/cartera"
+                    :estado="masDe60 && new Decimal(masDe60).gt(0) ? 'atencion' : undefined"
+                    :etiqueta-estado="masDe60 && new Decimal(masDe60).gt(0) ? `${formatearQuetzales(masDe60)} con más de 60 días` : undefined"
                     :valor="resumen ? formatearQuetzales(resumen.cartera_vencida.monto) : null"
                     :detalle="resumen ? `${resumen.cartera_vencida.facturas.toLocaleString('es-GT')} facturas de ${resumen.cartera_vencida.clientes.toLocaleString('es-GT')} clientes` : undefined"
                     :problema="problemaResumen"
                     class="max-lg:hidden"
                     @reintentar="cargarResumen"
                 />
-                <ContaKpi
+                <ContaIndicador
                     v-if="verLibro"
-                    titulo="Efectivo disponible"
+                    clave="dinero-disponible"
                     icono="i-lucide-landmark"
                     tono="tono-2"
                     :valor="efectivo ? formatearQuetzales(efectivo.total) : null"
                     :detalle="efectivo ? `en ${efectivo.bancos} ${efectivo.bancos === 1 ? 'banco' : 'bancos'} y ${efectivo.cajas} ${efectivo.cajas === 1 ? 'caja' : 'cajas'}` : undefined"
                     :problema="problemaEfectivo"
-                    ayuda="Saldo de las cuentas de caja (1.1.01) y bancos (1.1.02) del libro, hoy."
                     class="max-lg:order-2"
                     @reintentar="cargarEfectivo"
                 />
-                <ContaKpi
-                    titulo="Bajas del mes"
+                <ContaIndicador
+                    clave="bajas-mes"
                     icono="i-lucide-users"
                     tono="tono-3"
-                    :valor="null"
-                    sin-api="Retirados o suspendidos más de 60 días: llega con la API del panel financiero."
-                    ayuda="Un servicio cuenta como baja si se retiró o lleva más de 60 días suspendido; si se reactiva, deja de contar (churn)."
+                    :valor="bajas?.estado === 'ok' && bajas.datos ? cifra(bajas.datos.bajas) : null"
+                    :variacion="bajas?.datos?.tasa ? `${bajas.datos.tasa} %` : undefined"
+                    :detalle="bajas?.datos ? `${cifra(bajas.datos.retiros)} retiros · ${cifra(bajas.datos.suspendidos)} suspendidos de largo` : undefined"
+                    :problema="problemaPanel ?? (bajas?.estado === 'error' ? bajas.error : null)"
+                    :sin-datos="bajas?.estado === 'no_aplica' ? (bajas.motivo ?? 'No aplica a esta empresa') : undefined"
+                    titulo-sin-datos="No aplica"
+                    data-kpi="bajas"
                     class="max-lg:hidden"
+                    @reintentar="cargarPanel"
                 />
-                <ContaKpi
-                    titulo="Por servicio"
+                <ContaIndicador
+                    clave="por-servicio"
                     icono="i-lucide-pie-chart"
                     tono="tono-4"
-                    :valor="null"
-                    sin-api="Ingreso promedio por servicio: llega con la API del panel financiero."
-                    ayuda="Ingreso recurrente entre los servicios que facturan (ARPU)."
+                    :valor="ingresos?.estado === 'ok' && ingresos.datos ? (ingresos.datos.arpu ? formatearQuetzales(ingresos.datos.arpu) : '—') : null"
+                    :detalle="ingresos?.datos ? (ingresos.datos.arpu ? 'ingreso promedio por servicio al mes' : 'sin servicios que facturen') : undefined"
+                    :problema="problemaPanel ?? (ingresos?.estado === 'error' ? ingresos.error : null)"
+                    :sin-datos="ingresos?.estado === 'no_aplica' ? (ingresos.motivo ?? 'No aplica a esta empresa') : undefined"
+                    titulo-sin-datos="No aplica"
+                    data-kpi="por-servicio"
                     class="max-lg:hidden"
+                    @reintentar="cargarPanel"
                 />
-                <ContaKpi
+                <ContaIndicador
                     v-if="verFiscal"
+                    clave="impuestos-mes"
                     titulo="Impuestos por pagar"
+                    to="/fiscal/calendario"
+                    :estado="impuestos.some(i => i.vencida) ? 'urgente' : undefined"
+                    :etiqueta-estado="impuestos.some(i => i.vencida) ? 'Hay impuestos vencidos' : undefined"
                     icono="i-lucide-receipt"
                     tono="tono-aviso"
                     :valor="tablero ? (totalImpuestos ? formatearQuetzales(totalImpuestos) : 'Sin calcular') : null"

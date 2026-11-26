@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { entrar, ir } from './ayudas'
 
 /**
- * Configuración → Integraciones → Iris (`contratos/iris.md` §1.3), en modo fixtures, a 1280 y
+ * Ajustes → Integraciones → Iris (`contratos/iris.md` §1.3), en modo fixtures, a 1280 y
  * 390 px: el índice lleva a Iris, «Generar enlace de conexión» muestra el enlace una sola vez con
  * su instrucción y la caducidad, y al cerrar ya no está en ningún lado. El menú también tiene la
  * entrada directa. Las capturas (claro y oscuro) quedan en `test-results/capturas-iris/` (no se suben).
@@ -59,8 +59,9 @@ test('Iris: generar el enlace de conexión y verlo una sola vez', async ({ page 
     await page.locator('[data-prueba="cerrar-valor-una-vez"]').click()
     await expect(modal).toHaveCount(0)
 
-    // La entrada directa del menú lleva a la misma pantalla.
+    // Iris vive dentro de Integraciones (Ajustes, catálogo único): sin entrada propia en el menú.
     await ir(page, 'Integraciones', /\/configuracion\/integraciones$/)
-    await ir(page, 'Iris', /\/configuracion\/integraciones\/iris$/)
+    await page.locator('[data-prueba="configurar-iris"]').click()
+    await expect(page).toHaveURL(/\/configuracion\/integraciones\/iris$/)
     await expect(page.locator('[data-prueba="estado-conector-iris"]')).toHaveText('Sin conectar')
 })

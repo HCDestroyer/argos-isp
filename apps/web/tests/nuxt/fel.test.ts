@@ -297,7 +297,7 @@ describe('FEL · pantallas', () => {
         useUsuarioActual().value = null
     })
 
-    it('Configuración → FEL: modo, credenciales «configuradas» sin secretos y 422 avisos_por_certificar con la cuenta', async () => {
+    it('Ajustes → Factura electrónica (FEL): modo, credenciales «configuradas» sin secretos y 422 avisos_por_certificar con la cuenta', async () => {
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
         await esperar(() => expect(vista.find('[data-prueba="fel-modo"]').text()).toBe('Obligatoria'))
         const pruebas = vista.find('[data-credenciales="pruebas"]')
@@ -318,7 +318,7 @@ describe('FEL · pantallas', () => {
         expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').text()).toMatch(/\d+ avisos de cobro sin certificar/)
     })
 
-    it('Configuración → FEL: la tarjeta muestra y prueba las credenciales del certificador elegido, no las de otro', async () => {
+    it('Ajustes → Factura electrónica (FEL): la tarjeta muestra y prueba las credenciales del certificador elegido, no las de otro', async () => {
         // ArgosNet guarda INFILE como certificador y tiene credenciales de los dos en pruebas
         bd.fel.configuraciones[1] = { ...bd.fel.configuraciones[1]!, proveedor: 'infile' }
         bd.fel.credenciales.push({
@@ -351,7 +351,7 @@ describe('FEL · pantallas', () => {
         expect(falso.vista.probada_en).toBe('2026-10-01T15:36:27.394Z')
     })
 
-    it('Configuración → FEL: con la FEL activa y sin credenciales, el aviso dice qué falta', async () => {
+    it('Ajustes → Factura electrónica (FEL): con la FEL activa y sin credenciales, el aviso dice qué falta', async () => {
         bd.fel.configuraciones[2] = {
             empresa_id: 2,
             proveedor: 'infile',
@@ -370,7 +370,7 @@ describe('FEL · pantallas', () => {
         expect(vista.text()).toContain('NIT sin verificar')
     })
 
-    it('Configuración → FEL: la contingencia activa se ve en el aviso con su fecha y su motivo', async () => {
+    it('Ajustes → Factura electrónica (FEL): la contingencia activa se ve en el aviso con su fecha y su motivo', async () => {
         const activa = await useFel().cambiarContingencia(true, 'El certificador no responde', nuevaClaveIdempotencia(), 1)
         expect(activa.ok).toBe(true)
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
@@ -380,7 +380,7 @@ describe('FEL · pantallas', () => {
         expect(contingencia.text()).toContain('Motivo: El certificador no responde')
     })
 
-    it('Configuración → FEL con error de la API: el aviso con «Reintentar», sin datos inventados', async () => {
+    it('Ajustes → Factura electrónica (FEL) con error de la API: el aviso con «Reintentar», sin datos inventados', async () => {
         simularFalla('GET /api/v1/fel/configuracion', 501)
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
         await esperar(() => expect(vista.find('[data-prueba="fel-error"]').text()).toContain('Reintentar'))

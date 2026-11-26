@@ -64,7 +64,7 @@ export function useImpresionCaja() {
         return null
     }
 
-    /** Lo que otra pantalla ya guardó (Configuración › Reglas de cobro y libro). */
+    /** Lo que otra pantalla ya guardó (Ajustes › Reglas de cobro y libro). */
     function recordar(caja: Caja): void {
         cajas.value = { ...cajas.value, [caja.id]: caja }
     }

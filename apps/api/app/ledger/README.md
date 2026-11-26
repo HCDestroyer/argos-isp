@@ -108,13 +108,33 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cajas.abrir`  | `actions/abrir_caja.ts`  | Abre un turno con `fondo_inicial` y `abierto_por`. Uno abierto por caja (409 `turno_abierto`). Sin asiento: el fondo ya está en la cuenta de la caja                                                                                                                                                |
-| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno − egresos − depósitos del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto`. El esperado sale de `resumen_turno.ts` (misma regla que el resumen). Rediseño: `denominaciones` (Q200 … 1¢; sin `contado` es su suma, con los dos deben coincidir), `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto; sin asiento: el dinero sigue en la caja hasta depositarlo) |
+| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno − egresos − depósitos del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto`. El esperado sale de `resumen_turno.ts` (misma regla que el resumen). Rediseño: `denominaciones` (Q200 … 1¢; sin `contado` es su suma, con los dos deben coincidir), `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto; desde B1 es una entrega, ver abajo) |
 
 - Cada pago en efectivo guarda el turno abierto de su caja (`billing.pagos.turno_id`, con `FOR SHARE` frente al cierre). `POST /pagos` con `caja` sin `caja_id` usa la caja del turno abierto del cajero (`cajaDelCajero`: el que él abrió o una caja asignada a él, dentro de su alcance) y, si no tiene, la principal.
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
 - Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
 - Un turno cerrado es inmutable (hallazgo H3): el trigger `cajas_turnos_inmutable` rechaza DELETE, cualquier UPDATE de un turno con `cerrado_en` y, en el abierto, todo UPDATE que no sea su cierre o que cambie los datos de apertura; TRUNCATE también se rechaza. `argosisp_app` no tiene DELETE ni TRUNCATE y su UPDATE se limita a las columnas del cierre.
+
+### Caja de cobros → custodia → banco (B1 del plan de contabilidad, §5.7; corrige E1)
+
+El efectivo de cobros siempre está a nombre de una persona y solo se mueve por documentos con asiento (`custodia.ts`):
+
+| Paso | Acción (permiso) | Documento | Asiento |
+| --- | --- | --- | --- |
+| Cerrar y entregar | `cajas.cerrar` con `entregado_a` → `cajas.entregar` anidada | `ledger.entregas` (lo contado menos el fondo; sin `fondo_siguiente` queda el fondo fijo) | ninguno: «por recibir», sigue en la cuenta de la caja |
+| «Recibí» | `cajas.recibir_entrega` (solo la persona a quien va) | `ledger.entregas_recepciones` (`recibida`, con lo contado) | `entrega_caja`: `1.1.15 Efectivo en custodia` (contado) / Caja (entregado); diferencia a cargo de quien entregó en Faltantes o Sobrantes de caja, con motivo |
+| «No lo recibí» | `cajas.rechazar_entrega` | recepción `rechazada` | ninguno; el turno se vuelve a entregar con `cajas.entregar` (`POST /cajas/turnos/:id/entregar`) |
+| «Lo deposito yo» | `entregado_a` = quien cierra (si `cajas_ajustes.autoentrega`) | entrega + recepción en el acto | igual que «Recibí» |
+| Depositar | `cajas.depositar` (`POST /custodia/depositar`, o `POST /cajas/:id/depositar` sin `desde`) | `ledger.depositos` con `origen = custodia`, sin caja ni turno | `1.1.11 / 1.1.15`; no más que la custodia de quien deposita (422 `deposito_excede_custodia`) |
+
+- Las cajas tienen `tipo` (`cobros`; `gastos` = caja chica, B9) y `fondo_fijo` (null = `cajas_ajustes.fondo_cobros` de la empresa, Q200 de fábrica). `cajas.abrir` sin `fondo_inicial` abre con `fondo_esperado`: lo que quedó del turno anterior o el fondo fijo.
+- `ledger.cajas_ajustes` por empresa (`GET/PUT /cajas/ajustes`, `cajas.configurar`, con `version`): fondo de cambio, plazo de custodia en días hábiles (1), tope por persona (Q5,000) y «lo deposito yo». Pasarse del plazo o del tope avisa (`GET /cajas/custodia`, `sobre_tope` en `caja.entrega_recibida`, check `custodia_en_plazo`), nunca bloquea.
+- `GET /cajas/custodia` y `GET /cajas/entregas`: con `cajas.ver_custodia`, todas las personas; sin él, solo lo propio.
+- Revisiones del cierre (`CHECKS_CUSTODIA` en `checks.ts`): `entregas_recibidas` (ninguna entrega del periodo sin respuesta), `custodia_cuadra` (`1.1.15` = recibido − depositado) y `custodia_en_plazo` (aviso). Calculadas (`calcularChecksCustodia`) pero aún fuera de `CHECKS`: la invariante 18 del auditor solo admite las claves de §10.5; entran cuando AU2 las agregue.
+- Los depósitos desde un turno abierto (`desde = turno`) siguen como antes (los usan las pruebas de E3 hasta B5).
+- Historial: los cierres de antes de B1 con `entregado_monto` quedaron como entregas `migracion` «por recibir» a nombre de su receptor.
+- Eventos: `caja.entregada`, `caja.entrega_recibida`, `caja.entrega_rechazada`, `cajas.ajustes_cambiados`; `caja.depositada` suma `origen` y `custodio_id`.
 
 ## Cierre mensual (`cierres.ts`)
 
@@ -223,7 +243,7 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 | `bancos.trasladar` | `POST /bancos/trasladar` | `1.1.11 / Banco A` (misma empresa) |
 | `bancos.importar_extracto` | `POST /bancos/extractos` | Ninguno (neutral al origen; huella única por cuenta) |
 | `bancos.conciliar` | `POST /bancos/conciliaciones` | Ninguno sobre lo existente; la llegada de un depósito o traslado es un asiento nuevo `Banco / 1.1.11` |
-| `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Ninguno (fila de anulación por fila del grupo) |
+| `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Reverso de lo que la conciliación creó (E11 y B3): la llegada de un depósito o traslado (vuelve a `1.1.11`, fila en `transitos_reatribuciones`) y el asiento de su diferencia |
 | `bancos.reatribuir_llegada` | `POST /bancos/llegadas/reatribuir` | Reverso de la llegada equivocada y llegada nueva del documento correcto (`ledger.transitos_reatribuciones`) |
 | `bancos.registrar_desde_extracto` (`bancos.conciliar`) | `POST /bancos/extractos/lineas/:id/registrar` | Nuevo, origen `banco`: `5.3.07 / Banco` (cargo) o `Banco / contrapartida` (abono) |
 | `bancos.crear_regla`, `bancos.editar_regla`, `bancos.aplicar_reglas` (`bancos.conciliar`) | `GET/POST/PUT /bancos/reglas`, `POST /bancos/extractos/:id/aplicar-reglas` | El de `registrar_desde_extracto` (acción contrapartida) |
@@ -236,6 +256,28 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 - Eventos: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado`, `cartera.castigada`.
 - Diarios: `liquidacion_cobro` → `COB` (o `BAN-n` si va a una cuenta propia), depósito → `CAJ-n`, el resto `BAN-n` o `VAR`. Los asientos de estos orígenes no se revierten directo (`reversos.ts`).
 - Pruebas: `tests/ledger/cobros_liquidar.spec.ts`, `depositos_traslados.spec.ts`, `conciliacion_bancaria.spec.ts`, `cartera.spec.ts`, `rutas_bancos.spec.ts`; cada una termina en `afirmarLibro` (el auditor completo, con los invariantes de la fase 4 que agregó el auditor).
+
+### Diferencias al conciliar (plan de contabilidad B3, §5.8)
+
+La línea del banco casi nunca es igual a lo emparejado (comisión, redondeo, faltante del depósito). `bancos.conciliar` acepta `diferencias[] { motivo_id, monto, nota, cuenta }` y registra la diferencia en el mismo paso, con un asiento **nuevo** de origen `diferencia_conciliacion` (`origen_id` = `billing.diferencias_conciliacion.id`): de menos `cuenta del motivo / Banco`, de más `Banco / cuenta`. Su movimiento del banco entra al grupo de la conciliación. Las tablas viven en `billing` (como los borradores de asiento): no tocan el libro por sí solas.
+
+- **Tope de quien concilia** (`billing.ajustes_conciliacion`, por empresa): por línea y por día, Q 10.00 y Q 50.00 de fábrica (decisión N7). Cuentan solo los motivos con `cuenta_contra_tope` y, en el día, lo que la persona aceptó sola y sigue vigente (deshacer la conciliación lo libera).
+- **Motivos** (`billing.motivos_diferencia`): de fábrica `comision_banco` (5.3.07, hasta Q 10 por línea, cuenta), `comision_cobro` (5.1.02, hasta 4.5 % de lo emparejado, solo con un pago o una liquidación), `redondeo` (5.3.05, hasta Q 0.05), `faltante_deposito` (5.2.06, sin límite, solo con un depósito; queda a cargo de quien lo registró) y `otra` (la cuenta la elige quien concilia; siempre pide aprobación). Los de fábrica son globales; editarlos en una empresa le crea su copia con el mismo `codigo`. Nunca caja, banco, puente ni auxiliares. `clase = 'retencion'` queda reservada para B10 (retenciones de IVA e ISR del cliente, motivos fijos que no se apagan).
+- **Aprobación**: si pasa del tope o el motivo siempre la pide, `bancos.conciliar` responde 422 `diferencia_requiere_aprobacion` (`rule` = `motivo`, `tope_linea`, `tope_dia`) y se pide con `bancos.pedir_aprobacion_diferencia` (con explicación). No hay asiento hasta que **otro** usuario con `bancos.aprobar_diferencia` la apruebe (403 `autoaprobacion`); la línea queda apartada (409 `diferencia_pendiente`) sin bloquear el resto. Rechazar deja la línea libre.
+- **Sugerencias** (`GET /bancos/extractos/:id/sugerencias`, `sugerencias_conciliacion.ts`): `segura`, `para_decidir`, `con_diferencia` (con los motivos que aplican y por qué no los demás), `regla`, `sin_pareja`, `por_identificar`, `esperando_aprobacion`, y lo que le queda del tope a quien pregunta. `bancos.aceptar_sugerencias` concilia las seguras en lote. `bancos.marcar_por_identificar` deja una nota; esas líneas no son anomalía en `extractos_conciliados` (van en su detalle).
+- Los pares que un reverso anula (llegada deshecha, diferencia deshecha) no salen en `movimientos-sin-conciliar`, en las sugerencias ni en las partidas en tránsito del reporte.
+
+| Acción | Permiso | Endpoint |
+| --- | --- | --- |
+| `bancos.configurar_diferencias` | `bancos.configurar_diferencias` | `GET/PUT /bancos/ajustes-conciliacion` (GET con `bancos.ver`) |
+| `bancos.crear_motivo_diferencia`, `bancos.editar_motivo_diferencia` | `bancos.configurar_diferencias` | `GET/POST /bancos/motivos-diferencia`, `PUT /bancos/motivos-diferencia/:id` |
+| `bancos.pedir_aprobacion_diferencia` | `bancos.conciliar` | `POST /bancos/diferencias` |
+| `bancos.aprobar_diferencia`, `bancos.rechazar_diferencia` | `bancos.aprobar_diferencia` | `POST /bancos/diferencias/:id/aprobar`, `/rechazar` |
+| `bancos.aceptar_sugerencias` | `bancos.conciliar` | `POST /bancos/extractos/:id/aceptar-seguras` |
+| `bancos.marcar_por_identificar` | `bancos.conciliar` | `POST /bancos/extractos/lineas/:id/por-identificar` |
+| lecturas | `bancos.ver` | `GET /bancos/diferencias`, `/bancos/diferencias-pendientes` (consolidables), `/bancos/diferencias/:id`, `/bancos/extractos/:id/sugerencias` |
+
+Errores nuevos: 422 `diferencias_descuadradas`, `motivo_no_aplica`, `diferencia_requiere_aprobacion`, `aprobacion_innecesaria`; 409 `diferencia_pendiente`, `diferencia_decidida`; 403 `autoaprobacion`. Eventos: `banco.diferencia_pendiente` (con `aprobadores`), `banco.diferencia_aprobada`, `banco.diferencia_rechazada`, `banco.diferencias_config_cambiada`. Pruebas: `tests/ledger/diferencias_conciliacion.spec.ts`.
 
 ## Compras, proveedores, retenciones, activos y diferidos (fase 5, contrato §3.4, §3.5 y §10.10)
 
@@ -264,8 +306,12 @@ Detalle y desvíos en §19 del contrato. Todo de solo inserción (trigger y `REV
 - Pruebas: `tests/ledger/compras.spec.ts`, `retenciones.spec.ts`, `pagos_proveedores.spec.ts`, `activos.spec.ts`, `diferidos.spec.ts`; `hallazgos_fase5.spec.ts` (H19, H20 y las observaciones del auditor); cada una termina en `afirmarLibro` (el auditor completo, con los invariantes `15.*` de la fase 5).
 - Baja retroactiva (H20): revierte las cuotas vigentes del mes de la baja en adelante, cada una en su mes (422 `periodo_cerrado` si alguno está cerrado). Locks: `LOCK_ACTIVO` (depreciación, baja y anulación de la compra), `LOCK_DIFERIDO` (amortización y anulación de la compra), `LOCK_COMPRA` (pagos, constancias y anulación).
 
+## Inicio de contabilidad (`inicio_contabilidad.ts`, plan de contabilidad B2)
+
+`GET /contabilidad/inicio` (permiso `contabilidad.ver_inicio`): lectura sin estado y sin TTL, de la empresa activa (`empresas=todas` con alcance global suma). Devuelve «qué toca hoy» (`tareas`: nueve conteos, solo los que el rol puede atender por el permiso de su acción y solo con pendientes), los 7 `pasos` del mes calculados con datos (`?periodo=YYYY-MM`, por defecto el mes en curso) y 4 `indicadores`: Te deben (`carteraVencida`), Debes a proveedores (`cuentasPorPagar`), Dinero disponible (`efectivoDisponible`) e Impuestos del mes (`calcularDatos` de la declaración, o la presentada). Sin datos: `sin_datos`; sin permiso: `sin_permiso`; consulta fallida: `error` con su problema y sin cifras. No emite ni consume eventos.
+
 ## Eventos
 
-Emite: `ejercicio.cerrado`, `ejercicio.reabierto`, `libro.checks_verificados { empresa_id, tipo, periodo, anomalias }` y `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+Emite: `ejercicio.cerrado`, `ejercicio.reabierto`, `libro.checks_verificados { empresa_id, tipo, periodo, anomalias }` y `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `banco.diferencia_pendiente`, `banco.diferencia_aprobada`, `banco.diferencia_rechazada` y `banco.diferencias_config_cambiada` (B3, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
 - `GET /bancos/depositos?caja_id=&turno_id=` (permiso `bancos.ver` **o** `cajas.ver`, `autorizarLecturaDeCaja` de `lectura_caja.ts`): con `bancos.ver`, todos; con solo `cajas.ver` (el cajero), `caja_id` o `turno_id` obligatorio y la caja en su alcance (403; sin filtro 422); sin ninguno, 403.
 - `GET /egresos?caja_id=&turno_id=` (permiso `egresos.ver` **o** `cajas.ver`, mismo patrón): con solo `cajas.ver` el cajero lee los egresos de su caja o turno para el esperado provisional de /caja.

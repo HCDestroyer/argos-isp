@@ -211,6 +211,8 @@ export const PERMISOS = {
     'comprobantes.reconexion_temporal':
         'Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)',
     'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
+    'contabilidad.ver_inicio':
+        'Ver el inicio de contabilidad: qué toca hoy, los pasos del mes y los indicadores (cada dato pide además su permiso)',
     'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
     'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
     'libro.aprobar_asiento':
@@ -243,7 +245,16 @@ export const PERMISOS = {
     'cobros.configurar':
         'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
     'cobros.liquidar': 'Registrar la liquidación de un proveedor de cobro (banco neto y comisión)',
-    'cajas.depositar': 'Depositar en el banco el efectivo de un turno de caja (queda en fondos en tránsito)',
+    'cajas.depositar':
+        'Depositar en el banco el efectivo de tu custodia o de un turno de caja (queda en fondos en tránsito)',
+    // B1 del plan de contabilidad (§5.7): caja de cobros → custodia → banco
+    'cajas.entregar':
+        'Entregar otra vez el efectivo de un turno cerrado cuando quien debía recibirlo dijo «No lo recibí»',
+    'cajas.recibir_entrega': 'Recibir efectivo de una caja de cobros («Recibí»): pasa a tu custodia',
+    'cajas.rechazar_entrega': 'Rechazar una entrega de efectivo dirigida a ti («No lo recibí»)',
+    'cajas.ver_custodia': 'Ver la custodia y las entregas de todas las personas (sin él, solo las tuyas)',
+    'cajas.configurar':
+        'Configurar el fondo de cambio, el plazo y el tope de custodia y «lo deposito yo» de la empresa',
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
@@ -255,6 +266,11 @@ export const PERMISOS = {
         'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
     'bancos.reatribuir_llegada':
         'Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)',
+    // plan de contabilidad B3 (§5.8): diferencias al conciliar
+    'bancos.configurar_diferencias':
+        'Configurar las diferencias al conciliar: tope por línea y por día de quien concilia y motivos con su cuenta',
+    'bancos.aprobar_diferencia':
+        'Aprobar o rechazar una diferencia de conciliación que pasa del tope (nunca la propia)',
     'cartera.provisionar': 'Registrar la estimación para cuentas incobrables (hasta el tope legal)',
     'cartera.castigar': 'Castigar facturas incobrables con motivo y evidencia de gestión de cobro',
     'pagos.cerrar_diferencia': 'Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)',
@@ -606,6 +622,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'gestiones_cobro.adjuntar',
             'fel.ver',
             'cajas.depositar',
+            // B1: entregar otra vez un turno cuya entrega no se recibió
+            'cajas.entregar',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
             // egresos.ver: lee solo los de su caja con cajas.ver, como antes)
             'egresos.registrar',
@@ -833,6 +851,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'gestiones_cobro.ver',
             'gestiones_cobro.registrar',
             'gestiones_cobro.adjuntar',
+            'contabilidad.ver_inicio',
             'libro.ver',
             'libro.registrar_asiento',
             'libro.revertir_asiento',
@@ -856,6 +875,12 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'cobros.configurar',
             'cobros.liquidar',
             'cajas.depositar',
+            // B1 (decisión N4 del PM): recibir entregas de fábrica lo tienen admin y contabilidad
+            'cajas.entregar',
+            'cajas.recibir_entrega',
+            'cajas.rechazar_entrega',
+            'cajas.ver_custodia',
+            'cajas.configurar',
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',
@@ -863,6 +888,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'bancos.guardar_mapeo_extracto',
             'bancos.conciliar',
             'bancos.reatribuir_llegada',
+            'bancos.configurar_diferencias',
+            'bancos.aprobar_diferencia',
             'cartera.provisionar',
             'cartera.castigar',
             'pagos.cerrar_diferencia',
@@ -900,6 +927,6 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
     },
     lectura: {
         descripcion: 'Solo lectura',
-        permisos: [...lectura, 'clientes.estado_cuenta', 'incidentes_red.leer'],
+        permisos: [...lectura, 'contabilidad.ver_inicio', 'clientes.estado_cuenta', 'incidentes_red.leer'],
     },
 }

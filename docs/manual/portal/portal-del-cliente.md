@@ -64,7 +64,7 @@ Para quitarlo: «Desvincular Telegram» y confirmar.
 
 ## Ver los datos de depósito
 
-«Ver datos de depósito» muestra las cuentas de la empresa con un botón para copiar el número, y las instrucciones de pago. Se configuran en el panel en **Configuración → Empresa y fiscal → Contacto y pagos** y **Configuración → Facturación y cobro → Cuentas bancarias**. Solo aparecen las cuentas activas en quetzales: las cuentas en dólares no se muestran al cliente.
+«Ver datos de depósito» muestra las cuentas de la empresa con un botón para copiar el número, y las instrucciones de pago. Se configuran en el panel en **Ajustes → Empresa y fiscal → Contacto y pagos** y **Ajustes → Facturación y cobro → Cuentas bancarias**. Solo aparecen las cuentas activas en quetzales: las cuentas en dólares no se muestran al cliente.
 
 ![Datos para depósito con las cuentas de la empresa](/capturas/portal/02-datos-deposito.png)
 
@@ -111,7 +111,7 @@ Si la empresa tiene pasarela, el cliente toca «Pagar en línea» y paga con tar
 
 ## Contacto
 
-La página **Contacto** muestra los teléfonos (con botón para llamar), WhatsApp, correo, horario y dirección que configuraste en **Configuración → Empresa y fiscal → Contacto y pagos**. Si no hay ninguno configurado, dice «No hay datos de contacto para mostrar».
+La página **Contacto** muestra los teléfonos (con botón para llamar), WhatsApp, correo, horario y dirección que configuraste en **Ajustes → Empresa y fiscal → Contacto y pagos**. Si no hay ninguno configurado, dice «No hay datos de contacto para mostrar».
 
 ## Sorteos
 
@@ -134,7 +134,7 @@ Desde la conexión (sin código de 6 dígitos) el cliente solo ve su primer nomb
 | «No pudimos consultar tu servicio» / «No pudimos cargar tu cuenta» | El sistema no respondió. Que toque «Reintentar». Si dura, avisa a soporte técnico                                                                    |
 | «Demasiadas consultas»                                             | Que espere un minuto                                                                                                                                 |
 | «No pudimos identificar tu servicio»                               | Ver [Página de corte](./pagina-de-corte.md#cliente-no-identificado)                                                                                  |
-| «No hay cuentas para depósito disponibles»                         | La empresa no tiene cuentas configuradas para depósito; el cliente no puede subir comprobante. Configúralas en **Configuración → Facturación y cobro → Cuentas bancarias** |
+| «No hay cuentas para depósito disponibles»                         | La empresa no tiene cuentas configuradas para depósito; el cliente no puede subir comprobante. Configúralas en **Ajustes → Facturación y cobro → Cuentas bancarias** |
 | «No necesitas una promesa de pago»                                 | No tiene facturas vencidas                                                                                                                           |
 
 ## Relacionado

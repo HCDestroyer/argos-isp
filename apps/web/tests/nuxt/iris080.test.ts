@@ -110,7 +110,7 @@ describe('iris 0.8.0 · cuenta desactivada en llano', () => {
         await vista.find('[data-prueba="aprobar-comprobante"]').trigger('click')
         await esperar(() => expect(vista.find('[data-prueba="cuenta-inactiva"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="cuenta-inactiva"]').text()).toContain('cuenta desactivada')
-        expect(vista.find('[data-prueba="cuenta-inactiva"]').text()).toContain('Configuración → Cuentas bancarias')
+        expect(vista.find('[data-prueba="cuenta-inactiva"]').text()).toContain('Ajustes → Cuentas bancarias')
         vista.unmount()
     })
 })

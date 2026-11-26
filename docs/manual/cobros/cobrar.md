@@ -71,7 +71,7 @@ Abre tu caja (ver [Caja](./caja.md)). Si no la abriste, al elegir «Efectivo en 
 - **Dónde:** botón «Recibo en PDF», debajo del recibo.
 - **Qué pasa:** abre el recibo en PDF en otra pestaña, con la plantilla **predeterminada** del recibo de cobro; desde ahí lo imprimes. La flecha de al lado (**Imprimir con…**) muestra las otras plantillas activas, por ejemplo **«POS 80 mm»** para la impresora térmica de rollo: el PDF sale de 80 mm de ancho y del largo justo del recibo. Si el cobro fue de varias empresas, el recibo trae una sección por empresa.
 - «Imprimir» sigue imprimiendo el recibo que ves en pantalla, como antes.
-- Las plantillas se crean y se eligen en **Configuración → Plantillas de documentos** ([ver](../portal/plantillas-de-documentos.md)).
+- Las plantillas se crean y se eligen en **Ajustes → Facturación y cobro → Plantillas de documentos** ([ver](../portal/plantillas-de-documentos.md)).
 
 ### Cobrar facturas de varios clientes (responsable de pago)
 

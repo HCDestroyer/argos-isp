@@ -24,7 +24,7 @@ Al actualizar, la plantilla que ya tenías queda como predeterminada con el nomb
 - **Ver la lista y elegir con cuál imprimir:** permiso `documentos.ver` (`admin`, `cajero`, `soporte`, `contabilidad` y `lectura`).
 - **Crear:** `documentos.crear`. **Editar, vista previa y guardar:** `documentos.editar`. **Elegir la predeterminada:** `documentos.predeterminar`. **Desactivar / activar:** `documentos.desactivar` / `documentos.activar`. Todos, solo `admin`. Sin ellos la pantalla queda en solo lectura.
 
-Está en **Configuración → Facturación y cobro → Plantillas de documentos**.
+Está en **Ajustes → Facturación y cobro → Plantillas de documentos**.
 
 ## Qué ves
 
@@ -113,7 +113,7 @@ Una plantilla que editaste no recibe sola las variables nuevas de FEL. Si falta 
 - **«La plantilla está desactivada»** o **«La plantilla es de otro documento»** al imprimir: alguien la desactivó mientras tenías la pantalla abierta; recarga y elige otra.
 - **«Alguien más guardó la plantilla»:** otra persona guardó mientras editabas. Copia tus cambios si quieres conservarlos y toca «Recargar»: se reemplazan por la versión actual.
 - **El PDF del cliente no muestra los datos de FEL:** inserta el bloque FEL (arriba).
-- **Los datos de la empresa salen vacíos:** se llenan desde **Configuración → Empresa y fiscal → Contacto y pagos** y los datos de la empresa.
+- **Los datos de la empresa salen vacíos:** se llenan desde **Ajustes → Empresa y fiscal → Contacto y pagos** y los datos de la empresa.
 
 ## Relacionado
 

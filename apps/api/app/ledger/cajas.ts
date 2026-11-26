@@ -4,6 +4,7 @@ import { filtrarPorAlcance, permite, type Alcance } from '#core/acl'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
+import { AJUSTES_FABRICA } from '#ledger/custodia'
 
 /**
  * Cajas y turnos: lectura y la caja de un cajero. Las acciones (`abrirCaja`, `cerrarCaja`) están
@@ -28,6 +29,12 @@ export interface CajaVista {
     /** decisión del PM 20: formato del recibo (`pos_80` de fábrica) y de la factura (`carta`) */
     formato_recibo: FormatoImpresion
     formato_factura: FormatoImpresion
+    /** B1 (§5.7): `cobros` (turno, cierre y entrega) o `gastos` (caja chica, B9) */
+    tipo: 'cobros' | 'gastos'
+    /** fondo fijo propio; null = el fondo de cambio de la empresa */
+    fondo_fijo: string | null
+    /** fondo con el que abre: el propio o el de la empresa */
+    fondo_fijo_efectivo: string
     version: number
     created_at: Date
     updated_at: Date
@@ -52,6 +59,11 @@ export interface TurnoVista {
     entregado_a: number | null
     entregado_a_nombre: string | null
     entregado_monto: string | null
+    /** B1: lo que debía haber al abrir (lo que quedó del turno anterior o el fondo fijo) */
+    fondo_esperado: string | null
+    /** B1: la entrega vigente del turno (por recibir o recibida), o null */
+    entrega_id: number | null
+    entrega_estado: 'por_recibir' | 'recibida' | null
     version: number
     created_at: Date
     updated_at: Date
@@ -76,6 +88,13 @@ const COLUMNAS_TURNO = [
     't.entregado_a',
     db.raw('(select u.nombre from core.usuarios u where u.id = t.entregado_a) as entregado_a_nombre'),
     't.entregado_monto',
+    't.fondo_esperado',
+    db.raw(
+        `(SELECT e.id FROM ledger.entregas e WHERE e.turno_id = t.id AND NOT EXISTS (SELECT 1 FROM ledger.entregas_recepciones r WHERE r.entrega_id = e.id AND r.resultado = 'rechazada') ORDER BY e.id DESC LIMIT 1) AS entrega_id`,
+    ),
+    db.raw(
+        `(SELECT CASE WHEN r.id IS NULL THEN 'por_recibir' ELSE 'recibida' END FROM ledger.entregas e LEFT JOIN ledger.entregas_recepciones r ON r.entrega_id = e.id WHERE e.turno_id = t.id AND (r.id IS NULL OR r.resultado = 'recibida') ORDER BY e.id DESC LIMIT 1) AS entrega_estado`,
+    ),
     't.version',
     't.created_at',
     't.updated_at',
@@ -105,6 +124,11 @@ export async function listarCajas(
             ),
             'c.formato_recibo',
             'c.formato_factura',
+            'c.tipo',
+            'c.fondo_fijo',
+            db.raw(
+                `coalesce(c.fondo_fijo, (SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_cobros})::text AS fondo_fijo_efectivo`,
+            ),
             'c.version',
             'c.created_at',
             'c.updated_at',

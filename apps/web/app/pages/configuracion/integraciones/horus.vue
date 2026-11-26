@@ -3,7 +3,7 @@ import type { Problem } from '@argosisp/contracts'
 import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 
 /**
- * Configuración → Integraciones → Horus Flow (`contratos/horus.md` 1.2.0; API de A1 y A6). Estado
+ * Ajustes → Integraciones → Horus Flow (`contratos/horus.md` 1.2.0; API de A1 y A6). Estado
  * del conector (apagado por defecto) y su interruptor, enlace de conexión de 15 min y un uso (§1.4)
  * en los dos sentidos, conexión manual (URL, `hf_pat_`, receptores y secretos, §1.1–§1.3), token
  * `atk_` para que Horus lea de ArgosIsp (§1.2) y revocación de las vinculaciones de autologin

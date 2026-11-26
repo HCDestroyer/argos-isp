@@ -31,6 +31,17 @@ describe('usePermisos', () => {
         expect(puede('servicios.suspender')).toBe(true)
     })
 
+    it('una sección sin permiso propio (soloRol) solo la ve ese rol', () => {
+        const { puedeSeccion } = usePermisos()
+        const importar = obtenerSeccion('importar')
+        expect(importar).toMatchObject({ ruta: '/configuracion/importar', permiso: SIN_PERMISO, soloRol: 'admin' })
+        useUsuarioActual().value = meAdmin
+        expect(puedeSeccion(importar)).toBe(true)
+        useUsuarioActual().value = { ...meAdmin, roles: ['contabilidad'] }
+        expect(puedeSeccion(importar)).toBe(false)
+        expect(puedeSeccion(obtenerSeccion('fel'))).toBe(true)
+    })
+
     it('el menú solo muestra las secciones permitidas', () => {
         useUsuarioActual().value = meCajero
         const { puede } = usePermisos()
@@ -39,8 +50,8 @@ describe('usePermisos', () => {
         // plantilla imprimir: ve las plantillas en solo lectura), en el orden del menú del rediseño. Decisión 1
         // del PM: Facturación electrónica (`dte`) va en Finanzas › Impuestos, después de Lealtad.
         // «Revisión y garantía» (tablero NuevoInventario) se lee con `inventario.ver`; sus acciones piden cada una la suya.
-        // Bancos de origen (cuentas_bancarias.ver) y Plantillas y conceptos (documentos.ver) son pantallas nuevas de
-        // Configuración que el cajero puede leer.
-        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'revision-garantia', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'tecnicos-iris', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'dte', 'configuracion', 'fel', 'aviso-cobro', 'cuentas-bancarias', 'bancos-origen', 'plantillas-conceptos'])
+        // De Ajustes, en el orden del catálogo único: FEL, Plantillas de documentos, Conceptos y adicionales
+        // (documentos.ver), Cuentas bancarias y Bancos de origen (cuentas_bancarias.ver), que el cajero puede leer.
+        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes', 'facturas', 'pagos', 'notas-credito', 'bonificaciones', 'pasarela', 'planes', 'adicionales', 'existencias', 'traslados', 'mi-bodega', 'unidades', 'por-recuperar', 'revision-garantia', 'conteos', 'productos', 'tipos-producto', 'bodegas', 'kardex', 'tecnicos-iris', 'valorizado', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'dte', 'configuracion', 'fel', 'aviso-cobro', 'plantillas-conceptos', 'cuentas-bancarias', 'bancos-origen'])
     })
 })

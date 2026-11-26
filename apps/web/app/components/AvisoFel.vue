@@ -3,7 +3,7 @@
  * Aviso de la FEL en todo el panel (contrato §8.3; fila 17 de §15): con la FEL de la empresa activa
  * desactivada, la alerta permanente; con la contingencia activa, desde cuándo. Solo con `fel.ver`
  * y una empresa elegida. Lee `GET /fel/configuracion` una vez por empresa (`useFel().estadoDe`)
- * y se actualiza cuando Configuración → FEL guarda. Si la lectura falla no muestra nada: la
+ * y se actualiza cuando Ajustes → Factura electrónica (FEL) guarda. Si la lectura falla no muestra nada: la
  * pantalla de FEL es la que enseña el error.
  */
 const { puede } = usePermisos()

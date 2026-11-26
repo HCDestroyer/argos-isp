@@ -53,6 +53,13 @@ export interface OpcionesVerificacion {
     incluirHallazgosAbiertos?: boolean
     /** leer con esta conexión (una transacción de la prueba que aún no se confirma) */
     cliente?: QueryClientContract
+    /**
+     * B1 (§5.7): exige que todo turno haya abierto con su fondo esperado (lo que quedó del turno
+     * anterior o el fondo fijo). El producto todavía acepta un `fondo_inicial` distinto (clientes de
+     * antes de B1) y las ayudas de las suites viejas abren con un fondo libre; las pruebas del camino
+     * de B1 lo activan.
+     */
+    exigirFondoEsperado?: boolean
 }
 
 /**
@@ -1060,7 +1067,115 @@ async function verificarLibroCon(
                                       -- fase 7 PR B (§10.6): liquidación de una declaración y su pago
                                       'liquidacion_impuesto', 'pago_impuesto',
                                       -- inventario fase A (§5): consumo, ajuste, baja y saldo inicial (inv. 24)
-                                      'inventario')`,
+                                      'inventario',
+                                      -- B1 (§5.7): «Recibí» de una entrega de caja
+                                      'entrega_caja',
+                                      -- B3 (§5.8): la diferencia aceptada al conciliar (Banco contra la cuenta del motivo)
+                                      'diferencia_conciliacion')`,
+    )
+    await revisar(
+        '9.entrega_de_caja_mal_contabilizada (B1, §5.7: cada «Recibí» tiene exactamente un asiento entrega_caja de su empresa, con la fecha de la recepción: 1.1.15 Efectivo en custodia por lo contado y la caja de la entrega por lo entregado, la diferencia (contado − entregado) a cargo de quien entregó en Faltantes o Sobrantes de caja y nada más; una entrega por recibir o rechazada no tiene asiento; la recepción es de su empresa, con diferencia = contado − monto y lo entregado no pasa de lo contado del turno; una entrega vigente por turno)',
+        `WITH ent AS (
+             SELECT e.id, e.empresa_id, e.caja_id, e.turno_id, e.monto, cj.cuenta_id AS cuenta_caja, cj.empresa_id AS empresa_caja,
+                    cj.tipo AS tipo_caja, tu.contado AS contado_turno, tu.cerrado_en,
+                    r.id AS recepcion_id, r.resultado, r.contado, r.diferencia, r.empresa_id AS empresa_recepcion,
+                    to_char(r.fecha, 'YYYY-MM-DD') AS fecha_recepcion
+               FROM ledger.entregas e
+               JOIN ledger.cajas cj ON cj.id = e.caja_id
+               LEFT JOIN ledger.cajas_turnos tu ON tu.id = e.turno_id AND tu.caja_id = e.caja_id
+               LEFT JOIN ledger.entregas_recepciones r ON r.entrega_id = e.id
+              WHERE ${E('e.empresa_id')}
+         ), asi AS (
+             SELECT a.origen_id AS entrega_id, count(DISTINCT a.id) AS asientos, count(*) FILTER (WHERE a.reversa_de IS NOT NULL) AS reversos,
+                    min(to_char(a.fecha, 'YYYY-MM-DD')) AS fecha, min(a.empresa_id) AS empresa_asiento
+               FROM ledger.asientos a
+              WHERE a.origen_tipo = 'entrega_caja' AND ${E('a.empresa_id')}
+              GROUP BY 1
+         ), mov AS (
+             SELECT a.origen_id AS entrega_id,
+                    coalesce(sum(m.debe) FILTER (WHERE c.codigo = '${CUENTAS_GT.EFECTIVO_EN_CUSTODIA}'), 0) AS custodia_debe,
+                    coalesce(sum(m.haber) FILTER (WHERE c.codigo = '${CUENTAS_GT.EFECTIVO_EN_CUSTODIA}'), 0) AS custodia_haber,
+                    coalesce(sum(m.haber) FILTER (WHERE m.cuenta_id = ent.cuenta_caja), 0) AS caja_haber,
+                    coalesce(sum(m.debe) FILTER (WHERE m.cuenta_id = ent.cuenta_caja), 0) AS caja_debe,
+                    coalesce(sum(m.debe) FILTER (WHERE c.codigo = '${CUENTAS.FALTANTES_CAJA}'), 0) AS faltante,
+                    coalesce(sum(m.haber) FILTER (WHERE c.codigo = '${CUENTAS.SOBRANTES_CAJA}'), 0) AS sobrante,
+                    coalesce(sum(m.debe + m.haber) FILTER (WHERE c.codigo NOT IN ('${CUENTAS_GT.EFECTIVO_EN_CUSTODIA}',
+                             '${CUENTAS.FALTANTES_CAJA}', '${CUENTAS.SOBRANTES_CAJA}') AND m.cuenta_id <> ent.cuenta_caja), 0) AS ajeno
+               FROM ledger.asientos a
+               JOIN ent ON ent.id = a.origen_id
+               JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo = 'entrega_caja'
+              GROUP BY 1
+         )
+         SELECT ent.id AS entrega_id, ent.empresa_id, ent.monto::text, ent.resultado, ent.contado::text, ent.diferencia::text,
+                coalesce(asi.asientos, 0)::int AS asientos, mov.custodia_debe::text, mov.caja_haber::text,
+                mov.faltante::text, mov.sobrante::text, mov.ajeno::text
+           FROM ent LEFT JOIN asi ON asi.entrega_id = ent.id LEFT JOIN mov ON mov.entrega_id = ent.id
+          WHERE ent.tipo_caja <> 'cobros' OR ent.empresa_caja <> ent.empresa_id OR ent.cerrado_en IS NULL
+             OR ent.monto > ent.contado_turno
+             OR (ent.recepcion_id IS NOT NULL AND (ent.empresa_recepcion <> ent.empresa_id
+                 OR (ent.resultado = 'recibida' AND ent.diferencia <> ent.contado - ent.monto)))
+             -- sin «Recibí» no hay asiento; con «Recibí» hay uno solo
+             OR (coalesce(ent.resultado, 'por_recibir') <> 'recibida' AND coalesce(asi.asientos, 0) <> 0)
+             OR (ent.resultado = 'recibida' AND (coalesce(asi.asientos, 0) <> 1 OR asi.reversos <> 0
+                 OR asi.empresa_asiento <> ent.empresa_id OR asi.fecha <> ent.fecha_recepcion
+                 OR mov.custodia_debe <> ent.contado OR mov.custodia_haber <> 0
+                 OR mov.caja_haber <> ent.monto OR mov.caja_debe <> 0
+                 OR mov.faltante <> greatest(ent.monto - ent.contado, 0)
+                 OR mov.sobrante <> greatest(ent.contado - ent.monto, 0)
+                 OR mov.ajeno <> 0))
+             -- una sola entrega vigente (no rechazada) por turno
+             OR (coalesce(ent.resultado, 'por_recibir') <> 'rechazada' AND EXISTS (
+                     SELECT 1 FROM ledger.entregas o LEFT JOIN ledger.entregas_recepciones ro ON ro.entrega_id = o.id
+                      WHERE o.turno_id = ent.turno_id AND o.id <> ent.id AND coalesce(ro.resultado, 'por_recibir') <> 'rechazada'))`,
+    )
+
+    await revisar(
+        '9.asiento_de_entrega_sin_entrega (un asiento entrega_caja cuyo origen no es una entrega de su empresa)',
+        `SELECT a.id AS asiento_id, a.empresa_id, a.origen_id
+           FROM ledger.asientos a
+          WHERE a.origen_tipo = 'entrega_caja' AND ${E('a.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM ledger.entregas e WHERE e.id = a.origen_id AND e.empresa_id = a.empresa_id)`,
+    )
+    await revisar(
+        '9.diferencia_conciliacion_mal_contabilizada (B3, §5.8: un asiento original por diferencia de su empresa, solo si se aplicó o se aprobó; de menos: cuentas del motivo al debe y el banco de la línea al haber; de más: al revés; nunca caja, otro banco, puente ni tránsito; Σ partes = monto)',
+        `WITH a AS (
+             SELECT a.id, a.empresa_id, a.origen_id FROM ledger.asientos a
+              WHERE a.origen_tipo = 'diferencia_conciliacion' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+         )
+         SELECT 'sin_diferencia' AS que, a.id AS asiento_id, a.origen_id, NULL::text AS detalle
+           FROM a LEFT JOIN billing.diferencias_conciliacion d ON d.id = a.origen_id AND d.empresa_id = a.empresa_id
+          WHERE d.id IS NULL
+         UNION ALL
+         SELECT 'asiento_duplicado', min(a.id), a.origen_id, count(*)::text FROM a GROUP BY a.origen_id HAVING count(*) > 1
+         UNION ALL
+         SELECT 'sin_aprobar', a.id, d.id, d.requiere_aprobacion::text
+           FROM a JOIN billing.diferencias_conciliacion d ON d.id = a.origen_id AND d.empresa_id = a.empresa_id
+          WHERE d.requiere_aprobacion
+            AND NOT EXISTS (SELECT 1 FROM billing.diferencias_conciliacion_decisiones dd
+                             WHERE dd.diferencia_id = d.id AND dd.decision = 'aprobada')
+         UNION ALL
+         SELECT 'movimientos', a.id, d.id,
+                concat_ws('|', 'banco debe/haber=' || coalesce(b.debe, 0) || '/' || coalesce(b.haber, 0),
+                          'motivo debe/haber=' || coalesce(o.debe, 0) || '/' || coalesce(o.haber, 0))
+           FROM a JOIN billing.diferencias_conciliacion d ON d.id = a.origen_id AND d.empresa_id = a.empresa_id
+           LEFT JOIN LATERAL (SELECT sum(m.debe) AS debe, sum(m.haber) AS haber FROM ledger.movimientos m
+                               WHERE m.asiento_id = a.id AND m.cuenta_id = d.cuenta_id) b ON true
+           LEFT JOIN LATERAL (SELECT sum(m.debe) AS debe, sum(m.haber) AS haber
+                                FROM ledger.movimientos m
+                               WHERE m.asiento_id = a.id AND m.cuenta_id <> d.cuenta_id) o ON true
+          WHERE NOT (
+                (SELECT count(*) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE m.asiento_id = a.id AND m.cuenta_id <> d.cuenta_id
+                    AND (${CAJA_O_BANCO('c.codigo')} OR c.codigo IN ('${PUENTE}', '${TRANSITO}'))) = 0
+            AND (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id AND m.cuenta_id = d.cuenta_id) = 1
+            AND CASE d.sentido
+                    WHEN 'menos' THEN coalesce(b.haber, 0) = d.monto AND coalesce(b.debe, 0) = 0
+                                  AND coalesce(o.debe, 0) = d.monto AND coalesce(o.haber, 0) = 0
+                    ELSE coalesce(b.debe, 0) = d.monto AND coalesce(b.haber, 0) = 0
+                                  AND coalesce(o.haber, 0) = d.monto AND coalesce(o.debe, 0) = 0
+                END)`,
     )
 
     /*
@@ -1103,12 +1218,56 @@ async function verificarLibroCon(
              OR coalesce(dif.neto, 0) <> t.diferencia`,
     )
     await revisar(
+        '4.fondo_esperado_mal_calculado (B1, §5.7: el fondo esperado de un turno = lo que quedó al cerrar el anterior de su caja (fondo_siguiente, o todo lo contado) o, en el primero, el fondo fijo de la caja o el de cobros de la empresa; los turnos de antes de B1 no lo tienen)',
+        `WITH t AS (
+             SELECT t.id, t.caja_id, t.fondo_inicial, t.fondo_esperado, cj.empresa_id, cj.fondo_fijo,
+                    (SELECT p.id FROM ledger.cajas_turnos p WHERE p.caja_id = t.caja_id AND p.id < t.id AND p.cerrado_en IS NOT NULL
+                      ORDER BY p.id DESC LIMIT 1) AS previo
+               FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
+              WHERE ${E('cj.empresa_id')} AND t.fondo_esperado IS NOT NULL
+         )
+         SELECT t.id AS turno_id, t.caja_id, t.fondo_esperado::text,
+                coalesce(p.fondo_siguiente, p.contado, t.fondo_fijo,
+                         (SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = t.empresa_id), 200.00)::text AS debia
+           FROM t LEFT JOIN ledger.cajas_turnos p ON p.id = t.previo
+          WHERE t.fondo_esperado <> CASE WHEN t.previo IS NOT NULL THEN coalesce(p.fondo_siguiente, p.contado)
+                  ELSE coalesce(t.fondo_fijo, (SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = t.empresa_id), 200.00) END`,
+    )
+    if (opciones.exigirFondoEsperado) {
+        await revisar(
+            '4.apertura_con_fondo_distinto_del_esperado (B1: el turno abrió con un fondo distinto del que quedó al cerrar el anterior)',
+            `SELECT t.id AS turno_id, t.caja_id, t.fondo_inicial::text, t.fondo_esperado::text
+               FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
+              WHERE ${E('cj.empresa_id')} AND t.fondo_esperado IS NOT NULL AND t.fondo_inicial <> t.fondo_esperado`,
+        )
+    }
+    await revisar(
+        '4.entrega_de_turno_mal_calculada (B1: un turno cerrado con entregado_a deja fondo_siguiente + entregado_monto = contado y una entrega de ese monto (o más de una solo si las anteriores fueron rechazadas); un turno sin entregado_a no tiene entregas)',
+        `WITH t AS (
+             SELECT t.*, cj.empresa_id FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
+              WHERE t.cerrado_en IS NOT NULL AND ${E('cj.empresa_id')}
+         ), e AS (
+             SELECT e.turno_id, count(*) AS entregas, count(*) FILTER (WHERE e.monto <> t.entregado_monto) AS monto_distinto,
+                    count(*) FILTER (WHERE coalesce(r.resultado, 'por_recibir') <> 'rechazada') AS vigentes
+               FROM ledger.entregas e JOIN t ON t.id = e.turno_id
+               LEFT JOIN ledger.entregas_recepciones r ON r.entrega_id = e.id
+              GROUP BY 1
+         )
+         SELECT t.id AS turno_id, t.contado::text, t.fondo_siguiente::text, t.entregado_monto::text, t.entregado_a,
+                coalesce(e.entregas, 0)::int AS entregas, coalesce(e.vigentes, 0)::int AS vigentes
+           FROM t LEFT JOIN e ON e.turno_id = t.id
+          WHERE (t.entregado_a IS NOT NULL AND t.entregado_monto > 0
+                 AND (t.fondo_siguiente + t.entregado_monto <> t.contado OR coalesce(e.entregas, 0) = 0
+                      OR e.monto_distinto <> 0 OR e.vigentes > 1))
+             OR ((t.entregado_a IS NULL OR coalesce(t.entregado_monto, 0) = 0) AND coalesce(e.entregas, 0) > 0)`,
+    )
+    await revisar(
         '4.caja_con_dos_turnos_abiertos',
         `SELECT caja_id, count(*)::int AS abiertos FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
           WHERE t.cerrado_en IS NULL AND ${E('cj.empresa_id')} GROUP BY caja_id HAVING count(*) > 1`,
     )
     await revisar(
-        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos (sin lo retenido) − egresos ± diferencias de cierre + liquidaciones ± depósitos, traslados y partidas del extracto − pagos a proveedores + ventas de activos − pagos de declaraciones)',
+        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos (sin lo retenido) − egresos ± diferencias de cierre + liquidaciones − entregas recibidas (B1) ± depósitos, traslados, partidas del extracto y diferencias al conciliar (B3) − pagos a proveedores + ventas de activos − pagos de declaraciones)',
         `WITH docs AS (
              SELECT empresa_id, cuenta_id, sum(monto) AS saldo FROM (
                  SELECT p.empresa_id, p.monto - p.comision - p.retenido AS monto,
@@ -1140,7 +1299,14 @@ async function verificarLibroCon(
                  -- fase 4: la liquidación del proveedor entra al banco por el neto
                  SELECT l.empresa_id, l.neto, l.cuenta_id FROM ledger.liquidaciones_cobro l WHERE ${E('l.empresa_id')}
                  UNION ALL
-                 -- depósito: sale de la caja al depositar; entra al banco del documento cuando llega (al conciliar)
+                 -- B1 (§5.7): la entrega recibida («Recibí») sale de la caja de cobros hacia la custodia
+                 SELECT e.empresa_id, -e.monto, cj.cuenta_id FROM ledger.entregas e
+                   JOIN ledger.cajas cj ON cj.id = e.caja_id
+                   JOIN ledger.entregas_recepciones r ON r.entrega_id = e.id AND r.resultado = 'recibida'
+                  WHERE ${E('e.empresa_id')}
+                 UNION ALL
+                 -- depósito: sale de la caja al depositar (el de la custodia, B1, sale de 1.1.15, no de una caja);
+                 -- entra al banco del documento cuando llega (al conciliar)
                  SELECT d.empresa_id, -d.monto, cj.cuenta_id FROM ledger.depositos d JOIN ledger.cajas cj ON cj.id = d.caja_id
                   WHERE ${E('d.empresa_id')}
                  UNION ALL
@@ -1160,6 +1326,16 @@ async function verificarLibroCon(
                     AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'banco' AND a.origen_id = el.id
                                  AND a.reversa_de IS NULL
                                  AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))
+                 UNION ALL
+                 -- B3 (§5.8): la diferencia aceptada al conciliar mueve el banco de su línea (de menos sale,
+                 -- de más entra) mientras su asiento esté vigente; lo pendiente o rechazado no tiene asiento
+                 SELECT d.empresa_id, CASE d.sentido WHEN 'menos' THEN -d.monto ELSE d.monto END, d.cuenta_id
+                   FROM billing.diferencias_conciliacion d
+                  WHERE ${E('d.empresa_id')}
+                    AND EXISTS (SELECT 1 FROM ledger.asientos a
+                                 WHERE a.origen_tipo = 'diferencia_conciliacion' AND a.origen_id = d.id
+                                   AND a.reversa_de IS NULL
+                                   AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))
                  UNION ALL
                  -- fase 5: pago a un proveedor (vigente) desde su caja, banco o cuenta bancaria; el egreso de
                  -- una compra al contado ya está arriba (su dinero sale con el asiento de la compra)
@@ -1651,11 +1827,49 @@ async function verificarLibroCon(
           WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0)`,
     )
     await revisar(
-        '13.transito_mal_contabilizado (depósito 1.1.11 / Caja del turno; traslado 1.1.11 / Banco origen; llegada Banco destino / 1.1.11 en la cuenta de su línea, con su fecha o la del documento si es posterior)',
+        '13.custodia_distinta (B1, §5.7: 1.1.15 Efectivo en custodia = Σ contado de lo recibido − Σ depósitos desde la custodia, por empresa y por persona; ninguna persona en negativo; el asiento de 1.1.15 es de una recepción o de un depósito de su custodia)',
+        `WITH esperado AS (
+             SELECT empresa_id, persona, sum(monto) AS monto FROM (
+                 SELECT r.empresa_id, r.recibido_por AS persona, r.contado AS monto
+                   FROM ledger.entregas_recepciones r WHERE r.resultado = 'recibida' AND ${E('r.empresa_id')}
+                 UNION ALL
+                 SELECT d.empresa_id, d.custodio_id, -d.monto
+                   FROM ledger.depositos d WHERE d.origen = 'custodia' AND ${E('d.empresa_id')}
+             ) x GROUP BY 1, 2
+         ), libro AS (
+             SELECT a.empresa_id,
+                    coalesce(CASE WHEN a.origen_tipo = 'entrega_caja'
+                                  THEN (SELECT r.recibido_por FROM ledger.entregas_recepciones r WHERE r.entrega_id = a.origen_id)
+                                  WHEN a.origen_tipo = 'deposito'
+                                  THEN (SELECT d.custodio_id FROM ledger.depositos d WHERE d.id = a.origen_id AND d.origen = 'custodia')
+                             END, 0) AS persona,
+                    sum(m.debe - m.haber) AS monto
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${CUENTAS_GT.EFECTIVO_EN_CUSTODIA}' AND ${E('a.empresa_id')}
+              GROUP BY 1, 2
+         )
+         SELECT coalesce(e.empresa_id, l.empresa_id) AS empresa_id, coalesce(e.persona, l.persona) AS persona,
+                coalesce(e.monto, 0)::text AS esperado, coalesce(l.monto, 0)::text AS libro
+           FROM esperado e FULL JOIN libro l ON l.empresa_id = e.empresa_id AND l.persona = e.persona
+          WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0) OR coalesce(e.monto, 0) < 0`,
+    )
+    await revisar(
+        '13.transito_mal_contabilizado (depósito 1.1.11 / Caja del turno, o / 1.1.15 Efectivo en custodia de quien lo hace si sale de la custodia (B1); traslado 1.1.11 / Banco origen; llegada Banco destino / 1.1.11 en la cuenta de su línea, con su fecha o la del documento si es posterior)',
         `WITH doc AS (
-             SELECT 'deposito' AS tipo, d.id, d.empresa_id, d.monto, cj.cuenta_id AS sale, d.cuenta_id AS llega, d.fecha,
-                    tu.id IS NOT NULL AS turno_ok
-               FROM ledger.depositos d JOIN ledger.cajas cj ON cj.id = d.caja_id
+             -- B1 (§5.7): un depósito desde la custodia no tiene caja ni turno; sale de 1.1.15 de quien lo hace
+             SELECT 'deposito' AS tipo, d.id, d.empresa_id, d.monto,
+                    CASE WHEN d.origen = 'custodia'
+                         THEN (SELECT cu.id FROM ledger.cuentas cu WHERE cu.codigo = '${CUENTAS_GT.EFECTIVO_EN_CUSTODIA}'
+                                  AND (cu.empresa_id IS NULL OR cu.empresa_id = d.empresa_id)
+                                ORDER BY cu.empresa_id NULLS LAST LIMIT 1)
+                         ELSE cj.cuenta_id END AS sale,
+                    d.cuenta_id AS llega, d.fecha,
+                    CASE WHEN d.origen = 'custodia'
+                         THEN d.caja_id IS NULL AND d.turno_id IS NULL AND d.custodio_id IS NOT NULL
+                              AND EXISTS (SELECT 1 FROM core.usuarios u WHERE u.id = d.custodio_id)
+                         ELSE tu.id IS NOT NULL END AS turno_ok
+               FROM ledger.depositos d LEFT JOIN ledger.cajas cj ON cj.id = d.caja_id
                LEFT JOIN ledger.cajas_turnos tu ON tu.id = d.turno_id AND tu.caja_id = d.caja_id
               WHERE ${E('d.empresa_id')}
              UNION ALL
@@ -2104,6 +2318,9 @@ async function verificarLibroCon(
          SELECT 'linea', x.linea_id::text, count(*)::int, 0
            FROM ledger.transitos_acreditados x
           WHERE ${E('x.empresa_id')} AND ${llegadaViva('x.tipo', 'x.documento_id')}
+            -- E11: deshacer la conciliación revierte la llegada (fila con su reatribución); el mismo
+            -- depósito puede llegar otra vez con la misma línea y solo cuenta la llegada vigente
+            AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id)
           GROUP BY x.linea_id HAVING count(*) > 1`,
     )
 
@@ -3129,6 +3346,13 @@ async function verificarLibroCon(
         'hash_verificado',
         'depreciacion_al_dia',
     ]
+    /**
+     * B1 (§5.7): revisiones del efectivo. `custodia_en_plazo` es un aviso (siempre `ok`, nunca bloquea).
+     * Las otras dos se exigen al cerrar el mes solo si el cierre ya las calculaba (hay una fila suya
+     * para ese mes): los cierres anteriores a que `CHECKS` las incluya no las tienen.
+     */
+    const CHECKS_CUSTODIA_EXIGIDOS = ['entregas_recibidas', 'custodia_cuadra']
+    const CHECKS_CUSTODIA = [...CHECKS_CUSTODIA_EXIGIDOS, 'custodia_en_plazo']
     const CHECKS_ANUALES = ['incobrables', 'resultados_cero', 'comprobacion_cuadra']
     const CHECKS_IMPUESTOS = ['iva_cuadrado', 'iva_liquidado', 'retenciones_cuadradas']
     const listaSql = (claves: string[]) => `(${claves.map((c) => `'${c}'`).join(', ')})`
@@ -3142,22 +3366,29 @@ async function verificarLibroCon(
                     AND x.id = (SELECT max(y.id) FROM ledger.cierres_checks y
                                  WHERE y.empresa_id = x.empresa_id AND y.tipo = x.tipo AND y.periodo = x.periodo
                                    AND y.clave = x.clave AND y.created_at <= ${t})))`
+    const custodiaQueNoPasa = (e: string, p: string, t: string) =>
+        `(CASE WHEN EXISTS (SELECT 1 FROM ledger.cierres_checks z WHERE z.empresa_id = ${e} AND z.tipo = 'mensual'
+                             AND z.periodo = ${p} AND z.clave IN ${listaSql(CHECKS_CUSTODIA)} AND z.created_at <= ${t})
+              THEN ${checksQueNoPasan('mensual', CHECKS_CUSTODIA_EXIGIDOS, e, p, t)} END)`
     /** desde que existe la lista (la primera fila): los cierres de antes de la PR B no la tenían */
     const desdeLista = `(SELECT min(created_at) FROM ledger.cierres_checks)`
     await revisar(
         '18.cierre_con_checks_pendientes (al cerrar un mes, cada check mensual de §10.5 tenía su última fila revisada o supervisada; al fijar el bloqueo duro, los del mes de su fecha)',
         `WITH c AS (
              SELECT 'cierre' AS que, c.id, c.empresa_id, c.periodo, c.created_at,
-                    ${checksQueNoPasan('mensual', CHECKS_MENSUALES, 'c.empresa_id', 'c.periodo', 'c.created_at')} AS pendientes
+                    ${checksQueNoPasan('mensual', CHECKS_MENSUALES, 'c.empresa_id', 'c.periodo', 'c.created_at')} AS pendientes,
+                    ${custodiaQueNoPasa('c.empresa_id', 'c.periodo', 'c.created_at')} AS pendientes_custodia
                FROM ledger.cierres_mensuales c
               WHERE ${E('c.empresa_id')} AND c.created_at >= ${desdeLista}
              UNION ALL
              SELECT 'duro', b.id, b.empresa_id, date_trunc('month', b.hasta)::date, b.created_at,
-                    ${checksQueNoPasan('mensual', CHECKS_MENSUALES, 'b.empresa_id', "date_trunc('month', b.hasta)::date", 'b.created_at')}
+                    ${checksQueNoPasan('mensual', CHECKS_MENSUALES, 'b.empresa_id', "date_trunc('month', b.hasta)::date", 'b.created_at')},
+                    ${custodiaQueNoPasa('b.empresa_id', "date_trunc('month', b.hasta)::date", 'b.created_at')}
                FROM ledger.bloqueos b
               WHERE ${E('b.empresa_id')} AND b.tipo = 'duro' AND b.created_at >= ${desdeLista}
          )
-         SELECT que, id, empresa_id, to_char(periodo, 'YYYY-MM') AS periodo, pendientes FROM c WHERE pendientes IS NOT NULL`,
+         SELECT que, id, empresa_id, to_char(periodo, 'YYYY-MM') AS periodo, pendientes, pendientes_custodia
+           FROM c WHERE pendientes IS NOT NULL OR pendientes_custodia IS NOT NULL`,
     )
     await revisar(
         '18.check_mal_formado (clave de su tipo en §10.5; un automático lleva revisado si ok y anomalia si no, sin nota ni revisor; una revisión manual copia esperado, obtenido y resultado de la fila vigente que revisa, que estaba en anomalía, cambia su estado y lleva nota y revisor)',
@@ -3171,12 +3402,12 @@ async function verificarLibroCon(
          SELECT k.id, k.empresa_id, k.tipo, to_char(k.periodo, 'YYYY-MM') AS periodo, k.clave, k.automatico, k.estado,
                 k.resultado, p.estado AS estado_previo
            FROM k LEFT JOIN ledger.cierres_checks p ON p.id = k.previa
-          WHERE (k.tipo = 'mensual' AND k.clave NOT IN ${listaSql(CHECKS_MENSUALES)})
+          WHERE (k.tipo = 'mensual' AND k.clave NOT IN ${listaSql([...CHECKS_MENSUALES, ...CHECKS_CUSTODIA])})
              OR (k.tipo = 'anual' AND k.clave NOT IN ${listaSql(CHECKS_ANUALES)})
              OR (k.tipo = 'impuestos' AND k.clave NOT IN ${listaSql(CHECKS_IMPUESTOS)})
              OR (k.automatico AND (k.estado <> CASE WHEN k.resultado = 'ok' THEN 'revisado' ELSE 'anomalia' END
                                    OR k.nota IS NOT NULL OR k.revisado_por IS NOT NULL
-                                   OR (k.clave = 'por_certificar' AND k.resultado <> 'ok')))
+                                   OR (k.clave IN ('por_certificar', 'custodia_en_plazo') AND k.resultado <> 'ok')))
              OR (NOT k.automatico AND (p.id IS NULL OR p.resultado <> 'anomalia' OR k.resultado <> 'anomalia'
                                        OR p.valor_esperado IS DISTINCT FROM k.valor_esperado
                                        OR p.valor_obtenido IS DISTINCT FROM k.valor_obtenido

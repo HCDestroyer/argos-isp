@@ -5,7 +5,7 @@ import type { TableColumn } from '@nuxt/ui'
  * Sección de una empresa en el comparador de regímenes: la comparación anual (ISR de cada régimen, ISO
  * como piso, diferencia, `m` y `m*`), los bloques de los que sale, la proyección a 12 meses y los
  * supuestos y matices. Es una simulación: no tiene «aplicar»; el cambio de régimen está en
- * Configuración → Fiscal, con su aviso a la SAT.
+ * Ajustes → Régimen e impuestos, con su aviso a la SAT.
  */
 const props = withDefaults(defineProps<{
     empresa: ComparadorEmpresa
@@ -184,7 +184,7 @@ const verMeses = ref(false)
                     color="neutral"
                     variant="outline"
                     icon="i-lucide-info"
-                    description="Esta pantalla no cambia el régimen. El cambio se hace en Configuración → Fiscal: rige desde el 1 de enero y se avisa a la SAT en diciembre."
+                    description="Esta pantalla no cambia el régimen. El cambio se hace en Ajustes → Régimen e impuestos: rige desde el 1 de enero y se avisa a la SAT en diciembre."
                     :actions="puede('fiscal.ver') ? [{ label: 'Ir a la configuración fiscal', to: '/configuracion/fiscal', color: 'neutral', variant: 'outline', icon: 'i-lucide-arrow-right' }] : undefined"
                     data-prueba="comparador-sin-aplicar"
                 />

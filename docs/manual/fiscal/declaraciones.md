@@ -121,8 +121,8 @@ Filtra por **Año** y **Trimestre**. Cada fila muestra el concepto, si suma o re
 | Hay notas de crédito sin certificar           | Certifica las NCRE pendientes o anula las rechazadas y vuelve a revisar            |
 | El IVA no cuadra con los libros               | Revisa la lista de verificación de impuestos del mes: corrige o supervisa con nota |
 | El mes todavía no termina                     | Se revisa después del último día del mes                                           |
-| La empresa no tiene esa obligación en el mes  | Revisa el régimen y las banderas en Configuración → Fiscal                         |
-| Falta un valor que debe confirmar el contador | Pide que lo registren en Configuración → Fiscal → Parámetros                       |
+| La empresa no tiene esa obligación en el mes  | Revisa el régimen y las banderas en Ajustes → Empresa y fiscal → Régimen e impuestos                         |
+| Falta un valor que debe confirmar el contador | Pide que lo registren en Ajustes → Empresa y fiscal → Régimen e impuestos → Parámetros                       |
 | No hay impuesto por pagar                     | La declaración no tiene monto a pagar                                              |
 | El ejercicio está cerrado                     | Para cambiar el ISR anual o sus ajustes, reabre el ejercicio (Libro → Ejercicios)  |
 

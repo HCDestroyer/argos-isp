@@ -66,7 +66,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 @submit="enviar"
             >
                 <p class="text-sm text-muted">
-                    Se cobra al cliente un cargo único «{{ cobro ? ORIGENES_COBRO_EQUIPO[cobro.origen] : '' }}»{{ cobro?.nota ? ` (${cobro.nota})` : '' }}.
+                    Se le cobra al cliente con una nueva factura «{{ cobro ? ORIGENES_COBRO_EQUIPO[cobro.origen] : '' }}»{{ cobro?.nota ? ` (${cobro.nota})` : '' }}.
                 </p>
                 <UFormField
                     label="Monto (con IVA)"

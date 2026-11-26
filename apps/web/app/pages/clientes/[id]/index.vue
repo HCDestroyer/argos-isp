@@ -10,18 +10,18 @@ const { puede } = usePermisos()
 const { empresaId: empresaActivaId } = useEmpresaActiva()
 const toast = useToast()
 
-/** Cargo único sin servicio (venta de equipo, visita…): de la empresa activa. */
+/** Nueva factura (antes «Cargo único»): venta de equipo, visita… A un servicio o sin servicio, de la empresa activa. */
 const cargoAbierto = ref(false)
 
-async function alEmitirCargo(resultado: CargoUnicoEmitido) {
+async function alEmitirCargo(resultado: CargoUnicoEmitido, siguiente: { cobrar: boolean, clienteId: number }) {
     if (resultado.documento === 'bonificacion' && resultado.bonificacion) {
         toast.add({ title: 'Bonificación registrada', description: `Sin costo: ${formatearQuetzales(resultado.bonificacion.bruto)} · ${resultado.bonificacion.motivo_nombre}`, icon: 'i-lucide-hand-heart', color: 'success' })
         await navigateTo(`/bonificaciones/${resultado.bonificacion.id}`)
         return
     }
     if (resultado.factura) {
-        toast.add({ title: 'Cargo único emitido', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
-        await navigateTo(`/facturas/${resultado.factura.id}`)
+        toast.add({ title: 'Factura emitida', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
+        await navigateTo(siguiente.cobrar ? `/cobro?cliente=${siguiente.clienteId}` : `/facturas/${resultado.factura.id}`)
     }
 }
 
@@ -228,9 +228,6 @@ const masAcciones = computed<DropdownMenuItem[][]>(() => {
                     children: serviciosPromesa.value.map(s => ({ label: etiquetaServicio(s), description: s.plan_nombre, icon: 'i-lucide-wifi', onSelect: () => abrirPromesa(s) })),
                 })
     }
-    if (puede('facturas.emitir_cargo_unico') && puede('facturas.ver')) {
-        cobro.push({ label: 'Cargo único', icon: 'i-lucide-receipt', onSelect: () => abrir(cargoAbierto) })
-    }
     if (puede('clientes.estado_cuenta')) {
         cobro.push({ label: 'Estado de cuenta', icon: 'i-lucide-receipt-text', onSelect: irACuenta })
     }
@@ -419,6 +416,7 @@ onMounted(cargar)
                     :compacta="compacta"
                     :ver-cuenta="puede('clientes.estado_cuenta')"
                     @reintentar-cuenta="cargarCuenta"
+                    @nueva-factura="cargoAbierto = true"
                 >
                     <template #meta>
                         <p
@@ -696,6 +694,7 @@ onMounted(cargar)
                         v-else-if="pestana === 'cuenta'"
                         :cliente-id="cliente.id"
                         :servicios="servicios"
+                        @nueva-factura="cargoAbierto = true"
                     />
 
                     <ClientePagos
@@ -742,10 +741,23 @@ onMounted(cargar)
                 class="sm:hidden"
                 data-prueba="barra-cobro-cliente"
             >
+                <!-- Con «Nueva factura» a la vista la barra queda en una fila (tablero PlanClienteFiscalMovil); la promesa sigue en «Más». -->
                 <PromesaServicioBoton
+                    v-if="!(puede('facturas.emitir_cargo_unico') && puede('facturas.ver'))"
                     :servicios="serviciosLeidos ? servicios : null"
                     :boton="{ size: 'lg', class: 'rounded-full' }"
                     @creada="alCambiarCuenta"
+                />
+                <UButton
+                    v-if="puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
+                    label="Nueva factura"
+                    icon="i-lucide-plus"
+                    color="neutral"
+                    variant="outline"
+                    size="lg"
+                    class="rounded-full"
+                    data-prueba="nueva-factura-telefono"
+                    @click="cargoAbierto = true"
                 />
                 <UButton
                     v-if="puede('pagos.registrar')"
@@ -777,10 +789,10 @@ onMounted(cargar)
             :servicio="promesaServicio"
             @creada="alCrearPromesa"
         />
-        <CargoUnicoModal
+        <FacturaNuevaPanel
             v-if="cliente && puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
             v-model:open="cargoAbierto"
-            :destino="{ cliente, empresaId: empresaActivaId }"
+            :destino="{ cliente, empresaId: empresaActivaId, servicios: serviciosLeidos ? servicios : undefined }"
             @hecho="alEmitirCargo"
         />
     </PanelPagina>

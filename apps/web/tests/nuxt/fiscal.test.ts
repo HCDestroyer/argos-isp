@@ -8,7 +8,7 @@ import PaginaFiscal from '~/pages/configuracion/fiscal.vue'
 import { esperar } from '../ayudas/esperar'
 
 /**
- * Configuración → Fiscal (localización GT, fase 2 de A3): composables contra los fixtures (que
+ * Ajustes → Régimen e impuestos (localización GT, fase 2 de A3): composables contra los fixtures (que
  * resuelven igual que la API: empresa → instalación → global → paquete), esquemas espejo y la
  * pantalla por pestaña. Contrato: `.claude/integration/contratos/localizacion-fiscal.md` §11.
  */
@@ -211,7 +211,7 @@ describe('configuración fiscal · esquemas y formato', () => {
         })
         expect(legible.title).toBe('Falta un valor que debe confirmar el contador')
         expect(legible.detail).toContain('«interes_resarcitorio»')
-        expect(legible.detail).toContain('Configuración → Fiscal → Parámetros')
+        expect(legible.detail).toContain('Ajustes → Régimen e impuestos → Parámetros')
     })
 })
 

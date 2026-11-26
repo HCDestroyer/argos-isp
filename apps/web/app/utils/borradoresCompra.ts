@@ -32,7 +32,7 @@ export function textoErrorExtraccion(error: string): { titulo: string, detalle: 
     const [codigo = '', ...resto] = error.split(':')
     const detalle = resto.join(':').trim()
     if (codigo === 'ia_no_configurada') {
-        return { titulo: 'No hay IA configurada para leer PDF o imágenes', detalle: 'Captura los datos a mano o pide que configuren la IA en Configuración → Inventario.' }
+        return { titulo: 'No hay IA configurada para leer PDF o imágenes', detalle: 'Captura los datos a mano o pide que configuren la IA en Ajustes → Inventario.' }
     }
     if (codigo === 'ia_fallo') {
         const motivos: Record<string, string> = {
