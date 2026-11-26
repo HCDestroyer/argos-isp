@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Conciliar el banco · flujo guiado con parejas sugeridas, diferencias y reglas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+
+.pan{display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:20px}
+.ph2{padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.pf{padding:12px 18px;border-top:1px solid #F1F5F9;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.kv2{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:8px 0;border-top:1px solid #F1F5F9}
+.kv2:first-child{border-top:0}
+.kv2>span:first-child{color:#64748B;flex:0 0 auto}
+.kv2>*:last-child{text-align:right;min-width:0}
+.cd{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;min-width:0}
+.cdh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin-bottom:8px}
+.cdh .lnk{margin-left:auto;text-transform:none;letter-spacing:0}
+.btn.r{background:#fff;color:#B91C1C;border-color:#FECACA}
+.btn.rr{background:#B91C1C;color:#fff}
+.btn.sm{padding:6px 12px;font-size:12.5px}
+.velo{position:absolute;inset:0;background:rgba(15,23,42,.45);z-index:8}
+.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:22px;padding:22px;z-index:9;flex-direction:column;gap:12px;max-height:88%;overflow:auto}
+.dest{border:2px solid #4F46E5;border-radius:14px;padding:10px 14px;background:#fff;box-shadow:0 0 0 4px rgba(79,70,229,.12);font-size:22px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:13.5px;font-weight:600;color:#475569;cursor:pointer;text-decoration:none}
+.sn:hover{background:#F8FAFC}.sn.on{background:#EEF2FF;color:#3730A3}
+.sn small{display:block;font-weight:500;font-size:11.5px;color:#94A3B8}
+.cod{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;background:#0F172A;color:#CBD5E1;border-radius:14px;padding:14px;overflow:auto;white-space:pre}
+.cod em{color:#67E8F9;font-style:normal}.cod u{color:#FCD34D;text-decoration:none}
+.tk80{width:302px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 12px 30px rgba(15,23,42,.14);padding:16px 14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;color:#0F172A}
+.tk80 hr{border:0;border-top:1px dashed #94A3B8;margin:7px 0}
+.tk80 .fl{display:flex;justify-content:space-between;gap:8px}
+.rd2{width:18px;height:18px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;box-sizing:border-box}
+.rd2.on{border:5.5px solid #4F46E5}
+.ck2{width:20px;height:20px;border-radius:6px;border:2px solid #CBD5E1;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;color:#fff;box-sizing:border-box}
+.ck2.on{background:#4F46E5;border-color:#4F46E5}
+.dfa{background:#FEE2E2;color:#991B1B;border-radius:6px;padding:1px 6px;text-decoration:line-through}
+.dfb{background:#DCFCE7;color:#166534;border-radius:6px;padding:1px 6px}
+.rap{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid #E2E8F0;background:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.mbar{flex:0 0 auto;display:flex;gap:8px;padding:10px 12px 14px;background:#fff;border-top:1px solid #E6E8F0}
+.mbar .btn{flex:1;justify-content:center;padding:13px 10px;font-size:14px}
+
+.tema{position:absolute;inset:0}
+.tema.movil{background:#fff}.tema.movil.osc{background:#0B0F1A}
+.osc .mbar,.osc nav[style*="border-top:1px solid #E6E8F0"]{background:#121A2B!important;border-color:#1E2638!important}
+.osc{background:radial-gradient(1200px 500px at 20% -10%,#1B1F45 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#0B2A33 0%,transparent 55%),#0B0F1A;color:#E2E8F0}
+.osc .isla,.osc .f,.osc .card,.osc .cd,.osc .tk80{background:#121A2B!important;border-color:#1E2638!important;box-shadow:0 10px 30px rgba(0,0,0,.35)!important}
+.osc [style*="background:#fff"]{background:#121A2B!important}
+.osc [style*="background:#F8FAFC"],.osc [style*="background:#FAFBFE"],.osc [style*="background:#FCFCFE"],.osc [style*="background:#F1F5F9"],.osc .lh,.osc .kpi,.osc .segb,.osc .gr{background:#0F1524!important}
+.osc [style*="#F1F5F9"],.osc [style*="#E6E8F0"],.osc [style*="#E2E8F0"],.osc [style*="#EEF0F5"],.osc [style*="#CBD5E1"]{border-color:#1E2638!important}
+.osc [style*="color:#0F172A"],.osc [style*="color:#334155"]{color:#E2E8F0!important}
+.osc .h1,.osc b{color:#F1F5F9}
+.osc .m2,.osc .sub,.osc .migas,.osc .ay,.osc .th,.osc .sec,.osc .cdh,.osc .lb,.osc .kv2>span:first-child,.osc .kv>span:first-child{color:#94A3B8!important}
+.osc .migas b{color:#E2E8F0}
+.osc a,.osc .lnk{color:#A5B4FC}
+.osc .rail{color:#94A3B8}.osc .rail.on{background:rgba(129,140,248,.16);color:#C7D2FE}
+.osc .ci,.osc .ib{color:#CBD5E1}.osc .ib:hover{background:#1E2638}
+.osc .pt{border-color:#121A2B}
+.osc .btn.p{background:#818CF8;color:#0B0F1A;box-shadow:none}
+.osc .btn.o{background:transparent!important;color:#CBD5E1;border-color:#2A3550!important}
+.osc .btn.g{color:#CBD5E1}
+.osc .btn.v{background:#22C55E;color:#052E16}
+.osc .btn.r{background:transparent!important;color:#FCA5A5;border-color:#7F1D1D!important}
+.osc .btn.rr{background:#F87171;color:#1F0A0A}
+.osc .ts{color:#94A3B8}.osc .ts.on{background:#1E2638!important;color:#C7D2FE;box-shadow:none}
+.osc .ts .c{background:#1E2638;color:#CBD5E1}.osc .ts .c.rj{background:rgba(248,113,113,.18);color:#FCA5A5}
+.osc .in,.osc .busca,.osc .selp,.osc .fc,.osc .op,.osc .rap,.osc .pillf,.osc .opb{background:#0F1524!important;border-color:#2A3550!important;color:#E2E8F0}
+.osc .in.ph,.osc .busca{color:#64748B}
+.osc .in.auto{background:#121A2B!important}
+.osc .fc.on{background:#818CF8!important;color:#0B0F1A;border-color:#818CF8!important}
+.osc .op.on,.osc .opb.on{background:rgba(129,140,248,.14)!important;border-color:#818CF8!important}
+.osc .lr{border-color:#1A2235}.osc .lr:hover{background:#161E31}.osc .lr.on{background:#18213A;box-shadow:inset 3px 0 0 #818CF8}
+.osc .kv2,.osc .kv,.osc .tl{border-color:#1A2235}
+.osc .b.ok{background:rgba(34,197,94,.16);color:#86EFAC}.osc .b.wa{background:rgba(245,158,11,.16);color:#FCD34D}
+.osc .b.er{background:rgba(248,113,113,.16);color:#FCA5A5}.osc .b.in,.osc .b.nf{background:rgba(129,140,248,.18);color:#C7D2FE}
+.osc .b.ne{background:#1E2638;color:#CBD5E1}.osc .b.cy{background:rgba(34,211,238,.14);color:#67E8F9}
+.osc .ico.ok{background:rgba(34,197,94,.16);color:#86EFAC}.osc .ico.wa{background:rgba(245,158,11,.16);color:#FCD34D}
+.osc .ico.er{background:rgba(248,113,113,.16);color:#FCA5A5}.osc .ico.ne{background:#1E2638;color:#CBD5E1}
+.osc .ico.nf{background:rgba(129,140,248,.18);color:#C7D2FE}.osc .ico.cy{background:rgba(34,211,238,.14);color:#67E8F9}
+.osc .av2.wa{background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.35);color:#FCD34D}
+.osc .av2.er{background:rgba(248,113,113,.10);border-color:rgba(248,113,113,.35);color:#FCA5A5}
+.osc .av2.nf{background:rgba(129,140,248,.10);border-color:rgba(129,140,248,.35);color:#C7D2FE}
+.osc .av2.ok{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);color:#86EFAC}
+.osc .av2 b{color:inherit}
+.osc .copy,.osc .cmdp{background:#1E2638;color:#E2E8F0}
+.osc .tg i{background:#334155}.osc .tg.on i{background:#22C55E}
+.osc .ck2,.osc .rd2{border-color:#475569}.osc .ck2.on{background:#818CF8;border-color:#818CF8}.osc .rd2.on{border-color:#818CF8}
+.osc .dest{background:#0F1524;border-color:#818CF8;color:#F1F5F9;box-shadow:0 0 0 4px rgba(129,140,248,.18)}
+.osc .velo{background:rgba(2,6,23,.65)}
+.osc .bar{background:#1E2638}
+.osc .nuevo{background:rgba(34,211,238,.14);color:#67E8F9}
+.osc .mi{color:#CBD5E1}.osc .mi:hover{background:#1E2638}
+.osc .sn{color:#CBD5E1}.osc .sn.on{background:rgba(129,140,248,.16);color:#C7D2FE}
+.osc .dot.vv{box-shadow:0 0 0 4px rgba(34,197,94,.18)!important}
+
+.kt{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;position:relative}
+.kt .kl{font-size:12.5px;color:#64748B;display:flex;align-items:center;gap:6px;font-weight:600}
+.kt .kv{font-size:23px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kt .ks{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.q{width:20px;height:20px;border-radius:999px;border:1.5px solid #CBD5E1;color:#64748B;background:#fff;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;cursor:help;margin-left:auto;flex:0 0 auto;padding:0}
+.q.on{background:#4F46E5;border-color:#4F46E5;color:#fff}
+.pop{position:absolute;z-index:11;width:330px;border-radius:16px;padding:14px 16px;font-size:13px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.pop h4{margin:0;font-size:14px}.pop .pl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B}
+.pop .tec{font-size:12px;color:#64748B;border-top:1px solid #F1F5F9;padding-top:8px}
+.stp{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:14px;cursor:pointer}
+.stp:hover{background:#F8FAFC}.stp.on{background:#EEF2FF}
+.stp .n{width:28px;height:28px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-weight:700;font-size:12.5px;background:#F1F5F9;color:#64748B}
+.stp.ok .n{background:#DCFCE7;color:#166534}.stp.on .n{background:#4F46E5;color:#fff}.stp.wa .n{background:#FEF3C7;color:#92400E}
+.stp b{font-size:13.5px;display:block}.stp small{font-size:12px;color:#64748B;display:block}
+.tar{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #F1F5F9}
+.tar:first-child{border-top:0}
+.cnt{min-width:30px;height:30px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;padding:0 8px}
+.cr{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px;border-radius:14px;border:1px solid #E6E8F0;background:#fff;font-size:13px;font-weight:600;cursor:pointer;flex:1;min-width:0;text-align:left;font-family:inherit}
+.cr small{font-weight:500;color:#64748B;font-size:11.5px}
+.bl{display:grid;grid-template-columns:20px 64px minmax(0,1fr) 96px 150px;gap:10px;align-items:center;padding:11px 16px;border-bottom:1px solid #F1F5F9;font-size:13px;cursor:pointer}
+.bl.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.sug{border:1.5px solid #E2E8F0;border-radius:14px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:13px;cursor:pointer}
+.sug.on{border-color:#4F46E5;background:#EEF2FF}
+.pasos{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.osc .kt,.osc .cr,.osc .sug,.osc .pop{background:#121A2B!important;border-color:#1E2638!important;color:#E2E8F0}
+.osc .kt .kv,.osc .stp b,.osc .cr,.osc .pop h4{color:#F1F5F9}
+.osc .kt .kl,.osc .kt .ks,.osc .stp small,.osc .cr small,.osc .pop .pl,.osc .pop .tec{color:#94A3B8!important;border-color:#1E2638}
+.osc .q{background:#0F1524;border-color:#2A3550;color:#CBD5E1}.osc .q.on{background:#818CF8;border-color:#818CF8;color:#0B0F1A}
+.osc .stp:hover{background:#161E31}.osc .stp.on,.osc .sug.on,.osc .bl.on{background:rgba(129,140,248,.14)!important;border-color:#818CF8}
+.osc .stp .n{background:#1E2638;color:#CBD5E1}.osc .stp.on .n{background:#818CF8;color:#0B0F1A}.osc .stp.ok .n{background:rgba(34,197,94,.16);color:#86EFAC}.osc .stp.wa .n{background:rgba(245,158,11,.16);color:#FCD34D}
+.osc .tar,.osc .bl{border-color:#1A2235}
+.ti{width:18px;height:18px;display:inline-block;flex:0 0 auto;background:currentColor;-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat}.ti-check{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m5%2012%205%205L20%207%22/%3E%3C/svg%3E")}.ti-ayuda{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%229%22/%3E%3Cpath%20d%3D%22M9.5%209a2.5%202.5%200%200%201%205%200c0%202-2.5%202-2.5%204M12%2017h.01%22/%3E%3C/svg%3E")}.ti-dif{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%204v12a3%203%200%200%200%203%203h3M18%2020V8a3%203%200%200%200-3-3h-3M9%202%206%205l3%203M15%2022l3-3-3-3%22/%3E%3C/svg%3E")}.ti-rayo{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M13%202%204%2014h7l-1%208%209-12h-7z%22/%3E%3C/svg%3E")}.ti-x{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%229%22/%3E%3Cpath%20d%3D%22m9%209%206%206M15%209l-6%206%22/%3E%3C/svg%3E")}.ti-sello{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203%204%206v6c0%205%203.5%208%208%209%204.5-1%208-4%208-9V6z%22/%3E%3Cpath%20d%3D%22m9%2012%202%202%204-4%22/%3E%3C/svg%3E")}.ti-bloq{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%225%22%20y%3D%2211%22%20width%3D%2214%22%20height%3D%2210%22%20rx%3D%222%22/%3E%3Cpath%20d%3D%22M8%2011V7a4%204%200%200%201%208%200v4%22/%3E%3C/svg%3E")}</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<div class="tema {{tema}}"><nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Finanzas › Bancos › <b>Conciliar</b></div>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+ <div style="min-width:0"><h1 class="h1">Conciliar el banco</h1><div class="sub">Banco Industrial · Monetaria ···4521 · estado de cuenta del 1 al 24 de noviembre</div></div><span style="flex:1"></span><button class="ib f" title="Ayuda: qué es conciliar y para qué sirve" aria-label="Ayuda: qué es conciliar y para qué sirve" style="width:40px;height:40px;border-radius:999px;cursor:help;flex:0 0 auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button><button class="btn o"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Diferencias y reglas</button><button class="btn o"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>Subir otro estado de cuenta</button><button class="ib f" title="Tema claro u oscuro" aria-label="Tema" style="width:40px;height:40px;border-radius:999px" onClick="{{tTema}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></button></div>
+<div class="isla" style="border-radius:16px;padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto">
+ <button class="pc ok"><span class="n"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Subir el estado de cuenta</button><span class="ln ok"></span>
+ <button class="pc on"><span class="n">2</span>Emparejar</button><span class="ln"></span>
+ <button class="pc"><span class="n">3</span>Revisar el saldo</button><span class="ln"></span>
+ <button class="pc"><span class="n">4</span>Terminar</button>
+ <span style="width:1px;height:26px;background:#E6E8F0"></span>
+ <div style="min-width:170px"><div class="m2">Emparejado: <b style="color:#0F172A">38 de 52</b></div><span class="bar" style="margin-top:4px"><i style="width:73%"></i></span></div>
+</div>
+<div style="display:flex;gap:12px;flex:1;min-height:0">
+ <section class="isla pan" style="flex:1.25">
+  <div class="ph2"><div class="segb"><button class="ts {{f.todo.cls}}" onClick="{{f.todo.ir}}">Por emparejar<span class="c rj">14</span></button><button class="ts {{f.seg.cls}}" onClick="{{f.seg.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Seguras<span class="c ">7</span></button><button class="ts {{f.dud.cls}}" onClick="{{f.dud.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg>Para decidir<span class="c ">4</span></button><button class="ts {{f.sin.cls}}" onClick="{{f.sin.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg>Sin pareja<span class="c ">3</span></button><button class="ts {{f.ok.cls}}" onClick="{{f.ok.ir}}">Listas<span class="c ">38</span></button></div></div>
+  <div class="lh" style="grid-template-columns:20px 64px minmax(0,1fr) 96px 150px;padding:9px 16px"><span></span><span>Fecha</span><span>Lo que dice el banco</span><span class="r">Monto</span><span>Argos encontró</span></div>
+  <div class="sc" style="flex:1"><sc-for list="{{lin}}" as="x"><div class="bl {{x.cls}}" onClick="{{x.ver}}"><span class="ck2"></span><span class="m2">{{x.f}}</span>
+ <div style="min-width:0"><b class="el" style="display:block">{{x.d}}</b><span class="m2 mono" style="font-size:11.5px">ref. {{x.r}}</span></div>
+ <b class="num r">{{x.m}}</b><span><span class="b {{x.k}}"><span class="ti ti-{{x.ki}}" style="width:13px;height:13px"></span>{{x.kt}}</span></span></div></sc-for></div>
+  <div class="pf m2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><span style="flex:1">Entradas en positivo, salidas con «−». Lo emparejado pasa a «Listas».</span><button class="btn v sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Aceptar las 7 seguras</button></div>
+ </section>
+ <section class="isla pan" style="flex:1;padding:16px 18px;gap:10px">
+  <div class="cdh" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v6a6 6 0 0 0 6 6h6M18 15l-3-3M18 15l-3 3M6 21v-6"/></svg>Movimiento elegido · {{linSel.f}} · {{linSel.m}}</div>
+  <div style="display:{{sel.s1.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">Coincide con una liquidación</b><div class="m2">Mismo monto y misma referencia: no hay nada que decidir</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Liquidación 1 de Pasarela</b><span class="m2">10 nov · ref. LIQ-2026-11-10</span></div><b class="num">Q 308.78</b></div><div class="av2 ok"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg><div>Todas las «parejas seguras» se pueden aceptar juntas con <b>Aceptar las 7 seguras</b>.</div></div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">No es esta</button><button class="btn p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Aceptar pareja</button></div></div><div style="display:{{sel.s2.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">Hay 2 candidatos</b><div class="m2">Elige cuál es. Mismo monto, fecha cercana</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Pago 6102 · María López</b><span class="m2">12 nov · transferencia · ref. TRF-55120</span></div><b class="num">Q 450.00</b></div><div class="sug "><span class="rd2 "></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Pago 6088 · Taller Hermanos Ruiz</b><span class="m2">11 nov · depósito · sin referencia</span></div><b class="num">Q 450.00</b></div><div class="m2">¿Ninguno? <button class="lnk">Buscar otro movimiento</button> o <button class="lnk">registrar un cobro nuevo</button>.</div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">Dejar para después</button><button class="btn p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Es el pago 6102</button></div></div><div style="display:{{sel.s3.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">El banco muestra Q 5.00 menos</b><div class="m2">Encontramos el depósito, pero el monto no es igual. Elige el motivo: cada uno ya tiene su cuenta</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Depósito de custodia #14 · boleta B-4471</b><span class="m2">13 nov · lo llevó Marta Gómez</span></div><b class="num">Q 900.00</b></div><div class="cd" style="gap:8px"><div class="cdh" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v12a3 3 0 0 0 3 3h3M18 20V8a3 3 0 0 0-3-3h-3M9 2 6 5l3 3M15 22l3-3-3-3"/></svg>¿Qué pasó con los Q 5.00?<button class="lnk">Configurar motivos</button></div><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Comisión del banco</b><span class="m2">Gasto bancario · permitido hasta Q 10.00 por línea</span></div><b class="num">− Q 5.00</b></div><div class="sug "><span class="rd2 "></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Faltó efectivo en el depósito</b><span class="m2">Queda a cargo de quien lo llevó</span></div><b class="num">− Q 5.00</b></div><div class="sug" style="opacity:.55;cursor:not-allowed"><span class="rd2"></span><div style="flex:1"><b>Redondeo</b><div class="m2">No aplica: solo hasta Q 0.05</div></div></div><div class="sug "><span class="rd2 "></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Otra razón</b><span class="m2">Eliges la cuenta · siempre pide aprobación</span></div><b class="num"></b></div></div><div class="kv2"><span>Banco</span><b class="num">Q 895.00</b></div><div class="kv2"><span>Depósito − comisión</span><b class="num" style="color:#166534">Q 895.00 · cuadra</b></div><div class="av2 ok" style="padding:8px 12px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg><div>Dentro de lo que puedes aceptar tú: <b>Q 5.00 de Q 25.00</b> por línea.</div></div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">Dejar para después</button><button class="btn p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Conciliar con la diferencia</button></div></div><div style="display:{{sel.s4.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">Lo reconoció una regla</b><div class="m2">«Si el texto dice COMISION MANEJO → gasto bancario»</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="cd"><div class="kv2"><span>Se registra como</span><b>Gasto bancario</b></div><div class="kv2"><span>Monto</span><b class="num">Q 15.00</b></div><div class="kv2"><span>Regla</span><span>Comisiones del banco <button class="lnk">Editar</button></span></div></div><div class="m2">Las reglas proponen; nada entra al libro hasta que aceptas.</div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">No aplicar</button><button class="btn p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Registrar y conciliar</button></div></div><div style="display:{{sel.s5.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">Nadie registró este depósito</b><div class="m2">Di qué es y Argos lo registra y lo concilia en un paso</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="sug"><span class="ico ok" style="width:32px;height:32px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span><div style="flex:1"><b>Es el pago de un cliente</b><div class="m2">Busca al cliente y aplica a sus facturas</div></div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></div><div class="sug"><span class="ico nf" style="width:32px;height:32px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg></span><div style="flex:1"><b>Vino de otra cuenta mía</b><div class="m2">Traslado entre cuentas</div></div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></div><div class="sug"><span class="ico cy" style="width:32px;height:32px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17 9 11l4 4 8-8M15 7h6v6"/></svg></span><div style="flex:1"><b>Interés u otro ingreso</b><div class="m2">Elige el tipo de ingreso</div></div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></div><div class="sug"><span class="ico ne" style="width:32px;height:32px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></svg></span><div style="flex:1"><b>No sé todavía</b><div class="m2">Queda en «por identificar» y no bloquea el cierre con una nota</div></div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></div><label style="display:flex;gap:8px;align-items:center;font-size:13px"><span class="ck2"></span>Crear una regla para la próxima vez</label></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">Dejar para después</button></div></div><div style="display:{{sel.s6.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">Coincide: el cliente retuvo IVA</b><div class="m2">Hotel Posada del Valle es agente retenedor de IVA. El depósito esperado ya descuenta su retención</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Factura F-004530 · Hotel Posada del Valle</b><span class="m2">16 nov · instalación y 2 routers</span></div><b class="num">Q 1,200.00</b></div><div class="cd" style="gap:0"><div class="cdh" style="margin:0 0 4px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Cómo se llega al monto del banco</div><div class="kv2"><span>Total de la factura</span><span class="num">Q 1,200.00</span></div><div class="kv2"><span>Retención de IVA (15 % del IVA) <span class="b cy" style="font-size:11px">por su tipo de impuesto</span></span><span class="num">− Q 19.29</span></div><div class="kv2"><span style="color:#0F172A"><b>Debe llegar al banco</b></span><b class="num" style="color:#166534">Q 1,180.71 · cuadra</b></div></div><div class="av2 nf" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><div>Los Q 19.29 no son una pérdida: quedan como <b>IVA retenido por cobrar a la SAT</b> y la factura queda pagada completa. Falta la <b>constancia</b> del cliente; se anota en «Constancias por recibir».</div></div><div class="m2">No cuenta contra tu tope de diferencias.</div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">No es esta</button><button class="btn p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Registrar el pago y conciliar</button></div></div><div style="display:{{sel.s7.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px">Faltan Q 60.00 y pasa de tu tope</b><div class="m2">Tú puedes aceptar hasta Q 25.00 por línea. Esta diferencia la aprueba contabilidad</div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Depósito de custodia #17 · boleta B-4502</b><span class="m2">20 nov · lo llevó Marta Gómez</span></div><b class="num">Q 2,400.00</b></div><div class="cd" style="gap:8px"><div class="cdh" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v12a3 3 0 0 0 3 3h3M18 20V8a3 3 0 0 0-3-3h-3M9 2 6 5l3 3M15 22l3-3-3-3"/></svg>¿Qué pasó con los Q 60.00?</div><div class="sug on"><span class="rd2 on"></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Faltó efectivo en el depósito</b><span class="m2">Queda a cargo de Marta Gómez hasta aclararlo</span></div><b class="num">− Q 60.00</b></div><div class="sug "><span class="rd2 "></span><div style="flex:1;min-width:0"><b class="el" style="display:block">Comisión del banco</b><span class="m2">No aplica: permitido hasta Q 10.00</span></div><b class="num"></b></div></div><div><div class="lb">Explica qué pasó<span class=req>*</span></div><div class="in  ph">Ej.: la boleta dice Q 2,340; se contó mal al entregar</div></div><div class="av2 wa" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><div><b>No entra al libro todavía.</b> Queda «Esperando aprobación» y le avisa a quien tiene el permiso (Ana Castillo, Luis Pérez). La línea no bloquea el resto de la conciliación.</div></div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn o">Dejar para después</button><button class="btn p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/></svg>Pedir aprobación</button></div></div>
+ </section>
+</div>
+</main></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const st = this.state || {};
+const G = {"f": {"ids": ["todo", "seg", "dud", "sin", "ok"], "def": "todo"}};
+const L = {"lin": {"rows": [{"id": 1, "f": "10 nov", "d": "ABONO PASARELA LIQ", "r": "LIQ-2026-11-10", "m": "Q 308.78", "k": "ok", "ki": "check", "kt": "Pareja segura", "g": "seg"}, {"id": 2, "f": "12 nov", "d": "CREDITO TRANSFERENCIA ACH", "r": "TRF-55120", "m": "Q 450.00", "k": "nf", "ki": "ayuda", "kt": "Posible pareja", "g": "pos"}, {"id": 3, "f": "13 nov", "d": "DEPOSITO EN EFECTIVO AG. CENTRAL", "r": "B-4471", "m": "Q 895.00", "k": "wa", "ki": "dif", "kt": "Diferencia Q 5.00", "g": "dif"}, {"id": 4, "f": "14 nov", "d": "COMISION MANEJO DE CUENTA", "r": "—", "m": "− Q 15.00", "k": "cy", "ki": "rayo", "kt": "Regla: gasto bancario", "g": "reg"}, {"id": 5, "f": "14 nov", "d": "DEPOSITO MONETARIO 0098812", "r": "0098812", "m": "Q 200.00", "k": "er", "ki": "x", "kt": "Sin pareja", "g": "sin"}, {"id": 6, "f": "15 nov", "d": "PAGO SERVICIO EEGSA", "r": "884120", "m": "− Q 1,850.40", "k": "ok", "ki": "check", "kt": "Pareja segura", "g": "seg"}, {"id": 7, "f": "18 nov", "d": "TRANSFERENCIA HOTEL POSADA DEL VALLE", "r": "TRF-60231", "m": "Q 1,180.71", "k": "ok", "ki": "sello", "kt": "Pareja con retención", "g": "seg"}, {"id": 8, "f": "20 nov", "d": "DEPOSITO EN EFECTIVO AG. ZONA 4", "r": "B-4502", "m": "Q 2,340.00", "k": "er", "ki": "bloq", "kt": "Sobre el tope", "g": "dif"}], "def": 3}};
+const out = {};
+const cur = (g) => (st[g] === undefined ? G[g].def : st[g]);
+Object.keys(G).forEach((g) => {
+const c = cur(g); const o = {};
+G[g].ids.forEach((id) => { o[id] = { cls: id === c ? 'on' : '', v: id === c ? 'flex' : 'none', b: id === c ? 'block' : 'none', ir: () => this.setState({ [g]: id }) }; });
+out[g] = o; out[g + 'On'] = c !== G[g].def ? 'block' : 'none';
+});
+Object.keys(L).forEach((n) => {
+let rows = L[n].rows;
+if (L[n].por) { const c = cur(L[n].por); rows = rows.filter((r) => c === L[n].todos || String(r.g || '').split(' ').includes(c)); }
+const k = 's_' + n; const s = st[k] === undefined ? L[n].def : st[k];
+out[n] = rows.map((r) => ({ ...r, cls: r.id === s ? 'on' : '', ver: () => this.setState({ [k]: r.id }) }));
+out[n + 'Sel'] = L[n].rows.find((r) => r.id === s) || L[n].rows[0];
+out[n + 'N'] = rows.length;
+out[n + 'Vacio'] = rows.length ? 'none' : 'block';
+});
+out.tema = st.tema === 'osc' ? 'osc' : '';
+out.tTema = () => this.setState({ tema: st.tema === 'osc' ? 'claro' : 'osc' });
+const sid = st.s_lin === undefined ? 3 : st.s_lin; const mp = {1:'s1',2:'s2',3:'s3',4:'s4',5:'s5',6:'s1',7:'s6',8:'s7'}; out.sel = {}; ['s1','s2','s3','s4','s5','s6','s7'].forEach((k) => { out.sel[k] = { v: mp[sid] === k ? 'flex' : 'none' }; });
+return out;
+}
+}
+</script>
+</body>
+</html>

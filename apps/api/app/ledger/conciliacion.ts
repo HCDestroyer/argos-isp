@@ -46,6 +46,22 @@ export function huellasDeLineas(
 const VIGENTE = (alias: string) =>
     `NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones xa WHERE xa.conciliacion_id = ${alias}.id)`
 
+/**
+ * Plan de contabilidad B3 (E11): un movimiento del banco cuyo asiento se revirtió (o que es el
+ * reverso) y cuyo espejo en la misma cuenta, con fecha ≤ `hasta`, tampoco está conciliado, se anula
+ * con él: el par no está «en tránsito» ni se ofrece para conciliar (deshacer una llegada o una
+ * diferencia deja ese par). `m` es el movimiento y `a` su asiento.
+ */
+export function sinParAnulado(hasta: string | null): string {
+    return `NOT EXISTS (SELECT 1 FROM ledger.asientos par
+                JOIN ledger.movimientos pm ON pm.asiento_id = par.id AND pm.cuenta_id = m.cuenta_id
+               WHERE (par.reversa_de = a.id OR par.id = a.reversa_de)
+                 ${hasta === null ? '' : `AND par.fecha <= '${hasta}'::date`}
+                 AND (pm.debe - pm.haber) = -(m.debe - m.haber)
+                 AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones kp WHERE kp.movimiento_id = pm.id
+                       AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones xp WHERE xp.conciliacion_id = kp.id)))`
+}
+
 export interface ExtractoVista {
     id: number
     empresa_id: number
@@ -323,6 +339,7 @@ export async function movimientosSinConciliar(
         .whereNotExists((q) =>
             q.from('ledger.conciliaciones as k').whereRaw('k.movimiento_id = m.id').whereRaw(VIGENTE('k')),
         )
+        .whereRaw(sinParAnulado(hasta ? fechaSegura(hasta) : null))
         .orderBy('a.fecha')
         .orderBy('m.id')
         .select(
@@ -506,6 +523,7 @@ async function resumenDeCuenta(
                  FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
                 WHERE m.cuenta_id = ? AND a.empresa_id = ? AND a.fecha >= ? AND a.fecha <= ?
                   AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones k WHERE k.movimiento_id = m.id AND k.grupo IN ${cerrados})
+                  AND ${sinParAnulado(fechaSegura(fecha))}
                 ORDER BY a.fecha, m.id`,
                   [cuentaId, empresaId, desde, fecha, empresaId, cuentaId, fecha, fecha],
               )) as { rows: PartidaEnTransito[] }
@@ -557,6 +575,48 @@ async function resumenDeCuenta(
         diferencia: aTexto(diferencia),
         cuadra: diferencia.isZero(),
     }
+}
+
+/** Fecha YYYY-MM-DD validada antes de entrar a un SQL armado (nunca texto libre). */
+function fechaSegura(fecha: string): string {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error(`Fecha inválida: ${fecha}`)
+    return fecha
+}
+
+/**
+ * Cuenta que sirve de contrapartida de una partida del banco (extracto o diferencia al conciliar):
+ * activa, imputable, sin auxiliar y no de dinero, puente ni kardex. null si no sirve.
+ */
+export async function buscarContrapartida(
+    cliente: QueryClientContract,
+    codigo: string,
+    empresaId: number,
+): Promise<{ id: number; codigo: string } | null> {
+    const fila = (await cliente
+        .from('ledger.cuentas')
+        .where('codigo', codigo)
+        .where('pais', 'GT')
+        .where((q) => q.whereNull('empresa_id').orWhere('empresa_id', empresaId))
+        .select('id', 'codigo', 'activa', 'imputable', 'auxiliar_cliente', 'auxiliar_proveedor')
+        .first()) as {
+        id: number
+        codigo: string
+        activa: boolean
+        imputable: boolean
+        auxiliar_cliente: boolean
+        auxiliar_proveedor: boolean
+    } | null
+    if (
+        !fila ||
+        !fila.activa ||
+        !fila.imputable ||
+        fila.auxiliar_cliente ||
+        fila.auxiliar_proveedor ||
+        contrapartidaProhibida(fila.codigo)
+    ) {
+        return null
+    }
+    return { id: Number(fila.id), codigo: fila.codigo }
 }
 
 /** Cuentas que no admiten ser contrapartida de una partida del extracto (dinero o auxiliares). */
