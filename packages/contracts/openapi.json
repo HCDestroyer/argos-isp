@@ -152825,7 +152825,7 @@
               "por_identificar",
               "esperando_aprobacion",
               "conciliadas",
-              "total"
+              "en_extracto"
             ],
             "properties": {
               "segura": {
@@ -152852,8 +152852,9 @@
               "conciliadas": {
                 "type": "integer"
               },
-              "total": {
-                "type": "integer"
+              "en_extracto": {
+                "type": "integer",
+                "description": "Líneas del extracto"
               }
             }
           },

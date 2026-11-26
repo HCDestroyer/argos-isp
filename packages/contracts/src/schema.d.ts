@@ -26124,7 +26124,8 @@ export interface components {
                 por_identificar: number;
                 esperando_aprobacion: number;
                 conciliadas: number;
-                total: number;
+                /** @description Líneas del extracto */
+                en_extracto: number;
             };
             tope: {
                 tope_linea: components["schemas"]["Dinero"];

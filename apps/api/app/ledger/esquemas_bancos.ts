@@ -593,7 +593,7 @@ export const SugerenciasExtracto = definirEsquema(
         resumen: objeto({
             ...Object.fromEntries(NIVELES.map((n) => [n, entero])),
             conciliadas: entero,
-            total: entero,
+            en_extracto: { ...entero, description: 'Líneas del extracto' },
         }),
         tope: objeto({ tope_linea: Dinero, tope_dia: Dinero, usado_hoy: Dinero, disponible_hoy: Dinero }),
     }),

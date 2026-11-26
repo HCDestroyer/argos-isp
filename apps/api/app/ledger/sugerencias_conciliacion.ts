@@ -88,7 +88,7 @@ export interface SugerenciasExtracto {
     empresa_id: number
     cuenta_id: number
     lineas: SugerenciaLinea[]
-    resumen: Record<NivelSugerencia, number> & { conciliadas: number; total: number }
+    resumen: Record<NivelSugerencia, number> & { conciliadas: number; en_extracto: number }
     /** tope de quien pregunta: por línea, por día, lo usado hoy y lo que le queda */
     tope: { tope_linea: string; tope_dia: string; usado_hoy: string; disponible_hoy: string }
 }
@@ -227,9 +227,9 @@ export async function sugerenciasDeExtracto(
             cliente.raw(
                 `(SELECT d.id FROM billing.diferencias_conciliacion d WHERE d.linea_id = l.id AND d.requiere_aprobacion
                    AND NOT EXISTS (SELECT 1 FROM billing.diferencias_conciliacion_decisiones dd WHERE dd.diferencia_id = d.id)
-                   ORDER BY d.id DESC LIMIT 1) as pendiente_id`,
+                   ORDER BY d.id DESC LIMIT 1) as abierta_id`,
             ),
-        )) as Array<Linea & { conciliada: boolean; pendiente_id: number | null }>
+        )) as Array<Linea & { conciliada: boolean; abierta_id: number | null }>
     const lineas = todas.filter((l) => !l.conciliada)
     const candidatos = await candidatosDeCuenta(cliente, empresaId, cuentaId)
     const todasLasReglas = await listarReglas([empresaId], cliente)
@@ -321,7 +321,7 @@ export async function sugerenciasDeExtracto(
         }
         const nota = notas.get(linea.id) ?? null
         if (nivel === 'sin_pareja' && nota) nivel = 'por_identificar'
-        if (l.pendiente_id !== null) nivel = 'esperando_aprobacion'
+        if (l.abierta_id !== null) nivel = 'esperando_aprobacion'
         salida.push({
             linea_id: linea.id,
             fecha: linea.fecha,
@@ -333,7 +333,7 @@ export async function sugerenciasDeExtracto(
             regla_id: reglaId,
             motivos: sugeridos,
             por_identificar: nota,
-            diferencia_pendiente_id: l.pendiente_id === null ? null : Number(l.pendiente_id),
+            diferencia_pendiente_id: l.abierta_id === null ? null : Number(l.abierta_id),
         })
     }
     // una misma pareja reclamada como segura por dos líneas: las dos pasan a «para decidir»
@@ -359,7 +359,7 @@ export async function sugerenciasDeExtracto(
         empresa_id: empresaId,
         cuenta_id: cuentaId,
         lineas: salida,
-        resumen: { ...resumen, conciliadas: todas.length - lineas.length, total: todas.length },
+        resumen: { ...resumen, conciliadas: todas.length - lineas.length, en_extracto: todas.length },
         tope: {
             tope_linea: topes.tope_linea,
             tope_dia: topes.tope_dia,
