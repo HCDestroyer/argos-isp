@@ -87,14 +87,12 @@ onMounted(cargar)
         titulo="Motivos de cortesía"
         icono="i-lucide-gift"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('adicionales.crear_motivo')"
                 class="rounded-full"
                 label="Nuevo motivo"
                 icon="i-lucide-plus"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nuevo motivo"
                 data-prueba="nuevo-motivo"
                 @click="nuevoAbierto = true"
             />

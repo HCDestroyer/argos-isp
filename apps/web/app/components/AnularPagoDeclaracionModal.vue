@@ -99,9 +99,8 @@ async function enviar(evento: FormSubmitEvent<CuerpoAnularPagoDeclaracion>) {
                     name="fecha"
                     :help="`Vacía: hoy. No antes del pago (${formatearFecha(pago.fecha)}).`"
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.fecha"
-                        type="date"
                         :min="pago.fecha"
                         :max="hoy"
                         class="w-full"

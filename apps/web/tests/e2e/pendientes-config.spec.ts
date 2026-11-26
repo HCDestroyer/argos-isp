@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { elegirEmpresa, entrar, ir } from './ayudas'
+import { elegirEmpresa, entrar, ir, llenarFecha } from './ayudas'
 
 /**
  * «Pendientes del backend» en el panel (tableros OperLogin, OperConfigRed, OperConfigCobro,
@@ -144,7 +144,7 @@ test('panel financiero: con el aviso apagado, el límite superado (100 %) se avi
     await page.getByRole('button', { name: 'Nuevo valor de pc_limite_anual', exact: true }).click()
     const modal = page.getByRole('dialog')
     await modal.getByLabel('Valor', { exact: true }).fill('1.00')
-    await modal.getByLabel('Vigente desde').fill(`${new Date().getFullYear()}-01-01`)
+    await llenarFecha(modal.getByLabel('Vigente desde'), `${new Date().getFullYear()}-01-01`)
     await modal.getByLabel('Motivo').fill('Prueba del aviso')
     await modal.getByRole('button', { name: 'Guardar valor' }).click()
     await expect(modal).toBeHidden()

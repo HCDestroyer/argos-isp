@@ -103,7 +103,7 @@ const columnas: TableColumn<TokenApi>[] = [
         icono="i-lucide-key-round"
         descripcion="Un token actúa como su usuario y pasa por el mismo ACL, recortado a sus alcances. Se muestra una sola vez al crearlo; revocarlo lo apaga de inmediato."
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('tokens.crear') && puede('usuarios.ver')"
                 label="Nuevo token"

@@ -194,7 +194,7 @@ onMounted(async () => {
         icono="i-lucide-users"
         sin-descripcion
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('clientes.crear')"
                 to="/clientes/nuevo"
@@ -202,7 +202,6 @@ onMounted(async () => {
                 label="Nuevo cliente"
                 size="lg"
                 class="glow-brand rounded-full px-5"
-                aria-label="Nuevo cliente"
                 data-prueba="nuevo-cliente"
             />
         </template>

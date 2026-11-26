@@ -173,6 +173,9 @@ function elegirPuerto(id: number) {
                 data-prueba="detectar-red-acceso"
                 @click="detectarAbierto = true"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('olts.crear') || puede('olts.editar')"
                 label="Agregar OLT"

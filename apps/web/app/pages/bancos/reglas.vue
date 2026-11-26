@@ -59,15 +59,13 @@ onMounted(cargar)
         titulo="Reglas de conciliación"
         icono="i-lucide-wand-sparkles"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('bancos.conciliar')"
                 label="Nueva regla"
                 icon="i-lucide-plus"
                 size="lg"
                 class="glow-brand rounded-full px-5"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nueva regla"
                 data-prueba="nueva-regla"
                 @click="abrir(null)"
             />

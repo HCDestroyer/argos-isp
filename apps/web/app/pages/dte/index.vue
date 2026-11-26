@@ -136,6 +136,9 @@ onMounted(() => void lista.recargar())
     >
         <template #acciones>
             <ContaSelectorEmpresa />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('fel.certificar')"
                 label="Certificar en lote"
@@ -226,17 +229,15 @@ onMounted(() => void lista.recargar())
                                     />
                                 </UFormField>
                                 <UFormField label="Emitidos desde">
-                                    <UInput
+                                    <CampoFecha
                                         v-model="desde"
-                                        type="date"
                                         aria-label="Emitidos desde"
                                         class="w-full"
                                     />
                                 </UFormField>
                                 <UFormField label="Emitidos hasta">
-                                    <UInput
+                                    <CampoFecha
                                         v-model="hasta"
-                                        type="date"
                                         aria-label="Emitidos hasta"
                                         class="w-full"
                                     />

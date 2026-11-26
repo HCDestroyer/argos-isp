@@ -117,24 +117,25 @@ watch(perfilId, () => void cargar())
     >
         <template #acciones>
             <UButton
-                v-if="perfil && puede('qos.gestionar')"
-                class="rounded-full"
-                label="Copiar perfil"
-                icon="i-lucide-copy-plus"
-                color="neutral"
-                variant="outline"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Copiar perfil"
-                data-prueba="copiar-perfil"
-                @click="abrirCopiar"
-            />
-            <UButton
                 to="/red/qos"
                 icon="i-lucide-arrow-left"
                 label="Perfiles"
                 color="neutral"
                 variant="ghost"
                 class="hidden sm:inline-flex rounded-full"
+            />
+        </template>
+
+        <template #accion-principal>
+            <UButton
+                v-if="perfil && puede('qos.gestionar')"
+                class="rounded-full"
+                label="Copiar perfil"
+                icon="i-lucide-copy-plus"
+                color="neutral"
+                variant="outline"
+                data-prueba="copiar-perfil"
+                @click="abrirCopiar"
             />
         </template>
 

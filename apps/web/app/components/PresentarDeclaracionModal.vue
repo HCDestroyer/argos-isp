@@ -100,9 +100,8 @@ function aRecalcular() {
                         name="fecha_presentacion"
                         required
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha_presentacion"
-                            type="date"
                             :max="hoy"
                             class="w-full"
                             data-prueba="presentar-fecha"

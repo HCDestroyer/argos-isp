@@ -76,7 +76,7 @@ async function conciliar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
         titulo="Conciliación de la pasarela"
         icono="i-lucide-scale"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('facturas.generar')"
                 label="Conciliar un día"
@@ -90,10 +90,8 @@ async function conciliar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
 
         <div class="surface-card flex min-h-0 flex-1 flex-col gap-3 rounded-2xl p-3 sm:p-4">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <UInput
+                <CampoFecha
                     v-model="fecha"
-                    type="date"
-                    icon="i-lucide-calendar"
                     aria-label="Filtrar por día"
                     class="w-full sm:w-48"
                     :ui="{ base: 'rounded-full' }"
@@ -206,9 +204,8 @@ async function conciliar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         name="fecha"
                         help="Vacío = ayer (Guatemala)."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             class="w-full"
                             data-prueba="conciliar-fecha"
                         />
