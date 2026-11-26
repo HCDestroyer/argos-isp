@@ -589,7 +589,7 @@ onMounted(cargar)
                     variant="subtle"
                     icon="i-lucide-badge-alert"
                     title="NIT o CUI por corregir"
-                    description="El número no pasó la validación al activar la localización fiscal (se conservó tal cual). Corrígelo en «Editar»: la factura FEL lo exige válido."
+                    description="El dígito verificador no cuadra (sirve para pruebas) o el número no pasó la validación al activar la localización fiscal. En producción la factura FEL sale como consumidor final hasta corregirlo en «Editar»."
                     data-prueba="nit-invalido"
                 />
                 <UAlert

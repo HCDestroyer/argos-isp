@@ -314,6 +314,14 @@ export const EstablecimientoFiscal = definirEsquema(
         direccion: nulable(texto),
         municipio: nulable(texto),
         departamento: nulable(texto),
+        codigo_postal: {
+            ...nulable({ ...texto, pattern: '^[0-9]{5}$' }),
+            description: 'Código postal del RTU; null = el DTE sale con 01001',
+        },
+        cajas: {
+            ...lista(id),
+            description: 'Cajas cuyos cobros certifican con este establecimiento (P1)',
+        },
         activo: booleano,
         por_defecto: booleano,
         version: { type: 'integer', minimum: 1 },
@@ -359,7 +367,32 @@ export const ConfiguracionFel = definirEsquema(
         contingencia_desde: nulable(instante),
         version: { ...entero, description: '0 si la empresa nunca se configuró (está desactivada)' },
         updated_at: nulable(instante),
-        credenciales: lista(CredencialesFel),
+        lista: {
+            ...booleano,
+            description:
+                'Lista para certificar con el proveedor y ambiente guardados: hay proveedor, credenciales de ese ' +
+                'proveedor y ambiente y un establecimiento activo. No bloquea guardar: es aviso (P7)',
+        },
+        faltantes: {
+            ...lista(
+                enumerado([
+                    'proveedor',
+                    'credenciales',
+                    'credenciales_sin_probar',
+                    'establecimiento',
+                    'nit_emisor',
+                ]),
+            ),
+            description:
+                'Lo que falta: proveedor, credenciales y establecimiento impiden certificar (lista = false); ' +
+                'credenciales_sin_probar (sin prueba o la última rechazada) y nit_emisor (NIT de la empresa sin ' +
+                'dígito verificador válido) solo informan',
+        },
+        credenciales: {
+            ...lista(CredencialesFel),
+            description:
+                'Las credenciales guardadas de cada proveedor y ambiente (una fila por proveedor + ambiente)',
+        },
     }),
 )
 

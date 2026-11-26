@@ -1,3 +1,4 @@
+import { exigirSinNuncaObligatoria } from '#fiscal/fel/configuracion'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirPppoeAdmitido } from '#network/modo_seguridad'
@@ -324,6 +325,8 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
 
         await registrarTramo(t.trx, id, 'alta')
         await guardarExcepciones(t.trx, id, excepciones)
+        // FEL obligatoria: `nunca` no existe, ni por la plantilla ni por la excepción (fel-establecimientos R2)
+        await exigirSinNuncaObligatoria(t.trx, { servicioId: id })
 
         const servicio = await verServicio(id, t.trx)
         await t.registrarCambios({ tipo: 'servicio', id }, null, {

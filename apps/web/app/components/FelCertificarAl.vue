@@ -21,7 +21,7 @@ const problema = ref<Problem | null>(null)
 const guardando = ref<number | null>(null)
 const problemaGuardar = ref<Problem | null>(null)
 
-const items: SelectItem[] = (Object.keys(CERTIFICAR_AL) as CertificarAl[]).map(valor => ({ label: CERTIFICAR_AL[valor].etiqueta, value: valor, description: CERTIFICAR_AL[valor].descripcion }))
+const items = computed<SelectItem[]>(() => itemsCertificarAl(props.modo))
 
 const columnas: TableColumn<PlantillaFacturacion>[] = [
     { accessorKey: 'nombre', header: 'Plantilla', meta: { class: { td: 'whitespace-normal' } } },

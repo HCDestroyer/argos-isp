@@ -70,6 +70,13 @@ export function normalizarDocumentoProveedor(
         return limpio
     }
     const documento = validarDocumentoFiscal({ tipo, valor, pais })
+    // Proveedores siguen estrictos (`contratos/fel-establecimientos.md` R1, fuera de alcance): el NIT
+    // tolerante de los receptores no aplica a compras.
+    if (documento.nit_cui_invalido) {
+        throw new ValidacionFallida([
+            { field: 'nit_cui', message: 'El NIT no es válido (dígito verificador)', rule: 'nit' },
+        ])
+    }
     return documento.nit_cui ?? limpiarDocumento(valor)
 }
 

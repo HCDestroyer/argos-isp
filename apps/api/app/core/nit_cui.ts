@@ -6,7 +6,7 @@ import { ValidacionFallida } from '#shared/errores'
  * NIT: dígitos + dígito verificador (0-9 o K). Algoritmo módulo 11 que usa la SAT: cada dígito del
  * cuerpo se multiplica por un peso que empieza en `largo + 1` y baja hasta 2; el verificador es
  * `(11 − suma mod 11) mod 11` y, si da 10, es la letra K. Se guarda sin guion y en mayúsculas:
- * `5769373K`.
+ * `12521337`.
  *   Fuente: la SAT no publica el algoritmo como documento técnico en sat.gob.gt; es el descrito
  *   por la comunidad y por las implementaciones FEL, p. ej. M. Batres, "Validar el NIT con Módulo
  *   11" (2008, http://mariobatres7.blogspot.com/2008/02/validar-el-nit-con-modulo-11.html, con el
@@ -22,6 +22,11 @@ import { ValidacionFallida } from '#shared/errores'
  * RENAP). Se guarda sin espacios.
  *
  * Pasaporte: 3 a 20 letras o dígitos, sin verificador. `CF`: consumidor final.
+ *
+ * NIT tolerante (`contratos/fel-establecimientos.md` R1): el módulo 11 es una **advertencia**, no
+ * un rechazo. Los NIT de pruebas de los certificadores (INFILE: `1170142K`, `1000000000K`) no
+ * cuadran con él y el certificador los acepta; lo que de verdad valida es la consulta de NIT del
+ * certificador. `revisarNit` solo rechaza lo que no tiene forma de NIT (letras, dígitos y guiones).
  */
 
 export const TIPOS_DOCUMENTO_FISCAL = ['nit', 'cui', 'pasaporte', 'cf'] as const
@@ -30,6 +35,29 @@ export type TipoDocumentoFiscal = (typeof TIPOS_DOCUMENTO_FISCAL)[number]
 /** Quita espacios y guiones y pasa a mayúsculas. */
 export function limpiarDocumento(valor: string): string {
     return valor.replace(/[\s-]/g, '').toUpperCase()
+}
+
+/** Forma de un NIT ya limpio (`revisarNit`); la misma que `core.clasificar_documento`. */
+export const FORMA_NIT = /^[0-9A-Z]{2,20}$/
+
+/**
+ * NIT tolerante: letras, dígitos y guiones. Normaliza igual que `exigirNitLibre` y el índice
+ * `empresas_nit_activa_unico` (sin espacios ni guiones, mayúsculas). 422 `rule: 'nit'` en `campo`
+ * solo si, ya limpio, no es `^[0-9A-Z]{2,20}$`; `valido` = módulo 11 (`nitValido`), que si es
+ * `false` es advertencia, no rechazo.
+ */
+export function revisarNit(valor: string, campo = 'nit_cui'): { nit: string; valido: boolean } {
+    const nit = limpiarDocumento(valor)
+    if (!FORMA_NIT.test(nit)) {
+        throw new ValidacionFallida([
+            {
+                field: campo,
+                message: 'El NIT lleva de 2 a 20 letras o dígitos (se admiten guiones)',
+                rule: 'nit',
+            },
+        ])
+    }
+    return { nit, valido: nitValido(nit) }
 }
 
 /** Dígito verificador (0-9 o K) del cuerpo de un NIT. */
@@ -102,13 +130,18 @@ export interface DocumentoFiscal {
     tipo_documento_fiscal: TipoDocumentoFiscal
     nit_cui: string | null
     pais_fiscal: string
+    /** NIT con forma pero sin módulo 11 (`revisarNit`): se guarda con la marca, no se rechaza */
+    nit_cui_invalido: boolean
 }
 
 /**
  * Valida el documento del receptor según su tipo y lo devuelve normalizado. Sin `tipo` se deduce
  * del valor (`deducirTipoDocumento`), como antes de la localización. 422 por campo:
- * - `nit`: verificador módulo 11; `cui`: estructura del RENAP; `pasaporte`: 3-20 letras o dígitos.
- *   Los tres exigen el número.
+ * - `nit`: forma de `revisarNit` (letras, dígitos y guiones); si el módulo 11 no cuadra se acepta con
+ *   `nit_cui_invalido: true`. `cui`: estructura del RENAP; `pasaporte`: 3-20 letras o dígitos. Los
+ *   tres exigen el número.
+ * - Sin tipo: lo que no se deduce pero tiene forma de NIT queda `nit` con la marca; 13 dígitos que no
+ *   cuadran como CUI ni como NIT siguen dando el 422 de CUI.
  * - `cf`: sin número (o `CF`).
  * - NIT y CUI son de Guatemala: `pais_fiscal` debe ser `GT`.
  */
@@ -120,10 +153,20 @@ export function validarDocumentoFiscal(datos: {
     const pais = (datos.pais ?? 'GT').toUpperCase()
     const limpio = datos.valor === null || datos.valor === undefined ? '' : limpiarDocumento(datos.valor)
     if (!datos.tipo) {
+        if (deducirTipoDocumento(limpio) === null && !/^\d{13}$/.test(limpio)) {
+            const { nit, valido } = revisarNit(limpio)
+            exigirPaisDelDocumento('nit', pais)
+            return {
+                tipo_documento_fiscal: 'nit',
+                nit_cui: nit,
+                pais_fiscal: pais,
+                nit_cui_invalido: !valido,
+            }
+        }
         const nit = normalizarNitCui(datos.valor)
         const tipo = deducirTipoDocumento(nit)!
         exigirPaisDelDocumento(tipo, pais)
-        return { tipo_documento_fiscal: tipo, nit_cui: nit, pais_fiscal: pais }
+        return { tipo_documento_fiscal: tipo, nit_cui: nit, pais_fiscal: pais, nit_cui_invalido: false }
     }
     const tipo = datos.tipo
     const error = (message: string, rule: string) =>
@@ -132,10 +175,16 @@ export function validarDocumentoFiscal(datos: {
         if (limpio !== '' && limpio !== 'CF') {
             throw error('Consumidor final no lleva NIT, CUI ni pasaporte', 'cf')
         }
-        return { tipo_documento_fiscal: 'cf', nit_cui: limpio === 'CF' ? 'CF' : null, pais_fiscal: pais }
+        return {
+            tipo_documento_fiscal: 'cf',
+            nit_cui: limpio === 'CF' ? 'CF' : null,
+            pais_fiscal: pais,
+            nit_cui_invalido: false,
+        }
     }
     if (limpio === '' || limpio === 'CF') throw error(`Falta el número del documento (${tipo})`, 'required')
-    if (tipo === 'nit' && !nitValido(limpio)) throw error('El NIT no es válido (dígito verificador)', 'nit')
+    let invalido = false
+    if (tipo === 'nit') invalido = !revisarNit(limpio).valido
     if (tipo === 'cui' && !cuiValido(limpio)) {
         throw error('El CUI debe tener 13 dígitos con departamento 01-22 y municipio', 'cui')
     }
@@ -143,7 +192,7 @@ export function validarDocumentoFiscal(datos: {
         throw error('El pasaporte debe tener de 3 a 20 letras o dígitos', 'pasaporte')
     }
     exigirPaisDelDocumento(tipo, pais)
-    return { tipo_documento_fiscal: tipo, nit_cui: limpio, pais_fiscal: pais }
+    return { tipo_documento_fiscal: tipo, nit_cui: limpio, pais_fiscal: pais, nit_cui_invalido: invalido }
 }
 
 function exigirPaisDelDocumento(tipo: TipoDocumentoFiscal, pais: string) {

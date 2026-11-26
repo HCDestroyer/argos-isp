@@ -24,6 +24,8 @@ const conflicto = ref(false)
 let clave = nuevaClaveIdempotencia()
 
 const editando = computed(() => props.empresa !== null)
+/** NIT con forma pero sin módulo 11: aviso, no bloquea Guardar (fel-establecimientos R1). */
+const avisoNit = computed(() => avisoDocumentoFiscal('nit', estado.nit ?? ''))
 /** Países con paquete fiscal (`GET /empresas/paises`) para el alta; sin leerlos, la API usa GT. */
 const paises = shallowRef<PaisLocalizacion[]>([])
 const pais = ref('GT')
@@ -126,6 +128,15 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                             placeholder="1234567-8"
                             class="w-full font-mono"
                             autocomplete="off"
+                        />
+                        <UAlert
+                            v-if="avisoNit"
+                            color="warning"
+                            variant="subtle"
+                            icon="i-lucide-triangle-alert"
+                            :description="avisoNit"
+                            class="mt-2"
+                            data-prueba="aviso-nit-empresa"
                         />
                     </UFormField>
                     <UFormField
