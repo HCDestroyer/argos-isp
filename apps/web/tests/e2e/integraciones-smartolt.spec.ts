@@ -66,7 +66,7 @@ test('SmartOLT: alta de una instancia, probar, ver y ligar sus OLT y apagarla', 
     await expect(page.locator('[data-prueba="instancia-encender"]')).toBeVisible()
 
     // sin recargar (los fixtures viven en memoria): «Atrás» vuelve a la lista
-    await page.locator('[data-prueba="volver-configuracion"], [aria-label="Atrás"]').locator('visible=true').first().click()
+    await page.locator('[data-prueba="volver-ajustes"], [aria-label="Atrás"]').locator('visible=true').first().click()
     await expect(page).toHaveURL(/ver=smartolt/)
     await expect(page.locator('[data-instancia]')).toHaveCount(1)
     await expect(page.locator('[data-instancia]').first()).toContainText('Apagada')

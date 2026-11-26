@@ -135,9 +135,12 @@ test.describe('cuenta en el teléfono: panel desde abajo (tablero PerfilDrawer)'
         for (const fila of ['cuenta-mi-cuenta', 'cuenta-que-cambio', 'cuenta-cerrar-sesion']) {
             expect((await panel.locator(`[data-prueba="${fila}"]`).boundingBox())!.height).toBeGreaterThanOrEqual(48)
         }
-        // El panel termina en el borde de abajo, a la altura del pulgar.
-        const caja = (await panel.boundingBox())!
-        expect(Math.abs(caja.y + caja.height - page.viewportSize()!.height)).toBeLessThanOrEqual(1)
+        // El panel termina en el borde de abajo, a la altura del pulgar (se espera a que termine de subir:
+        // con la máquina cargada, la caja se medía a mitad de la animación).
+        await expect.poll(async () => {
+            const caja = (await panel.boundingBox())!
+            return Math.abs(caja.y + caja.height - page.viewportSize()!.height)
+        }).toBeLessThanOrEqual(1)
 
         await panel.locator('[data-tema="dark"]').click()
         await expect(page.locator('html')).toHaveClass(/dark/)
