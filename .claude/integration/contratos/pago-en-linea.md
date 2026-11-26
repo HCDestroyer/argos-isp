@@ -84,7 +84,3 @@ La pasarela ya no es una por instalación: cada empresa tiene su cuenta por prov
 - **Recurrente.** `probar` llama `GET /api/test` (devuelve el ambiente `live`/`sandbox`, que debe coincidir con el `modo` de la cuenta). Credencial: `secret_key`; el `webhook_secreto` (`whsec_…`) se guarda aparte y puede llegar después de crear la cuenta (Recurrente lo entrega al registrar la URL del webhook, que lleva la `clave_publica`). Opciones: `api_url`, `expira_horas`.
 - **Capacidades (D0).** Declaran lo que existe hoy: `tokenizacion: 'ninguna'`, `cargo_con_token: false`. Por eso `usos: ['debito']` responde 422 `debito_no_soportado` hasta D1, que las enciende.
 - **Evento.** `pasarela.config_cambiada` (`pasarela_cuenta_id`, `empresa_id`, `proveedor`, `campos[]`, solo nombres).
-
-### Antecedente del plan v3 (texto de main, previo a D0)
-
-Hoy la pasarela se configura por entorno (`PASARELA_PROVEEDOR`, `RECURRENTE_*`): un proveedor y una llave por instalación. El plan v3 lo reemplaza por `billing.pasarela_cuentas` (una cuenta por empresa y proveedor, credenciales cifradas, webhook `POST /pasarela/webhook/:proveedor/:clave_publica`) y por una interfaz común con `capacidades`. Contrato completo en `debito-automatico.md` §2 y §3. Compatibilidad: sin cuentas en la base, y con la ruta `POST /pasarela/webhook/:proveedor` actual, el pago en línea funciona como se describe arriba.
