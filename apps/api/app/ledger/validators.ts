@@ -4,8 +4,16 @@ import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
 import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import { METODOS_EGRESO } from '#ledger/egresos'
+import { TIPOS_CAJA } from '#ledger/custodia'
 
-export const abrirCajaValidator = vine.compile(vine.object({ fondo_inicial: dinero() }))
+export const abrirCajaValidator = vine.compile(
+    vine.object({
+        fondo_inicial: dinero().nullable().optional().meta({
+            description:
+                'Ya no se escribe a mano (B1): sin él, el turno abre con lo que quedó al cerrar el anterior o con el fondo fijo de la caja',
+        }),
+    }),
+)
 
 export const cerrarCajaValidator = vine.compile(
     vine.object({
@@ -61,6 +69,75 @@ export const crearCajaValidator = vine.compile(
         empresa_id: idEntidad().nullable().optional().meta({
             description: 'Empresa de la caja; por defecto la activa (X-Empresa-Id)',
         }),
+        tipo: vine.enum(TIPOS_CAJA).optional().meta({
+            description: 'cobros (de fábrica) o gastos (caja chica: llega en B9, hoy 422 tipo_no_disponible)',
+        }),
+        fondo_fijo: dinero().nullable().optional().meta({
+            description: 'Fondo fijo propio; sin él, el fondo de cambio de la empresa (GET /cajas/ajustes)',
+        }),
+    }),
+)
+
+/*
+| B1 del plan de contabilidad (§5.7): entregas, custodia y ajustes
+*/
+
+export const entregarCajaValidator = vine.compile(
+    vine.object({
+        entregado_a: idEntidad().meta({
+            description: 'Quien recibe (con cajas.recibir_entrega); tu propio usuario = «Lo deposito yo»',
+        }),
+    }),
+)
+
+export const recibirEntregaValidator = vine.compile(
+    vine.object({
+        contado: dinero()
+            .nullable()
+            .optional()
+            .meta({ description: 'Lo que contaste; por defecto, lo entregado' }),
+        motivo: motivo().nullable().optional().meta({
+            description: 'Obligatorio si lo contado no es lo entregado (queda a cargo de quien entregó)',
+        }),
+    }),
+)
+
+export const rechazarEntregaValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const listarEntregasValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        empresas: empresasConsulta(),
+        estado: vine.enum(['por_recibir', 'recibida', 'rechazada'] as const).optional(),
+        caja_id: idEntidad().optional(),
+        recibe_id: idEntidad().optional(),
+    }),
+)
+
+export const custodiaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().optional().meta({ description: 'Por defecto la empresa activa' }),
+    }),
+)
+
+export const configurarCajasValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'La de GET /cajas/ajustes (0 = valores de fábrica)' }),
+        fondo_cobros: dinero().optional().meta({ description: 'Fondo de cambio de cada caja de cobros' }),
+        custodia_plazo_dias: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .max(30)
+            .optional()
+            .meta({ description: 'Días hábiles para depositar lo que se tiene en custodia' }),
+        custodia_tope: dinero().optional().meta({ description: 'Efectivo máximo en custodia por persona' }),
+        autoentrega: vine.boolean().optional().meta({ description: '«Lo deposito yo» permitido' }),
     }),
 )
 
@@ -118,6 +195,7 @@ export const diarioValidator = vine.compile(
                 'nota_credito',
                 'egreso',
                 'cierre_caja',
+                'entrega_caja',
                 'ajuste',
                 'reclasificacion',
                 'liquidacion_cobro',
@@ -136,6 +214,7 @@ export const diarioValidator = vine.compile(
                 'lealtad',
                 'sorteo',
                 'bonificacion',
+                'diferencia_conciliacion',
             ] as const)
             .optional(),
         origen_id: idEntidad()
@@ -249,5 +328,20 @@ export const listarCierresValidator = vine.compile(
         ...reglasPaginacion,
         empresas: empresasConsulta(),
         estado: vine.enum(['cerrado', 'reabierto'] as const).optional(),
+    }),
+)
+
+export const inicioContabilidadValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        periodo: vine
+            .string()
+            .trim()
+            .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+            .optional()
+            .meta({
+                description:
+                    'Mes YYYY-MM de los pasos del mes (por defecto el mes en curso de Guatemala; uno futuro = el actual)',
+            }),
     }),
 )

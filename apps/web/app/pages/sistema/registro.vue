@@ -45,8 +45,6 @@ const columnas: TableColumn<EntradaRegistro>[] = [
 <template>
     <ConfiguracionMarco
         id="registro-sistema"
-        titulo="Sistema"
-        descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
         <div class="flex flex-col gap-4">
             <div

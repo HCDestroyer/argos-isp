@@ -2,11 +2,11 @@ import { expect, test } from '@playwright/test'
 import { accionServicio, entrar, ir, pestanaServicio } from './ayudas'
 
 /**
- * Decisión del PM (A3): nunca una factura de Q0. Un cargo único con descuento del 100 % se registra
+ * Decisión del PM (A3): nunca una factura de Q0. Una nueva factura (antes «Cargo único») con descuento del 100 % se registra
  * como bonificación (motivo y explicación obligatorios) y se abre su ficha; la ficha del servicio
  * lista sus periodos bonificados y el reporte agrupa por motivo, origen y mes.
  */
-test('cargo único sin costo: queda como bonificación con su motivo', async ({ page }) => {
+test('nueva factura sin costo: queda como bonificación con su motivo', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Servicios', /\/servicios/)
     await page.goto('/servicios/1')
@@ -18,8 +18,8 @@ test('cargo único sin costo: queda como bonificación con su motivo', async ({ 
     await expect(periodos).toBeVisible({ timeout: 15_000 })
     await expect(periodos.locator('[data-bonificacion="3"]')).toContainText('Cargo sin costo')
 
-    await accionServicio(page, 'Cargo único')
-    const modal = page.getByRole('dialog', { name: 'Cargo único' })
+    await accionServicio(page, 'Nueva factura')
+    const modal = page.getByRole('dialog', { name: 'Nueva factura' })
     await modal.locator('[data-prueba="cargo-concepto-1"]').click()
     await page.getByRole('option', { name: 'Visita técnica' }).click()
     await modal.locator('[data-prueba="cargo-precio-1"]').fill('100')

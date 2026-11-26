@@ -29,7 +29,7 @@ Si un técnico quedó rechazado, corrige primero el usuario en Argos (rol de té
 
 | Mensaje | Qué hacer |
 | --- | --- |
-| «Iris no está conectado» | Revisa el conector de Iris en Configuración → Integraciones. |
+| «Iris no está conectado» | Revisa el conector de Iris en Ajustes → Comunicación e integraciones → Integraciones. |
 | «Iris no lo encontró» | El técnico ya no existe en Iris: no se cambió nada. |
 
 ## Relacionado

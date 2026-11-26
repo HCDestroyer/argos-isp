@@ -123,6 +123,7 @@ const NOMBRES_ENTIDAD: Record<string, string> = {
     'notify.configuracion_canales': 'La configuración de notificaciones',
     'integraciones.horus_conector': 'La configuración de Horus',
     regla_conciliacion: 'La regla de conciliación',
+    motivo_diferencia: 'El motivo de diferencia',
     proveedor_cobro: 'El proveedor de cobro',
     proveedor: 'El proveedor',
     producto: 'El producto',

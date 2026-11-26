@@ -14,6 +14,10 @@ export type BalanceSaldos = Schema<'BalanceSaldos'>
 export type EstadoResultados = Schema<'EstadoResultados'>
 export type IntegridadLibro = Schema<'IntegridadLibro'>
 export type Diario = Schema<'Diario'>
+export type BorradorAsiento = Schema<'BorradorAsiento'>
+export type AsientoManual = Schema<'AsientoManual'>
+export type DatosAsientoManual = paths['/api/v1/libro/asientos']['post']['requestBody']['content']['application/json']
+export type EstadoBorrador = BorradorAsiento['estado']
 export type FiltrosIntegridad = Omit<NonNullable<paths['/api/v1/libro/integridad']['get']['parameters']['query']>, 'empresas'>
 
 /** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
@@ -150,5 +154,44 @@ export function useLibro() {
         return resolver(api.GET('/api/v1/libro/diarios/{id}', { params: { path: { id } } }))
     }
 
-    return { integridad, diarios, verDiario, cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
+    /**
+     * `POST /libro/asientos` (`libro.registrar_asiento`, decisión 10 del PM): asiento manual de
+     * ajuste con `Idempotency-Key`. Responde `registrado` (ya en el libro) o `pendiente_aprobacion`
+     * (borrador, cuando la empresa pide que otra persona apruebe).
+     */
+    function registrarAsiento(datos: DatosAsientoManual, claveIdempotencia: string): Promise<Resultado<AsientoManual>> {
+        return resolver(api.POST('/api/v1/libro/asientos', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    /** `GET /libro/borradores` (`libro.ver`): los asientos por aprobar de la empresa; sin `estado`, todos. */
+    function borradores(estado?: EstadoBorrador, cursor?: string): Promise<Resultado<Pagina<BorradorAsiento>>> {
+        const query: { limit: number, estado?: EstadoBorrador, cursor?: string } = { limit: 25 }
+        if (estado) {
+            query.estado = estado
+        }
+        if (cursor) {
+            query.cursor = cursor
+        }
+        return resolver(api.GET('/api/v1/libro/borradores', { params: { query } }))
+    }
+
+    /** `POST /libro/borradores/:id/aprobar` (`libro.aprobar_asiento`): 403 `autoaprobacion`, 409 `borrador_decidido`. */
+    function aprobarBorrador(id: number, claveIdempotencia: string): Promise<Resultado<BorradorAsiento>> {
+        return resolver(api.POST('/api/v1/libro/borradores/{id}/aprobar', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    /** `POST /libro/borradores/:id/rechazar` (`libro.rechazar_asiento`) con motivo de 3 a 500 caracteres. */
+    function rechazarBorrador(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<BorradorAsiento>> {
+        return resolver(api.POST('/api/v1/libro/borradores/{id}/rechazar', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
+    return { registrarAsiento, borradores, aprobarBorrador, rechazarBorrador, integridad, diarios, verDiario, cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
 }

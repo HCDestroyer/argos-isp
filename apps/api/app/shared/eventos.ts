@@ -1271,11 +1271,18 @@ export interface CatalogoEventos {
         neto: Dinero
         pagos: number[]
     }
-    /** Efectivo de un turno de caja depositado en el banco (queda en 1.1.11 hasta conciliarse). */
+    /**
+     * Efectivo depositado en el banco (queda en 1.1.11 hasta conciliarse): de un turno abierto
+     * (`origen = turno`) o, desde B1, de la custodia de quien deposita (`origen = custodia`, sin caja).
+     */
     'caja.depositada': {
         deposito_id: number
         empresa_id: number
-        caja_id: number
+        /** null si salió de la custodia */
+        caja_id: number | null
+        origen: 'turno' | 'custodia'
+        /** persona de cuya custodia salió (null desde un turno) */
+        custodio_id: number | null
         /** cuenta bancaria propia (null si el depósito fue a un banco del libro sin cuenta propia) */
         cuenta_bancaria_id: number | null
         /** subcuenta del libro (1.1.02.NN) que recibe el depósito */
@@ -1302,6 +1309,54 @@ export interface CatalogoEventos {
         linea_id: number
         lineas: number
         monto: Dinero
+    }
+    /**
+     * Plan de contabilidad B3 (§5.8): una diferencia al conciliar pasó del tope de quien concilia (o
+     * su motivo siempre pide aprobación) y espera a otro usuario con `bancos.aprobar_diferencia`. No
+     * hay asiento todavía. `aprobadores`: usuarios que pueden aprobarla (para avisarles).
+     */
+    'banco.diferencia_pendiente': {
+        diferencia_id: number
+        empresa_id: number
+        cuenta_id: number
+        linea_id: number
+        sentido: 'menos' | 'mas'
+        monto: Dinero
+        /** ⊂ motivo, tope_linea, tope_dia */
+        razones: string[]
+        solicitado_por: number | null
+        aprobadores: number[]
+    }
+    /** B3: otro usuario aprobó la diferencia; ya tiene su asiento y la línea quedó conciliada. */
+    'banco.diferencia_aprobada': {
+        diferencia_id: number
+        empresa_id: number
+        cuenta_id: number
+        linea_id: number
+        conciliacion_id: number
+        monto: Dinero
+        solicitado_por: number | null
+        aprobado_por: number
+    }
+    /** B3: la diferencia no entra al libro; la línea queda libre. */
+    'banco.diferencia_rechazada': {
+        diferencia_id: number
+        empresa_id: number
+        cuenta_id: number
+        linea_id: number
+        monto: Dinero
+        solicitado_por: number | null
+        rechazado_por: number | null
+        motivo: string
+    }
+    /**
+     * B3: cambió el tope de quien concilia (`motivo_id` null, campos ⊂ tope_linea, tope_dia) o un
+     * motivo de diferencia de la empresa (campos: solo nombres, nunca valores).
+     */
+    'banco.diferencias_config_cambiada': {
+        empresa_id: number
+        motivo_id: number | null
+        campos: string[]
     }
     /**
      * Se creó o editó una cuenta bancaria propia (contrato Iris 0.8.0 §7.8, pedido A26). Al crear,
@@ -1397,6 +1452,52 @@ export interface CatalogoEventos {
         empresa_id: number
         cliente_id: number
         fin_motivo: 'vencida' | 'manual' | 'reactivado' | 'retirado'
+    }
+    /**
+     * B1 del plan de contabilidad (§5.7): el efectivo de un turno cerrado sale de la caja de cobros hacia
+     * una persona. Sin asiento hasta que diga «Recibí» (con `autoentrega` se recibe en el acto).
+     */
+    'caja.entregada': {
+        entrega_id: number
+        empresa_id: number
+        caja_id: number
+        turno_id: number
+        entregado_por: number | null
+        recibe_id: number
+        monto: Dinero
+        autoentrega: boolean
+    }
+    /** «Recibí»: el efectivo pasa a la custodia de quien recibe (`1.1.15 / Caja`). */
+    'caja.entrega_recibida': {
+        entrega_id: number
+        empresa_id: number
+        caja_id: number
+        entregado_por: number | null
+        recibido_por: number
+        monto: Dinero
+        contado: Dinero
+        /** contado − monto, a cargo de quien entregó */
+        diferencia: Dinero
+        /** custodia de quien recibe después de recibir */
+        custodia: Dinero
+        /** pasó el tope de custodia por persona (avisa, no bloquea) */
+        sobre_tope: boolean
+    }
+    /** «No lo recibí»: sin asiento; el efectivo sigue a nombre del cajero y el turno se puede entregar otra vez. */
+    'caja.entrega_rechazada': {
+        entrega_id: number
+        empresa_id: number
+        caja_id: number
+        turno_id: number
+        entregado_por: number | null
+        recibe_id: number
+        monto: Dinero
+        motivo: string
+    }
+    /** Ajustes de cajas y custodia de la empresa (fondo de cambio, plazo, tope, «lo deposito yo»). */
+    'cajas.ajustes_cambiados': {
+        empresa_id: number
+        campos: Array<'fondo_cobros' | 'custodia_plazo_dias' | 'custodia_tope' | 'autoentrega'>
     }
     /** Decisión del PM 20: la caja cambió su formato de impresión (`pos_80` o `carta`). */
     'caja.impresion_cambiada': {
@@ -2090,6 +2191,10 @@ export const EVENTOS = [
     'caja.depositada',
     'banco.extracto_importado',
     'banco.conciliado',
+    'banco.diferencia_pendiente',
+    'banco.diferencia_aprobada',
+    'banco.diferencia_rechazada',
+    'banco.diferencias_config_cambiada',
     'cuenta_bancaria.cambiada',
     'gestion_cobro.registrada',
     'gestion_cobro.adjunto_agregado',
@@ -2100,6 +2205,10 @@ export const EVENTOS = [
     'servicio.pausa_iniciada',
     'servicio.pausa_terminada',
     'caja.impresion_cambiada',
+    'caja.entregada',
+    'caja.entrega_recibida',
+    'caja.entrega_rechazada',
+    'cajas.ajustes_cambiados',
     'banco_origen.cambiado',
     'cartera.castigada',
     'compra.registrada',

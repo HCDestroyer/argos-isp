@@ -36,7 +36,7 @@ function avisarCargos(consumo: ConsumoInventario) {
     const total = cargos.reduce((suma, c) => suma.plus(c.monto), new Decimal(0))
     toast.add({
         title: `Se cobró ${formatearQuetzales(total.toFixed(2))} al cliente`,
-        description: `${cargos.length === 1 ? 'Un cargo único' : `${cargos.length} cargos únicos`} en la factura #${consumo.factura_id ?? cargos[0]?.id}.`,
+        description: `${cargos.length === 1 ? 'Se emitió una factura' : `Se emitieron ${cargos.length} facturas`}: #${consumo.factura_id ?? cargos[0]?.id}.`,
         icon: 'i-lucide-receipt',
         color: 'info',
         duration: 10_000,
@@ -381,7 +381,7 @@ async function enviar(evento: FormSubmitEvent<SalidaOperacion>) {
                     variant="subtle"
                     icon="i-lucide-receipt"
                     title="Se cobra al cliente del servicio"
-                    :description="`Al registrarlo se emite un cargo único${producto?.precio_venta ? ` a ${formatearQuetzales(producto.precio_venta)} cada uno (con IVA)` : ''}, con la fecha de hoy.`"
+                    :description="`Al registrarlo se emite una factura${producto?.precio_venta ? ` a ${formatearQuetzales(producto.precio_venta)} cada uno (con IVA)` : ''}, con la fecha de hoy.`"
                     data-prueba="mov-aviso-cobro"
                 />
                 <UFormField

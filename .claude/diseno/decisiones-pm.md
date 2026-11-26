@@ -59,6 +59,20 @@ Sin cambiar ninguna decisión; así quedaron en los tableros y lo que falta conf
 - Promociones de velocidad: pestaña dentro de Red › Planes (no entrada propia en el menú).
 - Días de gracia (decisión 21): campo al emitir facturas de meses pasados, no ajuste fijo de cobro.
 
+## SmartOLT y ACS (aprobado por el PM el 25 nov 2026)
+
+Tableros de la página «Pendientes del backend» (generador `generadores/pend_olt_acs.py`), según el contrato `contratos/equipos-olt-acs.md`. Todos en claro y oscuro, escritorio y teléfono. Partimos de las decisiones ya tomadas por el PM: SmartOLT y ACS son independientes (una empresa puede tener uno, otro, los dos o ninguno); SmartOLT admite varias instancias (subdominios), una puede ser compartida y solo la administra quien tiene acceso a todas las empresas; cada instancia trae varias OLT que se ligan a las OLT de la red de Argos; un ACS por empresa; Wi-Fi y PPPoE de la ONU solo con ACS; las credenciales nunca se ven (`***` con «Cambiar»).
+
+- `PendSmartoltLista` (+ `PendSmartoltMovil`): Configuración › Integraciones › SmartOLT. Lista con subdominio, empresa o «Compartida», estado (probada, falla, sin probar, más «Apagada»), número de OLT y última prueba; «Agregar instancia»; vacía; error con «Reintentar» sin números inventados.
+- `PendSmartoltDetalle`: datos, token `***`, «Probar conexión» (también trae las OLT), «Sincronizar OLT», encender o apagar, empresas que la usan, eliminar; sus OLT con selector para ligar cada una a una OLT de Argos (las ya ligadas o de otra empresa salen deshabilitadas con el motivo). Vista de solo lectura para una instancia compartida sin acceso global.
+- `PendSmartoltForm` (+ móvil): formulario en página (más de 3 campos): nombre, subdominio, token, una empresa o compartida, nota, encender al guardar; errores 409 (subdominio repetido, otra persona editó) y 403 (compartida sin acceso global).
+- `PendAcs` (+ móvil): ACS de la empresa activa: probado, falla, apagado, sin configurar y edición en página (URL, usuario, clave `***`, CA, PPPoE por ACS). Siempre el aviso «Sin ACS no se configuran Wi-Fi ni PPPoE de la ONU».
+- `PendEquipoServicio` (+ móvil): ficha del servicio › Equipo: cuenta y OLT de SmartOLT que usa el servicio, Wi-Fi y PPPoE por ACS, y qué pasa si no hay ACS, si la OLT no está ligada (se busca la serie en las cuentas de la empresa) o si SmartOLT no responde (el ACS sigue mostrándose).
+
+Respuestas del PM (25 nov 2026):
+1. **Empresas de una instancia:** una empresa o compartida con todas, como en el tablero.
+2. **Nota:** el campo «Nota» del formulario se mantiene (columna nueva `nota` en la instancia).
+3. Tableros aprobados tal como están para construirlos.
 
 ## Contabilidad (pendiente de aprobación del PM)
 
@@ -130,17 +144,32 @@ Por decidir ahora (plan §8.2): N1 caja sin factura con dos tipos; N2 quitar el 
   - la caja chica se repone desde la custodia o desde el banco (N5);
   - el faltante o sobrante al recibir queda a nombre de quien entregó, y Argos no lo descuenta de planilla (N8).
 
-## SmartOLT y ACS (aprobado por el PM el 25 nov 2026)
+## Menú lateral, Ajustes y perfil (pendiente de aprobación del PM)
 
-Tableros de la página «Pendientes del backend» (generador `generadores/pend_olt_acs.py`), según el contrato `contratos/equipos-olt-acs.md`. Todos en claro y oscuro, escritorio y teléfono. Partimos de las decisiones ya tomadas por el PM: SmartOLT y ACS son independientes (una empresa puede tener uno, otro, los dos o ninguno); SmartOLT admite varias instancias (subdominios), una puede ser compartida y solo la administra quien tiene acceso a todas las empresas; cada instancia trae varias OLT que se ligan a las OLT de la red de Argos; un ACS por empresa; Wi-Fi y PPPoE de la ONU solo con ACS; las credenciales nunca se ven (`***` con «Cambiar»).
+Propuesta del 26 nov 2026 al pedido del PM sobre el menú lateral cortado, el menú de Ajustes y el menú del perfil en el teléfono. Tableros `MenuLateral`, `AjustesEscritorio`, `AjustesMovil` y `PerfilDrawer`; imágenes en `imagenes/menu-ajustes/`; diagnóstico, auditoría y lotes en `plan-menu-ajustes.md`. **Nada de esto es regla hasta que el PM lo apruebe**, salvo el primer punto, que es un arreglo.
 
-- `PendSmartoltLista` (+ `PendSmartoltMovil`): Configuración › Integraciones › SmartOLT. Lista con subdominio, empresa o «Compartida», estado (probada, falla, sin probar, más «Apagada»), número de OLT y última prueba; «Agregar instancia»; vacía; error con «Reintentar» sin números inventados.
-- `PendSmartoltDetalle`: datos, token `***`, «Probar conexión» (también trae las OLT), «Sincronizar OLT», encender o apagar, empresas que la usan, eliminar; sus OLT con selector para ligar cada una a una OLT de Argos (las ya ligadas o de otra empresa salen deshabilitadas con el motivo). Vista de solo lectura para una instancia compartida sin acceso global.
-- `PendSmartoltForm` (+ móvil): formulario en página (más de 3 campos): nombre, subdominio, token, una empresa o compartida, nota, encender al guardar; errores 409 (subdominio repetido, otra persona editó) y 403 (compartida sin acceso global).
-- `PendAcs` (+ móvil): ACS de la empresa activa: probado, falla, apagado, sin configurar y edición en página (URL, usuario, clave `***`, CA, PPPoE por ACS). Siempre el aviso «Sin ACS no se configuran Wi-Fi ni PPPoE de la ONU».
-- `PendEquipoServicio` (+ móvil): ficha del servicio › Equipo: cuenta y OLT de SmartOLT que usa el servicio, Wi-Fi y PPPoE por ACS, y qué pasa si no hay ACS, si la OLT no está ligada (se busca la serie en las cuentas de la empresa) o si SmartOLT no responde (el ACS sigue mostrándose).
+- **Menú lateral cortado (arreglo, no espera aprobación):** la isla del menú queda a 16 px de los cuatro bordes en cualquier alto de pantalla y «Ajustes» se ve entero.
+- **Propuesto, por aprobar:**
+  - «Ajustes» es una sola entrada fija abajo del menú. Ya no despliega su lista dentro del menú.
+  - Ajustes se ordena en 8 grupos por tarea, y cada pantalla aparece una sola vez: Empresa y fiscal; Facturación y cobro; Clientes y portal; Red y equipos; Comunicación e integraciones; Usuarios y seguridad; Apariencia y reportes; Sistema.
+  - Dentro de Ajustes hay una lista propia con todos los grupos y un solo buscador, que también encuentra por lo que hay dentro («correo», «NIT», «mora», «logo»). En el teléfono, esa lista es la pantalla de Ajustes y cada ajuste se abre a pantalla completa con «‹ Ajustes».
+  - Lo que un usuario no puede abrir no aparece, y un grupo sin nada permitido tampoco.
+  - En la computadora, «Ajustes» abre la última pantalla usada; desaparece la página de tarjetas.
+  - Todo se llama «Ajustes» (hoy el menú dice «Ajustes» y la pantalla «Configuración»).
+  - En el teléfono, el círculo de la cuenta abre un panel desde abajo (drawer) con la cuenta, la empresa activa, el tema, Mi cuenta, Ayuda, Qué cambió y Cerrar sesión. El menú «Más» sigue a pantalla completa y lleva arriba una fila de la cuenta que abre ese mismo panel.
+- **Cambia respecto a lo aprobado el 21 nov:** en los tableros `OperConfig*`, la isla de la izquierda listaba secciones y sus pantallas iban en pestañas. Con esta propuesta la isla lista las pantallas por grupo y esas pestañas desaparecen (quedan las que dividen una misma pantalla).
+- **Preguntas al PM:**
+  1. ¿Aprueba los 8 grupos y los nombres nuevos («Datos de la empresa», «Régimen e impuestos», «Conceptos y adicionales», «Corte, caídas y retiro», «Canales de aviso», «Registro de fallos»)?
+  2. ¿«Ajustes» en todas partes en lugar de «Configuración»?
+  3. ¿Que «Ajustes» abra directo la última pantalla usada, sin la página de tarjetas?
+  4. ¿El panel de la cuenta desde abajo y, además, la fila de la cuenta arriba de «Más»?
+  5. ¿«Sistema» (salud, registro, almacenamiento, tareas) se queda dentro de Ajustes?
 
-Respuestas del PM (25 nov 2026):
-1. **Empresas de una instancia:** una empresa o compartida con todas, como en el tablero.
-2. **Nota:** el campo «Nota» del formulario se mantiene (columna nueva `nota` en la instancia).
-3. Tableros aprobados tal como están para construirlos.
+### Respuestas del PM (26 nov 2026): menú lateral, Ajustes y perfil
+
+- **Aprobado:** los 8 grupos de Ajustes, con sus nombres: Empresa y fiscal · Facturación y cobro · Clientes y portal · Red y equipos · Comunicación e integraciones · Usuarios y seguridad · Apariencia y reportes · Sistema. «Sistema» queda dentro de Ajustes.
+- **Nombre:** «Ajustes» en todas partes (menú, migas y títulos), en lugar de «Configuración».
+- **Entrada en computadora:** «Ajustes» abre una **página de tarjetas** por grupo. No abre la última pantalla usada (el PM descartó esa opción).
+  - La página de tarjetas es el índice: una tarjeta por grupo, con sus ajustes y el buscador arriba.
+  - Dentro de cada ajuste se mantiene la lista de grupos a la izquierda.
+- **Teléfono:** el menú de la cuenta es un panel que sube desde abajo (`UDrawer`). Arriba del menú «Más» hay además una fila de la cuenta que abre ese mismo panel.

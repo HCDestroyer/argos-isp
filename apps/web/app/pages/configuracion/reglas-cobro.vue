@@ -123,8 +123,6 @@ onMounted(recargar)
 <template>
     <ConfiguracionMarco
         id="configuracion-reglas-cobro"
-        titulo="Facturación y cobro"
-        descripcion="Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos"
         empresas
     >
         <UAlert

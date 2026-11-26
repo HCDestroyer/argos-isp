@@ -14,7 +14,7 @@ El catálogo de bancos de donde viene el dinero de una transferencia o un ACH. E
 - **Agregar** un banco: `bancos_origen.crear`. **Editar** (nombre o si sale en las listas): `bancos_origen.editar`. Los dos cambian el catálogo de todas las empresas.
 - **Ocultar** y **mostrar** en la empresa activa: `bancos_origen.ocultar` y `bancos_origen.mostrar`.
 
-Se llega desde **Configuración → Facturación y cobro → Bancos de origen**.
+Se llega desde **Ajustes → Facturación y cobro → Bancos de origen**.
 
 ## Qué ves
 

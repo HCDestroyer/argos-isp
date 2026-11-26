@@ -11,6 +11,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     nota_credito: { etiqueta: 'Nota de crédito', icono: 'i-lucide-file-minus' },
     egreso: { etiqueta: 'Egreso', icono: 'i-lucide-arrow-up-right' },
     cierre_caja: { etiqueta: 'Cierre de caja', icono: 'i-lucide-lock' },
+    entrega_caja: { etiqueta: 'Entrega de caja recibida', icono: 'i-lucide-hand-coins' },
     ajuste: { etiqueta: 'Ajuste', icono: 'i-lucide-scale' },
     reclasificacion: { etiqueta: 'Reclasificación de IVA', icono: 'i-lucide-arrow-left-right' },
     liquidacion_cobro: { etiqueta: 'Liquidación de cobros', icono: 'i-lucide-hand-coins' },
@@ -29,6 +30,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
     sorteo: { etiqueta: 'Premio de sorteo', icono: 'i-lucide-ticket' },
     bonificacion: { etiqueta: 'Bonificación', icono: 'i-lucide-badge-percent' },
+    diferencia_conciliacion: { etiqueta: 'Diferencia al conciliar', icono: 'i-lucide-git-compare' },
 }
 
 interface OrigenVisual {

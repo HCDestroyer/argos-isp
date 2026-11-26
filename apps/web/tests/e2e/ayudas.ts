@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { HOY_FIXTURES } from '../../fixtures/facturacion/datos'
+import { SECCIONES_CONFIGURACION } from '../../app/utils/configuracionSecciones'
 
 /**
  * Piezas comunes de las pruebas de flujo. En modo fixtures los datos viven en memoria: después
@@ -41,7 +42,8 @@ export async function menu(page: Page) {
     const abrir = botonMasIsla(page)
     // Esperar a que el layout pinte el menú (escritorio) o la isla que lo abre (teléfono).
     await expect(lateral.getByRole('link', { name: 'Inicio' }).or(abrir).first()).toBeVisible()
-    if (!(await lateral.isVisible())) {
+    const yaAbierto = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Inicio' }) })
+    if (!(await lateral.isVisible()) && !(await yaAbierto.isVisible())) {
         await abrir.click()
     }
     else if (await lateral.locator('[data-prueba="menu-rail"]').isVisible()) {
@@ -60,7 +62,7 @@ export async function menu(page: Page) {
  * pruebas vean cada enlace permitido. Un grupo sin secciones permitidas no existe.
  */
 export async function expandirGrupos(contenedor: Locator): Promise<void> {
-    const cerrados = contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]')
+    const cerrados = contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]')
     while (await cerrados.count()) {
         await cerrados.first().click()
     }
@@ -77,10 +79,47 @@ async function esperarQuieto(elemento: Locator): Promise<void> {
     }, { intervals: [100] }).toBe(true)
 }
 
-/** Elige la empresa activa desde el menú del usuario (barra superior). */
-export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
+/** Si la cuenta se abre como panel desde abajo (teléfono, bajo 1024 px) o como menú (computadora). */
+function cuentaEnPanel(page: Page): boolean {
+    return (page.viewportSize()?.width ?? 1280) < 1024
+}
+
+/** Abre la cuenta desde el círculo: el menú en la computadora, el panel desde abajo en el teléfono. */
+export async function abrirCuenta(page: Page): Promise<void> {
     await page.locator('[data-prueba="menu-usuario"]').click()
-    await page.getByRole('menuitemcheckbox', { name: nombre }).click()
+    if (cuentaEnPanel(page)) {
+        await expect(page.locator('[data-prueba="cerrar-cuenta"]')).toBeVisible()
+    }
+}
+
+/** Una acción de la cuenta («Mi cuenta», «Qué cambió»…): opción del menú o fila del panel. */
+export function opcionCuenta(page: Page, nombre: string | RegExp): Locator {
+    return cuentaEnPanel(page)
+        ? page.getByRole('dialog', { name: 'Tu cuenta' }).getByRole('button', { name: nombre })
+        : page.getByRole('menuitem', { name: nombre })
+}
+
+/** Las empresas para elegir en la cuenta: casillas del menú o la lista del panel. */
+export function opcionesEmpresaCuenta(page: Page, nombre: string | RegExp): Locator {
+    return cuentaEnPanel(page)
+        ? page.locator('[data-prueba="cuenta-empresas"]').getByRole('radio', { name: nombre })
+        : page.getByRole('menuitemcheckbox', { name: nombre })
+}
+
+/** Elige la empresa activa desde la cuenta (menú en la computadora, panel desde abajo en el teléfono). */
+export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
+    await abrirCuenta(page)
+    const opcion = opcionesEmpresaCuenta(page, nombre)
+    if (cuentaEnPanel(page) && (await opcion.getAttribute('aria-checked')) === 'true') {
+        // Ya es la activa: en el panel no hay nada que elegir, se cierra.
+        await page.locator('[data-prueba="cerrar-cuenta"]').click()
+    }
+    else {
+        await opcion.click()
+    }
+    if (cuentaEnPanel(page)) {
+        await expect(page.locator('[data-prueba="cerrar-cuenta"]')).toHaveCount(0)
+    }
     await expect(empresaActiva(page)).toContainText(nombre)
 }
 
@@ -89,8 +128,14 @@ export function empresaActiva(page: Page): Locator {
     return page.locator('[data-prueba="empresa-activa"]').first()
 }
 
-/** Va a una sección por el menú lateral. */
+/** Nombres de los ajustes: no están en el menú, se llega por la página de Ajustes. */
+const AJUSTES = new Set(SECCIONES_CONFIGURACION.flatMap(grupo => grupo.paginas.map(pagina => pagina.etiqueta)))
+
+/** Va a una sección por el menú lateral (a un ajuste, por la página de Ajustes: `irAjuste`). */
 export async function ir(page: Page, seccion: string, url: RegExp): Promise<void> {
+    if (AJUSTES.has(seccion)) {
+        return irAjuste(page, seccion, url)
+    }
     const contenedor = await menu(page)
     const enlace = contenedor.getByRole('link', { name: seccion, exact: true })
     // Los grupos se abren con animación: con el menú largo, un enlace del final (Integraciones)
@@ -111,13 +156,34 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
             url: page.url(),
             dialogos: await page.getByRole('dialog').count(),
             lateralVisible: await page.locator('#dashboard-sidebar-principal').isVisible(),
-            gruposPlegados: await contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]').count().catch(() => -1),
+            gruposPlegados: await contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]').count().catch(() => -1),
             enlaceAntes: antes,
             enlaceDespues: await enlace.boundingBox({ timeout: 1000 }).catch(() => null),
         }
         await test.info().attach('diagnostico-ir', { body: JSON.stringify(diagnostico, null, 2), contentType: 'application/json' })
         throw error
     }
+}
+
+/** Abre la página de Ajustes desde el menú (una sola entrada «Ajustes»). */
+export async function abrirAjustes(page: Page): Promise<void> {
+    await ir(page, 'Ajustes', /\/configuracion$/)
+    await expect(page.locator('[data-prueba="indice-ajustes"]')).toBeVisible()
+}
+
+/**
+ * Va a un ajuste: desde la página de Ajustes (tarjetas en la computadora, lista en el teléfono) o,
+ * si ya está dentro de un ajuste en la computadora, desde la lista de la izquierda. Un clic.
+ */
+export async function irAjuste(page: Page, nombre: string, url: RegExp): Promise<void> {
+    const lateral = page.locator('[data-prueba="navegacion-ajustes"]')
+    const indice = page.locator('[data-prueba="indice-ajustes"]')
+    if (!(await lateral.isVisible()) && !(await indice.isVisible())) {
+        await abrirAjustes(page)
+    }
+    const contenedor = (await lateral.isVisible()) ? lateral : indice
+    await contenedor.getByRole('link', { name: nombre, exact: true }).click()
+    await expect(page).toHaveURL(url, { timeout: 20_000 })
 }
 
 /** Abre una pestaña de la ficha del router («Resumen», «Conexión», «Red e IPs», «Velocidad»…). */

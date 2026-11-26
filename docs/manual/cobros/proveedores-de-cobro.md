@@ -13,7 +13,7 @@ Un proveedor de cobro es quien cobra por ti y te liquida después: una pasarela 
 - **Ver:** `bancos.ver` (`admin`, `contabilidad`, `lectura`).
 - **Crear y editar:** `cobros.configurar` (`admin`, `contabilidad`).
 
-Se llega desde **Configuración → Facturación y cobro → Proveedores de cobro**.
+Se llega desde **Ajustes → Facturación y cobro → Proveedores de cobro**.
 
 ## Qué ves
 

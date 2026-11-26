@@ -10,7 +10,7 @@ Un nodo del portal es un portal del cliente (con su página de corte) instalado 
 
 ## Quién la usa
 
-Permiso `nodos_portal.administrar` (solo `admin`). Está en **Configuración → Red y portal → Nodos del portal**.
+Permiso `nodos_portal.administrar` (solo `admin`). Está en **Ajustes → Red y equipos → Corte, caídas y retiro → Nodos del portal**.
 
 ## Qué ves
 
