@@ -297,7 +297,7 @@ describe('FEL · pantallas', () => {
         useUsuarioActual().value = null
     })
 
-    it('Configuración → FEL: modo, credenciales «configuradas» sin secretos y 422 avisos_por_certificar con la cuenta', async () => {
+    it('Ajustes → Factura electrónica (FEL): modo, credenciales «configuradas» sin secretos y 422 avisos_por_certificar con la cuenta', async () => {
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
         await esperar(() => expect(vista.find('[data-prueba="fel-modo"]').text()).toBe('Obligatoria'))
         const pruebas = vista.find('[data-credenciales="pruebas"]')
@@ -318,7 +318,7 @@ describe('FEL · pantallas', () => {
         expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').text()).toMatch(/\d+ avisos de cobro sin certificar/)
     })
 
-    it('Configuración → FEL: la contingencia activa se ve en el aviso con su fecha y su motivo', async () => {
+    it('Ajustes → Factura electrónica (FEL): la contingencia activa se ve en el aviso con su fecha y su motivo', async () => {
         const activa = await useFel().cambiarContingencia(true, 'El certificador no responde', nuevaClaveIdempotencia(), 1)
         expect(activa.ok).toBe(true)
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
@@ -328,7 +328,7 @@ describe('FEL · pantallas', () => {
         expect(contingencia.text()).toContain('Motivo: El certificador no responde')
     })
 
-    it('Configuración → FEL con error de la API: el aviso con «Reintentar», sin datos inventados', async () => {
+    it('Ajustes → Factura electrónica (FEL) con error de la API: el aviso con «Reintentar», sin datos inventados', async () => {
         simularFalla('GET /api/v1/fel/configuracion', 501)
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
         await esperar(() => expect(vista.find('[data-prueba="fel-error"]').text()).toContain('Reintentar'))

@@ -14,7 +14,7 @@ import PaginaPortalCorte from '~/pages/configuracion/portal-corte.vue'
 import { esperar } from '../ayudas/esperar'
 
 /**
- * Configuración → Portal de corte (`GET`/`PUT /corte/configuracion`): IPv4, IPv6 y puerto del NAT de
+ * Ajustes → Corte, caídas y retiro (`GET`/`PUT /corte/configuracion`): IPv4, IPv6 y puerto del NAT de
  * corte y modo de suspensión. Esquema espejo, fixtures fieles a la API, 409 con «Recargar», errores
  * con «Reintentar», confirmación al reescribir los routers y solo lectura sin `portal_corte.configurar`.
  */

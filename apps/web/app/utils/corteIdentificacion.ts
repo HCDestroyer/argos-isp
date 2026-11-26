@@ -139,8 +139,8 @@ export function presentarCodigoCorte(codigo: CodigoCorteServicio, ahora: number 
 export type MotivoSinCorteTunel = NonNullable<Schema<'Router'>['corte_por_tunel_motivo']>
 
 export const MOTIVOS_SIN_CORTE_TUNEL: Record<MotivoSinCorteTunel, string> = {
-    wireguard_apagado: 'El túnel WireGuard está apagado en el servidor. El corte va a la IP del portal de Configuración → Portal de corte.',
-    tunel_corte_apagado: 'El corte por el túnel está desactivado en el servidor (PORTAL_CORTE_TUNEL=0). El corte va a la IP del portal de Configuración → Portal de corte.',
+    wireguard_apagado: 'El túnel WireGuard está apagado en el servidor. El corte va a la IP del portal de Ajustes → Corte, caídas y retiro.',
+    tunel_corte_apagado: 'El corte por el túnel está desactivado en el servidor (PORTAL_CORTE_TUNEL=0). El corte va a la IP del portal de Ajustes → Corte, caídas y retiro.',
     router_inactivo: 'El router está desactivado.',
     modo_codigo: 'El router identifica por código: el corte va al proxy del propio router y no necesita el túnel.',
     sin_tunel: 'El router no está conectado al túnel WireGuard. Genera el script de conexión (pestaña Conexión) y pega su clave pública.',

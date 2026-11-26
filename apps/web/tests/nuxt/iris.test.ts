@@ -10,7 +10,7 @@ import PaginaIris from '~/pages/configuracion/integraciones/iris.vue'
 import PaginaIntegraciones from '~/pages/configuracion/integraciones/index.vue'
 import { esperar } from '../ayudas/esperar'
 
-/** Configuración → Integraciones → Iris (`contratos/iris.md` §1 y §2.3). */
+/** Ajustes → Integraciones → Iris (`contratos/iris.md` §1 y §2.3). */
 
 const conApp = (componente: Component) => defineComponent({
     render: () => h(UApp, null, { default: () => h(componente) }),

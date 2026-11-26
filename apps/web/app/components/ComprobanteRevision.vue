@@ -663,7 +663,7 @@ defineExpose({ comprobante })
                     variant="subtle"
                     icon="i-lucide-landmark"
                     :title="`${comprobante.cuenta_bancaria_nombre}: cuenta desactivada`"
-                    description="El cliente depositó en una cuenta que ya no recibe pagos. Pide que la vuelvan a activar en Configuración → Cuentas bancarias, o rechaza el comprobante y explícale al cliente dónde depositar."
+                    description="El cliente depositó en una cuenta que ya no recibe pagos. Pide que la vuelvan a activar en Ajustes → Cuentas bancarias, o rechaza el comprobante y explícale al cliente dónde depositar."
                     data-prueba="cuenta-inactiva"
                 />
                 <template v-else-if="problemaAprobar">

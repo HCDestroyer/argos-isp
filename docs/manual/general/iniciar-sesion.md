@@ -11,7 +11,7 @@ Entras al panel con el correo que te dio tu administrador y tu contraseña. Si l
 
 ## Quién la usa
 
-Cualquier persona con usuario del panel; no hace falta permiso. Que se pueda recuperar la contraseña por correo lo decide un administrador en **Configuración → Red y portal → Retiro, historial de IP y acceso** («Recuperar la contraseña por correo», encendido de fábrica).
+Cualquier persona con usuario del panel; no hace falta permiso. Que se pueda recuperar la contraseña por correo lo decide un administrador en **Ajustes → Red y equipos → Corte, caídas y retiro → Retiro, historial de IP y acceso** («Recuperar la contraseña por correo», encendido de fábrica).
 
 ## Qué ves
 

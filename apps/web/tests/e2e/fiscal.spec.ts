@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { elegirEmpresa, entrar, ir, llenarFecha } from './ayudas'
 
 /**
- * Configuración → Fiscal (localización GT, fase 2): régimen con su aviso, parámetros con vigencia
+ * Ajustes → Régimen e impuestos (localización GT, fase 2): régimen con su aviso, parámetros con vigencia
  * y la marca «confirmar con contador», e impuestos con la tasa en positivo. Fixtures: la empresa 1
  * (ArgosNet) tiene cerrado 2026-09, así que una vigencia en ese mes responde 422.
  */

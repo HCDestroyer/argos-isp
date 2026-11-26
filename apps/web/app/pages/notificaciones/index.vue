@@ -6,7 +6,7 @@ import type { SelectItem, TabsItem, TableColumn } from '@nuxt/ui'
  * Avisos a clientes y al equipo (A6, brief semana 2): plantillas por evento y canal con su editor
  * y las variables del evento, los tres recordatorios de pago y el registro de envíos con su
  * estado, error o motivo. Leer pide `notificaciones.ver`; editar, `notificaciones.editar`. Los
- * canales (SMTP, bot de Telegram) se configuran en Configuración → Notificaciones.
+ * canales (SMTP, bot de Telegram) se configuran en Ajustes → Canales de aviso.
  */
 definePageMeta({ permiso: 'notificaciones.ver' })
 

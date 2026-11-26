@@ -7,7 +7,7 @@ import { erroresDeFormulario } from './resultado'
  * una cuenta bancaria propia que alguien desactivó. Antes salía como `exists`, igual que una cuenta
  * inexistente; ahora el panel lo explica en llano.
  */
-export const MENSAJE_CUENTA_INACTIVA = 'Esta cuenta bancaria está desactivada y ya no recibe pagos. Elige otra cuenta, o pide que la vuelvan a activar en Configuración → Cuentas bancarias.'
+export const MENSAJE_CUENTA_INACTIVA = 'Esta cuenta bancaria está desactivada y ya no recibe pagos. Elige otra cuenta, o pide que la vuelvan a activar en Ajustes → Cuentas bancarias.'
 
 export function esCuentaInactiva(problema: Problem | null | undefined): boolean {
     return problema?.status === 422 && (problema.errors ?? []).some(e => e.field === 'cuenta_bancaria_id' && e.rule === 'inactiva')

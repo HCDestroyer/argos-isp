@@ -83,13 +83,16 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
   - **Inventario 0.14.0**: declarar no recuperado con los intentos y su verificación de Iris, decidir los anteriores y el progreso hacia el mínimo (`PendIntentosRecuperacion`); técnicos de Iris con sus vínculos y «Conciliar» (`PendVinculosTecnicos`).
   - **Inicio de sesión** (`OperLogin`, `OperLoginMovil`): recuperar (correo), enviado (misma respuesta exista o no), demasiadas solicitudes, nueva contraseña (cierra las sesiones), listo, enlace vencido y recuperación apagada.
 
-## Menú lateral, Ajustes y perfil (propuesta del 26 nov 2026, pendiente de aprobación)
+## Menú lateral, Ajustes y perfil (aprobado por el PM el 26 nov 2026)
 
 - Tableros `MenuLateral`, `AjustesEscritorio`, `AjustesMovil` y `PerfilDrawer` (página «Menú lateral, Ajustes y perfil» de `canvas.json`). Generador: `generadores/menu_ajustes.py` (`python3 menu_ajustes.py` escribe en `tableros/`).
 - Imágenes ya dibujadas en `imagenes/menu-ajustes/`; en `antes/`, las capturas del panel real con las que se hizo el diagnóstico.
 - Estados para `render.js`: `{"tema":"osc"}` en los cuatro; `MenuLateral` `{"modo":"expandido"}`; `AjustesEscritorio` `{"v":"buscar"}` y `{"v":"rol"}`; `AjustesMovil` `{"p":"buscar"}` y `{"p":"pagina"}`; `PerfilDrawer` `{"p":"mas"}` y `{"p":"una"}` (una sola empresa).
-- Diagnóstico del corte, auditoría de Ajustes, justificación y lotes: `plan-menu-ajustes.md`. Lo que falta aprobar: última sección de `decisiones-pm.md`.
-- No es diseño aprobado todavía: el código no lo sigue hasta que el PM lo confirme (salvo el arreglo del corte del menú).
+- Diagnóstico del corte, auditoría de Ajustes, justificación y lotes: `plan-menu-ajustes.md`. Respuestas del PM: «Respuestas del PM (26 nov 2026)» al final de `decisiones-pm.md`, que mandan sobre el plan donde difieren.
+- Aprobado con un cambio: en la computadora, «Ajustes» abre una **página de tarjetas** por grupo con el buscador arriba (no la última pantalla usada, como dibuja `AjustesEscritorio`). Esa página no tiene tablero propio: sigue la lista agrupada de `AjustesMovil`, con una tarjeta por grupo desde 1024 px. Dentro de cada ajuste sí es `AjustesEscritorio`.
+- Todo se llama «Ajustes»; las rutas siguen en `/configuracion/…`.
+- Cambia respecto a lo aprobado el 21 nov: en los tableros `OperConfig*` la isla de la izquierda listaba secciones y sus pantallas iban en pestañas; ahora la isla lista las pantallas por grupo (`AjustesNavegacion`) y esas pestañas ya no existen. Quedan solo las que dividen una misma pantalla (las tres de «Corte, caídas y retiro»).
+- Implementado en el panel (lotes 1 a 6 de `plan-menu-ajustes.md`): `configuracionSecciones.ts`, `AjustesNavegacion`, `ConfiguracionMarco`, `useMenuCuenta` y `CuentaDrawer`.
 
 ## Portal del cliente
 

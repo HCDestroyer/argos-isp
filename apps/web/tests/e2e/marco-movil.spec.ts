@@ -75,7 +75,7 @@ test('ficha: «Copiar perfil» de QoS es la acción principal y abre su ventana'
     await expect(page.getByRole('dialog')).toBeVisible()
 })
 
-test('formulario de Configuración: «Descartar / Guardar» fijos abajo y el último campo alcanzable', async ({ page }) => {
+test('formulario de Ajustes: «Descartar / Guardar» fijos abajo y el último campo alcanzable', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/configuracion/empresa')
     const pie = page.locator('[data-prueba="pie-configuracion"]')

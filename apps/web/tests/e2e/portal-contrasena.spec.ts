@@ -3,7 +3,7 @@ import { abrirAjustes, elegirEmpresa, entrar, irAjuste, verDatosCliente } from '
 
 /**
  * Contraseña del portal (pedido del PM; contrato A5), en modo fixtures, a 1280 y 390 px:
- * 1. Configuración → Contraseña del portal: con «Todas las empresas» pide elegir una; Fibra del Sur
+ * 1. Ajustes → Contraseña del portal: con «Todas las empresas» pide elegir una; Fibra del Sur
  *    no tiene: se configura (nunca se vuelve a mostrar) y queda «Configurada el …».
  * 2. Ficha del cliente: María José usa contraseña propia; «Restaurar contraseña por defecto» confirma
  *    y avisa de las 2 sesiones cerradas. El cajero ve el estado pero ni el botón ni la configuración.

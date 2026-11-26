@@ -2,7 +2,7 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Configuración → Integraciones (tablero OperConfigIntegraciones): a la izquierda, los sistemas
+ * Ajustes → Integraciones (tablero OperConfigIntegraciones): a la izquierda, los sistemas
  * con los que Argos habla y su estado; a la derecha, el elegido (`?ver=`). Iris y Horus se
  * configuran en su pantalla; pasarela y FEL muestran su estado y llevan a su configuración;
  * SmartOLT y GenieACS se configuran aquí por empresa (`ConfiguracionEquipos`): credenciales

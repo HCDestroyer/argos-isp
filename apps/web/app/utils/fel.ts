@@ -73,7 +73,7 @@ export const MODOS_FEL: Record<ModoFel, { etiqueta: string, color: BadgeColor, i
 }
 
 /** Aviso permanente con la FEL desactivada (contrato §8.3; fila 17 de §15: confirmar con contador). */
-export const AVISO_FEL_DESACTIVADA = 'La FEL es obligatoria para el régimen general: sin ella las facturas no tienen validez fiscal. Actívala en Configuración → FEL.'
+export const AVISO_FEL_DESACTIVADA = 'La FEL es obligatoria para el régimen general: sin ella las facturas no tienen validez fiscal. Actívala en Ajustes → Factura electrónica (FEL).'
 
 export const AMBIENTES_FEL: Record<AmbienteFel, string> = {
     pruebas: 'Pruebas',

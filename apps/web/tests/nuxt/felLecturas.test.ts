@@ -141,7 +141,7 @@ describe('FEL · lecturas nuevas', () => {
         await esperar(() => expect(document.querySelector('[data-prueba="cierre-ncre"]')?.textContent).toContain(`Nota de crédito #${ncre.documento_id}`))
     })
 
-    it('Configuración → FEL usa el catálogo: el falso no se ofrece en producción', async () => {
+    it('Ajustes → Factura electrónica (FEL) usa el catálogo: el falso no se ofrece en producción', async () => {
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
         await esperar(() => expect(vista.find('[data-prueba="fel-modo"]').exists()).toBe(true))
         expect(vista.text()).toContain('Certificador de laboratorio (falso)')

@@ -132,7 +132,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                         name="codigo_establecimiento"
                         label="Establecimiento (SAT)"
                         :hint="editando ? undefined : 'Para FEL'"
-                        :help="editando ? 'Se cambia en Configuración → Fiscal → Establecimientos.' : undefined"
+                        :help="editando ? 'Se cambia en Ajustes → Régimen e impuestos → Establecimientos.' : undefined"
                     >
                         <UInput
                             v-model="estado.codigo_establecimiento"
@@ -180,7 +180,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                     <UFormField
                         name="regimen_isr"
                         label="Régimen de ISR"
-                        :help="editando ? 'Se cambia en Configuración → Fiscal, con su vigencia y el aviso a la SAT.' : undefined"
+                        :help="editando ? 'Se cambia en Ajustes → Régimen e impuestos, con su vigencia y el aviso a la SAT.' : undefined"
                         class="sm:col-span-2"
                     >
                         <USelect

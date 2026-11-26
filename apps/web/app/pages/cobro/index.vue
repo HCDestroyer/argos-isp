@@ -1751,7 +1751,7 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                                 label="Banco de origen"
                                 name="banco_origen_id"
                                 required
-                                help="De la lista de bancos de Configuración"
+                                help="De la lista de bancos de Ajustes"
                             >
                                 <USelectMenu
                                     v-model="bancoOrigen"

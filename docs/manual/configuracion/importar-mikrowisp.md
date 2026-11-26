@@ -12,7 +12,7 @@ Trae a ArgosIsp los datos de tu sistema anterior: clientes, servicios, planes, f
 
 - Solo usuarios con el rol `admin`.
 
-Se llega desde **Configuración → Importar datos → Importar desde Mikrowisp**.
+Se llega desde **Ajustes → Comunicación e integraciones → Importar desde Mikrowisp**.
 
 ## Pasos
 

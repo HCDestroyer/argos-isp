@@ -11,7 +11,7 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  */
 definePageMeta({ permiso: 'reportes.ver' })
 
-useHead({ title: 'Reportes · Configuración · ArgosIsp' })
+useHead({ title: 'Ajustes de reportes · Ajustes · ArgosIsp' })
 
 const { puede } = usePermisos()
 const toast = useToast()

@@ -3,7 +3,7 @@ import type { Problem } from '@argosisp/contracts'
 import type { FormSubmitEvent } from '@nuxt/ui'
 
 /**
- * Configuración → Contraseña del portal (A5): la contraseña por defecto con la que entran al
+ * Ajustes → Contraseña del portal (A5): la contraseña por defecto con la que entran al
  * portal los clientes de la empresa activa que aún no eligieron la suya. La API nunca la devuelve:
  * se ve si está configurada y desde cuándo, y solo se puede escribir una nueva. Cambiarla requiere
  * `portal.configurar_contrasena_defecto` (solo admin); un 409 relee la versión actual.

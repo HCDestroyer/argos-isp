@@ -18,7 +18,7 @@ async function abrirFacturaRechazada(page: Page): Promise<void> {
     await expect(page).toHaveURL(/\/facturas\/\d+$/)
 }
 
-test('Configuración → FEL: credenciales sin secretos, desactivar con avisos vivos muestra la cuenta y el aviso global', async ({ page }) => {
+test('Ajustes → Factura electrónica (FEL): credenciales sin secretos, desactivar con avisos vivos muestra la cuenta y el aviso global', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Factura electrónica (FEL)', /\/configuracion\/fel/)
     await expect(page.locator('[data-prueba="elegir-empresa"]')).toBeVisible()

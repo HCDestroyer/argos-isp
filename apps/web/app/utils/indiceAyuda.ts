@@ -447,8 +447,8 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ],
     },
     '/configuracion': {
-        titulo: 'Configuración',
-        resumen: 'Empresa, empresas, apariencia y ajustes generales.',
+        titulo: 'Ajustes',
+        resumen: 'Empresa, cobro, portal, red, avisos, usuarios, apariencia y sistema: lo que se ajusta una vez y casi no se toca.',
         pagina: 'configuracion',
         ancla: null,
         temas: [],
@@ -544,7 +544,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ],
     },
     '/configuracion/fiscal': {
-        titulo: 'Configuración fiscal',
+        titulo: 'Régimen e impuestos',
         resumen: 'La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia, el aviso de pequeño contribuyente e impuestos. También los feriados, que valen para todas las empresas.',
         pagina: 'fiscal/configuracion-fiscal',
         ancla: null,
@@ -610,7 +610,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ],
     },
     '/configuracion/inventario': {
-        titulo: 'Configuración del inventario',
+        titulo: 'Ajustes del inventario',
         resumen: 'Dos ajustes de la empresa activa: si recibir una orden de traslado exige firma, y la inteligencia artificial que lee las facturas de compra en PDF o imagen.',
         pagina: 'inventario/configuracion',
         ancla: null,
@@ -637,7 +637,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ],
     },
     '/configuracion/notificaciones': {
-        titulo: 'Configuración de notificaciones',
+        titulo: 'Canales de aviso',
         resumen: 'Aquí conectas los canales por los que ArgosIsp avisa a tus clientes y a tu equipo: el servidor de correo, el bot de Telegram y WhatsApp (por Iris). También decides qué tipos de aviso se mandan. Lo que configures aquí rige desde que guardas, sin reiniciar nada.',
         pagina: 'notificaciones/configuracion',
         ancla: null,
@@ -1314,7 +1314,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/notificaciones': {
         titulo: 'Plantillas de avisos, recordatorios y envíos',
-        resumen: 'En esta pantalla decides qué dice cada aviso que reciben tus clientes, cuándo salen los recordatorios de pago y revisas cada mensaje que salió (o que no salió, y por qué). Los canales (servidor de correo, bot de Telegram) y los interruptores por tipo de aviso están en Configuración de notificaciones.',
+        resumen: 'En esta pantalla decides qué dice cada aviso que reciben tus clientes, cuándo salen los recordatorios de pago y revisas cada mensaje que salió (o que no salió, y por qué). Los canales (servidor de correo, bot de Telegram) y los interruptores por tipo de aviso están en Canales de aviso.',
         pagina: 'notificaciones/plantillas-y-envios',
         ancla: null,
         temas: [

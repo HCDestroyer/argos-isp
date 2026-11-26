@@ -16,7 +16,7 @@ Cualquier usuario con sesión. No pide permiso: cada quien ve solo su propia cue
 
 ### Mis datos
 
-Tu **Nombre**, tu **Correo** y tus **Roles** (por ejemplo, `cajero` o `soporte`). Estos datos no se cambian aquí: los cambia un administrador en **Configuración → Usuarios y acceso → Usuarios**.
+Tu **Nombre**, tu **Correo** y tus **Roles** (por ejemplo, `cajero` o `soporte`). Estos datos no se cambian aquí: los cambia un administrador en **Ajustes → Usuarios y seguridad → Usuarios**.
 
 ### Cuentas vinculadas
 
@@ -31,7 +31,7 @@ Una cuenta se vincula sola la primera vez que abres ArgosIsp desde Horus («Ver 
 - **Permiso:** ninguno; solo las tuyas.
 - **Dónde:** botón «Quitar» en la fila de la cuenta vinculada.
 - **Qué pasa:** pide confirmación («Quitar vinculación»). Al confirmar, esa cuenta ya no abre ArgosIsp sin contraseña; la próxima vez que entres desde ese sistema te pedirá la contraseña. Se puede volver a vincular entrando desde Horus e iniciando sesión.
-- El administrador puede quitar las de todos desde **Configuración → Notificaciones e integraciones → Integraciones**.
+- El administrador puede quitar las de todos desde **Ajustes → Comunicación e integraciones → Integraciones**.
 
 ## Tu sesión
 
@@ -56,7 +56,7 @@ Hoy **Mi cuenta** no tiene cambio de contraseña, verificación en dos pasos (MF
 ## Preguntas frecuentes y errores
 
 - **Aviso de error con «Reintentar» en Cuentas vinculadas.** No se pudo leer la lista. Reintenta; tus datos de arriba no cambian.
-- **«No me deja cambiar mi correo».** Lo cambia un administrador en **Configuración → Usuarios y acceso → Usuarios**.
+- **«No me deja cambiar mi correo».** Lo cambia un administrador en **Ajustes → Usuarios y seguridad → Usuarios**.
 
 ## Relacionado
 

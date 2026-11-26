@@ -14,7 +14,7 @@ import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
  */
 definePageMeta({ permiso: 'inventario.configurar' })
 
-useHead({ title: 'Inventario · Configuración · ArgosIsp' })
+useHead({ title: 'Inventario · Ajustes · ArgosIsp' })
 
 const toast = useToast()
 const { puede } = usePermisos()

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { entrar, ir } from './ayudas'
 
 /**
- * Configuración → Integraciones → Iris (`contratos/iris.md` §1.3), en modo fixtures, a 1280 y
+ * Ajustes → Integraciones → Iris (`contratos/iris.md` §1.3), en modo fixtures, a 1280 y
  * 390 px: el índice lleva a Iris, «Generar enlace de conexión» muestra el enlace una sola vez con
  * su instrucción y la caducidad, y al cerrar ya no está en ningún lado. El menú también tiene la
  * entrada directa. Las capturas (claro y oscuro) quedan en `test-results/capturas-iris/` (no se suben).

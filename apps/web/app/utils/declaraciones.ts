@@ -385,7 +385,7 @@ const QUE_HACER: Record<string, string> = {
     periodo_en_curso: 'Se revisa y liquida después del último día del mes.',
     cascada_bloqueada: 'Resuelva la causa en el mes indicado (por ejemplo, certifique sus NCRE) y vuelva a revisar: nada se guardó.',
     regla_no_soportada: 'ArgosIsp no calcula ese criterio: confirme con el contador el valor del parámetro o presente esta declaración fuera del sistema.',
-    parametro_sin_confirmar: 'Pida al contador que lo confirme en Configuración → Fiscal → Parámetros.',
+    parametro_sin_confirmar: 'Pida al contador que lo confirme en Ajustes → Régimen e impuestos → Parámetros.',
     declaracion_sin_pago: 'Ya no tiene pago que anular: puede registrar uno nuevo.',
     ejercicio_cerrado: 'Para cambiar el ISR anual o sus ajustes, reabra el ejercicio en Libro → Ejercicios.',
     isr_de_declaracion: 'No escriba el ISR: el cierre toma el de la declaración ISR anual revisada.',
