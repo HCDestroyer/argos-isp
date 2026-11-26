@@ -385,19 +385,20 @@ const TONO_AVISO = {
                 :class="vistaMovil === 'resumen' ? '' : 'max-lg:hidden'"
                 data-prueba="kpis-panel"
             >
-                <ContaKpi
-                    titulo="Ingreso recurrente"
+                <ContaIndicador
+                    clave="ingreso-recurrente"
                     icono="i-lucide-trending-up"
                     :valor="ingresos?.estado === 'ok' && ingresos.datos ? formatearQuetzales(ingresos.datos.mrr) : null"
                     :detalle="ingresos?.datos ? `con IVA · ${cifra(ingresos.datos.servicios)} servicios activos y limitados` : undefined"
                     :problema="problemaPanel ?? (ingresos?.estado === 'error' ? ingresos.error : null)"
-                    :sin-api="ingresos?.estado === 'no_aplica' ? (ingresos.motivo ?? 'No aplica a esta empresa') : undefined"
+                    :sin-datos="ingresos?.estado === 'no_aplica' ? (ingresos.motivo ?? 'No aplica a esta empresa') : undefined"
+                    titulo-sin-datos="No aplica"
                     data-kpi="ingreso-recurrente"
-                    ayuda="Lo que se factura cada mes por los servicios activos y limitados, con IVA, menos descuentos y precios temporales (MRR)."
                     class="max-lg:order-3"
                     @reintentar="cargarPanel"
                 />
-                <ContaKpi
+                <ContaIndicador
+                    clave="cobrado-mes"
                     :titulo="`Cobrado en ${nombreMes || 'el mes'}`"
                     icono="i-lucide-banknote"
                     tono="tono-exito"
@@ -408,58 +409,64 @@ const TONO_AVISO = {
                     class="max-lg:order-1"
                     @reintentar="cargarResumen"
                 />
-                <ContaKpi
-                    titulo="Cartera vencida"
+                <ContaIndicador
+                    clave="cartera-vencida"
                     icono="i-lucide-triangle-alert"
                     tono="tono-error"
+                    to="/cartera"
+                    :estado="masDe60 && new Decimal(masDe60).gt(0) ? 'atencion' : undefined"
+                    :etiqueta-estado="masDe60 && new Decimal(masDe60).gt(0) ? `${formatearQuetzales(masDe60)} con más de 60 días` : undefined"
                     :valor="resumen ? formatearQuetzales(resumen.cartera_vencida.monto) : null"
                     :detalle="resumen ? `${resumen.cartera_vencida.facturas.toLocaleString('es-GT')} facturas de ${resumen.cartera_vencida.clientes.toLocaleString('es-GT')} clientes` : undefined"
                     :problema="problemaResumen"
                     class="max-lg:hidden"
                     @reintentar="cargarResumen"
                 />
-                <ContaKpi
+                <ContaIndicador
                     v-if="verLibro"
-                    titulo="Efectivo disponible"
+                    clave="dinero-disponible"
                     icono="i-lucide-landmark"
                     tono="tono-2"
                     :valor="efectivo ? formatearQuetzales(efectivo.total) : null"
                     :detalle="efectivo ? `en ${efectivo.bancos} ${efectivo.bancos === 1 ? 'banco' : 'bancos'} y ${efectivo.cajas} ${efectivo.cajas === 1 ? 'caja' : 'cajas'}` : undefined"
                     :problema="problemaEfectivo"
-                    ayuda="Saldo de las cuentas de caja (1.1.01) y bancos (1.1.02) del libro, hoy."
                     class="max-lg:order-2"
                     @reintentar="cargarEfectivo"
                 />
-                <ContaKpi
-                    titulo="Bajas del mes"
+                <ContaIndicador
+                    clave="bajas-mes"
                     icono="i-lucide-users"
                     tono="tono-3"
                     :valor="bajas?.estado === 'ok' && bajas.datos ? cifra(bajas.datos.bajas) : null"
                     :variacion="bajas?.datos?.tasa ? `${bajas.datos.tasa} %` : undefined"
                     :detalle="bajas?.datos ? `${cifra(bajas.datos.retiros)} retiros · ${cifra(bajas.datos.suspendidos)} suspendidos de largo` : undefined"
                     :problema="problemaPanel ?? (bajas?.estado === 'error' ? bajas.error : null)"
-                    :sin-api="bajas?.estado === 'no_aplica' ? (bajas.motivo ?? 'No aplica a esta empresa') : undefined"
+                    :sin-datos="bajas?.estado === 'no_aplica' ? (bajas.motivo ?? 'No aplica a esta empresa') : undefined"
+                    titulo-sin-datos="No aplica"
                     data-kpi="bajas"
-                    ayuda="Un servicio cuenta como baja si se retiró o lleva más de 60 días suspendido; si se reactiva, deja de contar (churn)."
                     class="max-lg:hidden"
                     @reintentar="cargarPanel"
                 />
-                <ContaKpi
-                    titulo="Por servicio"
+                <ContaIndicador
+                    clave="por-servicio"
                     icono="i-lucide-pie-chart"
                     tono="tono-4"
                     :valor="ingresos?.estado === 'ok' && ingresos.datos ? (ingresos.datos.arpu ? formatearQuetzales(ingresos.datos.arpu) : '—') : null"
                     :detalle="ingresos?.datos ? (ingresos.datos.arpu ? 'ingreso promedio por servicio al mes' : 'sin servicios que facturen') : undefined"
                     :problema="problemaPanel ?? (ingresos?.estado === 'error' ? ingresos.error : null)"
-                    :sin-api="ingresos?.estado === 'no_aplica' ? (ingresos.motivo ?? 'No aplica a esta empresa') : undefined"
+                    :sin-datos="ingresos?.estado === 'no_aplica' ? (ingresos.motivo ?? 'No aplica a esta empresa') : undefined"
+                    titulo-sin-datos="No aplica"
                     data-kpi="por-servicio"
-                    ayuda="Ingreso recurrente entre los servicios que facturan (ARPU)."
                     class="max-lg:hidden"
                     @reintentar="cargarPanel"
                 />
-                <ContaKpi
+                <ContaIndicador
                     v-if="verFiscal"
+                    clave="impuestos-mes"
                     titulo="Impuestos por pagar"
+                    to="/fiscal/calendario"
+                    :estado="impuestos.some(i => i.vencida) ? 'urgente' : undefined"
+                    :etiqueta-estado="impuestos.some(i => i.vencida) ? 'Hay impuestos vencidos' : undefined"
                     icono="i-lucide-receipt"
                     tono="tono-aviso"
                     :valor="tablero ? (totalImpuestos ? formatearQuetzales(totalImpuestos) : 'Sin calcular') : null"

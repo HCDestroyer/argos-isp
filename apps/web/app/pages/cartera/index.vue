@@ -335,33 +335,34 @@ onMounted(() => {
                         modo="barra"
                     />
                 </div>
-                <ContaKpi
-                    titulo="Con promesa activa"
+                <ContaIndicador
+                    clave="con-promesa"
                     icono="i-lucide-hand"
                     :valor="resumen ? formatearQuetzales(resumen.promesas_activas.monto) : null"
                     :detalle="resumen ? `${resumen.promesas_activas.cantidad} promesas · no se cortan` : undefined"
                     :problema="problemaResumen"
                     @reintentar="cargarResumen"
                 />
-                <ContaKpi
+                <ContaIndicador
+                    clave="no-se-cobrara"
                     titulo="Castigado este año"
                     icono="i-lucide-triangle-alert"
                     tono="tono-error"
                     :valor="castigadoAnio ? formatearQuetzales(castigadoAnio.monto) : null"
                     :detalle="castigadoAnio ? `${castigadoAnio.cantidad} castigos` : undefined"
-                    :sin-api="castigadoAnio === null && !castigos.cargando.value && castigos.haySiguiente.value ? 'Hay más castigos de los que caben en una página: el total del año llega con la API del panel.' : undefined"
+                    :sin-datos="castigadoAnio === null && !castigos.cargando.value && castigos.haySiguiente.value ? 'Hay más castigos de los que caben en una página: el total del año llega con la API del panel.' : undefined"
                     :problema="castigos.problema.value"
                     @reintentar="recargarCastigos"
                 />
-                <ContaKpi
-                    titulo="Estimación disponible"
+                <ContaIndicador
+                    clave="estimacion-incobrables"
                     icono="i-lucide-shield-check"
                     tono="tono-exito"
                     :valor="estimacion"
                     detalle="cuenta 1.1.12 del libro"
                     :problema="problemaEstimacion"
-                    :sin-api="puede('libro.ver') ? undefined : 'Necesita permiso para ver el libro.'"
-                    ayuda="Lo reservado para cuentas que no se van a cobrar (estimación para incobrables); se calcula al cierre del año."
+                    :sin-datos="puede('libro.ver') ? undefined : 'Necesita permiso para ver el libro.'"
+                    titulo-sin-datos="Sin permiso"
                     @reintentar="cargarEstimacion"
                 />
             </div>
