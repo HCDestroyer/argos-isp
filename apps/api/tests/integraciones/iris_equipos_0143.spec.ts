@@ -6,14 +6,17 @@ import { contextoPrueba, estado, soloEmpresaPrincipal, unico } from '#tests/ayud
 import { crearServicioFila } from '#tests/core/fabricas'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
-import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
-import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
 import { procesarAprovisionamiento } from '#integraciones/equipos/cola'
 import { fijarEsperaReintentos } from '#integraciones/equipos/http'
 import { payloadParaIris } from '#integraciones/iris/envios'
 import { EVENTO_BIENVENIDA } from '#notify/instalacion'
 import CargarSaldoInicial from '#inventario/actions/cargar_saldo_inicial'
-import { Simulado } from '#tests/integraciones/equipos_simulado'
+import {
+    Simulado,
+    apagarEquipos,
+    configurarEquipos,
+    limpiarEquipos,
+} from '#tests/integraciones/equipos_simulado'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { bodegaEn, productoEn } from '#tests/inventario/ayudas_inventario'
@@ -68,22 +71,11 @@ async function configurar(so: Simulado, acs: Simulado, empresaId: number, acsOk 
     acs.responder('GET /devices/', () =>
         acsOk ? { status: 200, cuerpo: [] } : { status: 401, cuerpo: 'Unauthorized' },
     )
-    const ctx = { ...contextoPrueba(), empresaId, empresasPermitidas: null }
-    const fila = await db.from('integraciones.equipos_config').where('empresa_id', empresaId).first()
-    await new ConfigurarEquipos().execute(
-        {
-            version: fila?.version ?? 0,
-            activo: true,
-            smartolt_url: so.url,
-            smartolt_token: TOKEN_SO,
-            genieacs_url: acs.url,
-            genieacs_usuario: 'argos',
-            genieacs_clave: CLAVE_ACS,
-            perfiles: [],
-        },
-        ctx,
-    )
-    await new ProbarEquipos().execute({}, ctx)
+    await configurarEquipos({
+        empresaId,
+        smartolt: { url: so.url, token: TOKEN_SO },
+        acs: { url: acs.url, usuario: 'argos', clave: CLAVE_ACS, probado: acsOk },
+    })
 }
 
 async function servicioPendiente(empresaId: number) {
@@ -144,8 +136,7 @@ test.group('Iris 0.14.3 · capacidades de equipos y activación con la orden cer
         acs.limpiar()
     })
     group.each.teardown(async () => {
-        await db.from('integraciones.equipos_perfiles').delete()
-        await db.from('integraciones.equipos_config').delete()
+        await limpiarEquipos()
         await db.from('integraciones.iris_conector').delete()
         await soloEmpresaPrincipal()
     })
@@ -252,7 +243,7 @@ test.group('Iris 0.14.3 · capacidades de equipos y activación con la orden cer
         )
 
         // empresa sin SmartOLT ni ACS: GET equipo 422 (antes que equipo_sin_gestion)
-        await db.from('integraciones.equipos_config').where('empresa_id', e.B).update({ activo: false })
+        await apagarEquipos(e.B)
         const equipo = await estado(
             client
                 .get(`/api/v1/servicios/${servicioId}/equipo`)
@@ -600,7 +591,7 @@ test.group('Iris 0.14.3 · capacidades de equipos y activación con la orden cer
         const primera = await estado(pedir(clave), 202)
 
         // la marca `wifi` se apaga (la empresa deja de tener el ACS)
-        await db.from('integraciones.equipos_config').where('empresa_id', e.B).update({ activo: false })
+        await apagarEquipos(e.B)
 
         // 1. la misma clave y huella: el 2xx original, sin mirar la capacidad
         const replay = await estado(pedir(clave), 202)

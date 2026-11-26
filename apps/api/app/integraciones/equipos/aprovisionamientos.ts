@@ -23,6 +23,11 @@ export interface EquipoPedido {
     unidad_id: number | null
     modelo: string | null
     gestionado: boolean
+    /**
+     * Interno (no sale en la vista): el PPPoE va por el ACS, decidido al aceptar (§4.3). Ausente en
+     * los pedidos anteriores al lote 2 de `contratos/equipos-olt-acs.md`.
+     */
+    pppoe_por_acs?: boolean
 }
 
 export interface FilaAprovisionamiento {
@@ -50,6 +55,8 @@ export interface FilaAprovisionamiento {
     iris_actor: string | null
     senal: { rx_dbm: number | null; tx_dbm: number | null } | null
     smartolt_external_id: string | null
+    /** instancia de SmartOLT donde se autorizó la ONT (§4.2) */
+    smartolt_instancia_id: number | null
     acs_device_id: string | null
     intentos: number
     proximo_intento_en: Date | null
@@ -97,6 +104,10 @@ export async function leerAprovisionamiento(
         servicio_id: Number(fila.servicio_id),
         cliente_id: Number(fila.cliente_id),
         bodega_id: fila.bodega_id === null || fila.bodega_id === undefined ? null : Number(fila.bodega_id),
+        smartolt_instancia_id:
+            fila.smartolt_instancia_id === null || fila.smartolt_instancia_id === undefined
+                ? null
+                : Number(fila.smartolt_instancia_id),
     }
 }
 
@@ -149,7 +160,14 @@ export async function vistaAprovisionamiento(
         reintentable: fila.reintentable,
         detalle: fila.detalle,
         servicio_estado: servicio?.estado ?? 'retirado',
-        equipo: fila.equipo,
+        equipo: {
+            tipo: fila.equipo.tipo,
+            serie: fila.equipo.serie,
+            mac: fila.equipo.mac,
+            unidad_id: fila.equipo.unidad_id,
+            modelo: fila.equipo.modelo,
+            gestionado: fila.equipo.gestionado,
+        },
         senal: fila.senal,
         creado_en: new Date(fila.created_at).toISOString(),
         actualizado_en: new Date(fila.updated_at).toISOString(),

@@ -308,7 +308,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                 secciones: [
                     { id: 'notificaciones', etiqueta: 'Notificaciones', descripcion: 'Correo, Telegram y WhatsApp (por Iris): servidor, bot, interruptores por canal y por aviso, global y por empresa.', icono: 'i-lucide-bell-ring', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver' },
                     { id: 'notificaciones-plantillas', etiqueta: 'Plantillas de avisos', descripcion: 'Texto de cada aviso por evento y canal, recordatorios de pago y registro de envíos.', icono: 'i-lucide-message-square-text', ruta: '/notificaciones', permiso: 'notificaciones.ver' },
-                    { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow, Iris, SmartOLT y GenieACS: conexión, credenciales y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'equipos.ver'] },
+                    { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow, Iris, SmartOLT y GenieACS: conexión, credenciales y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver'] },
                     { id: 'integracion-iris', etiqueta: 'Iris', descripcion: 'Conector con Iris: enlace de conexión, configuración a mano, tokens y envíos.', icono: 'i-lucide-clipboard-list', ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' },
                 ],
             },
