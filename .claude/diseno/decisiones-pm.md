@@ -129,3 +129,18 @@ Por decidir ahora (plan §8.2): N1 caja sin factura con dos tipos; N2 quitar el 
   - «lo deposito yo» está permitido y cada empresa lo puede apagar (N4);
   - la caja chica se repone desde la custodia o desde el banco (N5);
   - el faltante o sobrante al recibir queda a nombre de quien entregó, y Argos no lo descuenta de planilla (N8).
+
+## SmartOLT y ACS (aprobado por el PM el 25 nov 2026)
+
+Tableros de la página «Pendientes del backend» (generador `generadores/pend_olt_acs.py`), según el contrato `contratos/equipos-olt-acs.md`. Todos en claro y oscuro, escritorio y teléfono. Partimos de las decisiones ya tomadas por el PM: SmartOLT y ACS son independientes (una empresa puede tener uno, otro, los dos o ninguno); SmartOLT admite varias instancias (subdominios), una puede ser compartida y solo la administra quien tiene acceso a todas las empresas; cada instancia trae varias OLT que se ligan a las OLT de la red de Argos; un ACS por empresa; Wi-Fi y PPPoE de la ONU solo con ACS; las credenciales nunca se ven (`***` con «Cambiar»).
+
+- `PendSmartoltLista` (+ `PendSmartoltMovil`): Configuración › Integraciones › SmartOLT. Lista con subdominio, empresa o «Compartida», estado (probada, falla, sin probar, más «Apagada»), número de OLT y última prueba; «Agregar instancia»; vacía; error con «Reintentar» sin números inventados.
+- `PendSmartoltDetalle`: datos, token `***`, «Probar conexión» (también trae las OLT), «Sincronizar OLT», encender o apagar, empresas que la usan, eliminar; sus OLT con selector para ligar cada una a una OLT de Argos (las ya ligadas o de otra empresa salen deshabilitadas con el motivo). Vista de solo lectura para una instancia compartida sin acceso global.
+- `PendSmartoltForm` (+ móvil): formulario en página (más de 3 campos): nombre, subdominio, token, una empresa o compartida, nota, encender al guardar; errores 409 (subdominio repetido, otra persona editó) y 403 (compartida sin acceso global).
+- `PendAcs` (+ móvil): ACS de la empresa activa: probado, falla, apagado, sin configurar y edición en página (URL, usuario, clave `***`, CA, PPPoE por ACS). Siempre el aviso «Sin ACS no se configuran Wi-Fi ni PPPoE de la ONU».
+- `PendEquipoServicio` (+ móvil): ficha del servicio › Equipo: cuenta y OLT de SmartOLT que usa el servicio, Wi-Fi y PPPoE por ACS, y qué pasa si no hay ACS, si la OLT no está ligada (se busca la serie en las cuentas de la empresa) o si SmartOLT no responde (el ACS sigue mostrándose).
+
+Respuestas del PM (25 nov 2026):
+1. **Empresas de una instancia:** una empresa o compartida con todas, como en el tablero.
+2. **Nota:** el campo «Nota» del formulario se mantiene (columna nueva `nota` en la instancia).
+3. Tableros aprobados tal como están para construirlos.

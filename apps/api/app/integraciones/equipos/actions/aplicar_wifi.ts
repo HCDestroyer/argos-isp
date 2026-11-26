@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { descifrar } from '#shared/cifrado'
-import { configDeEmpresa, gestionDe } from '#integraciones/equipos/configuracion'
+import { acsDeEmpresa } from '#integraciones/equipos/acs'
 import { equipoGestionado } from '#integraciones/equipos/equipos'
 import { ErrorEquipos } from '#integraciones/equipos/http'
 import * as genieacs from '#integraciones/equipos/genieacs'
@@ -39,9 +39,9 @@ export default class AplicarWifi extends DomainAction<{ id: number }, ResultadoA
         t.fijarEmpresa(empresaId)
         t.fijarEntidad('solicitud_wifi', Number(fila.id))
 
-        const config = await configDeEmpresa(empresaId, t.trx)
+        const config = await acsDeEmpresa(empresaId, t.trx)
         const equipo = await equipoGestionado(servicioId, empresaId, t.trx)
-        if (!gestionDe(config).tr069 || !config.genieacs || !equipo?.acs_device_id) {
+        if (!config.operativo || !config.genieacs || !equipo?.acs_device_id) {
             return this.resolver(t, fila, 'fallido', 'equipo_sin_gestion')
         }
         const acs = config.genieacs
