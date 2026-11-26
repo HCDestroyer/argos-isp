@@ -398,9 +398,8 @@ onMounted(async () => {
                             label="Depositado desde"
                             size="sm"
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="desde"
-                                type="date"
                                 :max="hasta || undefined"
                                 class="w-full"
                                 data-prueba="filtro-desde"
@@ -411,9 +410,8 @@ onMounted(async () => {
                             size="sm"
                             :error="fechasInvalidas ? 'Debe ser igual o posterior a la fecha inicial' : undefined"
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="hasta"
-                                type="date"
                                 :min="desde || undefined"
                                 class="w-full"
                                 data-prueba="filtro-hasta"

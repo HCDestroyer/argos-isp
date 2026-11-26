@@ -60,6 +60,9 @@ onMounted(async () => {
                 variant="outline"
                 class="boton-flotante rounded-full"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('inventario.crear_traslado')"
                 label="Nuevo traslado"

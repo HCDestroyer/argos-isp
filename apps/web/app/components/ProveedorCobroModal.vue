@@ -131,9 +131,8 @@ async function enviar(evento: FormSubmitEvent<SalidaProveedorCobro>) {
                         name="desde"
                         :help="editando ? 'Solo se mueve mientras el proveedor no tenga pagos.' : 'Vacía: hoy. Los pagos anteriores siguen contra el banco.'"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.desde"
-                            type="date"
                             :min="hoy"
                             class="w-full"
                         />

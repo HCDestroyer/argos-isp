@@ -17,6 +17,7 @@
   "dependencies": {
     "@argosisp/contracts": "workspace:*",
     "@iconify-json/lucide": "^1.2.144",
+    "@internationalized/date": "^3.12.4",
     "@nuxt/ui": "^4.11.3",
     "decimal.js": "^10.6.0",
     "nuxt": "^4.6.1",

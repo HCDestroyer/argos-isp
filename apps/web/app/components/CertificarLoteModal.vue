@@ -111,9 +111,8 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     name="desde"
                     required
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.desde"
-                        type="date"
                         class="w-full"
                         data-prueba="lote-desde"
                     />
@@ -123,9 +122,8 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     name="hasta"
                     required
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.hasta"
-                        type="date"
                         class="w-full"
                         data-prueba="lote-hasta"
                     />

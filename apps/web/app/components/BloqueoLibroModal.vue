@@ -120,9 +120,8 @@ async function enviar() {
                         ? `Nada se registra con fecha hasta ese día. ${vigente ? `Vigente: ${formatearFecha(vigente)}.` : 'Sin bloqueo vigente.'}${vigentes.duro ? ` Duro: ${formatearFecha(vigentes.duro)}.` : ''}`
                         : `Anterior al vigente (${vigente ? formatearFecha(vigente) : '—'})${vigentes.duro ? ` y no antes del duro (${formatearFecha(vigentes.duro)})` : ''}.`"
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.hasta"
-                        type="date"
                         :max="modo === 'bloquear' ? hoy : (vigente ?? undefined)"
                         :min="vigentes.duro ?? undefined"
                         class="w-full"

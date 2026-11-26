@@ -1,5 +1,5 @@
 import type { Aplicacion, Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, Extra, MatrizControlVelocidad, Padre, TipoCola, TipoConexionVelocidad } from '~/types/controlVelocidad'
-import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } from '~/types/controlVelocidad'
+import { APLICACIONES, EXTRAS, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } from '~/types/controlVelocidad'
 
 /**
  * Control de velocidad por capas (`contratos/control-velocidad.md`): textos en lenguaje simple de
@@ -265,5 +265,3 @@ export function erroresPorCapa(errores: { field: string, message: string }[]): R
     }
     return salida
 }
-
-export { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD }

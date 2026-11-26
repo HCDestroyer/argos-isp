@@ -146,7 +146,7 @@ function acciones(plantilla: PlantillaDocumentoResumen): DropdownMenuItem[][] {
         descripcion="Aviso, recibo y nota en carta o POS 80 mm"
         volver="/configuracion/plantillas-conceptos"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('documentos.crear')"
                 label="Nueva plantilla"
