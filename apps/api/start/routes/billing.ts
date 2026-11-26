@@ -28,6 +28,8 @@ import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
+import AsignarPerfilFiscal from '#billing/actions/asignar_perfil_fiscal'
+import { simularRetenciones, vistaPerfilFiscal } from '#billing/perfil_fiscal'
 import { exigirContactoIris } from '#billing/contacto_iris'
 import cobranza from '#start/routes/cobranza'
 import { ComprobanteAprobado } from '#billing/esquemas_cobro'
@@ -143,6 +145,8 @@ import {
     PaginaComprobantes,
     ReconexionTemporal,
     EstadoCuenta,
+    PerfilFiscalCliente,
+    PerfilFiscalFactura,
     Banco,
     CuentaBancaria,
     ConceptoCargo,
@@ -1785,6 +1789,69 @@ const estadoCuenta: Ruta[] = [
                 empresasEstadoCuenta(ctx, query.empresa_id),
                 query.servicio_id ?? null,
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/perfil-fiscal',
+        operacion: 'clientesPerfilFiscal',
+        resumen: 'Perfil fiscal del cliente: tipo de impuesto y «me retiene ISR»',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        descripcion:
+            'Lote B4 del plan de contabilidad. Un cliente que nunca se configuró es normal, sin ISR, con version 0. exencion dice si la exención se aplica hoy en las facturas (apagada: exencion_sin_frase).',
+        respuesta: { status: 200, descripcion: 'Perfil fiscal', esquema: PerfilFiscalCliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return vistaPerfilFiscal(id, ctx.empresa?.activa ?? null)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/perfil-fiscal/retenciones',
+        operacion: 'clientesSimularRetenciones',
+        resumen: 'Qué se espera retener de una factura de este total al cliente (antes de emitirla)',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        query: v.simularRetencionesValidator,
+        descripcion:
+            'Lote B4: la cuenta de «Nueva factura» y de Cobrar (te retendrá, recibirás) con el perfil fiscal de hoy y el régimen de la empresa. Sin empresa_id usa la activa; 422 empresa_requerida si no hay. Mismas reglas que la instantánea que guarda la factura al emitirse.',
+        respuesta: { status: 200, descripcion: 'Retenciones esperadas', esquema: PerfilFiscalFactura },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            const empresaId = query.empresa_id ?? ctx.empresa?.activa ?? null
+            if (!empresaId) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'empresa_id',
+                        message: 'Indica la empresa que factura',
+                        rule: 'empresa_requerida',
+                    },
+                ])
+            }
+            exigirEmpresaPeticion(ctx.empresa, empresaId)
+            return simularRetenciones(id, empresaId, query.total)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/perfil-fiscal',
+        operacion: 'clientesAsignarPerfilFiscal',
+        resumen: 'Asignar el tipo de impuesto del cliente y «me retiene ISR»',
+        etiqueta: 'clientes',
+        permiso: 'clientes.asignar_perfil_fiscal',
+        cuerpo: v.asignarPerfilFiscalValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Define cómo salen sus facturas y qué retención se espera al cobrarle; no toca las facturas ya emitidas (cada una guarda su instantánea). exento exige resolucion_exencion y se guarda, pero la factura sale con IVA hasta tener la frase de exención. 409 por version, 422 por resolución. audit.cambios (cliente_perfil_fiscal) y cliente.actualizado con campos tipo_impuesto y retiene_isr.',
+        respuesta: { status: 200, descripcion: 'Perfil fiscal guardado', esquema: PerfilFiscalCliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return new AsignarPerfilFiscal().execute({ ...cuerpo, cliente_id: id }, ctx.contextoAccion())
         },
     }),
 ]

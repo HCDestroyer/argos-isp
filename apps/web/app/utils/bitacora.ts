@@ -127,6 +127,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'billing.resumenes': 'Resúmenes de facturación calculados',
     'clientes.asignar_responsable_pago': 'Responsable de pago asignado',
     'clientes.quitar_responsable_pago': 'Responsable de pago quitado',
+    'clientes.asignar_perfil_fiscal': 'Tipo de impuesto del cliente cambiado',
     'clientes.vincular_telegram': 'Telegram vinculado',
     'clientes.desvincular_telegram': 'Telegram desvinculado',
     'comprobantes.registrar': 'Comprobante de depósito recibido',
@@ -587,6 +588,8 @@ export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker',
 export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: number) => string }> = {
     campo_personalizado: { etiqueta: 'Campo personalizado', ruta: id => `/campos-personalizados?campo=${id}` },
     cliente: { etiqueta: 'Cliente', ruta: id => `/clientes/${id}` },
+    // B4 (A3): perfil fiscal del cliente; id = el cliente
+    cliente_perfil_fiscal: { etiqueta: 'Perfil fiscal del cliente', ruta: id => `/clientes/${id}` },
     servicio: { etiqueta: 'Servicio', ruta: id => `/servicios/${id}` },
     factura: { etiqueta: 'Factura', ruta: id => `/facturas/${id}` },
     pago: { etiqueta: 'Pago', ruta: id => `/pagos/${id}` },

@@ -10,6 +10,8 @@ export const PERMISOS = {
     'clientes.crear': 'Crear clientes',
     'clientes.editar': 'Editar datos de clientes',
     'clientes.estado_cuenta': 'Ver el estado de cuenta de un cliente',
+    'clientes.asignar_perfil_fiscal':
+        'Asignar el tipo de impuesto del cliente (Normal, Agente retenedor de IVA, Exento) y «me retiene ISR»',
     'clientes.vincular_telegram': 'Vincular el chat de Telegram de un cliente',
     'clientes.desvincular_telegram': 'Quitar el chat de Telegram de un cliente',
     'clientes.asignar_responsable_pago': 'Asignar el cliente que paga por otro (responsable de pago)',
@@ -776,6 +778,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         permisos: [
             'clientes.ver',
             'clientes.estado_cuenta',
+            // B4: perfil fiscal del cliente (tipo de impuesto y retención de ISR)
+            'clientes.asignar_perfil_fiscal',
             'zonas.ver',
             'servicios.ver',
             'adicionales.ver',

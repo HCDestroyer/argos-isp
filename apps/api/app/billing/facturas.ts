@@ -12,6 +12,7 @@ import { notasDeFactura } from '#billing/notas_credito'
 import { emisorDeFactura } from '#billing/empresa'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import type { OrigenExternoTipo } from '#inventario/origen_externo'
+import type { PerfilFiscalFactura } from '#billing/perfil_fiscal'
 
 /**
  * Facturas: montos (IVA incluido), estado según lo pagado y consultas de lectura.
@@ -219,6 +220,8 @@ export interface FacturaFila {
     tipo_dte?: string | null
     anulada_en?: Date | null
     motivo_anulacion?: string | null
+    /** instantánea del perfil fiscal del cliente al emitir (B4); null en las anteriores */
+    perfil_fiscal?: PerfilFiscalFactura | null
     /** factura importada: sistema de origen e id allí */
     origen?: string | null
     id_externo?: string | null
@@ -281,6 +284,8 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
             `(select ms.nombre from billing.motivos_sin_costo ms where ms.id = ${alias}.motivo_sin_costo_id) as motivo_sin_costo_nombre`,
         ),
         c('motivo_sin_costo_texto'),
+        // perfil fiscal del cliente al emitir (B4; null en las anteriores)
+        c('perfil_fiscal'),
         c('origen'),
         cliente.raw(`${alias}.clave_externa as id_externo`),
         // orden de Iris del cargo único (`#inventario/origen_externo`)

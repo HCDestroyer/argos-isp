@@ -13587,6 +13587,354 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/perfil-fiscal": {
+      "get": {
+        "operationId": "clientesPerfilFiscal",
+        "summary": "Perfil fiscal del cliente: tipo de impuesto y «me retiene ISR»",
+        "description": "Lote B4 del plan de contabilidad. Un cliente que nunca se configuró es normal, sin ISR, con version 0. exencion dice si la exención se aplica hoy en las facturas (apagada: exencion_sin_frase).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil fiscal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilFiscalCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "clientesAsignarPerfilFiscal",
+        "summary": "Asignar el tipo de impuesto del cliente y «me retiene ISR»",
+        "description": "Define cómo salen sus facturas y qué retención se espera al cobrarle; no toca las facturas ya emitidas (cada una guarda su instantánea). exento exige resolucion_exencion y se guarda, pero la factura sale con IVA hasta tener la frase de exención. 409 por version, 422 por resolución. audit.cambios (cliente_perfil_fiscal) y cliente.actualizado con campos tipo_impuesto y retiene_isr.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo_impuesto": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "agente_retenedor_iva",
+                      "exento"
+                    ],
+                    "description": "normal, agente_retenedor_iva o exento (exento se guarda, pero la factura sale con IVA hasta tener la frase de exención)"
+                  },
+                  "retiene_isr": {
+                    "description": "Casilla «me retiene ISR»",
+                    "type": "boolean"
+                  },
+                  "resolucion_exencion": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "numero": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60
+                      },
+                      "fecha": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "numero",
+                      "fecha"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Resolución de la SAT: obligatoria con exento; solo va con exento"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se guardó); si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "tipo_impuesto",
+                  "retiene_isr",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil fiscal guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilFiscalCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.asignar_perfil_fiscal; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.asignar_perfil_fiscal",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/perfil-fiscal/retenciones": {
+      "get": {
+        "operationId": "clientesSimularRetenciones",
+        "summary": "Qué se espera retener de una factura de este total al cliente (antes de emitirla)",
+        "description": "Lote B4: la cuenta de «Nueva factura» y de Cobrar (te retendrá, recibirás) con el perfil fiscal de hoy y el régimen de la empresa. Sin empresa_id usa la activa; 422 empresa_requerida si no hay. Mismas reglas que la instantánea que guarda la factura al emitirse.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "total",
+            "in": "query",
+            "required": true,
+            "description": "Monto con hasta 2 decimales, como string",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+              "examples": [
+                "150.00"
+              ]
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa que factura; sin ella, la activa (X-Empresa-Id)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retenciones esperadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilFiscalFactura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/puntos": {
       "get": {
         "operationId": "lealtadPuntosCliente",
@@ -82901,6 +83249,7 @@
                         "cartera.provisionar",
                         "cierres.revisar_check",
                         "cierres.verificar",
+                        "clientes.asignar_perfil_fiscal",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -83372,6 +83721,7 @@
                         "cartera.provisionar",
                         "cierres.revisar_check",
                         "cierres.verificar",
+                        "clientes.asignar_perfil_fiscal",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -99746,6 +100096,7 @@
                             "cartera.provisionar",
                             "cierres.revisar_check",
                             "cierres.verificar",
+                            "clientes.asignar_perfil_fiscal",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
@@ -120810,6 +121161,10 @@
               "$ref": "#/components/schemas/SeccionEstadoCuenta"
             },
             "description": "Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo"
+          },
+          "perfil_fiscal": {
+            "$ref": "#/components/schemas/PerfilFiscalCliente",
+            "description": "Perfil fiscal del cliente hoy (tipo de impuesto y «me retiene ISR»)"
           }
         }
       },
@@ -122895,6 +123250,17 @@
             ],
             "format": "date",
             "description": "Desde este día la factura cuenta para limitar o cortar (emisión + dias_gracia_corte); null = desde que vence"
+          },
+          "perfil_fiscal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerfilFiscalFactura"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Perfil fiscal del cliente al emitir (tipo de impuesto, ISR, exención y retenciones esperadas); null en las facturas anteriores"
           },
           "version": {
             "type": "integer",
@@ -128958,6 +129324,7 @@
           "cartera.provisionar",
           "cierres.revisar_check",
           "cierres.verificar",
+          "clientes.asignar_perfil_fiscal",
           "clientes.asignar_responsable_pago",
           "clientes.crear",
           "clientes.desvincular_telegram",
@@ -129321,6 +129688,7 @@
           "Registrar la estimación para cuentas incobrables (hasta el tope legal)",
           "Supervisar con nota un check de cierre en anomalía, o retirar la supervisión",
           "Correr la lista de verificación de cierre (checks del mes o del año)",
+          "Asignar el tipo de impuesto del cliente (Normal, Agente retenedor de IVA, Exento) y «me retiene ISR»",
           "Asignar el cliente que paga por otro (responsable de pago)",
           "Crear clientes",
           "Quitar el chat de Telegram de un cliente",
@@ -132225,6 +132593,198 @@
           "ultimo_intento": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PerfilFiscalCliente": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "tipo_impuesto",
+          "retiene_isr",
+          "resolucion_exencion",
+          "nota",
+          "version",
+          "actualizado_por",
+          "actualizado_en",
+          "exencion"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo_impuesto": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "agente_retenedor_iva",
+              "exento"
+            ],
+            "description": "normal = se le cobra IVA; agente_retenedor_iva = paga menos y entrega constancia por el 15 % del IVA; exento = por ley no paga IVA (apagado: la factura sale con IVA hasta tener la frase de exención)"
+          },
+          "retiene_isr": {
+            "type": "boolean",
+            "description": "Casilla «me retiene ISR»: al cobrar se espera su constancia"
+          },
+          "resolucion_exencion": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "numero",
+              "fecha"
+            ],
+            "properties": {
+              "numero": {
+                "type": "string"
+              },
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "description": "Resolución de la SAT que respalda la exención (obligatoria con exento)"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Control optimista: envíala al asignar (0 = nunca se guardó: Normal)"
+          },
+          "actualizado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "exencion": {
+            "type": "object",
+            "required": [
+              "disponible",
+              "motivo"
+            ],
+            "properties": {
+              "disponible": {
+                "type": "boolean"
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "exencion_sin_frase"
+                ]
+              }
+            },
+            "description": "Si la exención se aplica hoy en las facturas: apagada (exencion_sin_frase) hasta que la empresa tenga la frase de exención del contador"
+          }
+        }
+      },
+      "PerfilFiscalFactura": {
+        "type": "object",
+        "required": [
+          "tipo_impuesto",
+          "retiene_isr",
+          "exento_aplicado",
+          "motivo_exento",
+          "regimen",
+          "retenciones",
+          "sin_retencion",
+          "total_retenciones",
+          "a_recibir"
+        ],
+        "properties": {
+          "tipo_impuesto": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "agente_retenedor_iva",
+              "exento"
+            ],
+            "description": "normal = se le cobra IVA; agente_retenedor_iva = paga menos y entrega constancia por el 15 % del IVA; exento = por ley no paga IVA (apagado: la factura sale con IVA hasta tener la frase de exención)"
+          },
+          "retiene_isr": {
+            "type": "boolean"
+          },
+          "exento_aplicado": {
+            "type": "boolean",
+            "description": "La factura salió sin IVA por la exención (hoy siempre false: exención apagada)"
+          },
+          "motivo_exento": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "exencion_sin_frase"
+            ]
+          },
+          "regimen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Régimen de la empresa en la fecha de la factura"
+          },
+          "retenciones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetencionEsperada"
+            }
+          },
+          "sin_retencion": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "impuesto",
+                "motivo"
+              ],
+              "properties": {
+                "impuesto": {
+                  "type": "string",
+                  "enum": [
+                    "iva",
+                    "isr"
+                  ]
+                },
+                "motivo": {
+                  "type": "string",
+                  "enum": [
+                    "cliente_no_retiene",
+                    "regimen_pequeno_contribuyente",
+                    "regimen_utilidades",
+                    "sin_iva",
+                    "bajo_minimo",
+                    "sin_localizacion"
+                  ]
+                }
+              }
+            },
+            "description": "Por qué no se espera retención de cada impuesto"
+          },
+          "total_retenciones": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "a_recibir": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total − retenciones: lo que debe llegar en dinero"
           }
         }
       },
@@ -146153,6 +146713,91 @@
           }
         }
       },
+      "RetencionEsperada": {
+        "type": "object",
+        "required": [
+          "impuesto",
+          "codigo",
+          "base",
+          "tasa",
+          "monto"
+        ],
+        "properties": {
+          "impuesto": {
+            "type": "string",
+            "enum": [
+              "iva",
+              "isr"
+            ]
+          },
+          "codigo": {
+            "type": "string",
+            "description": "Retención recibida del catálogo fiscal (RET_IVA_ESP, RET_ISR_OPC)"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "IVA de la factura (iva) o lo facturado sin IVA (isr)"
+          },
+          "tasa": {
+            "type": "string",
+            "description": "Porcentaje aplicado (en ISR, el del tramo)"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "RetencionFacturaPendiente": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "empresa_id",
+          "total",
+          "pendiente",
+          "fuente",
+          "retencion_iva",
+          "retencion_isr",
+          "total_retenciones",
+          "a_recibir"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fuente": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "perfil_actual"
+            ],
+            "description": "factura = instantánea guardada al emitir; perfil_actual = factura anterior al perfil fiscal, calculada con el perfil de hoy"
+          },
+          "retencion_iva": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "retencion_isr": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "total_retenciones": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "a_recibir": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Pendiente − retenciones (nunca negativo)"
+          }
+        }
+      },
       "RevisionTitularEmpresa": {
         "type": "object",
         "required": [
@@ -146612,6 +147257,7 @@
               "cartera.provisionar",
               "cierres.revisar_check",
               "cierres.verificar",
+              "clientes.asignar_perfil_fiscal",
               "clientes.asignar_responsable_pago",
               "clientes.crear",
               "clientes.desvincular_telegram",
@@ -147161,6 +147807,7 @@
               "cartera.provisionar",
               "cierres.revisar_check",
               "cierres.verificar",
+              "clientes.asignar_perfil_fiscal",
               "clientes.estado_cuenta",
               "clientes.ver",
               "cobros.configurar",
@@ -147703,6 +148350,13 @@
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
             },
             "description": "Saldo acumulado dentro de la empresa"
+          },
+          "retenciones_esperadas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetencionFacturaPendiente"
+            },
+            "description": "Una por factura pendiente: retención de IVA e ISR que se espera del cliente y lo que debe llegar en dinero (perfil fiscal, B4). Siempre viene; opcional en el esquema para no romper fixtures"
           }
         }
       },
