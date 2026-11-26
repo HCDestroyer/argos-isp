@@ -961,85 +961,45 @@
       "x": 0,
       "y": 13840
     },
-    "PlanContaInicio.dc.html": {
+    "MenuLateral.dc.html": {
       "expand": "fill",
       "h": 900,
       "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "1 · Inicio de contabilidad: qué toca hoy, pasos del mes, crear e indicadores con «?» (interactiva, claro/oscuro)",
+      "page": "menu",
+      "title": "1 · Menú lateral corregido: isla a 16 px de los cuatro bordes y «Ajustes» como una sola entrada (estados: modo expandido, tema)",
       "w": 1440,
       "x": 0,
       "y": 0
     },
-    "PlanContaInicioMovil.dc.html": {
-      "expand": "fill",
-      "h": 844,
-      "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "1 · Inicio de contabilidad · teléfono",
-      "w": 390,
-      "x": 1520,
-      "y": 0
-    },
-    "PlanContaConciliar.dc.html": {
+    "AjustesEscritorio.dc.html": {
       "expand": "fill",
       "h": 900,
       "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "2 · Conciliar el banco: pasos, parejas sugeridas, diferencia, regla y sin pareja (interactiva)",
+      "page": "menu",
+      "title": "2 · Ajustes reestructurado · escritorio: lista agrupada con un buscador y la pantalla (estados: buscar, rol, tema)",
       "w": 1440,
       "x": 0,
-      "y": 1200
+      "y": 1100
     },
-    "PlanContaConciliarMovil.dc.html": {
+    "AjustesMovil.dc.html": {
       "expand": "fill",
       "h": 844,
       "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "2 · Conciliar el banco · teléfono (lista y decisión)",
+      "page": "menu",
+      "title": "2 · Ajustes reestructurado · teléfono: lista a pantalla completa, buscar y una pantalla",
       "w": 390,
       "x": 1520,
-      "y": 1200
+      "y": 1100
     },
-    "PlanClienteFiscal.dc.html": {
-      "expand": "fill",
-      "h": 900,
-      "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "3 · Ficha del cliente: «Nueva factura» visible, tipo de impuesto y retención (interactiva)",
-      "w": 1440,
-      "x": 0,
-      "y": 2400
-    },
-    "PlanClienteFiscalMovil.dc.html": {
+    "PerfilDrawer.dc.html": {
       "expand": "fill",
       "h": 844,
       "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "3 · Ficha del cliente · teléfono: nueva factura y tipo de impuesto",
+      "page": "menu",
+      "title": "3 · Perfil en el teléfono: drawer desde abajo (cuenta, empresa, tema, ayuda, salir) y su fila en «Más»",
       "w": 390,
-      "x": 1520,
-      "y": 2400
-    },
-    "PlanIndicadorAyuda.dc.html": {
-      "expand": "fill",
-      "h": 1000,
-      "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "4 · Patrón de indicador con ayuda «¿Qué es esto?»: partes, estados y palabras",
-      "w": 1440,
-      "x": 0,
-      "y": 3600
-    },
-    "PlanIndicadorAyudaMovil.dc.html": {
-      "expand": "fill",
-      "h": 844,
-      "is_interactive": true,
-      "page": "plan_contabilidad",
-      "title": "4 · Patrón de indicador con ayuda · teléfono (hoja desde abajo)",
-      "w": 390,
-      "x": 1520,
-      "y": 3600
+      "x": 1990,
+      "y": 1100
     },
     "PendSmartoltLista.dc.html": {
       "expand": "fill",
@@ -1130,6 +1090,86 @@
       "w": 390,
       "x": 1410,
       "y": 4500
+    },
+    "PlanContaInicio.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "1 · Inicio de contabilidad: qué toca hoy, pasos del mes, crear e indicadores con «?» (interactiva, claro/oscuro)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "PlanContaInicioMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "1 · Inicio de contabilidad · teléfono",
+      "w": 390,
+      "x": 1520,
+      "y": 0
+    },
+    "PlanContaConciliar.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "2 · Conciliar el banco: parejas, retención del cliente, diferencia con motivo, sobre el tope, regla y sin pareja (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 1200
+    },
+    "PlanContaConciliarMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "2 · Conciliar el banco · teléfono (lista y decisión)",
+      "w": 390,
+      "x": 1520,
+      "y": 1200
+    },
+    "PlanClienteFiscal.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "3 · Ficha del cliente: «Nueva factura» visible, tipo de impuesto y retención (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 2400
+    },
+    "PlanClienteFiscalMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "3 · Ficha del cliente · teléfono: nueva factura y tipo de impuesto",
+      "w": 390,
+      "x": 1520,
+      "y": 2400
+    },
+    "PlanIndicadorAyuda.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "4 · Patrón de indicador con ayuda «¿Qué es esto?»: partes, estados y palabras",
+      "w": 1440,
+      "x": 0,
+      "y": 3600
+    },
+    "PlanIndicadorAyudaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "4 · Patrón de indicador con ayuda · teléfono (hoja desde abajo)",
+      "w": 390,
+      "x": 1520,
+      "y": 3600
     },
     "PlanConciliarConfig.dc.html": {
       "expand": "fill",
@@ -1375,15 +1415,6 @@
     "PendEnviosReportes.dc.html",
     "PendIntentosRecuperacion.dc.html",
     "PendVinculosTecnicos.dc.html",
-    "MarcoMovil.dc.html",
-    "PlanContaInicio.dc.html",
-    "PlanContaInicioMovil.dc.html",
-    "PlanContaConciliar.dc.html",
-    "PlanContaConciliarMovil.dc.html",
-    "PlanClienteFiscal.dc.html",
-    "PlanClienteFiscalMovil.dc.html",
-    "PlanIndicadorAyuda.dc.html",
-    "PlanIndicadorAyudaMovil.dc.html",
     "PendSmartoltLista.dc.html",
     "PendSmartoltDetalle.dc.html",
     "PendSmartoltForm.dc.html",
@@ -1393,6 +1424,19 @@
     "PendSmartoltFormMovil.dc.html",
     "PendAcsMovil.dc.html",
     "PendEquipoServicioMovil.dc.html",
+    "MarcoMovil.dc.html",
+    "MenuLateral.dc.html",
+    "AjustesEscritorio.dc.html",
+    "AjustesMovil.dc.html",
+    "PerfilDrawer.dc.html",
+    "PlanContaInicio.dc.html",
+    "PlanContaInicioMovil.dc.html",
+    "PlanContaConciliar.dc.html",
+    "PlanContaConciliarMovil.dc.html",
+    "PlanClienteFiscal.dc.html",
+    "PlanClienteFiscalMovil.dc.html",
+    "PlanIndicadorAyuda.dc.html",
+    "PlanIndicadorAyudaMovil.dc.html",
     "PlanConciliarConfig.dc.html",
     "PlanCajas.dc.html",
     "PlanCajasMovil.dc.html"
@@ -1433,6 +1477,10 @@
     {
       "id": "pendientes",
       "name": "Pendientes del backend"
+    },
+    {
+      "id": "menu",
+      "name": "Menú lateral, Ajustes y perfil (por aprobar)"
     },
     {
       "id": "plan_contabilidad",

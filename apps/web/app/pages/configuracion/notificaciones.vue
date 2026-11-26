@@ -166,8 +166,6 @@ const canales = computed<{ id: Canal, titulo: string, detalle: string, icono: st
 <template>
     <ConfiguracionMarco
         id="notificaciones"
-        titulo="Notificaciones"
-        descripcion="Por dónde se avisa a los clientes y al equipo, y qué dice cada mensaje"
         sin-tarjeta
     >
         <template #acciones>

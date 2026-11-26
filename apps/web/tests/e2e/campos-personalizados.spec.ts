@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar, ir, menu } from './ayudas'
+import { abrirAjustes, entrar, ir } from './ayudas'
 
 /**
  * Catálogo de campos personalizados (solo admin) y contacto de los routers (modo fixtures,
@@ -50,8 +50,8 @@ test('admin: crear un campo de lista, editarlo y desactivarlo', async ({ page })
 
 test('cajero no ve el catálogo de campos personalizados', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
-    const lateral = await menu(page)
-    await expect(lateral.getByRole('link', { name: 'Campos personalizados' })).toHaveCount(0)
+    await abrirAjustes(page)
+    await expect(page.locator('[data-prueba="indice-ajustes"]').getByRole('link', { name: 'Campos personalizados' })).toHaveCount(0)
     await page.goto('/campos-personalizados')
     await expect(page).toHaveURL(/\/sin-permiso/)
 })

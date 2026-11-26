@@ -210,5 +210,5 @@ export function mensajeErrorSso(problema: Problem): { titulo: string, detalle: s
 /** Texto de la explicación de un botón "Ver en Horus" deshabilitado. */
 export const EXPLICACION_HORUS = {
     sinPermiso: 'Necesitas el permiso horus.abrir para abrir registros en Horus.',
-    apagado: 'La integración con Horus está apagada. Actívala en Configuración → Integraciones.',
+    apagado: 'La integración con Horus está apagada. Actívala en Ajustes → Integraciones.',
 } as const

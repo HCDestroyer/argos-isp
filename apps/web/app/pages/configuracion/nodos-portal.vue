@@ -83,9 +83,6 @@ function alRevocar(nodo: NodoPortal) {
 <template>
     <ConfiguracionMarco
         id="nodos-portal"
-        titulo="Nodos del portal"
-        descripcion="Portales del cliente instalados en otro sitio"
-        volver="/configuracion/portal-corte"
     >
         <template #accion-principal>
             <UButton

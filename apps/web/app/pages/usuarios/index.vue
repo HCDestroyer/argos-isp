@@ -209,11 +209,10 @@ const menuFila = useMenuFila(accionesUsuario)
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="usuarios"
-        titulo="Usuarios"
-        icono="i-lucide-user-cog"
         descripcion="Las personas que entran al panel, con su rol y hasta dónde llega"
+        sin-tarjeta
     >
         <template #acciones>
             <UButton
@@ -450,5 +449,5 @@ const menuFila = useMenuFila(accionesUsuario)
             :ejecutar="cambiarActivo"
             @hecho="alCambiarActivo"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

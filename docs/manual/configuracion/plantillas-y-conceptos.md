@@ -12,7 +12,7 @@ Un resumen en una sola pantalla de lo que define cómo se cobra y qué se imprim
 
 - **Ver:** `plantillas.ver` o `documentos.ver`. Cada bloque aparece solo si tienes su permiso: plantillas de facturación con `plantillas.ver`, plantillas de documentos con `documentos.ver` y conceptos con `facturas.ver`.
 
-Se llega desde **Configuración → Facturación y cobro → Plantillas y conceptos**.
+Se llega desde **Ajustes → Facturación y cobro → Conceptos y adicionales**.
 
 ## Qué ves
 

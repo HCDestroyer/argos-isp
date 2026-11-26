@@ -38,7 +38,7 @@ Abajo, la lista **Por revisar** muestra los borradores pendientes con su número
 | Esta factura ya está registrada                | El mismo emisor, serie y número ya están en las compras de la empresa        |
 | Este archivo ya se cargó                       | Hay un borrador con el mismo archivo: búscalo en «Por revisar»               |
 | Borrador creado para capturar a mano           | No se pudo leer el archivo; llena los datos tú                               |
-| No hay IA configurada para leer PDF o imágenes | Captura a mano o pide que configuren la IA en **Configuración → Red y portal → Inventario** |
+| No hay IA configurada para leer PDF o imágenes | Captura a mano o pide que configuren la IA en **Ajustes → Red y equipos → Inventario** |
 | La IA no pudo leer la factura                  | Por ejemplo, un PDF escaneado sin texto: súbelo como imagen o captura a mano |
 
 ## Revisar un borrador

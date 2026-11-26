@@ -9,7 +9,7 @@ pantallas:
 Cómo se cuentan las bajas en los reportes y en el panel del dueño.
 
 ::: tip El aviso de pequeño contribuyente se movió
-El aviso del límite anual del pequeño contribuyente y sus umbrales ahora están en [Configuración → Fiscal](../fiscal/configuracion-fiscal.md#aviso-de-pequeno-contribuyente).
+El aviso del límite anual del pequeño contribuyente y sus umbrales ahora están en [Ajustes → Empresa y fiscal → Régimen e impuestos](../fiscal/configuracion-fiscal.md#aviso-de-pequeno-contribuyente).
 :::
 
 ## Quién la usa
@@ -17,7 +17,7 @@ El aviso del límite anual del pequeño contribuyente y sus umbrales ahora está
 - **Ver la pantalla:** `reportes.ver`.
 - **Ver los ajustes:** `panel_financiero.ver`; **guardarlos** con `panel_financiero.configurar`.
 
-Se llega desde **Configuración → Reportes**. Los correos externos aprobados para los envíos programados ya no están aquí: viven en [Reportes → Envíos programados](../reportes/envios-programados.md).
+Se llega desde **Ajustes → Apariencia y reportes → Ajustes de reportes**. Los correos externos aprobados para los envíos programados ya no están aquí: viven en [Reportes → Envíos programados](../reportes/envios-programados.md).
 
 ## Qué ves
 
@@ -32,11 +32,11 @@ Se llega desde **Configuración → Reportes**. Los correos externos aprobados p
 | Mensaje | Qué hacer |
 | --- | --- |
 | «Elige una empresa» | Estos ajustes son de cada empresa: elige una arriba. |
-| ¿Dónde quedó el aviso de pequeño contribuyente? | En [Configuración → Fiscal](../fiscal/configuracion-fiscal.md#aviso-de-pequeno-contribuyente). |
+| ¿Dónde quedó el aviso de pequeño contribuyente? | En [Ajustes → Empresa y fiscal → Régimen e impuestos](../fiscal/configuracion-fiscal.md#aviso-de-pequeno-contribuyente). |
 | Conflicto de versión | Otra persona guardó mientras editabas: toca **Recargar**. |
 
 ## Relacionado
 
 - [Envíos programados](../reportes/envios-programados.md)
 - [Catálogo de reportes](../reportes/catalogo.md)
-- [Configuración fiscal](../fiscal/configuracion-fiscal.md)
+- [Régimen e impuestos](../fiscal/configuracion-fiscal.md)

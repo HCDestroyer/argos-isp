@@ -5,7 +5,7 @@ export type ComparadorEmpresa = ComparadorRegimenes['empresas'][number]
 
 /**
  * Comparador de regímenes (A3, fase 8 PR B; contrato de localización fiscal §22). Es una simulación:
- * no escribe nada ni cambia el régimen (eso es `POST /fiscal/regimen`, en Configuración → Fiscal). Una
+ * no escribe nada ni cambia el régimen (eso es `POST /fiscal/regimen`, en Ajustes → Régimen e impuestos). Una
  * sección por empresa (con «Todas», todas) con seis bloques calculados por separado; uno cuyo insumo
  * falló trae 422 `bloque_dependiente`.
  */

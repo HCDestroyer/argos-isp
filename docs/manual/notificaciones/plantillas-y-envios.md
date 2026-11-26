@@ -6,7 +6,7 @@ pantallas:
 
 # Plantillas de avisos, recordatorios y envíos
 
-En esta pantalla decides qué dice cada aviso que reciben tus clientes, cuándo salen los recordatorios de pago y revisas cada mensaje que salió (o que no salió, y por qué). Los canales (servidor de correo, bot de Telegram) y los interruptores por tipo de aviso están en [Configuración de notificaciones](./configuracion.md).
+En esta pantalla decides qué dice cada aviso que reciben tus clientes, cuándo salen los recordatorios de pago y revisas cada mensaje que salió (o que no salió, y por qué). Los canales (servidor de correo, bot de Telegram) y los interruptores por tipo de aviso están en [Canales de aviso](./configuracion.md).
 
 ## Quién la usa
 
@@ -14,13 +14,13 @@ En esta pantalla decides qué dice cada aviso que reciben tus clientes, cuándo 
 - **Editar plantillas y recordatorios:** permiso `notificaciones.editar`. Solo lo trae `admin`. Sin él no aparece el lápiz de editar.
 - El filtro por cliente de la pestaña «Envíos» y el nombre de cada cliente necesitan además `clientes.ver`.
 
-Menú: **Configuración → Notificaciones e integraciones → Plantillas de avisos**. Tiene tres pestañas: «Plantillas», «Recordatorios» y «Envíos».
+Menú: **Ajustes → Comunicación e integraciones → Plantillas de avisos**. Tiene tres pestañas: «Plantillas», «Recordatorios» y «Envíos».
 
 ## Cómo sale un aviso
 
 Cuando pasa algo en la cuenta de un cliente (se emite una factura, se registra un pago, se suspende el servicio…), ArgosIsp prepara el aviso con la plantilla de ese evento y lo manda **por todos los canales que sirvan**, para que le llegue por cualquier medio. Un canal sirve si:
 
-1. está encendido y configurado en Configuración → Notificaciones,
+1. está encendido y configurado en Ajustes → Comunicación e integraciones → Canales de aviso,
 2. el cliente tiene destino en ese canal (correo en su ficha, o Telegram vinculado), y
 3. la plantilla de ese evento y canal está activa.
 
@@ -111,5 +111,5 @@ El ojo al final de la fila abre el detalle: estado y número de intentos, client
 
 ## Relacionado
 
-- [Configuración de notificaciones](./configuracion.md)
+- [Canales de aviso](./configuracion.md)
 - [Monitoreo y alertas del servidor](../../runbooks/monitoreo.md)
