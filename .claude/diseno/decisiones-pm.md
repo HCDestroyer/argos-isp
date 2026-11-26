@@ -90,3 +90,21 @@ Por decidir (cada una con su recomendación en el plan, §8):
 12. Conciliación en el teléfono (amplía la decisión 9).
 13. Revisión de los textos de ayuda por el contador.
 14. Pasos del mes automáticos.
+
+
+### Respuestas del PM (26 nov 2026)
+
+- **Aprobado:** menú Finanzas en 7 entradas con «Inicio» primero (cambia la decisión 1).
+- **Aprobado:** «Cargo único» pasa a llamarse «Nueva factura» y queda a la vista.
+- **Aprobado:** tipos de impuesto del cliente: Normal, Agente retenedor de IVA y Exento, más la casilla «me retiene ISR». «Exento» queda apagado hasta tener la frase del contador.
+- **Conciliación.** Texto del PM: «En la conciacion es segun lo que se configure, pero no se puede definir un tope? Ademas del tipo de cliente (retención de iva) se debe poder tambien tomar en cuenta en dicha conciación, ademas de otros». Queda así (plan §5.8, tableros `PlanConciliarConfig` y `PlanContaConciliar`):
+  - la diferencia aceptable se configura por empresa: tope por línea y por día, y quién aprueba por encima;
+  - la conciliación entiende las retenciones: con un cliente agente retenedor de IVA o que retiene ISR, el depósito esperado es el total menos la retención, y esa parte va a la cuenta de retención, no a «diferencia»;
+  - cada diferencia conocida es un motivo configurable con su cuenta y su límite: comisión del banco, comisión de pasarela o agente, redondeo, faltante de depósito y «otra razón».
+- **Cajas.** Texto del PM: «Debe existir 2 tipos de cajas 1 para cobros y 1 para gastos(mejora esto, y analisa algo que se adapte y se eficiente, consiso y que el flujo de efectivo que se maneja no se pueda perder o dejar de tener el control)». Queda así (plan §5.7, tableros `PlanCajas` y `PlanCajasMovil`):
+  - dos tipos de caja: **de cobros** (turno, cierre y entrega) y **de gastos o caja chica** (fondo fijo que se repone contra comprobantes);
+  - entre la caja y el banco está la **custodia**: el efectivo siempre está a nombre de una persona;
+  - el efectivo se mueve solo de cuatro formas: entrega, depósito, reposición y gasto, cada una con su número y su movimiento en el libro.
+- **Preguntas 7 a 14:** quedan como se recomendaron. El gasto en efectivo sale de la caja chica.
+
+Por decidir ahora (plan §8.2): N1 caja sin factura con dos tipos; N2 quitar el retiro del cajero; N3 plazo y tope de custodia; N4 quién recibe entregas; N5 reponer la caja chica desde la custodia; N6 retención sin constancia; N7 tope de diferencias de fábrica; N8 diferencia al recibir una entrega; N9 fondos fijos de fábrica.

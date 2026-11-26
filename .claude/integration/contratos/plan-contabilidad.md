@@ -1,6 +1,6 @@
 # Plan de contabilidad: análisis, propuesta y lotes
 
-Estado: **propuesta, pendiente de aprobación del PM** (26 nov 2026). Rama `lider/plan-contabilidad`, sobre `main` en `d86d5602`.
+Estado: **propuesta con las respuestas del PM del 26 nov 2026** (§8.1); quedan por responder las preguntas de §8.2. Rama `lider/plan-contabilidad`, sobre `main` en `d86d5602`.
 Este documento no cambia código. Lo ejecutan A3 (backend), A4 (panel) y el auditor (`apps/api/tests/contabilidad/`).
 
 - Tableros: `.claude/diseno/tableros/Plan*.dc.html` (generador `.claude/diseno/generadores/conta_plan.py`).
@@ -105,17 +105,17 @@ Solo ideas de función y de flujo. No se copia marca, nombres ni diseño.
 
 | Idea | Argos hoy | ¿Aplica a un ISP en Guatemala? | Propuesta |
 | --- | --- | --- | --- |
-| **Tipo de impuesto por cliente** (gravado, exento, tasa por defecto) | No. Solo `tipo_documento_fiscal` (CF, NIT, CUI). El régimen es de la empresa (`billing/regimen.ts`) | Sí. Agentes de retención de IVA (contribuyentes especiales, Estado, exportadores), clientes que retienen ISR y entidades exentas. Con empresa pequeño contribuyente no hay IVA ni retención de IVA | **Construir** (lote B4/P7): perfil fiscal del cliente que define la factura (frase de exención) y lo que el cobro espera (constancia) |
+| **Tipo de impuesto por cliente** (gravado, exento, tasa por defecto) | No. Solo `tipo_documento_fiscal` (CF, NIT, CUI). El régimen es de la empresa (`billing/regimen.ts`) | Sí. Agentes de retención de IVA (contribuyentes especiales, Estado, exportadores), clientes que retienen ISR y entidades exentas. Con empresa pequeño contribuyente no hay IVA ni retención de IVA | **Construir** (lotes B4, P7 y B10): perfil fiscal del cliente que define la factura (frase de exención) y lo que el cobro espera (constancia) |
 | **Tipo de impuesto por proveedor** | Sí: `regimen_isr` y `agente_retencion_iva` (`ledger/proveedores.ts:38-39`), con retenciones sugeridas en la compra | Sí | Mostrarlo igual que en el cliente (misma tarjeta «Impuestos») |
 | **Tipo de cuenta** (cada cuenta tiene un tipo que decide en qué reporte sale y cómo se comporta) | A medias: `tipo`, `naturaleza`, `contracuenta`, `categoria_flujo`, `categoria_fiscal`, auxiliares. El plan de cuentas es de solo lectura en el panel | Sí, simplificado | Plan de cuentas con el tipo en palabras («Dinero», «Me deben», «Debo», «Ventas», «Gastos») y crear **subcuentas** de gasto e ingreso; nunca borrar (lote B7/P10) |
 | **Coincidencia automática** con el banco | A medias: reglas y botón «Automático» por referencia y monto | Sí | Niveles «pareja segura / para decidir / sin pareja» y aceptar las seguras en lote (B3/P6) |
 | **Reglas bancarias por texto** | Sí (`contiene` o `regex` → contrapartida o cliente) | Sí | Subirlas de nivel: «crear regla» desde la línea |
 | **Varias partidas contra una línea** | Sí (`movimientos[]`, depósitos y traslados) | Sí | Mantener |
-| **Conciliar con diferencia** (crear el ajuste en el mismo paso) | No: `conciliacion_descuadrada` (`conciliar_linea.ts:152-160`) | Sí: comisiones de banco y de agentes | **Construir** (B3) con tope y motivo |
+| **Conciliar con diferencia** (crear el ajuste en el mismo paso) | No: `conciliacion_descuadrada` (`conciliar_linea.ts:152-160`) | Sí: comisiones de banco y de agentes | **Construir** (B3, §5.8): motivos configurables con su cuenta, tope y aprobación |
 | **Categorizar una línea sin pareja** (pago de cliente, gasto, traslado, ingreso) | A medias: «Registrar pago recibido» y contrapartida libre | Sí | Cuatro opciones en palabras y «no sé todavía» (por identificar) |
 | **Conciliación por periodo con saldo final** y «deshacer» | A medias: reporte de conciliación y anular por línea | Sí | Paso «Revisar el saldo» y «Terminar» del flujo guiado |
-| **Anticipos y saldo a favor del cliente** | Sí: `2.1.01`, se aplica solo a la siguiente factura | Sí | Falta **devolver** el saldo a favor (B6) y verlo en la ficha |
-| **Anticipos y créditos de proveedor** | Créditos sí (NCRE); anticipos no (`pago_excede_saldo`) | Sí (tránsito de internet, postes) | Construir en B6, después de lo urgente |
+| **Anticipos y saldo a favor del cliente** | Sí: `2.1.01`, se aplica solo a la siguiente factura | Sí | Falta **devolver** el saldo a favor (B5) y verlo en la ficha |
+| **Anticipos y créditos de proveedor** | Créditos sí (NCRE); anticipos no (`pago_excede_saldo`) | Sí (tránsito de internet, postes) | Construir en B8, después de lo urgente |
 | **Factura de anticipo (retainer)** | No | Poco. En Guatemala el anticipo se factura al recibirlo; hoy basta el saldo a favor | No construir; anotar para el contador |
 | **Recurrencia de facturas** | Sí, nativa: plantillas y generación por periodo | Sí | Nada |
 | **Gastos recurrentes** (alquiler, enlaces) | No | Sí | Más adelante: «repetir cada mes» como borrador de compra (pregunta 9) |
@@ -228,6 +228,83 @@ Panel (A4): menú nuevo, inicio, indicador con ayuda, conectar lo apagado, nueva
 
 Reglas que se respetan: libro inmutable (todo lo nuevo es asiento o reverso), acciones explícitas con su permiso de `apps/api/app/core/permisos.ts`, todo con `empresa_id` y filtrado por la empresa activa, lecturas sin estado en memoria (el inicio se calcula por consulta o por proyección refrescada por evento, nunca con TTL).
 
+### 5.7 Modelo de cajas (respuesta del PM, 26 nov 2026)
+
+Pedido del PM: dos tipos de caja, una para cobros y una para gastos, con un flujo corto en el que el efectivo no se pueda perder ni quedar sin control. Resuelve E1.
+
+**Cuatro lugares donde puede estar el efectivo, y solo cuatro.**
+
+| Lugar | Qué es | Cuenta en el libro | Quién responde |
+| --- | --- | --- | --- |
+| Caja de cobros | Turno del cajero. Solo entra dinero de clientes; solo sale por «entrega» | Subcuenta de Cajas `1.1.01.NN` (ya existe) | El cajero del turno |
+| Custodia | Efectivo que ya salió de una caja y aún no llega al banco | Cuenta nueva «Efectivo en custodia» (código por confirmar con el contador; una por empresa) | La persona que dijo «Recibí» |
+| Caja chica | Caja de gastos con fondo fijo | Subcuenta de Cajas `1.1.01.NN`, con `tipo = gastos` | Su encargado |
+| Banco | Depósito en camino y luego confirmado | Fondos en tránsito `1.1.11` y la cuenta del banco (ya existen) | — |
+
+**Cuatro movimientos, y solo cuatro.** Cada uno es un documento con número, quién entrega, quién recibe, monto y su asiento. Ninguno se edita: se anula con su reverso.
+
+| Movimiento | De → a | Cuándo | Asiento |
+| --- | --- | --- | --- |
+| **Entrega** | Caja de cobros → custodia | Al cerrar el turno: todo lo contado menos el fondo fijo de cambio | Custodia / Caja, **cuando quien recibe confirma con su usuario**. Hasta entonces sigue a nombre del cajero («por recibir») |
+| **Depósito** | Custodia → banco | Con boleta y foto, sin necesidad de turno abierto | Fondos en tránsito / Custodia (luego la conciliación lo confirma) |
+| **Reposición** | Custodia o banco → caja chica | Por lo gastado desde la última reposición; nunca desde una caja de cobros | Caja chica / Custodia o Banco |
+| **Gasto** | Caja chica → gasto | Con comprobante obligatorio (foto) y tope por gasto | Gasto / Caja chica. Con factura a nombre de la empresa se registra como compra pagada con caja chica, para no perder el IVA |
+
+Reglas que evitan que se pierda el rastro:
+
+- **Fondo fijo.** La caja de cobros abre siempre con su fondo de cambio configurado; ya no se escribe a mano. La caja chica siempre cumple «efectivo + comprobantes sin reponer = fondo fijo».
+- **Dos personas en cada entrega.** Quien recibe cuenta y confirma. Si cuenta distinto, la diferencia queda como faltante o sobrante del turno, con el nombre de quien entregó.
+- **«Lo deposito yo».** En un ISP de pocas personas el cajero puede entregarse a sí mismo: el efectivo pasa a custodia a su nombre y el camino es el mismo.
+- **Plazo y tope de custodia** por persona, configurables. Pasarse avisa en el inicio de contabilidad y en el panel del dueño; no bloquea los cobros.
+- **Conteo sorpresa** de la caja chica y de la custodia de una persona, con diferencia a su cargo.
+- **Un indicador:** «Efectivo fuera del banco» = cajas de cobros + custodia + caja chica + en camino, con quién tiene cada parte y desde cuándo.
+- **Revisión del cierre del mes nueva:** ninguna entrega «por recibir» ni custodia fuera de plazo.
+
+Lo que cambia respecto a hoy:
+
+- `ledger.cajas` gana `tipo` (`cobros` | `gastos`), `fondo_fijo`, `tope_gasto` y `encargado_id`.
+- `cajas.cerrar` deja de guardar `entregado_a` como dato suelto: crea la entrega. `cajas.depositar` sale de la custodia de quien deposita, no de un turno.
+- El «retiro» del cajero desde su caja de cobros desaparece: los gastos en efectivo salen de la caja chica (pregunta N2). El pago en efectivo a un proveedor sale de caja chica hasta su tope; por encima, del banco.
+- Documentos nuevos: `ledger.entregas`, `ledger.reposiciones`, `ledger.conteos_caja`. Los gastos de caja chica reúsan `ledger.egresos` con `comprobante` obligatorio.
+
+**Caja sin factura (`fiscal = false`, PR #331).** Es una marca independiente del tipo: puede haber caja de cobros sin factura (recibos internos) y caja chica sin factura (gastos internos sin comprobante fiscal). El efectivo sigue el mismo camino; lo que no se mezcla son las cuentas de ingreso y gasto, que ya separa ese PR. Choque a resolver: ese PR describe una sola caja sin factura que «mueve entradas y salidas»; con este modelo serían dos (pregunta N1). B1 se integra después del PR #331.
+
+**Permisos y visibilidad.** Se mantiene el alcance por caja que ya existe: el cajero ve su caja y sus entregas; el encargado, su caja chica; cada persona, su custodia; contabilidad y el dueño, todo. Permisos nuevos (se piden a A1 para `core/permisos.ts`): `cajas.recibir_entrega`, `cajas.ver_custodia`, `cajas.configurar`, `caja_chica.registrar_gasto`, `caja_chica.reponer`, `caja_chica.contar`. `cajas.depositar` ya existe.
+
+**Multiempresa.** Cada caja, cada custodia y cada caja chica son de una empresa. Una entrega, un depósito o una reposición nunca cruzan de empresa; quien cobra para dos empresas hace dos entregas.
+
+**Eventos nuevos** (a `contratos/eventos.md` y al catálogo de `CLAUDE.md` en la PR de B1 y B9): `caja.entregada`, `caja.entrega_recibida`, `caja_chica.repuesta`, `caja.contada`, `custodia.fuera_de_plazo`. `caja.cerrada` y `caja.depositada` no cambian de nombre.
+
+Tableros: `PlanCajas` (camino del efectivo, caja chica, custodia y depósitos; cerrar y entregar, recibir, depositar, gasto, reponer, contar) y `PlanCajasMovil`.
+
+### 5.8 Diferencias y retenciones al conciliar (respuesta del PM, 26 nov 2026)
+
+Pedido del PM: que la diferencia aceptable se configure, con tope; que la conciliación tome en cuenta el tipo de cliente (retención de IVA) y otras diferencias conocidas.
+
+**Configuración por empresa** (Configuración › Finanzas › «Diferencias al conciliar», tablero `PlanConciliarConfig`):
+
+1. **Tope de quien concilia:** por línea y por día. Con Q 0.00 toda diferencia pide aprobación.
+2. **Quién aprueba por encima del tope:** quien tenga `bancos.aprobar_diferencia`. Quien la pidió no puede aprobarla. Mientras espera, no hay asiento (queda como borrador, igual que los asientos manuales) y la línea no bloquea el resto.
+3. **Motivos de diferencia**, cada uno con: nombre, cuándo se ofrece (de más o de menos, cuenta, método o proveedor de cobro, texto), cuánto se permite (monto fijo, porcentaje o sin límite), a qué cuenta va, si cuenta contra el tope y si siempre pide aprobación.
+
+Motivos de fábrica:
+
+| Motivo | A dónde va | Límite de fábrica | Contra el tope |
+| --- | --- | --- | --- |
+| Retención de IVA del cliente | IVA retenido por clientes (1.1.05) | El de su impuesto | No. Fija: no se apaga |
+| Retención de ISR del cliente | ISR retenido por clientes (1.1.06) | El de su impuesto | No. Fija |
+| Comisión del banco | Gastos bancarios (5.3.07) | Q 10.00 por línea | Sí |
+| Comisión de pasarela o agente | Comisiones de pasarelas (5.1.02) | 4.5 % del cobro | No |
+| Redondeo | Diferencias de cobro (5.3.05) | Q 0.05 | No |
+| Faltó efectivo en el depósito | Faltantes de caja (5.2.06), a nombre de quien lo llevó | Sin límite propio | Sí |
+| Otra razón | La cuenta que elija quien concilia (nunca caja, banco ni puente) | — | Siempre pide aprobación |
+
+**Cómo entiende las retenciones.** Para cada factura pendiente de un cliente con perfil fiscal (lote B4), el monto esperado en el banco es `total − retención de IVA − retención de ISR`. Si una línea del banco coincide con ese monto, la sugerencia es «Pareja con retención»: muestra la cuenta (total, retención, lo que debe llegar) y al aceptar registra el pago con su retención, deja la factura pagada completa y anota la constancia en «Constancias por recibir». No usa el tope ni la cuenta de diferencias. Con empresa pequeño contribuyente no hay retención de IVA y esta sugerencia no aparece.
+
+**Cómo se ve en la conciliación** (tablero `PlanContaConciliar`): el estado de la línea dice «Pareja con retención», «Diferencia Q 5.00» o «Sobre el tope». Al abrirla, los motivos que aplican aparecen con su cuenta y su límite; los que no aplican se ven apagados con la razón. Abajo, «Dentro de lo que puedes aceptar tú: Q 5.00 de Q 25.00». Si pasa del tope, el botón cambia a «Pedir aprobación» y pide explicación.
+
+API nueva: `GET/PUT /bancos/ajustes-conciliacion` (`bancos.configurar_diferencias`), `GET/POST/PUT /bancos/motivos-diferencia`, `diferencias[] { motivo_id, monto, nota }` en `POST /bancos/conciliaciones`, `GET /bancos/diferencias-pendientes`, `POST /bancos/diferencias/:id/aprobar` y `/rechazar` (`bancos.aprobar_diferencia`). Eventos: `banco.diferencia_pendiente`, `banco.diferencia_aprobada`, `banco.diferencias_config_cambiada`. Reemplaza el `ajustes[]` simple de la primera versión de B3.
+
 ## 6. Tableros
 
 Generador `generadores/conta_plan.py` (base `pend_base.py`, claro y oscuro). Página «Contabilidad: propuesta (pendiente de aprobación)» de `canvas.json`.
@@ -235,7 +312,9 @@ Generador `generadores/conta_plan.py` (base `pend_base.py`, claro y oscuro). Pá
 | Tablero | Qué muestra | Imágenes en `capturas/contabilidad/propuesta/` |
 | --- | --- | --- |
 | `PlanContaInicio`, `PlanContaInicioMovil` | Inicio con tareas, pasos, crear e indicadores | `inicio-escritorio`, `inicio-ayuda-escritorio`, `inicio-oscuro-escritorio`, `inicio-movil`, `inicio-pasos-movil` |
-| `PlanContaConciliar`, `PlanContaConciliarMovil` | Conciliación guiada: 4 pasos, parejas, diferencia, regla, sin pareja | `conciliar-diferencia-escritorio`, `conciliar-sin-pareja-escritorio`, `conciliar-oscuro-escritorio`, `conciliar-movil`, `conciliar-decision-movil` |
+| `PlanContaConciliar`, `PlanContaConciliarMovil` | Conciliación guiada: 4 pasos, parejas, retención del cliente, diferencia con motivo, sobre el tope, regla, sin pareja | `conciliar-diferencia-escritorio`, `conciliar-retencion-escritorio`, `conciliar-sobre-tope-escritorio`, `conciliar-sin-pareja-escritorio`, `conciliar-oscuro-escritorio`, `conciliar-movil`, `conciliar-decision-movil` |
+| `PlanConciliarConfig` | Configuración de diferencias: tope, quién aprueba, motivos con su cuenta | `conciliar-config-escritorio`, `conciliar-config-ayuda-escritorio` |
+| `PlanCajas`, `PlanCajasMovil` | Cajas y efectivo: camino del efectivo, caja chica, custodia; cerrar y entregar, recibir, depositar, gasto, reponer | `cajas-camino-escritorio`, `cajas-chica-escritorio`, `cajas-custodia-escritorio`, `cajas-cerrar-entregar-escritorio`, `cajas-recibir-escritorio`, `cajas-depositar-escritorio`, `cajas-gasto-escritorio`, `cajas-reponer-escritorio`, `cajas-oscuro-escritorio`, `cajas-movil`, `cajas-chica-movil`, `cajas-recibir-movil` |
 | `PlanClienteFiscal`, `PlanClienteFiscalMovil` | Ficha con «Nueva factura», tipo de impuesto y retención | `cliente-escritorio`, `cliente-nueva-factura-escritorio`, `cliente-tipo-impuesto-escritorio`, `cliente-movil`, `cliente-nueva-factura-movil`, `cliente-tipo-impuesto-movil` |
 | `PlanIndicadorAyuda`, `PlanIndicadorAyudaMovil` | Patrón de indicador, estados, ayuda y palabras | `indicador-escritorio`, `indicador-movil`, `indicador-oscuro-movil` |
 
@@ -243,66 +322,86 @@ Diferencia conocida con el diseño aprobado: «Nueva factura» va en un panel la
 
 ## 7. Lotes y olas
 
-Complejidad: **alta** = toca asientos o varias acciones; **media** = una pantalla o una lectura; **baja** = menú, textos o permisos. Cada lote es una PR. Los de A3 regeneran `packages/contracts`; por eso dentro de una ola se mergean de uno en uno con `scripts/integrar.sh`.
+Actualizado con las respuestas del PM (26 nov 2026). Complejidad: **alta** = toca asientos o varias acciones; **media** = una pantalla o una lectura; **baja** = menú, textos o permisos. Cada lote es una PR. Los de A3 regeneran `packages/contracts`; por eso dentro de una ola se mergean de uno en uno con `scripts/integrar.sh`. Los permisos nuevos se piden a A1 en `integration/a3.md`.
 
-### Ola 1 (en paralelo; nada depende de una decisión nueva salvo lo marcado)
+### Ola 1 (en paralelo)
 
 | Lote | Dueño | Qué | Depende | Archivos | Pruebas | Complejidad |
 | --- | --- | --- | --- | --- | --- | --- |
-| AU1 | Auditor | Pruebas que fijan lo de hoy: E1 (entrega sin asiento, depósito al día siguiente), E3 (depósito corregido con ajuste), E5, E8 (saldo por libro = saldo por facturas tras cada operación del escenario generativo) | — | `apps/api/tests/contabilidad/plan_contabilidad.spec.ts`, `escenario_generativo.ts` | Las de E8 deben pasar ya; las de E1, E3 y E5 se escriben como comportamiento esperado y quedan marcadas hasta B1, B5 y B6 | Media |
-| B1 | A3 | Caja: asiento de la entrega al cerrar (cuenta nueva «Efectivo por depositar», con quién lo tiene), depositar desde una entrega sin turno abierto, aviso si el fondo de apertura no es el que quedó | Pregunta 5 | `ledger/actions/cerrar_caja.ts`, `depositar_caja.ts`, `abrir_caja.ts`, `ledger/resumen_turno.ts`, `ledger/transitos.ts`, `fiscal/l10n/gt/cuentas.ts`, migración, `ledger/README.md`, `contratos/eventos.md` (`caja.cerrada` con `entregado`) | `tests/ledger/` cajas y depósitos; AU1 | Alta |
-| B2 | A3 | `GET /contabilidad/inicio`: tareas con conteo y pasos del mes, por empresa activa y por permiso | — | `ledger/inicio_contabilidad.ts` (nuevo), `start/routes/ledger.ts`, `ledger/esquemas.ts`, permiso `contabilidad.ver_inicio` en `core/permisos.ts` (pedirlo a A1 en `integration/a3.md`) | `tests/ledger/inicio_contabilidad.spec.ts`: multiempresa, alcance, sin datos | Media |
-| P1 | A4 | Menú «Finanzas» en 7 entradas; pestañas dentro de cada pantalla; nombres en simple; permisos de página iguales a su API (E10) | Pregunta 1 | `app/utils/navegacion.ts`, `components/ContaPestanas.vue`, `ContaComprasPestanas.vue`, `LibrosNavegacion.vue`, páginas de bancos, fiscal y libro; `tests/e2e/menu.spec.ts`, `permisos.spec.ts`; `pnpm verificar:permisos` | e2e de menú en escritorio y teléfono | Media |
+| AU1 | Auditor | Pruebas que fijan lo de hoy: E1, E3, E5 y E8 (saldo por libro = saldo por facturas tras cada operación del escenario generativo) | — | `apps/api/tests/contabilidad/plan_contabilidad.spec.ts`, `escenario_generativo.ts` | Las de E8 deben pasar ya; las de E1, E3 y E5 se escriben como comportamiento esperado y quedan marcadas hasta B1, B5 y B6 | Media |
+| B1 | A3 | **Cajas I (§5.7):** `tipo` y `fondo_fijo` en la caja; custodia con su cuenta; entrega al cerrar con recepción («Recibí») y su asiento; depósito desde la custodia sin turno; apertura con el fondo fijo; plazo y tope de custodia; revisión nueva del cierre del mes | PR #331 integrado | `ledger/actions/cerrar_caja.ts`, `abrir_caja.ts`, `depositar_caja.ts`, `crear_caja.ts`, nuevas `entregar_caja.ts`, `recibir_entrega.ts`; `ledger/cajas.ts`, `resumen_turno.ts`, `transitos.ts`, `checks.ts`, `fiscal/l10n/gt/cuentas.ts`, migraciones (`node ace make:migration`), `start/routes/ledger.ts` y `bancos.ts`, `ledger/README.md`, `contratos/eventos.md`, `CLAUDE.md` (catálogo) | `tests/ledger/` cajas: entrega, recepción con diferencia, «lo deposito yo», depósito al día siguiente, multiempresa, idempotencia | Alta |
+| B2 | A3 | `GET /contabilidad/inicio`: tareas con conteo y pasos del mes, por empresa activa y por permiso | — | `ledger/inicio_contabilidad.ts` (nuevo), `start/routes/ledger.ts`, `ledger/esquemas.ts`, permiso `contabilidad.ver_inicio` | `tests/ledger/inicio_contabilidad.spec.ts`: multiempresa, alcance, sin datos | Media |
+| P1 | A4 | Menú «Finanzas» en 7 entradas (aprobado); pestañas dentro de cada pantalla; nombres en simple; permisos de página iguales a su API (E10) | — | `app/utils/navegacion.ts`, `components/ContaPestanas.vue`, `ContaComprasPestanas.vue`, `LibrosNavegacion.vue`, páginas de bancos, fiscal y libro; `tests/e2e/menu.spec.ts`, `permisos.spec.ts`; `pnpm verificar:permisos` | e2e de menú en escritorio y teléfono | Media |
 | P2 | A4 | Conectar lo apagado: asiento manual y pestaña «Por aprobar», registrar gestión, indicadores del panel, favoritos y programar envío desde el visor, balance de comprobación | — | `pages/libro/index.vue`, `components/Libro*.vue`, `composables/useLibro.ts`, `pages/cartera/index.vue`, `pages/finanzas/index.vue`, `pages/reportes/index.vue`, `pages/reportes/[reporte].vue`, fixtures | Vitest por composable; e2e `libro`, `cartera`, `reportes` | Media |
-| P3 | A4 | `ContaIndicador` con ayuda (reemplaza `ContaKpi`), `utils/ayudaIndicadores.ts`, aplicado en Panel, Cartera, Cajas y resumen fiscal | — (no toca las páginas de P1 ni P2 salvo `finanzas/index.vue`: va después de P2) | `components/ContaIndicador.vue`, `ContaKpi.vue`, `utils/ayudaIndicadores.ts`, `pages/cartera`, `pages/caja`, `pages/fiscal/tablero.vue` | Vitest del componente (5 estados, teclado), accesibilidad (`accesibilidad.spec.ts`) | Media |
-| P4 | A4 | «Nueva factura»: renombrar y sacar a la vista en ficha del cliente, Facturas, ficha del servicio; panel lateral; nota de crédito desde la lista | Pregunta 2 | `components/CargoUnicoModal.vue` → `FacturaNuevaPanel.vue`, `pages/clientes/[id]/index.vue`, `pages/facturas/index.vue`, `pages/servicios/[id]/index.vue`, pruebas e2e de la ficha y de facturas | e2e escritorio y teléfono | Media |
+| P3 | A4 | `ContaIndicador` con ayuda (reemplaza `ContaKpi`), `utils/ayudaIndicadores.ts`, aplicado en Panel, Cartera, Cajas y resumen fiscal | Después de P2 (`finanzas/index.vue`) | `components/ContaIndicador.vue`, `ContaKpi.vue`, `utils/ayudaIndicadores.ts`, `pages/cartera`, `pages/fiscal/tablero.vue` | Vitest del componente (5 estados, teclado), `accesibilidad.spec.ts` | Media |
+| P4 | A4 | «Nueva factura» (aprobado): renombrar y sacar a la vista en ficha del cliente, Facturas y ficha del servicio; panel lateral; nota de crédito desde la lista | — | `components/CargoUnicoModal.vue` → `FacturaNuevaPanel.vue`, `pages/clientes/[id]/index.vue`, `pages/facturas/index.vue`, `pages/servicios/[id]/index.vue` | e2e escritorio y teléfono | Media |
 
 ### Ola 2 (depende de la ola 1)
 
 | Lote | Dueño | Qué | Depende | Archivos | Pruebas | Complejidad |
 | --- | --- | --- | --- | --- | --- | --- |
-| B3 | A3 | Conciliación: `GET /bancos/extractos/:id/sugerencias` (segura, posible, regla, sin pareja), `POST /bancos/conciliaciones/lote`, `ajustes[]` en conciliar (cuenta, monto, motivo, con tope), «por identificar» | Pregunta 6 | `ledger/conciliacion.ts`, `ledger/actions/conciliar_linea.ts`, `aplicar_reglas_conciliacion.ts`, `validators_bancos.ts`, `start/routes/bancos.ts`, `contratos/localizacion-fiscal.md` §10.4 | `tests/ledger/` conciliación: diferencia, tope, lote, idempotencia | Alta |
-| B4 | A3 | Perfil fiscal del cliente (`billing.clientes_fiscal`: tipo, retiene IVA, retiene ISR, exento con su documento, vigencia); la factura lo guarda en su instantánea; el estado de cuenta devuelve las retenciones esperadas; evento `cliente.perfil_fiscal_cambiado` | Preguntas 3 y 4 | `billing/perfil_fiscal.ts` (nuevo), `billing/actions/asignar_perfil_fiscal.ts`, `emitir_factura.ts`, `emitir_cargo_unico.ts`, `registrar_pago.ts`, `estado_cuenta.ts`, `fiscal/fel/xml_gt.ts`, migración, permiso `clientes.asignar_perfil_fiscal`, `contratos/eventos.md`, `CLAUDE.md` (catálogo) | `tests/billing/perfil_fiscal.spec.ts`: general y pequeño contribuyente, FEL falso | Alta |
+| B9 | A3 | **Cajas II, caja chica (§5.7):** gasto con comprobante obligatorio y tope; gasto con factura como compra pagada con caja chica; reposición desde custodia o banco; conteo; los gastos dejan de salir de la caja de cobros; caja chica sin factura | B1; preguntas N1 y N2 | `ledger/actions/registrar_egreso.ts`, `registrar_compra.ts`, `registrar_pago_proveedor.ts`, nuevas `reponer_caja_chica.ts`, `contar_caja.ts`; `ledger/egresos.ts`, `validators.ts`, migración, rutas, eventos | `tests/ledger/caja_chica.spec.ts`: efectivo + comprobantes = fondo en cada paso; tope; reposición sellada | Alta |
+| B3 | A3 | **Conciliación I (§5.8):** ajustes de diferencias por empresa (tope por línea y por día), motivos con su cuenta y límite, `diferencias[]` al conciliar, aprobación por encima del tope sin asiento hasta aprobar, sugerencias con nivel, aceptar en lote, «por identificar» | — | `ledger/conciliacion.ts`, `ledger/actions/conciliar_linea.ts`, `aplicar_reglas_conciliacion.ts`, nuevas `configurar_diferencias.ts`, `crear_motivo_diferencia.ts`, `editar_motivo_diferencia.ts`, `aprobar_diferencia.ts`, `rechazar_diferencia.ts`; `validators_bancos.ts`, `start/routes/bancos.ts`, migración, `contratos/localizacion-fiscal.md` §10.4, eventos | `tests/ledger/` conciliación: motivo dentro y fuera de su límite, tope por línea y por día, aprobación por otro usuario, lote, idempotencia, multiempresa | Alta |
+| B4 | A3 | Perfil fiscal del cliente (aprobado): Normal, Agente retenedor de IVA, Exento (apagado hasta tener la frase) y casilla «me retiene ISR»; la factura lo guarda en su instantánea; el estado de cuenta devuelve las retenciones esperadas; evento `cliente.perfil_fiscal_cambiado` | — | `billing/perfil_fiscal.ts` (nuevo), `billing/actions/asignar_perfil_fiscal.ts`, `emitir_factura.ts`, `emitir_cargo_unico.ts`, `registrar_pago.ts`, `estado_cuenta.ts`, migración, permiso `clientes.asignar_perfil_fiscal`, `contratos/eventos.md`, `CLAUDE.md` | `tests/billing/perfil_fiscal.spec.ts`: general y pequeño contribuyente, FEL falso, exento rechazado mientras esté apagado | Alta |
 | P5 | A4 | Inicio de contabilidad (tablero `PlanContaInicio`) | B2, P3 | `pages/contabilidad/index.vue`, `composables/useInicioContabilidad.ts`, `navegacion.ts`, fixtures | Vitest y e2e en 1280 y 390; error con Reintentar | Media |
-| P8 | A4 | Cierre de caja: entrega con su recibo, «Depositar lo entregado», depósito a la vista | B1 | `pages/caja/index.vue`, `components/CajaDepositoSlideover.vue`, `components/CajaCierre*.vue`, `composables/useCajas.ts` | `tests/e2e/cierre-caja.spec.ts` | Media |
-| AU2 | Auditor | Activar las pruebas de E1; invariantes nuevas: caja en libro = efectivo de turnos + entregas sin depositar | B1 | `tests/contabilidad/plan_contabilidad.spec.ts`, `cajas_bancos.spec.ts` | — | Media |
+| P8 | A4 | **Cajas y efectivo (tablero `PlanCajas`):** camino del efectivo, cerrar y entregar, recibir, custodia y depósitos; teléfono con «Recibir» | B1 | `pages/caja/index.vue`, `components/Caja*.vue`, `CajaDepositoSlideover.vue`, `composables/useCajas.ts`, nuevo `useCustodia.ts`, fixtures | `tests/e2e/cierre-caja.spec.ts` ampliada; teléfono | Alta |
+| AU2 | Auditor | Invariantes de efectivo: caja de cobros cerrada = fondo fijo + entregas por recibir; custodia en libro = entregas recibidas − depósitos − reposiciones, por persona; nada sale de una caja de cobros que no sea entrega; activa las pruebas de E1 | B1 | `tests/contabilidad/plan_contabilidad.spec.ts`, `cajas_bancos.spec.ts`, `escenario_generativo.ts` | — | Media |
 
 ### Ola 3
 
 | Lote | Dueño | Qué | Depende | Archivos | Pruebas | Complejidad |
 | --- | --- | --- | --- | --- | --- | --- |
-| B5 | A3 | Anular depósito de caja (reverso y vuelve al efectivo); devolver saldo a favor (`pagos.devolver_saldo`); anticipo a proveedor | B1; pregunta 8 | `ledger/actions/anular_deposito.ts`, `billing/actions/devolver_saldo_favor.ts`, `ledger/actions/registrar_pago_proveedor.ts`, `ledger/reversos.ts`, `core/permisos.ts` (pedir a A1) | `tests/ledger`, `tests/billing` | Alta |
+| B10 | A3 | **Conciliación II, retenciones (§5.8):** monto esperado por factura según el perfil fiscal, sugerencia «pareja con retención», pago con retención y «constancia por recibir», revisión del cierre «constancias pendientes» | B3, B4; pregunta N6 | `ledger/conciliacion.ts`, `ledger/retenciones.ts`, `billing/actions/registrar_pago.ts`, `ledger/checks.ts`, `ledger/constancias.ts` | `tests/ledger/conciliacion_retenciones.spec.ts`: IVA, ISR, las dos, pequeño contribuyente | Alta |
+| B5 | A3 | Anular depósito (vuelve a la custodia); devolver saldo a favor (`pagos.devolver_saldo`) | B1 | `ledger/actions/anular_deposito.ts`, `billing/actions/devolver_saldo_favor.ts`, `ledger/reversos.ts` | `tests/ledger`, `tests/billing` | Alta |
 | B6 | A3 | Cartera a una fecha con saldo histórico (desde el auxiliar del libro) | — | `billing/reportes/reportes.ts`, `contratos/reportes.md` | `tests/billing/reportes*` | Media |
-| P6 | A4 | Conciliación guiada (tablero `PlanContaConciliar`) | B3 | `pages/bancos/extractos/[id].vue`, `components/Conciliar*.vue`, `composables/useExtractos.ts`, `useConciliaciones.ts` | `tests/e2e/fase4-bancos.spec.ts` ampliada; teléfono | Alta |
-| P7 | A4 | Ficha del cliente: tarjeta «Impuestos de este cliente», tipo de impuesto, retención en «Nueva factura» y en Cobrar (constancia propuesta); misma tarjeta en el proveedor | B4, P4 | `pages/clientes/[id]/index.vue`, `components/ClienteFiscal*.vue`, `FacturaNuevaPanel.vue`, `pages/cobro/index.vue`, `pages/proveedores/[id].vue` | e2e cobro con retención; Vitest | Alta |
-| AU3 | Auditor | Perfil fiscal: retención esperada = constancias; exento sin IVA en libro, libros de ventas y declaración; diferencia de conciliación cuadra con el reporte | B3, B4 | `tests/contabilidad/hallazgos_plan.spec.ts` | — | Media |
+| P6 | A4 | **Conciliación guiada y su configuración (tableros `PlanContaConciliar` y `PlanConciliarConfig`):** pasos, parejas, motivos con su límite, tope, pedir y dar aprobación | B3 | `pages/bancos/extractos/[id].vue`, `components/Conciliar*.vue`, nueva `pages/configuracion/diferencias-conciliacion.vue`, `composables/useExtractos.ts`, `useConciliaciones.ts`, `utils/configuracionSecciones.ts` | `tests/e2e/fase4-bancos.spec.ts` ampliada; teléfono | Alta |
+| P7 | A4 | Ficha del cliente: tarjeta «Impuestos de este cliente», tipo de impuesto, retención en «Nueva factura» y en Cobrar; misma tarjeta en el proveedor | B4, P4 | `pages/clientes/[id]/index.vue`, `components/ClienteFiscal*.vue`, `FacturaNuevaPanel.vue`, `pages/cobro/index.vue`, `pages/proveedores/[id].vue` | e2e cobro con retención; Vitest | Alta |
+| P12 | A4 | Caja chica en el panel (pestaña de `PlanCajas`): gasto con foto, reponer, contar; teléfono | B9, P8 | `pages/caja/index.vue`, `components/CajaChica*.vue`, `composables/useCajaChica.ts` | e2e en 1280 y 390 | Media |
+| AU3 | Auditor | Diferencias: cada motivo cae en su cuenta y nunca en caja, banco ni puente; lo aprobado y lo pendiente cuadran con el reporte de conciliación; caja chica: efectivo + comprobantes = fondo tras cada operación generada | B3, B9 | `tests/contabilidad/hallazgos_plan.spec.ts` | — | Media |
 
 ### Ola 4
 
 | Lote | Dueño | Qué | Depende | Archivos | Pruebas | Complejidad |
 | --- | --- | --- | --- | --- | --- | --- |
-| B7 | A3 | Subcuentas de gasto e ingreso desde el panel (`libro.crear_cuenta`, `libro.desactivar_cuenta`); tipo de cuenta en palabras | Pregunta 11 | `ledger/actions/crear_cuenta.ts`, `ledger/plan_cuentas.ts`, rutas | `tests/ledger/cuentas.spec.ts` | Media |
-| B8 | A3 | Permisos propios para deshacer (E9) con migración de roles | A1 (`core/permisos.ts`) | `start/routes/{bancos,compras,activos,billing}.ts`, seed de roles | `tests/core/acl`, `pnpm verificar:permisos` | Baja |
-| P9 | A4 | Asistente «Cerrar el mes»: cada revisión con su botón «Arreglar» que lleva a la pantalla, en el orden de los pasos; «Cerrar el año» con lo que falta | P5 | `pages/libro/cierres.vue`, `components/LibroCierres.vue`, `composables/useChecksCierre.ts` | `tests/e2e/checks-cierre.spec.ts` | Media |
-| P10 | A4 | Gasto unificado («con factura / sin factura») y plan de cuentas con subcuentas | B7; pregunta 7 | `pages/compras/nueva.vue`, `pages/egresos/index.vue`, `pages/libro/index.vue` | e2e compras | Media |
-| P11 | A4 | Devolver saldo a favor, anular depósito, anticipo a proveedor | B5 | `pages/clientes/[id]`, `pages/caja`, `pages/pagos-proveedores.vue` | e2e | Media |
-| AU4 | Auditor | Recorrido completo de un mes con el escenario generativo siguiendo los 7 pasos | todo | `tests/contabilidad/generativo.spec.ts` | — | Media |
+| B7 | A3 | Subcuentas de gasto e ingreso desde el panel (`libro.crear_cuenta`, `libro.desactivar_cuenta`); tipo de cuenta en palabras | — | `ledger/actions/crear_cuenta.ts`, `ledger/plan_cuentas.ts`, rutas | `tests/ledger/cuentas.spec.ts` | Media |
+| B8 | A3 | Permisos propios para deshacer (E9) con migración de roles; anticipo a proveedor | A1 (`core/permisos.ts`) | `start/routes/{bancos,compras,activos,billing}.ts`, `ledger/actions/registrar_pago_proveedor.ts`, seed de roles | `tests/core/acl`, `pnpm verificar:permisos` | Media |
+| P9 | A4 | Asistente «Cerrar el mes»: cada revisión con su botón «Arreglar», en el orden de los pasos; «Cerrar el año» con lo que falta | P5 | `pages/libro/cierres.vue`, `components/LibroCierres.vue`, `composables/useChecksCierre.ts` | `tests/e2e/checks-cierre.spec.ts` | Media |
+| P10 | A4 | Gasto unificado («con factura / sin factura») y plan de cuentas con subcuentas | B7, B9 | `pages/compras/nueva.vue`, `pages/egresos/index.vue`, `pages/libro/index.vue` | e2e compras | Media |
+| P11 | A4 | Devolver saldo a favor, anular depósito, anticipo a proveedor | B5, B8 | `pages/clientes/[id]`, `pages/caja`, `pages/pagos-proveedores.vue` | e2e | Media |
+| P13 | A4 | Retenciones en la conciliación («pareja con retención») y lista «Constancias por recibir» | B10, P6, P7 | `components/Conciliar*.vue`, `pages/constancias.vue` | e2e | Media |
+| AU4 | Auditor | Retenciones: lo esperado = lo retenido = constancias; recorrido completo de un mes con el escenario generativo siguiendo los 7 pasos | todo | `tests/contabilidad/generativo.spec.ts` | — | Media |
 
-Qué no se pisa: en cada ola, A3 trabaja en archivos distintos (cajas, lectura nueva, conciliación, facturación); A4 separa menú (P1), libro y reportes (P2), componente (P3) y facturas (P4). `finanzas/index.vue` lo tocan P2 y P3: P3 va después. `navegacion.ts` lo tocan P1 y P5: P5 es de la ola 2.
+Qué no se pisa: en cada ola A3 trabaja en archivos distintos (cajas, lectura nueva, conciliación, facturación) y A4 separa menú (P1), libro y reportes (P2), componente (P3), facturas (P4), cajas (P8, P12) y conciliación (P6, P13). `pages/caja/index.vue` lo tocan P3, P8 y P12 en olas distintas. `registrar_pago.ts` lo tocan B4 y B10 en olas distintas.
 
-## 8. Preguntas para el PM (con recomendación)
+## 8. Preguntas para el PM
 
-1. **¿El grupo «Finanzas» pasa a 7 entradas con «Inicio» primero?** Cambia la decisión 1 (8 entradas sueltas). Recomendación: sí.
-2. **¿«Cargo único» se llama «Nueva factura» y va a la vista?** Recomendación: sí; el nombre técnico queda en la bitácora.
-3. **¿Qué tipos de impuesto tiene un cliente?** Recomendación: Normal, Agente retenedor de IVA, Exento, y aparte la casilla «me retiene ISR» (un cliente puede retener las dos cosas).
-4. **Exento con factura electrónica:** hace falta la frase de exención que confirme el contador. Recomendación: construir primero «retenedor» y dejar «exento» apagado hasta tener la frase.
-5. **Efectivo que se entrega al cerrar la caja:** ¿queda a nombre de quien lo recibe hasta que lo deposita? Recomendación: sí, en una cuenta «Efectivo por depositar», y el depósito se registra contra esa entrega.
-6. **Diferencia al conciliar:** ¿hasta cuánto puede aceptar quien concilia? Recomendación: el mismo tope de «cerrar diferencia» de la empresa; arriba de eso, solo contabilidad con motivo.
-7. **¿Una sola puerta para gastos?** Recomendación: sí, «Registrar compra o gasto» con dos caminos (con factura, sin factura). El retiro de caja del cajero se queda en Caja.
-8. **¿Se construye anular depósito, devolver saldo a favor y anticipo a proveedor?** Recomendación: los dos primeros sí; el anticipo a proveedor en la última ola.
-9. **Gastos que se repiten cada mes (alquiler, enlaces):** Recomendación: después de este plan, como borrador mensual que alguien confirma.
-10. **¿Aprobación de compras o pagos a proveedores sobre un monto?** Recomendación: no por ahora; ya hay aprobación de asientos manuales.
-11. **¿El usuario puede crear subcuentas de gasto e ingreso?** Recomendación: sí, solo contabilidad, y nunca borrar: se desactivan.
-12. **Conciliación en el teléfono:** la decisión 9 dice consulta y aprobar. Recomendación: en teléfono aceptar parejas y decidir una por una; subir el estado de cuenta y las reglas, solo en escritorio.
-13. **Textos de ayuda:** ¿los revisa el contador antes de publicarlos? Recomendación: sí, una sola pasada sobre el archivo de textos.
-14. **Pasos del mes:** ¿automáticos o con casillas? Recomendación: automáticos; un paso está «listo» cuando los datos lo dicen.
+### 8.1 Respondidas (26 nov 2026)
+
+| # | Pregunta | Respuesta |
+| --- | --- | --- |
+| 1 | Finanzas en 7 entradas con «Inicio» primero | **Aprobado** |
+| 2 | «Cargo único» pasa a «Nueva factura» y queda a la vista | **Aprobado** |
+| 3 | Tipos de impuesto del cliente | **Aprobado:** Normal, Agente retenedor de IVA, Exento y la casilla «me retiene ISR» |
+| 4 | «Exento» apagado hasta tener la frase del contador | **Aprobado** |
+| 5 | Efectivo entregado al cerrar la caja | Reemplazada por el modelo de cajas (§5.7) |
+| 6 | Tope de diferencia al conciliar | Configurable por empresa, con retenciones y motivos (§5.8) |
+| 7 | Una sola puerta para gastos | Aprobado como se propuso; el gasto en efectivo sale de la caja chica |
+| 8 | Anular depósito, devolver saldo a favor, anticipo a proveedor | Aprobado como se propuso |
+| 9 | Gastos que se repiten cada mes | Después de este plan |
+| 10 | Aprobación de compras y pagos a proveedores | No por ahora |
+| 11 | Subcuentas creadas por contabilidad | Sí; se desactivan, no se borran |
+| 12 | Conciliación en el teléfono | Aceptar y decidir; subir estado de cuenta, reglas y configuración, solo en escritorio |
+| 13 | Textos de ayuda revisados por el contador | Sí |
+| 14 | Pasos del mes automáticos | Sí |
+
+### 8.2 Nuevas (con recomendación)
+
+- **N1. Caja sin factura y los dos tipos.** El PR #331 describe una caja sin factura que cobra y también paga. Con dos tipos serían una caja de cobros sin factura y una caja chica sin factura. Recomendación: sí, dos; lo que ya se pagó desde una caja sin factura se queda como está y lo nuevo sale de su caja chica.
+- **N2. ¿Se quita el «retiro» del cajero desde la caja de cobros?** Hoy puede sacar para un gasto hasta un tope. Recomendación: sí, se quita; los gastos en efectivo salen solo de la caja chica. En un ISP de una persona, esa persona es cajera y encargada de la caja chica.
+- **N3. Plazo y tope de la custodia.** Recomendación: 1 día hábil y Q 5,000.00 por persona de fábrica, configurables por empresa; pasarse avisa al dueño y a contabilidad, no bloquea cobros.
+- **N4. ¿Quién puede recibir una entrega?** Recomendación: permiso propio; de fábrica admin y contabilidad. «Lo deposito yo» permitido de fábrica y se puede apagar por empresa.
+- **N5. ¿La caja chica se puede reponer con efectivo de la custodia?** Recomendación: sí, además del banco; es lo práctico y queda documentado. Nunca directo desde una caja de cobros.
+- **N6. Cliente que retiene y aún no entrega la constancia.** Recomendación: la factura queda pagada, la constancia queda «por recibir» con aviso en el cierre del mes, y la retención no se usa en la declaración hasta tenerla (confirmar con el contador).
+- **N7. Tope de diferencias de fábrica.** Recomendación: Q 10.00 por línea y Q 50.00 por día; cada empresa lo cambia. Los tableros muestran Q 25.00 y Q 100.00 como ejemplo de una empresa que ya lo subió.
+- **N8. Diferencia al recibir una entrega.** Recomendación: queda como faltante o sobrante del turno con el nombre de quien entregó; Argos no descuenta nada de planilla.
+- **N9. Fondo fijo de fábrica.** Recomendación: Q 200.00 de cambio por caja de cobros y Q 2,000.00 de caja chica con tope de Q 300.00 por gasto, configurables por caja.

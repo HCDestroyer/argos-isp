@@ -137,7 +137,9 @@ LIN = [dict(id=1, f='10 nov', d='ABONO PASARELA LIQ', r='LIQ-2026-11-10', m='Q 3
        dict(id=3, f='13 nov', d='DEPOSITO EN EFECTIVO AG. CENTRAL', r='B-4471', m='Q 895.00', k='wa', ki='dif', kt='Diferencia Q 5.00', g='dif'),
        dict(id=4, f='14 nov', d='COMISION MANEJO DE CUENTA', r='—', m='− Q 15.00', k='cy', ki='rayo', kt='Regla: gasto bancario', g='reg'),
        dict(id=5, f='14 nov', d='DEPOSITO MONETARIO 0098812', r='0098812', m='Q 200.00', k='er', ki='x', kt='Sin pareja', g='sin'),
-       dict(id=6, f='15 nov', d='PAGO SERVICIO EEGSA', r='884120', m='− Q 1,850.40', k='ok', ki='check', kt='Pareja segura', g='seg')]
+       dict(id=6, f='15 nov', d='PAGO SERVICIO EEGSA', r='884120', m='− Q 1,850.40', k='ok', ki='check', kt='Pareja segura', g='seg'),
+       dict(id=7, f='18 nov', d='TRANSFERENCIA HOTEL POSADA DEL VALLE', r='TRF-60231', m='Q 1,180.71', k='ok', ki='sello', kt='Pareja con retención', g='seg'),
+       dict(id=8, f='20 nov', d='DEPOSITO EN EFECTIVO AG. ZONA 4', r='B-4502', m='Q 2,340.00', k='er', ki='bloq', kt='Sobre el tope', g='dif')]
 blin = T('''<sc-for list="{{lin}}" as="x"><div class="bl {{x.cls}}" onClick="{{x.ver}}"><span class="ck2"></span><span class="m2">{{x.f}}</span>
  <div style="min-width:0"><b class="el" style="display:block">{{x.d}}</b><span class="m2 mono" style="font-size:11.5px">ref. {{x.r}}</span></div>
  <b class="num r">{{x.m}}</b><span><span class="b {{x.k}}"><span class="ti ti-{{x.ki}}" style="width:13px;height:13px"></span>{{x.kt}}</span></span></div></sc-for>''')
@@ -145,16 +147,29 @@ def det(i, tit, sub, body, acc):
     return T('<div style="display:{{sel.<<i>>.v}};flex-direction:column;gap:10px;flex:1;min-height:0"><div><b style="font-size:16px"><<t>></b><div class="m2"><<s>></div></div><div class="sc" style="flex:1;display:flex;flex-direction:column;gap:8px"><<b>></div><div style="display:flex;gap:8px;justify-content:flex-end"><<a>></div></div>', i=i, t=tit, s=sub, b=body, a=acc)
 sg = lambda on, a, b, c: T('<div class="sug <<on>>"><span class="rd2 <<on>>"></span><div style="flex:1;min-width:0"><b class="el" style="display:block"><<a>></b><span class="m2"><<b>></span></div><b class="num"><<c>></b></div>', on='on' if on else '', a=a, b=b, c=c)
 d_seg = det('s1', 'Coincide con una liquidación', 'Mismo monto y misma referencia: no hay nada que decidir',
-            sg(True, 'Liquidación 1 de Pasarela', '10 nov · ref. LIQ-2026-11-10', 'Q 308.78') + '<div class="av2 ok"><i:check:16><div>Todas las «parejas seguras» se pueden aceptar juntas con <b>Aceptar las 6 seguras</b>.</div></div>',
+            sg(True, 'Liquidación 1 de Pasarela', '10 nov · ref. LIQ-2026-11-10', 'Q 308.78') + '<div class="av2 ok"><i:check:16><div>Todas las «parejas seguras» se pueden aceptar juntas con <b>Aceptar las 7 seguras</b>.</div></div>',
             '<button class="btn o">No es esta</button><button class="btn p"><i:check:15>Aceptar pareja</button>')
 d_pos = det('s2', 'Hay 2 candidatos', 'Elige cuál es. Mismo monto, fecha cercana',
             sg(True, 'Pago 6102 · María López', '12 nov · transferencia · ref. TRF-55120', 'Q 450.00') + sg(False, 'Pago 6088 · Taller Hermanos Ruiz', '11 nov · depósito · sin referencia', 'Q 450.00') + '<div class="m2">¿Ninguno? <button class="lnk">Buscar otro movimiento</button> o <button class="lnk">registrar un cobro nuevo</button>.</div>',
             '<button class="btn o">Dejar para después</button><button class="btn p"><i:check:15>Es el pago 6102</button>')
-d_dif = det('s3', 'El banco muestra Q 5.00 menos', 'Encontramos el depósito, pero el monto no es igual',
-            sg(True, 'Depósito de caja #14 · boleta B-4471', '13 nov · Caja principal', 'Q 900.00')
-            + '<div class="cd" style="gap:8px"><div class="cdh" style="margin:0"><i:dif:15>¿Qué pasó con los Q 5.00?</div>' + sg(True, 'El banco cobró una comisión', 'Se registra como gasto bancario', '− Q 5.00') + sg(False, 'Se contó mal el efectivo', 'Se registra como faltante de caja', '− Q 5.00') + sg(False, 'Otra razón', 'Tú eliges dónde va', '') + '</div>'
-            + '<div class="kv2"><span>Banco</span><b class="num">Q 895.00</b></div><div class="kv2"><span>Depósito − comisión</span><b class="num" style="color:#166534">Q 895.00 · cuadra</b></div>',
+d_dif = det('s3', 'El banco muestra Q 5.00 menos', 'Encontramos el depósito, pero el monto no es igual. Elige el motivo: cada uno ya tiene su cuenta',
+            sg(True, 'Depósito de custodia #14 · boleta B-4471', '13 nov · lo llevó Marta Gómez', 'Q 900.00')
+            + '<div class="cd" style="gap:8px"><div class="cdh" style="margin:0"><i:dif:15>¿Qué pasó con los Q 5.00?<button class="lnk">Configurar motivos</button></div>' + sg(True, 'Comisión del banco', 'Gasto bancario · permitido hasta Q 10.00 por línea', '− Q 5.00') + sg(False, 'Faltó efectivo en el depósito', 'Queda a cargo de quien lo llevó', '− Q 5.00') + '<div class="sug" style="opacity:.55;cursor:not-allowed"><span class="rd2"></span><div style="flex:1"><b>Redondeo</b><div class="m2">No aplica: solo hasta Q 0.05</div></div></div>' + sg(False, 'Otra razón', 'Eliges la cuenta · siempre pide aprobación', '') + '</div>'
+            + '<div class="kv2"><span>Banco</span><b class="num">Q 895.00</b></div><div class="kv2"><span>Depósito − comisión</span><b class="num" style="color:#166534">Q 895.00 · cuadra</b></div>'
+            + '<div class="av2 ok" style="padding:8px 12px"><i:check:15><div>Dentro de lo que puedes aceptar tú: <b>Q 5.00 de Q 25.00</b> por línea.</div></div>',
             '<button class="btn o">Dejar para después</button><button class="btn p"><i:check:15>Conciliar con la diferencia</button>')
+d_ret = det('s6', 'Coincide: el cliente retuvo IVA', 'Hotel Posada del Valle es agente retenedor de IVA. El depósito esperado ya descuenta su retención',
+            sg(True, 'Factura F-004530 · Hotel Posada del Valle', '16 nov · instalación y 2 routers', 'Q 1,200.00')
+            + '<div class="cd" style="gap:0"><div class="cdh" style="margin:0 0 4px"><i:sello:15>Cómo se llega al monto del banco</div><div class="kv2"><span>Total de la factura</span><span class="num">Q 1,200.00</span></div><div class="kv2"><span>Retención de IVA (15 % del IVA) <span class="b cy" style="font-size:11px">por su tipo de impuesto</span></span><span class="num">− Q 19.29</span></div><div class="kv2"><span style="color:#0F172A"><b>Debe llegar al banco</b></span><b class="num" style="color:#166534">Q 1,180.71 · cuadra</b></div></div>'
+            + '<div class="av2 nf" style="align-items:flex-start"><i:info:16><div>Los Q 19.29 no son una pérdida: quedan como <b>IVA retenido por cobrar a la SAT</b> y la factura queda pagada completa. Falta la <b>constancia</b> del cliente; se anota en «Constancias por recibir».</div></div>'
+            + '<div class="m2">No cuenta contra tu tope de diferencias.</div>',
+            '<button class="btn o">No es esta</button><button class="btn p"><i:check:15>Registrar el pago y conciliar</button>')
+d_top = det('s7', 'Faltan Q 60.00 y pasa de tu tope', 'Tú puedes aceptar hasta Q 25.00 por línea. Esta diferencia la aprueba contabilidad',
+            sg(True, 'Depósito de custodia #17 · boleta B-4502', '20 nov · lo llevó Marta Gómez', 'Q 2,400.00')
+            + '<div class="cd" style="gap:8px"><div class="cdh" style="margin:0"><i:dif:15>¿Qué pasó con los Q 60.00?</div>' + sg(True, 'Faltó efectivo en el depósito', 'Queda a cargo de Marta Gómez hasta aclararlo', '− Q 60.00') + sg(False, 'Comisión del banco', 'No aplica: permitido hasta Q 10.00', '') + '</div>'
+            + campo('Explica qué pasó', '~Ej.: la boleta dice Q 2,340; se contó mal al entregar', True)
+            + '<div class="av2 wa" style="align-items:flex-start"><i:bloq:16><div><b>No entra al libro todavía.</b> Queda «Esperando aprobación» y le avisa a quien tiene el permiso (Ana Castillo, Luis Pérez). La línea no bloquea el resto de la conciliación.</div></div>',
+            '<button class="btn o">Dejar para después</button><button class="btn p"><i:enviar:15>Pedir aprobación</button>')
 d_reg = det('s4', 'Lo reconoció una regla', '«Si el texto dice COMISION MANEJO → gasto bancario»',
             '<div class="cd"><div class="kv2"><span>Se registra como</span><b>Gasto bancario</b></div><div class="kv2"><span>Monto</span><b class="num">Q 15.00</b></div><div class="kv2"><span>Regla</span><span>Comisiones del banco <button class="lnk">Editar</button></span></div></div><div class="m2">Las reglas proponen; nada entra al libro hasta que aceptas.</div>',
             '<button class="btn o">No aplicar</button><button class="btn p"><i:check:15>Registrar y conciliar</button>')
@@ -175,18 +190,18 @@ conc = T('''<<head>>
   <div class="ph2"><<seg>></div>
   <div class="lh" style="grid-template-columns:20px 64px minmax(0,1fr) 96px 150px;padding:9px 16px"><span></span><span>Fecha</span><span>Lo que dice el banco</span><span class="r">Monto</span><span>Argos encontró</span></div>
   <div class="sc" style="flex:1"><<blin>></div>
-  <div class="pf m2"><i:info:14><span style="flex:1">Entradas en positivo, salidas con «−». Lo emparejado pasa a «Listas».</span><button class="btn v sm"><i:check:14>Aceptar las 6 seguras</button></div>
+  <div class="pf m2"><i:info:14><span style="flex:1">Entradas en positivo, salidas con «−». Lo emparejado pasa a «Listas».</span><button class="btn v sm"><i:check:14>Aceptar las 7 seguras</button></div>
  </section>
  <section class="isla pan" style="flex:1;padding:16px 18px;gap:10px">
   <div class="cdh" style="margin:0"><i:unir:15>Movimiento elegido · {{linSel.f}} · {{linSel.m}}</div>
-  <<d1>><<d2>><<d3>><<d4>><<d5>>
+  <<d1>><<d2>><<d3>><<d4>><<d5>><<d6>><<d7>>
  </section>
-</div>''', head=head('Conciliar el banco', 'Banco Industrial · Monetaria ···4521 · estado de cuenta del 1 al 24 de noviembre', '<button class="btn o"><i:rayo:15>Reglas</button><button class="btn o"><i:subir:15>Subir otro estado de cuenta</button>' + TEMA_HINT, 'Ayuda: qué es conciliar y para qué sirve'),
-         seg=seg('f', [('todo', 'Por emparejar', None, 14, 'rj'), ('seg', 'Seguras', 'check', 6), ('dud', 'Para decidir', 'ayuda', 5), ('sin', 'Sin pareja', 'x', 3), ('ok', 'Listas', None, 38)]),
-         blin=blin, d1=d_seg, d2=d_pos, d3=d_dif, d4=d_reg, d5=d_sin)
-SELJS = "const sid = st.s_lin === undefined ? 3 : st.s_lin; const mp = {1:'s1',2:'s2',3:'s3',4:'s4',5:'s5',6:'s1'}; out.sel = {}; ['s1','s2','s3','s4','s5'].forEach((k) => { out.sel[k] = { v: mp[sid] === k ? 'flex' : 'none' }; });"
+</div>''', head=head('Conciliar el banco', 'Banco Industrial · Monetaria ···4521 · estado de cuenta del 1 al 24 de noviembre', '<button class="btn o"><i:aj:15>Diferencias y reglas</button><button class="btn o"><i:subir:15>Subir otro estado de cuenta</button>' + TEMA_HINT, 'Ayuda: qué es conciliar y para qué sirve'),
+         seg=seg('f', [('todo', 'Por emparejar', None, 14, 'rj'), ('seg', 'Seguras', 'check', 7), ('dud', 'Para decidir', 'ayuda', 4), ('sin', 'Sin pareja', 'x', 3), ('ok', 'Listas', None, 38)]),
+         blin=blin, d1=d_seg, d2=d_pos, d3=d_dif, d4=d_reg, d5=d_sin, d6=d_ret, d7=d_top)
+SELJS = "const sid = st.s_lin === undefined ? 3 : st.s_lin; const mp = {1:'s1',2:'s2',3:'s3',4:'s4',5:'s5',6:'s1',7:'s6',8:'s7'}; out.sel = {}; ['s1','s2','s3','s4','s5','s6','s7'].forEach((k) => { out.sel[k] = { v: mp[sid] === k ? 'flex' : 'none' }; });"
 pbuild('PlanContaConciliar.dc.html', 'Conciliar el banco · flujo guiado con parejas sugeridas, diferencias y reglas', shell2('fin', ['Finanzas', 'Bancos', 'Conciliar'], conc),
-       tlogic({'f': (['todo', 'seg', 'dud', 'sin', 'ok'], 'todo')}, {'lin': {'rows': LIN, 'def': 3}}, SELJS), 900, CSSP + mask(['check', 'ayuda', 'dif', 'rayo', 'x']))
+       tlogic({'f': (['todo', 'seg', 'dud', 'sin', 'ok'], 'todo')}, {'lin': {'rows': LIN, 'def': 3}}, SELJS), 900, CSSP + mask(['check', 'ayuda', 'dif', 'rayo', 'x', 'sello', 'bloq']))
 
 mlin = T('''<sc-for list="{{lin}}" as="x"><div class="card" style="padding:11px 13px;display:flex;flex-direction:column;gap:6px" onClick="{{d.det.ir}}">
  <div style="display:flex;gap:8px;align-items:center"><b class="el" style="flex:1;font-size:13.5px">{{x.d}}</b><b class="num">{{x.m}}</b></div>
@@ -201,11 +216,11 @@ mconc = T('''<div style="height:100%;display:flex;flex-direction:column;position
   <section class="cd" style="gap:8px"><div class="cdh" style="margin:0">Argos encontró</div><<s1>><div class="cdh" style="margin:6px 0 0"><i:dif:15>¿Y los Q 5.00 que faltan?</div><<s2>><<s3>><<s4>></section>
  </div>
 </div>
-<div class="mbar" style="display:{{d.lista.v}}"><button class="btn v"><i:check:16>Aceptar las 6 seguras</button></div>
+<div class="mbar" style="display:{{d.lista.v}}"><button class="btn v"><i:check:16>Aceptar las 7 seguras</button></div>
 <div class="mbar" style="display:{{d.det.v}}"><button class="btn o" style="flex:0 0 auto" onClick="{{d.lista.ir}}">Después</button><button class="btn p"><i:check:16>Conciliar con la diferencia</button></div>
 </div>''', top=mtop('Conciliar el banco', 'Banco Industrial ···4521', '<button class="ib f" style="width:38px;height:38px;border-radius:999px" onClick="{{tTema}}" aria-label="Tema"><i:luna:17></button>'), mlin=mlin,
-          s1=sg(True, 'Depósito de caja #14', 'boleta B-4471 · Caja principal', 'Q 900.00'), s2=sg(True, 'Comisión del banco', 'Gasto bancario', '− Q 5.00'), s3=sg(False, 'Se contó mal el efectivo', 'Faltante de caja', ''), s4=sg(False, 'Otra razón', 'Tú eliges', ''))
-pmbuild('PlanContaConciliarMovil.dc.html', 'Conciliar el banco · teléfono (lista y decisión)', mconc, tlogic({'d': (['lista', 'det'], 'lista')}, {'lin': {'rows': LIN, 'def': 3}}), CSSP + mask(['check', 'ayuda', 'dif', 'rayo', 'x']))
+          s1=sg(True, 'Depósito de custodia #14', 'boleta B-4471 · lo llevó Marta Gómez', 'Q 900.00'), s2=sg(True, 'Comisión del banco', 'Gasto bancario · hasta Q 10.00', '− Q 5.00'), s3=sg(False, 'Faltó efectivo en el depósito', 'A cargo de quien lo llevó', ''), s4=sg(False, 'Otra razón', 'Pide aprobación', ''))
+pmbuild('PlanContaConciliarMovil.dc.html', 'Conciliar el banco · teléfono (lista y decisión)', mconc, tlogic({'d': (['lista', 'det'], 'lista')}, {'lin': {'rows': LIN, 'def': 3}}), CSSP + mask(['check', 'ayuda', 'dif', 'rayo', 'x', 'sello', 'bloq']))
 
 # ============================ 3 · Ficha del cliente: «Nueva factura» y tipo de impuesto ============================
 TIPOS = [('nor', 'Normal', 'Se le cobra IVA. Es lo de casi todos los clientes.', 'Factura con IVA incluido'),
@@ -329,4 +344,176 @@ mpat = T('''<div style="height:100%;display:flex;flex-direction:column;position:
          k1=ind('a', 'x', 'cli', 'wa', 'Te deben', 'Q 15,840', '64 facturas', ('wa', 'alerta', 'Atención')), k2=ind('a', 'x', 'banco', 'ok', 'Disponible', 'Q 9,757', 'bancos y cajas', ('ok', 'check', 'Bien')),
          k3=ind('a', 'x', 'calc', 'er', 'IVA de octubre', 'Q 3,104.00', 'Venció hace 3 días', ('er', 'alerta', 'Urgente')))
 pmbuild('PlanIndicadorAyudaMovil.dc.html', 'Patrón · indicador con ayuda · teléfono', mpat, tlogic({'a': (['no', 'x'], 'x')}), CSSP)
+
+# ============================ 5 · Configuración: diferencias al conciliar ============================
+TD = [('ret', 'sello', 'cy', 'Retención de IVA del cliente', 'Automática: el cliente es agente retenedor', '15 % del IVA de la factura', 'IVA retenido por clientes', 'No cuenta', 'Fija'),
+      ('isr', 'sello', 'cy', 'Retención de ISR del cliente', 'Automática: el cliente «me retiene ISR»', '5 % o 7 % sin IVA', 'ISR retenido por clientes', 'No cuenta', 'Fija'),
+      ('com', 'banco', 'nf', 'Comisión del banco', 'El banco acredita de menos', 'Hasta Q 10.00 por línea', 'Gastos bancarios', 'Cuenta', 'Activa'),
+      ('pas', 'tarjeta', 'nf', 'Comisión de pasarela o agente', 'Cobros de Pasarela, Agente BAM', 'Hasta 4.5 % del cobro', 'Comisiones de pasarelas', 'No cuenta', 'Activa'),
+      ('red', 'calc', 'ne', 'Redondeo', 'De más o de menos', 'Hasta Q 0.05', 'Diferencias de cobro', 'No cuenta', 'Activa'),
+      ('fal', 'caja', 'wa', 'Faltó efectivo en el depósito', 'Depósitos de custodia', 'Sin límite propio', 'A cargo de quien lo llevó', 'Cuenta', 'Activa'),
+      ('otr', 'editar', 'ne', 'Otra razón', 'Cualquier línea', 'Quien concilia elige la cuenta', 'La que se elija', 'Pide aprobación', 'Activa')]
+CT = '34px minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) 120px 90px'
+tdr = ''.join(T('<div class="lr {{td.<<i>>.cls}}" style="grid-template-columns:<<c>>" onClick="{{td.<<i>>.ir}}"><span class="ico <<k>>" style="width:30px;height:30px;border-radius:10px"><i:<<ic>>:15></span><b class="el"><<a>></b><span class="m2 el"><<b>></span><span class="el"><<d>></span><span class="el"><<e>></span><span class="m2"><<f>></span><span><<g>></span></div>',
+                c=CT, i=i, ic=ic_, k=k, a=a, b=b, d=d, e=e, f=f, g=chip('ne' if g == 'Fija' else 'ok', 'bloq' if g == 'Fija' else 'check', g)) for i, ic_, k, a, b, d, e, f, g in TD)
+edit = T("""<aside style="width:400px;flex:0 0 auto;border-left:1px solid #F1F5F9;display:flex;flex-direction:column;min-height:0">
+ <div class="ph2"><span class="ico nf" style="width:32px;height:32px;border-radius:10px"><i:banco:16></span><b style="font-size:16px;flex:1">Comisión del banco</b><span class="tg on"><i></i></span></div>
+ <div class="sc" style="flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+  <<c1>><<c2>>
+  <div><div class="lb">Cuánto se permite</div><div class="segb"><button class="ts on">Monto fijo</button><button class="ts">% del movimiento</button><button class="ts">Sin límite</button></div><div class="g2" style="margin-top:8px"><<c3>><<c4>></div></div>
+  <<c5>>
+  <label style="display:flex;gap:10px;align-items:center;font-size:13px"><span class="tg on"><i></i></span>Cuenta contra el tope de quien concilia</label>
+  <label style="display:flex;gap:10px;align-items:center;font-size:13px"><span class="tg"><i></i></span>Pedir aprobación siempre</label>
+  <div class="av2 nf" style="align-items:flex-start"><i:info:15><div><b>Ejemplo:</b> un depósito de Q 900.00 que el banco muestra en Q 895.00 deja Q 5.00 en «Gastos bancarios», sin pedir aprobación.</div></div>
+ </div>
+ <div class="pf"><button class="btn g">Cancelar</button><span style="flex:1"></span><button class="btn p"><i:check:15>Guardar</button></div>
+</aside>""", c1=campo('Nombre que ve quien concilia', 'Comisión del banco', True), c2=campo('Cuándo se ofrece', 'El banco acredita de menos · cualquier cuenta', False, 'sel'),
+             c3=campo('Hasta', 'Q 10.00'), c4=campo('Por', 'línea del banco', False, 'sel'), c5=campo('A qué cuenta va', 'Gastos bancarios (5.3.07)', True, 'sel', 'Solo cuentas de gasto o de impuestos por cobrar; nunca caja ni banco'))
+conf = T("""<<head>>
+<div style="display:flex;gap:12px;flex:0 0 auto">
+ <section class="isla pan" style="flex:1;padding:14px 18px;gap:8px;overflow:visible"><div class="cdh" style="margin:0"><i:escudo:15>Tope de quien concilia<<q>></div>
+  <div style="display:flex;gap:14px;align-items:flex-end"><div style="width:150px"><<t1>></div><div style="width:150px"><<t2>></div><div class="m2" style="flex:1;padding-bottom:10px">Lo que una persona con «conciliar» puede aceptar sola. Con Q 0.00 toda diferencia pide aprobación.</div></div></section>
+ <section class="isla pan" style="flex:1;padding:14px 18px;gap:8px"><div class="cdh" style="margin:0"><i:usuarios:15>Quién aprueba por encima del tope</div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="b nf"><i:user:12>Ana Castillo</span><span class="b nf"><i:user:12>Luis Pérez</span><span class="m2">· tienen el permiso «aprobar diferencias de conciliación»</span><button class="lnk">Cambiar en Roles</button></div>
+  <div class="m2">Quien pidió la aprobación no puede aprobarla. Mientras espera, no entra al libro.</div></section>
+</div>
+<section class="isla pan" style="flex:1"><div style="display:flex;flex:1;min-height:0">
+ <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+  <div class="ph2"><b style="font-size:15px;flex:1">Motivos de diferencia y a dónde va cada uno</b><button class="btn p sm"><i:mas1:14>Nuevo motivo</button></div>
+  <div class="lh" style="grid-template-columns:<<c>>;border-top:0"><span></span><span>Motivo</span><span>Cuándo se ofrece</span><span>Cuánto se permite</span><span>A dónde va</span><span>Contra el tope</span><span>Estado</span></div>
+  <div class="sc" style="flex:1"><<rows>></div>
+  <div class="pf m2"><i:info:14>Las retenciones salen del tipo de impuesto del cliente y no se pueden apagar. Cada cambio queda en la bitácora.</div>
+ </div><<edit>></div>
+</section>""", head=head('Diferencias al conciliar', 'Redes del Valle · qué diferencias se aceptan, hasta cuánto y a qué cuenta va cada una', emp('Redes del Valle') + TEMA_HINT, 'Ayuda: diferencias al conciliar'),
+         q=Q('a', 'x'), t1=campo('Por línea', 'Q 25.00'), t2=campo('Por día', 'Q 100.00'), c=CT, rows=tdr, edit=edit)
+p_tope = pop('a', 'x', 'left:300px;top:150px', 'Tope de quien concilia', 'El monto máximo de diferencia que una persona puede dar por buena sin pedir permiso.', 'Se suman las diferencias que «cuentan contra el tope» de cada línea y del día. Retenciones y redondeo no cuentan.', 'Ponlo bajo. Lo que pase del tope queda esperando a quien aprueba.', 'Tolerancia de conciliación', 'Ver diferencias del mes')
+pbuild('PlanConciliarConfig.dc.html', 'Configuración · diferencias al conciliar: tope, quién aprueba y motivos con su cuenta', shell2('aj', ['Configuración', 'Finanzas', 'Diferencias al conciliar'], conf, p_tope),
+       tlogic({'td': ([x[0] for x in TD], 'com'), 'a': (['no', 'x'], 'no')}), 900, CSSP)
+
+# ============================ 6 · Cajas: cobros, caja chica, custodia y banco ============================
+CSSC2 = """
+.nodo{flex:1;min-width:0;border:1.5px solid #E2E8F0;border-radius:16px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:2px}
+.nodo .nv{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.fle{flex:0 0 118px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11.5px;font-weight:700;color:#4338CA;text-align:center;padding:0 6px}
+.fle i{display:block;width:100%;height:2px;background:#C7D2FE;position:relative}
+.fle i::after{content:"";position:absolute;right:-1px;top:-4px;border-left:8px solid #818CF8;border-top:5px solid transparent;border-bottom:5px solid transparent}
+.fle small{font-weight:500;color:#64748B}
+.osc .nodo{background:#121A2B;border-color:#1E2638}.osc .nodo .nv{color:#F1F5F9}.osc .fle{color:#A5B4FC}.osc .fle i{background:#2A3550}
+"""
+def nodo(ico, cls, tit, val, sub, est=''):
+    return T('<div class="nodo"><div style="display:flex;align-items:center;gap:8px"><span class="ico <<c>>" style="width:30px;height:30px;border-radius:10px"><i:<<i>>:16></span><b style="font-size:13.5px;flex:1"><<t>></b><<e>></div><span class="nv"><<v>></span><span class="m2"><<s>></span></div>', c=cls, i=ico, t=tit, v=val, s=sub, e=est)
+fle = lambda a, b: T('<div class="fle"><<a>><i></i><small><<b>></small></div>', a=a, b=b)
+mapa = (nodo('cob', 'ok', 'Cajas de cobros', 'Q 3,420.00', '2 turnos abiertos · solo entra dinero de clientes') + fle('Entrega', 'al cerrar el turno')
+        + nodo('escudo', 'wa', 'Custodia', 'Q 6,150.00', 'Marta Gómez Q 4,100 · Luis Pérez Q 2,050', chip('wa', 'reloj', '2 días')) + fle('Depósito', 'con boleta')
+        + nodo('banco', 'nf', 'Banco', 'Q 4,150.00', 'en camino · el banco aún no lo muestra'))
+mapa2 = (nodo('pos', 'cy', 'Caja chica', 'Q 1,180.00', 'de un fondo fijo de Q 2,000.00 · Q 820.00 en comprobantes', chip('ok', 'check', 'Cuadra')) + fle('Gasto', 'con comprobante')
+         + nodo('doc', 'ne', 'Gastos del mes', 'Q 2,460.00', '31 comprobantes · tope Q 300.00 por gasto') + '<div class="fle" style="visibility:hidden"></div>'
+         + T('<div class="nodo" style="border-style:dashed;gap:6px"><b style="font-size:13.5px">La caja chica se repone</b><span class="m2">desde la custodia o el banco, <b>por lo gastado</b>; nunca desde una caja de cobros.</span><button class="btn o sm" style="align-self:flex-start" onClick="{{m.rep.ir}}"><i:refresh:13>Reponer Q 820.00</button></div>'))
+MV = [('E-031', 'Entrega', 'cob', 'Caja Central (Karla Ruiz) → Marta Gómez', 'hoy 18:04', 'Q 2,850.00', 'wa', 'reloj', 'Por recibir', 'Recibir', 'rec'),
+      ('D-015', 'Depósito', 'banco', 'Marta Gómez → Banco Industrial ···4521', 'hoy 10:20 · boleta B-4502', 'Q 2,400.00', 'nf', 'reloj', 'En camino', '', ''),
+      ('G-118', 'Gasto', 'doc', 'Caja chica → Combustible moto 2', 'hoy 09:12 · con foto', 'Q 150.00', 'ok', 'check', 'Con comprobante', '', ''),
+      ('E-030', 'Entrega', 'cob', 'Caja Zona 4 (José Tum) → Luis Pérez', 'ayer 18:10', 'Q 2,050.00', 'ok', 'check', 'Recibida', 'Depositar', 'dep'),
+      ('R-006', 'Reposición', 'pos', 'Banco (cheque 1042) → Caja chica', '22 nov', 'Q 1,640.00', 'ok', 'check', 'Hecha', '', ''),
+      ('D-014', 'Depósito', 'banco', 'Marta Gómez → Banco Industrial ···4521', '13 nov · boleta B-4471', 'Q 900.00', 'ok', 'check', 'Confirmado por el banco', '', '')]
+CM = '64px 110px minmax(0,1.6fr) minmax(0,1fr) 100px 190px 100px'
+mvr = ''.join(T('<div class="lr" style="grid-template-columns:<<c>>;cursor:default;padding:9px 18px"><span class="mono"><<a>></span><span><span class="b ne"><i:<<i>>:12><<b>></span></span><b class="el"><<d>></b><span class="m2 el"><<e>></span><b class="num r"><<f>></b><span><<g>></span><span><<h>></span></div>',
+                c=CM, a=a, b=b, i=i, d=d, e=e, f=f, g=chip(k, ki, kt), h=(T('<button class="btn <<s>> sm" onClick="{{m.<<mm>>.ir}}"><<x>></button>', s='p' if x == 'Recibir' else 'o', mm=mm, x=x) if x else '')) for a, b, i, d, e, f, k, ki, kt, x, mm in MV)
+t_mapa = T("""<div style="display:{{t.mapa.v}};flex-direction:column;flex:1;min-height:0">
+ <div style="padding:14px 18px 10px;display:flex;flex-direction:column;gap:10px;flex:0 0 auto">
+  <div style="display:flex;gap:0;align-items:stretch"><<m1>></div><div style="display:flex;gap:0;align-items:stretch"><<m2>></div>
+ </div>
+ <div class="lh" style="grid-template-columns:<<c>>"><span>N.º</span><span>Qué</span><span>De dónde a dónde</span><span>Cuándo</span><span class="r">Monto</span><span>Estado</span><span></span></div>
+ <div class="sc" style="flex:1"><<rows>></div>
+ <div class="pf m2"><i:info:14>El efectivo solo se mueve por estos cuatro caminos. Cada uno tiene número, quién entrega, quién recibe y su movimiento en el libro.</div>
+</div>""", m1=mapa, m2=mapa2, c=CM, rows=mvr)
+GA = [('G-118', 'Combustible moto 2', 'Vehículos', 'hoy 09:12', 'Q 150.00', 'Foto del ticket', 'ok'), ('G-117', 'Cinchos y grapas', 'Materiales de instalación', 'ayer', 'Q 85.00', 'Factura · pasa a Compras', 'nf'),
+      ('G-116', 'Parqueo visita técnica', 'Vehículos', 'ayer', 'Q 25.00', 'Recibo a mano', 'ok'), ('G-115', 'Almuerzo cuadrilla (turno extra)', 'Otros gastos', '24 nov', 'Q 260.00', 'Foto del ticket', 'ok'),
+      ('G-114', 'Paso por terreno · Finca El Roble', 'Gasto sin factura (interno)', '23 nov', 'Q 300.00', 'Recibo firmado', 'wa')]
+CG = '70px minmax(0,1.4fr) minmax(0,1fr) 90px 100px minmax(0,1fr)'
+t_chica = T("""<div style="display:{{t.chica.v}};flex:1;min-height:0">
+ <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+  <div style="display:flex;gap:10px;padding:14px 18px;flex:0 0 auto;align-items:stretch">
+   <div class="kpi" style="flex:1"><span class="l">Efectivo que debe haber</span><b>Q 1,180.00</b></div><span style="align-self:center;font-weight:700;color:#94A3B8">+</span>
+   <div class="kpi" style="flex:1"><span class="l">Comprobantes sin reponer</span><b>Q 820.00</b></div><span style="align-self:center;font-weight:700;color:#94A3B8">=</span>
+   <div class="kpi" style="flex:1"><span class="l" style="color:#166534"><i:check:13>Fondo fijo</span><b>Q 2,000.00</b></div>
+  </div>
+  <div class="lh" style="grid-template-columns:<<c>>"><span>N.º</span><span>En qué se gastó</span><span>Tipo de gasto</span><span>Cuándo</span><span class="r">Monto</span><span>Comprobante</span></div>
+  <div class="sc" style="flex:1"><<rows>></div>
+  <div class="pf"><span class="m2" style="flex:1">Sin comprobante no hay gasto. Un gasto con factura a nombre de la empresa pasa a Compras para no perder el IVA.</span><button class="btn o sm" onClick="{{m.arq.ir}}"><i:calc:14>Contar la caja chica</button></div>
+ </div>
+ <aside style="width:330px;flex:0 0 auto;border-left:1px solid #F1F5F9;padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+  <div class="cdh" style="margin:0"><i:pos:15>Caja chica Central</div>
+  <div><<k1>><<k2>><<k3>><<k4>><<k5>></div>
+  <div class="av2 wa" style="align-items:flex-start"><i:alerta:15><div>Queda el 59 % del fondo. Se avisa para reponer al bajar del 30 %.</div></div>
+  <span style="flex:1"></span>
+  <button class="btn p" style="justify-content:center" onClick="{{m.gas.ir}}"><i:mas1:15>Registrar gasto</button>
+  <button class="btn o" style="justify-content:center" onClick="{{m.rep.ir}}"><i:refresh:15>Reponer Q 820.00</button>
+ </aside>
+</div>""", c=CG, rows=''.join(T('<div class="lr" style="grid-template-columns:<<c>>;cursor:default"><span class="mono"><<a>></span><b class="el"><<b>></b><span class="m2 el"><<d>></span><span class="m2"><<e>></span><b class="num r"><<f>></b><span><<g>></span></div>', c=CG, a=a, b=b, d=d, e=e, f=f, g=chip(k, 'img' if k != 'nf' else 'doc', g)) for a, b, d, e, f, g, k in GA),
+              k1=kv('Encargada', '<b>Sofía Méndez</b>'), k2=kv('Fondo fijo', 'Q 2,000.00'), k3=kv('Tope por gasto', 'Q 300.00'), k4=kv('Última reposición', '22 nov · R-006'), k5=kv('Último conteo', '22 nov · cuadró'))
+CUS = [('Marta Gómez', 'Supervisora', 'Q 4,100.00', '2 entregas · la más vieja de hace 2 días', 'wa', 'Pasa del plazo (1 día)', 1), ('Luis Pérez', 'Contabilidad', 'Q 2,050.00', '1 entrega · ayer', 'ok', 'En plazo', 1), ('Karla Ruiz', 'Cajera · Caja Central', 'Q 2,850.00', 'Entrega E-031: Marta aún no dice «Recibí»', 'nf', 'Sigue a su nombre', 0)]
+CC = 'minmax(0,1.2fr) 130px minmax(0,1.4fr) 190px 130px'
+t_cus = T("""<div style="display:{{t.cus.v}};flex-direction:column;flex:1;min-height:0">
+ <div class="av2 nf" style="margin:14px 18px"><i:escudo:16><div><b>Custodia</b> es el efectivo que ya salió de una caja y todavía no llega al banco. Siempre está a nombre de una persona, desde que dice «Recibí» hasta que registra el depósito.</div></div>
+ <div class="lh" style="grid-template-columns:<<c>>"><span>Quién lo tiene</span><span class="r">Cuánto</span><span>De qué</span><span>Estado</span><span></span></div>
+ <div class="sc" style="flex:1"><<rows>></div>
+ <div class="pf m2"><i:info:14>Plazo para depositar: 1 día hábil. Tope en custodia por persona: Q 5,000.00. Los dos se cambian en Configuración › Cajas.</div>
+</div>""", c=CC, rows=''.join(T('<div class="lr" style="grid-template-columns:<<cc>>;cursor:default"><div><b><<a>></b><div class="m2"><<b>></div></div><b class="num r"><<c>></b><span class="m2 el"><<d>></span><span><<e>></span><span><<bt>></span></div>', cc=CC, a=a, b=b, c=c, d=d, e=chip(k, 'reloj' if k != 'ok' else 'check', x), bt=(T('<button class="btn o sm" onClick="{{m.dep.ir}}"><i:banco:13>Depositar</button>') if dep else '')) for a, b, c, d, k, x, dep in CUS))
+m_cie = dlg('cie', 'cob', 'ok', 'Cerrar el turno · paso 3 de 3: entregar', T("""<div class="cd" style="background:#F8FAFC"><<a>><<b>><<c>></div>
+ <<d>>
+ <div class="av2 nf" style="align-items:flex-start"><i:info:15><div>Marta recibe un aviso y confirma con <b>su</b> usuario. Hasta que diga «Recibí», los Q 2,850.00 siguen a tu nombre.</div></div>""",
+            a=kv('Contaste', '<b class="num">Q 3,050.00</b> ' + chip('ok', 'check', 'Cuadra')), b=kv('Queda en la caja para dar cambio (fondo fijo)', '<b class="num">Q 200.00</b>'), c=kv('<b style="color:#0F172A">Entregas</b>', '<b class="num" style="font-size:18px">Q 2,850.00</b>'),
+            d=campo('A quién se lo entregas', 'Marta Gómez · Supervisora', True, 'sel', 'Solo personas con permiso de recibir efectivo. «Lo deposito yo» lo deja a tu nombre.', 'user')),
+            '<button class="btn g" onClick="{{m.no.ir}}">Atrás</button><button class="btn p" onClick="{{m.no.ir}}"><i:check:15>Cerrar y entregar</button>', w=520)
+m_rec = dlg('rec', 'escudo', 'wa', 'Recibir la entrega E-031', '<div class="m2">Karla Ruiz (Caja Central) dice que te entrega:</div><div class="dest num">Q 2,850.00</div>' + campo('Cuánto contaste tú', 'Q 2,850.00', True, '', 'Si no es igual, la diferencia queda a cargo de quien entrega y se avisa a contabilidad.') + '<div class="m2">Al confirmar, el efectivo pasa a tu nombre hasta que lo deposites.</div>',
+            '<button class="btn r" onClick="{{m.no.ir}}">No lo recibí</button><button class="btn p" onClick="{{m.no.ir}}"><i:check:15>Recibí Q 2,850.00</button>', w=460)
+m_dep = dlg('dep', 'banco', 'nf', 'Depositar lo que tienes en custodia', '<div class="g2">' + campo('Monto', 'Q 2,050.00', True, '', 'Tienes Q 2,050.00 en custodia') + campo('Boleta', '~Número de boleta', True) + '</div>' + campo('A qué cuenta', 'Banco Industrial · Monetaria ···4521', True, 'sel') + campo('Foto de la boleta', '~Tomar o subir foto', True, '', '', 'img') + '<div class="m2">Queda «en camino» hasta que aparezca en el estado de cuenta.</div>',
+            '<button class="btn g" onClick="{{m.no.ir}}">Cancelar</button><button class="btn p" onClick="{{m.no.ir}}"><i:check:15>Registrar depósito</button>', w=520)
+m_rep = dlg('rep', 'refresh', 'cy', 'Reponer la caja chica', '<div class="cd" style="background:#F8FAFC">' + kv('Comprobantes desde la última reposición', '<b class="num">9 · Q 820.00</b>') + kv('Fondo fijo', '<span class="num">Q 2,000.00</span>') + kv('<b style="color:#0F172A">Se repone</b>', '<b class="num" style="font-size:18px">Q 820.00</b>') + '</div><div class="lb" style="margin:4px 0 0">De dónde sale</div>' + sg(True, 'De la custodia de Marta Gómez', 'Tiene Q 4,100.00 · no pasa por el banco', '') + sg(False, 'Del banco', 'Cheque o retiro · Banco Industrial ···4521', '') + '<div class="m2">Los 9 comprobantes quedan sellados como «repuestos» y ya no se pueden cambiar.</div>',
+            '<button class="btn g" onClick="{{m.no.ir}}">Cancelar</button><button class="btn p" onClick="{{m.no.ir}}"><i:check:15>Reponer Q 820.00</button>', w=520)
+m_gas = dlg('gas', 'doc', 'nf', 'Gasto de caja chica', '<div class="g2">' + campo('Monto', 'Q 150.00', True, '', 'Tope por gasto: Q 300.00') + campo('Tipo de gasto', 'Vehículos', True, 'sel') + '</div>' + campo('En qué se gastó', 'Combustible moto 2', True) + campo('Comprobante', 'ticket-gasolinera.jpg', True, '', 'Obligatorio: foto del ticket, factura o recibo firmado', 'img')
+            + '<div class="lb" style="margin:0">¿Tiene factura a nombre de la empresa?</div><div class="segb"><button class="ts on">No, es un ticket o recibo</button><button class="ts">Sí, con NIT de la empresa</button></div><div class="m2">Con factura se registra como compra pagada con caja chica, para aprovechar el IVA.</div>',
+            '<button class="btn g" onClick="{{m.no.ir}}">Cancelar</button><button class="btn p" onClick="{{m.no.ir}}"><i:check:15>Registrar gasto</button>', w=540)
+m_arq = dlg('arq', 'calc', 'nf', 'Contar la caja chica', '<div class="g2">' + campo('Efectivo que contaste', 'Q 1,180.00', True) + campo('Comprobantes en la caja', 'Q 820.00', False, 'auto') + '</div><div class="av2 ok"><i:check:15><div>Q 1,180.00 + Q 820.00 = Q 2,000.00 · cuadra con el fondo fijo.</div></div><div class="m2">Lo puede pedir contabilidad sin aviso. Si falta o sobra, queda a cargo de la encargada con su motivo.</div>',
+            '<button class="btn g" onClick="{{m.no.ir}}">Cancelar</button><button class="btn p" onClick="{{m.no.ir}}"><i:check:15>Guardar conteo</button>', w=500)
+cajas = T("""<<head>>
+<div style="display:flex;gap:10px;flex:0 0 auto"><<i1>><<i2>><<i3>><<i4>></div>
+<section class="isla pan" style="flex:1">
+ <div class="ph2"><<seg>><span style="flex:1"></span><span class="m2">Efectivo fuera del banco: <b style="color:#0F172A">Q 10,750.00</b></span></div>
+ <<a>><<b>><<c>>
+</section>""", head=head('Cajas y efectivo', 'Redes del Valle · dónde está cada quetzal en efectivo y quién lo tiene', emp('Redes del Valle') + '<button class="btn o" onClick="{{m.cie.ir}}"><i:cob:15>Cerrar mi turno</button>' + TEMA_HINT, 'Ayuda: cajas, custodia y caja chica'),
+          i1=ind('a', 'x', 'cob', 'ok', 'En cajas de cobros', 'Q 3,420.00', '2 turnos abiertos'), i2=ind('a', 'x', 'escudo', 'wa', 'En custodia', 'Q 6,150.00', '2 personas', ('wa', 'reloj', 'Depositar')),
+          i3=ind('a', 'x', 'pos', 'cy', 'En caja chica', 'Q 1,180.00', 'de Q 2,000.00', ('ok', 'check', 'Cuadra')), i4=ind('a', 'x', 'banco', 'nf', 'En camino al banco', 'Q 4,150.00', '2 depósitos sin confirmar'),
+          seg=seg('t', [('mapa', 'Camino del efectivo', 'flecha'), ('chica', 'Caja chica', 'pos'), ('cus', 'Custodia y depósitos', 'escudo', 1, 'rj')]), a=t_mapa, b=t_chica, c=t_cus)
+nota6 = nota_estados('Ventanas del tablero', 'm', [('no', 'Ninguna'), ('cie', 'Cerrar y entregar'), ('rec', 'Recibir'), ('dep', 'Depositar'), ('gas', 'Gasto'), ('rep', 'Reponer'), ('arq', 'Contar')], 'right:28px;bottom:70px;width:470px')
+pbuild('PlanCajas.dc.html', 'Cajas y efectivo · cobros, custodia, caja chica y banco', shell2('fin', ['Finanzas', 'Bancos y cajas', 'Cajas y efectivo'], cajas, VELO.replace('{{mOn}}', '{{velo}}') + m_cie + m_rec + m_dep + m_rep + m_gas + m_arq + nota6),
+       tlogic({'t': (['mapa', 'chica', 'cus'], 'mapa'), 'm': (['no', 'cie', 'rec', 'dep', 'rep', 'gas', 'arq'], 'no'), 'a': (['no', 'x'], 'no')}, None, "out.velo = (st.m && st.m !== 'no') ? 'block' : 'none';"), 900, CSSP + CSSC2)
+
+mrow = lambda ico, cls, a, b, c, e='': T('<div class="tar"><span class="ico <<cls>>" style="width:34px;height:34px;border-radius:11px"><i:<<i>>:16></span><div style="flex:1;min-width:0"><b style="font-size:13.5px;display:block"><<a>></b><span class="m2"><<b>></span></div><div style="text-align:right"><b class="num"><<c>></b><<e>></div></div>', i=ico, cls=cls, a=a, b=b, c=c, e=e)
+mcaj = T("""<div style="height:100%;display:flex;flex-direction:column;position:relative">
+<<top>>
+<div style="padding:0 12px 8px;flex:0 0 auto"><div class="segb" style="display:flex;width:100%"><button class="ts {{t.mapa.cls}}" style="flex:1;justify-content:center;padding:8px 4px" onClick="{{t.mapa.ir}}">Efectivo</button><button class="ts {{t.chica.cls}}" style="flex:1;justify-content:center;padding:8px 4px" onClick="{{t.chica.ir}}">Caja chica</button><button class="ts {{t.rec.cls}}" style="flex:1;justify-content:center;padding:8px 4px" onClick="{{t.rec.ir}}">Recibir<span class="c rj">1</span></button></div></div>
+<div class="sc" style="flex:1;padding:0 12px 12px;display:flex;flex-direction:column;gap:10px">
+ <div style="display:{{t.mapa.v}};flex-direction:column;gap:10px">
+  <section class="cd"><div class="m2">Efectivo fuera del banco</div><b style="font-size:24px" class="num">Q 10,750.00</b></section>
+  <section class="cd" style="padding:4px 14px"><<r1>><<r2>><<r3>><<r4>></section>
+  <div class="m2">Camino: caja de cobros, custodia, banco. La caja chica se repone por lo gastado.</div>
+ </div>
+ <div style="display:{{t.chica.v}};flex-direction:column;gap:10px">
+  <section class="cd"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1"><div class="m2">Debe haber en efectivo</div><b style="font-size:24px" class="num">Q 1,180.00</b></div><span class="b ok"><i:check:12>Cuadra</span></div><span class="bar" style="margin-top:8px"><i style="width:59%"></i></span><div class="m2" style="margin-top:4px">Fondo fijo Q 2,000.00 · comprobantes Q 820.00</div></section>
+  <section class="cd" style="padding:4px 14px"><<g1>><<g2>><<g3>></section>
+ </div>
+ <div style="display:{{t.rec.v}};flex-direction:column;gap:10px">
+  <section class="cd"><div class="m2">Entrega E-031 · Karla Ruiz (Caja Central) te entrega</div><div class="dest num" style="margin-top:6px">Q 2,850.00</div></section>
+  <<cc>><div class="m2">Al confirmar, el efectivo pasa a tu nombre hasta que lo deposites.</div>
+ </div>
+</div>
+<div class="mbar" style="display:{{t.mapa.v}}"><button class="btn o"><i:banco:16>Depositar</button><button class="btn p"><i:cob:16>Cerrar mi turno</button></div>
+<div class="mbar" style="display:{{t.chica.v}}"><button class="btn o" style="flex:0 0 auto"><i:refresh:16>Reponer</button><button class="btn p"><i:img:16>Gasto con foto</button></div>
+<div class="mbar" style="display:{{t.rec.v}}"><button class="btn o" style="flex:0 0 auto;color:#B91C1C">No lo recibí</button><button class="btn p"><i:check:16>Recibí Q 2,850.00</button></div>
+</div>""", top=mtop('Cajas y efectivo', 'Redes del Valle', '<button class="ib f" style="width:38px;height:38px;border-radius:999px" onClick="{{tTema}}" aria-label="Tema"><i:luna:17></button>'),
+          r1=mrow('cob', 'ok', 'Cajas de cobros', '2 turnos abiertos', 'Q 3,420'), r2=mrow('escudo', 'wa', 'Custodia', 'Marta y Luis · 2 días', 'Q 6,150', '<div class="m2" style="color:#92400E">Depositar</div>'), r3=mrow('pos', 'cy', 'Caja chica', 'de Q 2,000', 'Q 1,180'), r4=mrow('banco', 'nf', 'En camino al banco', '2 depósitos', 'Q 4,150'),
+          g1=mrow('img', 'ok', 'Combustible moto 2', 'hoy · ticket', 'Q 150'), g2=mrow('doc', 'nf', 'Cinchos y grapas', 'ayer · factura, va a Compras', 'Q 85'), g3=mrow('img', 'ok', 'Parqueo visita técnica', 'ayer · recibo', 'Q 25'),
+          cc=campo('Cuánto contaste tú', 'Q 2,850.00', True, '', 'Si no es igual, la diferencia queda a cargo de quien entrega.'))
+pmbuild('PlanCajasMovil.dc.html', 'Cajas y efectivo · teléfono (efectivo, caja chica y recibir entrega)', mcaj, tlogic({'t': (['mapa', 'chica', 'rec'], 'mapa')}), CSSP)
 print('listo')

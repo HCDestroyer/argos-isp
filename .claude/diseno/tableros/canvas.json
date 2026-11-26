@@ -986,7 +986,7 @@
       "h": 900,
       "is_interactive": true,
       "page": "plan_contabilidad",
-      "title": "2 · Conciliar el banco: pasos, parejas sugeridas, diferencia, regla y sin pareja (interactiva)",
+      "title": "2 · Conciliar el banco: parejas, retención del cliente, diferencia con motivo, sobre el tope, regla y sin pareja (interactiva)",
       "w": 1440,
       "x": 0,
       "y": 1200
@@ -1040,6 +1040,36 @@
       "w": 390,
       "x": 1520,
       "y": 3600
+    },
+    "PlanConciliarConfig.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "2 · Configuración de diferencias al conciliar: tope, quién aprueba y motivos con su cuenta (interactiva)",
+      "w": 1440,
+      "x": 1990,
+      "y": 1200
+    },
+    "PlanCajas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "5 · Cajas y efectivo: cobros, custodia, caja chica y banco; cerrar y entregar, recibir, depositar, gasto, reponer y contar (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 4800
+    },
+    "PlanCajasMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "plan_contabilidad",
+      "title": "5 · Cajas y efectivo · teléfono (efectivo, caja chica y recibir entrega)",
+      "w": 390,
+      "x": 1520,
+      "y": 4800
     }
   },
   "createdOnFiles": {
@@ -1263,7 +1293,10 @@
     "PlanClienteFiscal.dc.html",
     "PlanClienteFiscalMovil.dc.html",
     "PlanIndicadorAyuda.dc.html",
-    "PlanIndicadorAyudaMovil.dc.html"
+    "PlanIndicadorAyudaMovil.dc.html",
+    "PlanConciliarConfig.dc.html",
+    "PlanCajas.dc.html",
+    "PlanCajasMovil.dc.html"
   ],
   "pages": [
     {
