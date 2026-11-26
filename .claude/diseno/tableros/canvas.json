@@ -961,96 +961,6 @@
       "x": 0,
       "y": 13840
     },
-    "PendSmartoltLista.dc.html": {
-      "expand": "fill",
-      "h": 900,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "6 · Integraciones › SmartOLT: lista de instancias (con instancias, vacía y error con Reintentar; claro/oscuro, interactiva)",
-      "w": 1440,
-      "x": 0,
-      "y": 3400
-    },
-    "PendSmartoltDetalle.dc.html": {
-      "expand": "fill",
-      "h": 900,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "6 · SmartOLT: detalle de una instancia con sus OLT, selector para ligar con la OLT de Argos, probar, sincronizar, apagar y empresas (probada, falla, sin probar, compartida)",
-      "w": 1440,
-      "x": 1520,
-      "y": 3400
-    },
-    "PendSmartoltForm.dc.html": {
-      "expand": "fill",
-      "h": 1000,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "6 · SmartOLT: formulario de instancia en página (agregar y editar, token ***, empresa o compartida, errores 409 y 403)",
-      "w": 1440,
-      "x": 3040,
-      "y": 3400
-    },
-    "PendAcs.dc.html": {
-      "expand": "fill",
-      "h": 900,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "7 · Integraciones › ACS (GenieACS) de la empresa activa: probado, falla, apagado, sin configurar y editar en página",
-      "w": 1440,
-      "x": 4560,
-      "y": 3400
-    },
-    "PendEquipoServicio.dc.html": {
-      "expand": "fill",
-      "h": 900,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "8 · Ficha del servicio › Equipo: qué cuenta y OLT de SmartOLT usa y qué pasa sin ACS, con OLT sin ligar o con SmartOLT caído",
-      "w": 1440,
-      "x": 6080,
-      "y": 3400
-    },
-    "PendSmartoltMovil.dc.html": {
-      "expand": "fill",
-      "h": 844,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "6 · SmartOLT · teléfono (lista, vacío, error, detalle, falla y ligar OLT)",
-      "w": 390,
-      "x": 0,
-      "y": 4500
-    },
-    "PendSmartoltFormMovil.dc.html": {
-      "expand": "fill",
-      "h": 844,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "6 · SmartOLT formulario · teléfono",
-      "w": 390,
-      "x": 470,
-      "y": 4500
-    },
-    "PendAcsMovil.dc.html": {
-      "expand": "fill",
-      "h": 844,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "7 · ACS · teléfono",
-      "w": 390,
-      "x": 940,
-      "y": 4500
-    },
-    "PendEquipoServicioMovil.dc.html": {
-      "expand": "fill",
-      "h": 844,
-      "is_interactive": true,
-      "page": "pendientes",
-      "title": "8 · Ficha del servicio · equipo · teléfono",
-      "w": 390,
-      "x": 1410,
-      "y": 4500
-    },
     "PlanContaInicio.dc.html": {
       "expand": "fill",
       "h": 900,
@@ -1160,6 +1070,96 @@
       "w": 390,
       "x": 1520,
       "y": 4800
+    },
+    "PendSmartoltLista.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "6 · Integraciones › SmartOLT: lista de instancias (con instancias, vacía y error con Reintentar; claro/oscuro, interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 3400
+    },
+    "PendSmartoltDetalle.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "6 · SmartOLT: detalle de una instancia con sus OLT, selector para ligar con la OLT de Argos, probar, sincronizar, apagar y empresas (probada, falla, sin probar, compartida)",
+      "w": 1440,
+      "x": 1520,
+      "y": 3400
+    },
+    "PendSmartoltForm.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "6 · SmartOLT: formulario de instancia en página (agregar y editar, token ***, empresa o compartida, errores 409 y 403)",
+      "w": 1440,
+      "x": 3040,
+      "y": 3400
+    },
+    "PendAcs.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "7 · Integraciones › ACS (GenieACS) de la empresa activa: probado, falla, apagado, sin configurar y editar en página",
+      "w": 1440,
+      "x": 4560,
+      "y": 3400
+    },
+    "PendEquipoServicio.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "8 · Ficha del servicio › Equipo: qué cuenta y OLT de SmartOLT usa y qué pasa sin ACS, con OLT sin ligar o con SmartOLT caído",
+      "w": 1440,
+      "x": 6080,
+      "y": 3400
+    },
+    "PendSmartoltMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "6 · SmartOLT · teléfono (lista, vacío, error, detalle, falla y ligar OLT)",
+      "w": 390,
+      "x": 0,
+      "y": 4500
+    },
+    "PendSmartoltFormMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "6 · SmartOLT formulario · teléfono",
+      "w": 390,
+      "x": 470,
+      "y": 4500
+    },
+    "PendAcsMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "7 · ACS · teléfono",
+      "w": 390,
+      "x": 940,
+      "y": 4500
+    },
+    "PendEquipoServicioMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "pendientes",
+      "title": "8 · Ficha del servicio · equipo · teléfono",
+      "w": 390,
+      "x": 1410,
+      "y": 4500
     }
   },
   "createdOnFiles": {
@@ -1375,15 +1375,6 @@
     "PendEnviosReportes.dc.html",
     "PendIntentosRecuperacion.dc.html",
     "PendVinculosTecnicos.dc.html",
-    "PendSmartoltLista.dc.html",
-    "PendSmartoltDetalle.dc.html",
-    "PendSmartoltForm.dc.html",
-    "PendAcs.dc.html",
-    "PendEquipoServicio.dc.html",
-    "PendSmartoltMovil.dc.html",
-    "PendSmartoltFormMovil.dc.html",
-    "PendAcsMovil.dc.html",
-    "PendEquipoServicioMovil.dc.html",
     "MarcoMovil.dc.html",
     "PlanContaInicio.dc.html",
     "PlanContaInicioMovil.dc.html",
@@ -1395,7 +1386,16 @@
     "PlanIndicadorAyudaMovil.dc.html",
     "PlanConciliarConfig.dc.html",
     "PlanCajas.dc.html",
-    "PlanCajasMovil.dc.html"
+    "PlanCajasMovil.dc.html",
+    "PendSmartoltLista.dc.html",
+    "PendSmartoltDetalle.dc.html",
+    "PendSmartoltForm.dc.html",
+    "PendAcs.dc.html",
+    "PendEquipoServicio.dc.html",
+    "PendSmartoltMovil.dc.html",
+    "PendSmartoltFormMovil.dc.html",
+    "PendAcsMovil.dc.html",
+    "PendEquipoServicioMovil.dc.html"
   ],
   "pages": [
     {

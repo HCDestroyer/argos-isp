@@ -214,6 +214,7 @@ export const diarioValidator = vine.compile(
                 'lealtad',
                 'sorteo',
                 'bonificacion',
+                'diferencia_conciliacion',
             ] as const)
             .optional(),
         origen_id: idEntidad()

@@ -13,7 +13,15 @@ import { lista, pagina } from '#shared/openapi/esquemas'
 import { EmpresaRequerida, empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
 import * as v from '#ledger/validators_bancos'
+import { resolverEmpresaActiva } from '#core/empresas'
+import { usuarioDelActor } from '#shared/contexto'
 import {
+    AjustesConciliacion,
+    DiferenciaConciliacion,
+    LineaPorIdentificar,
+    MotivoDiferencia,
+    ResultadoAceptarSugerencias,
+    SugerenciasExtracto,
     CastigoCartera,
     Conciliacion,
     Deposito,
@@ -68,6 +76,22 @@ import {
 import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
 import EditarProveedorCobro from '#ledger/actions/editar_proveedor_cobro'
 import LiquidarCobros from '#ledger/actions/liquidar_cobros'
+import {
+    empresaDeDiferencia,
+    leerAjustesConciliacion,
+    listarDiferencias,
+    motivosEfectivos,
+    verDiferencia,
+} from '#ledger/diferencias_conciliacion'
+import { sugerenciasDeExtracto } from '#ledger/sugerencias_conciliacion'
+import ConfigurarDiferencias from '#ledger/actions/configurar_diferencias'
+import CrearMotivoDiferencia from '#ledger/actions/crear_motivo_diferencia'
+import EditarMotivoDiferencia from '#ledger/actions/editar_motivo_diferencia'
+import PedirAprobacionDiferencia from '#ledger/actions/pedir_aprobacion_diferencia'
+import AprobarDiferencia from '#ledger/actions/aprobar_diferencia'
+import RechazarDiferencia from '#ledger/actions/rechazar_diferencia'
+import AceptarSugerencias from '#ledger/actions/aceptar_sugerencias'
+import MarcarPorIdentificar from '#ledger/actions/marcar_por_identificar'
 
 const cobros: Ruta[] = [
     definirRuta({
@@ -360,7 +384,7 @@ const conciliacion: Ruta[] = [
         cuerpo: v.conciliarValidator,
         idempotente: true,
         descripcion:
-            'Nunca reescribe un asiento: liga la línea con lo que ya está en el libro. Un depósito o traslado en tránsito llega con un asiento nuevo Banco / 1.1.11. Σ = monto de la línea (422 conciliacion_descuadrada); 409 linea_conciliada o movimiento_conciliado. Emite banco.conciliado.',
+            'Nunca reescribe un asiento: liga la línea con lo que ya está en el libro. Un depósito o traslado en tránsito llega con un asiento nuevo Banco / 1.1.11. Σ = monto de la línea (422 conciliacion_descuadrada), salvo que diferencias[] explique lo que falta o sobra con sus motivos: asiento nuevo de origen diferencia_conciliacion (de menos: cuenta del motivo / Banco; de más: Banco / cuenta). 422 motivo_no_aplica si un motivo no aplica o pasa de su límite; 422 diferencia_requiere_aprobacion si pasa del tope de quien concilia (por línea o por día) o el motivo siempre pide aprobación (se pide con POST /bancos/diferencias). 409 linea_conciliada, diferencia_pendiente o movimiento_conciliado. Emite banco.conciliado.',
         respuesta: { status: 201, descripcion: 'Conciliación', esquema: Conciliacion },
         handler: async (ctx, { cuerpo }) => {
             exigirAcceso(ctx, await empresaDe('extractos_lineas', cuerpo.linea_id))
@@ -371,7 +395,10 @@ const conciliacion: Ruta[] = [
         metodo: 'post',
         ruta: '/bancos/conciliaciones/:id/anular',
         operacion: 'bancosAnularConciliacion',
-        resumen: 'Deshacer una conciliación (fila de anulación; el libro no cambia)',
+        resumen:
+            'Deshacer una conciliación (fila de anulación; revierte la llegada y la diferencia que creó)',
+        descripcion:
+            'Solo inserción. Lo que la conciliación creó se revierte: la llegada de un depósito o traslado (vuelve a fondos en tránsito, fila en transitos_reatribuciones) y el asiento de su diferencia (libera el tope del día). Lo que ya estaba en el libro queda disponible para conciliar. 409 conciliacion_anulada.',
         etiqueta: 'bancos',
         permiso: 'bancos.conciliar',
         cuerpo: v.anularConciliacionValidator,
@@ -477,6 +504,242 @@ const conciliacion: Ruta[] = [
     }),
 ]
 
+const diferencias: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos/ajustes-conciliacion',
+        operacion: 'bancosAjustesConciliacion',
+        resumen: 'Tope de diferencias al conciliar de la empresa activa y quién aprueba',
+        etiqueta: 'bancos',
+        permiso: 'bancos.ver',
+        descripcion:
+            'Sin guardar nunca: los de fábrica (Q 10.00 por línea y Q 50.00 por día) y version 0. aprobadores: usuarios activos con bancos.aprobar_diferencia y acceso a la empresa.',
+        respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesConciliacion },
+        handler: async (ctx) => leerAjustesConciliacion(await resolverEmpresaActiva(ctx.contextoAccion())),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/bancos/ajustes-conciliacion',
+        operacion: 'bancosConfigurarDiferencias',
+        resumen: 'Cambiar el tope de diferencias al conciliar de la empresa activa',
+        etiqueta: 'bancos',
+        permiso: 'bancos.configurar_diferencias',
+        cuerpo: v.configurarDiferenciasValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Tope por línea y por día de quien concilia (Q 0.00 = toda diferencia que cuente contra el tope pide aprobación); el de línea no pasa del del día. Solo cambia lo que viene; 409 conflicto_version. Emite banco.diferencias_config_cambiada.',
+        respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesConciliacion },
+        handler: (ctx, { cuerpo }) => new ConfigurarDiferencias().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos/motivos-diferencia',
+        operacion: 'bancosMotivosDiferencia',
+        resumen: 'Motivos de diferencia que valen en la empresa activa (propios y de fábrica)',
+        etiqueta: 'bancos',
+        permiso: 'bancos.ver',
+        respuesta: { status: 200, descripcion: 'Motivos', esquema: lista(MotivoDiferencia) },
+        handler: async (ctx) => motivosEfectivos(await resolverEmpresaActiva(ctx.contextoAccion())),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/motivos-diferencia',
+        operacion: 'bancosCrearMotivoDiferencia',
+        resumen: 'Crear un motivo de diferencia de la empresa activa',
+        etiqueta: 'bancos',
+        permiso: 'bancos.configurar_diferencias',
+        cuerpo: v.crearMotivoDiferenciaValidator,
+        idempotente: true,
+        descripcion:
+            'La cuenta debe ser imputable, sin auxiliar y nunca caja, banco ni puente (422 contrapartida); sin cuenta, siempre pide aprobación. Emite banco.diferencias_config_cambiada.',
+        respuesta: { status: 201, descripcion: 'Motivo', esquema: MotivoDiferencia },
+        handler: (ctx, { cuerpo }) => new CrearMotivoDiferencia().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/bancos/motivos-diferencia/:id',
+        operacion: 'bancosEditarMotivoDiferencia',
+        resumen: 'Editar un motivo de diferencia (con version)',
+        etiqueta: 'bancos',
+        permiso: 'bancos.configurar_diferencias',
+        cuerpo: v.editarMotivoDiferenciaValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Un motivo de fábrica no cambia: la empresa activa recibe su copia (mismo codigo, id nuevo) que lo reemplaza solo en ella. Los motivos no se borran: se apagan (activo false); uno fijo no se apaga. 409 conflicto_version. Emite banco.diferencias_config_cambiada.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Motivo (la copia de la empresa si era de fábrica)',
+            esquema: MotivoDiferencia,
+        },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarMotivoDiferencia().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/diferencias',
+        operacion: 'bancosPedirAprobacionDiferencia',
+        resumen: 'Pedir aprobación de una diferencia al conciliar que pasa del tope',
+        etiqueta: 'bancos',
+        permiso: 'bancos.conciliar',
+        cuerpo: v.pedirAprobacionDiferenciaValidator,
+        idempotente: true,
+        descripcion:
+            'Mismo cuerpo que POST /bancos/conciliaciones más la explicación. No toca el libro: la diferencia queda esperando a otro usuario con bancos.aprobar_diferencia y la línea queda apartada (409 diferencia_pendiente al conciliarla) sin bloquear el resto. 422 aprobacion_innecesaria si está dentro del tope. Emite banco.diferencia_pendiente.',
+        respuesta: { status: 201, descripcion: 'Diferencia pendiente', esquema: DiferenciaConciliacion },
+        handler: async (ctx, { cuerpo }) => {
+            exigirAcceso(ctx, await empresaDe('extractos_lineas', cuerpo.linea_id))
+            return new PedirAprobacionDiferencia().execute(cuerpo, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos/diferencias',
+        operacion: 'bancosDiferencias',
+        resumen: 'Diferencias al conciliar (aplicadas, pendientes, aprobadas, rechazadas o anuladas)',
+        etiqueta: 'bancos',
+        permiso: 'bancos.ver',
+        query: v.listarDiferenciasValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de diferencias',
+            esquema: pagina(DiferenciaConciliacion),
+        },
+        handler: (ctx, { query }) => listarDiferencias(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos/diferencias-pendientes',
+        operacion: 'bancosDiferenciasPendientes',
+        resumen: 'Diferencias al conciliar que esperan aprobación',
+        etiqueta: 'bancos',
+        permiso: 'bancos.ver',
+        query: v.diferenciasPendientesValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de diferencias',
+            esquema: pagina(DiferenciaConciliacion),
+        },
+        handler: (ctx, { query }) =>
+            listarDiferencias(
+                { ...query, estado: 'pendiente' },
+                empresasDeLaLista(ctx.empresa, query.empresas),
+            ),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos/diferencias/:id',
+        operacion: 'bancosVerDiferencia',
+        resumen: 'Ver una diferencia al conciliar',
+        etiqueta: 'bancos',
+        permiso: 'bancos.ver',
+        respuesta: { status: 200, descripcion: 'Diferencia', esquema: DiferenciaConciliacion },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeDiferencia(id))
+            return verDiferencia(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/diferencias/:id/aprobar',
+        operacion: 'bancosAprobarDiferencia',
+        resumen: 'Aprobar una diferencia al conciliar (concilia la línea con su asiento)',
+        etiqueta: 'bancos',
+        permiso: 'bancos.aprobar_diferencia',
+        idempotente: true,
+        descripcion:
+            'Quien la pidió no puede aprobarla (403 autoaprobacion). Concilia la línea con lo emparejado y la diferencia tal como se pidió (asiento diferencia_conciliacion). 409 diferencia_decidida; si la línea o lo emparejado ya se conciliaron por otro camino, responde ese error y sigue pendiente. Emite banco.diferencia_aprobada y banco.conciliado.',
+        respuesta: { status: 200, descripcion: 'Diferencia aprobada', esquema: DiferenciaConciliacion },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeDiferencia(id))
+            return new AprobarDiferencia().execute({ diferencia_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/diferencias/:id/rechazar',
+        operacion: 'bancosRechazarDiferencia',
+        resumen: 'Rechazar una diferencia al conciliar (no entra al libro)',
+        etiqueta: 'bancos',
+        permiso: 'bancos.aprobar_diferencia',
+        cuerpo: v.rechazarDiferenciaValidator,
+        idempotente: true,
+        descripcion:
+            'Motivo obligatorio. La línea queda libre. 409 diferencia_decidida. Emite banco.diferencia_rechazada.',
+        respuesta: { status: 200, descripcion: 'Diferencia rechazada', esquema: DiferenciaConciliacion },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeDiferencia(id))
+            return new RechazarDiferencia().execute(
+                { diferencia_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos/extractos/:id/sugerencias',
+        operacion: 'bancosSugerenciasExtracto',
+        resumen:
+            'Parejas sugeridas por línea sin conciliar: seguras, para decidir, con diferencia, regla o sin pareja',
+        etiqueta: 'bancos',
+        permiso: 'bancos.ver',
+        descripcion:
+            'Solo lectura. segura = un solo candidato con el mismo monto y la misma referencia; para_decidir = mismo monto sin confirmar; con_diferencia = monto cercano, con los motivos que aplican (y por qué no los demás); regla = la reconoce una regla de contrapartida; por_identificar = marcada con nota; esperando_aprobacion = tiene una diferencia pendiente. tope: lo que le queda hoy a quien pregunta.',
+        respuesta: { status: 200, descripcion: 'Sugerencias', esquema: SugerenciasExtracto },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDe('extractos', id))
+            return sugerenciasDeExtracto(id, usuarioDelActor(ctx.contextoAccion().actor))
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/extractos/:id/aceptar-seguras',
+        operacion: 'bancosAceptarSugerencias',
+        resumen: 'Conciliar juntas las parejas seguras del extracto',
+        etiqueta: 'bancos',
+        permiso: 'bancos.conciliar',
+        cuerpo: v.aceptarSugerenciasValidator,
+        idempotente: true,
+        descripcion:
+            'Recalcula las sugerencias y concilia cada línea segura (con lineas[], solo esas; las demás vuelven en omitidas con su nivel). Repetirla no duplica. Emite banco.conciliado por línea.',
+        respuesta: { status: 200, descripcion: 'Resultado', esquema: ResultadoAceptarSugerencias },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDe('extractos', id))
+            return new AceptarSugerencias().execute(
+                { extracto_id: id, lineas: cuerpo.lineas },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/extractos/lineas/:id/por-identificar',
+        operacion: 'bancosMarcarPorIdentificar',
+        resumen: '«No sé todavía»: dejar la línea por identificar con una nota',
+        etiqueta: 'bancos',
+        permiso: 'bancos.conciliar',
+        cuerpo: v.marcarPorIdentificarValidator,
+        idempotente: true,
+        descripcion:
+            'No toca el libro y no cuenta como anomalía en la revisión extractos_conciliados del cierre (va en su detalle). Marcarla otra vez cambia la nota. 409 linea_conciliada.',
+        respuesta: { status: 201, descripcion: 'Marca', esquema: LineaPorIdentificar },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDe('extractos_lineas', id))
+            return new MarcarPorIdentificar().execute(
+                { linea_id: id, nota: cuerpo.nota },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+]
+
 /** Empresa dueña de una subcuenta bancaria (la de la cuenta propia si la subcuenta es común). */
 async function empresaDeCuenta(cuentaId: number): Promise<number> {
     const fila = await db
@@ -574,4 +837,4 @@ async function empresaDeFactura(id: number): Promise<number> {
     return Number(fila.empresa_id)
 }
 
-export default [...cobros, ...transitos, ...conciliacion, ...cartera]
+export default [...cobros, ...transitos, ...conciliacion, ...diferencias, ...cartera]

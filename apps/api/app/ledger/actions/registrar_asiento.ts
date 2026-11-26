@@ -81,6 +81,9 @@ export const ORIGENES_ASIENTO = [
     // B1 del plan de contabilidad (§5.7): «Recibí» de una entrega de caja (1.1.15 / Caja);
     // origen_id = `ledger.entregas.id`
     'entrega_caja',
+    // plan de contabilidad B3 (§5.8): diferencia aceptada al conciliar el banco;
+    // origen_id = `billing.diferencias_conciliacion.id`
+    'diferencia_conciliacion',
 ] as const
 
 /**

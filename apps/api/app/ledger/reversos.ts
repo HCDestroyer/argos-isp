@@ -78,6 +78,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'pagos.anular',
         documento: 'el pago aplicado a la factura (POST /pagos/:id/anular): revierte sus diferencias',
     },
+    // B3 (§5.8): la diferencia aceptada al conciliar se revierte al deshacer su conciliación
+    diferencia_conciliacion: {
+        accion: 'bancos.conciliar',
+        documento: 'la conciliación (POST /bancos/conciliaciones/:id/anular): revierte su diferencia',
+    },
     // fase 6 PR C (§9.1): los asientos del cierre anual se revierten al reabrir el ejercicio
     cierre_anual: {
         accion: 'libro.reabrir_ejercicio',

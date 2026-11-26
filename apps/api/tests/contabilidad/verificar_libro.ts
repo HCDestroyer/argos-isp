@@ -1069,7 +1069,9 @@ async function verificarLibroCon(
                                       -- inventario fase A (§5): consumo, ajuste, baja y saldo inicial (inv. 24)
                                       'inventario',
                                       -- B1 (§5.7): «Recibí» de una entrega de caja
-                                      'entrega_caja')`,
+                                      'entrega_caja',
+                                      -- B3 (§5.8): la diferencia aceptada al conciliar (Banco contra la cuenta del motivo)
+                                      'diferencia_conciliacion')`,
     )
     await revisar(
         '9.entrega_de_caja_mal_contabilizada (B1, §5.7: cada «Recibí» tiene exactamente un asiento entrega_caja de su empresa, con la fecha de la recepción: 1.1.15 Efectivo en custodia por lo contado y la caja de la entrega por lo entregado, la diferencia (contado − entregado) a cargo de quien entregó en Faltantes o Sobrantes de caja y nada más; una entrega por recibir o rechazada no tiene asiento; la recepción es de su empresa, con diferencia = contado − monto y lo entregado no pasa de lo contado del turno; una entrega vigente por turno)',
@@ -1135,6 +1137,45 @@ async function verificarLibroCon(
            FROM ledger.asientos a
           WHERE a.origen_tipo = 'entrega_caja' AND ${E('a.empresa_id')}
             AND NOT EXISTS (SELECT 1 FROM ledger.entregas e WHERE e.id = a.origen_id AND e.empresa_id = a.empresa_id)`,
+    )
+    await revisar(
+        '9.diferencia_conciliacion_mal_contabilizada (B3, §5.8: un asiento original por diferencia de su empresa, solo si se aplicó o se aprobó; de menos: cuentas del motivo al debe y el banco de la línea al haber; de más: al revés; nunca caja, otro banco, puente ni tránsito; Σ partes = monto)',
+        `WITH a AS (
+             SELECT a.id, a.empresa_id, a.origen_id FROM ledger.asientos a
+              WHERE a.origen_tipo = 'diferencia_conciliacion' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+         )
+         SELECT 'sin_diferencia' AS que, a.id AS asiento_id, a.origen_id, NULL::text AS detalle
+           FROM a LEFT JOIN billing.diferencias_conciliacion d ON d.id = a.origen_id AND d.empresa_id = a.empresa_id
+          WHERE d.id IS NULL
+         UNION ALL
+         SELECT 'asiento_duplicado', min(a.id), a.origen_id, count(*)::text FROM a GROUP BY a.origen_id HAVING count(*) > 1
+         UNION ALL
+         SELECT 'sin_aprobar', a.id, d.id, d.requiere_aprobacion::text
+           FROM a JOIN billing.diferencias_conciliacion d ON d.id = a.origen_id AND d.empresa_id = a.empresa_id
+          WHERE d.requiere_aprobacion
+            AND NOT EXISTS (SELECT 1 FROM billing.diferencias_conciliacion_decisiones dd
+                             WHERE dd.diferencia_id = d.id AND dd.decision = 'aprobada')
+         UNION ALL
+         SELECT 'movimientos', a.id, d.id,
+                concat_ws('|', 'banco debe/haber=' || coalesce(b.debe, 0) || '/' || coalesce(b.haber, 0),
+                          'motivo debe/haber=' || coalesce(o.debe, 0) || '/' || coalesce(o.haber, 0))
+           FROM a JOIN billing.diferencias_conciliacion d ON d.id = a.origen_id AND d.empresa_id = a.empresa_id
+           LEFT JOIN LATERAL (SELECT sum(m.debe) AS debe, sum(m.haber) AS haber FROM ledger.movimientos m
+                               WHERE m.asiento_id = a.id AND m.cuenta_id = d.cuenta_id) b ON true
+           LEFT JOIN LATERAL (SELECT sum(m.debe) AS debe, sum(m.haber) AS haber
+                                FROM ledger.movimientos m
+                               WHERE m.asiento_id = a.id AND m.cuenta_id <> d.cuenta_id) o ON true
+          WHERE NOT (
+                (SELECT count(*) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE m.asiento_id = a.id AND m.cuenta_id <> d.cuenta_id
+                    AND (${CAJA_O_BANCO('c.codigo')} OR c.codigo IN ('${PUENTE}', '${TRANSITO}'))) = 0
+            AND (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id AND m.cuenta_id = d.cuenta_id) = 1
+            AND CASE d.sentido
+                    WHEN 'menos' THEN coalesce(b.haber, 0) = d.monto AND coalesce(b.debe, 0) = 0
+                                  AND coalesce(o.debe, 0) = d.monto AND coalesce(o.haber, 0) = 0
+                    ELSE coalesce(b.debe, 0) = d.monto AND coalesce(b.haber, 0) = 0
+                                  AND coalesce(o.haber, 0) = d.monto AND coalesce(o.debe, 0) = 0
+                END)`,
     )
 
     /*
@@ -1226,7 +1267,7 @@ async function verificarLibroCon(
           WHERE t.cerrado_en IS NULL AND ${E('cj.empresa_id')} GROUP BY caja_id HAVING count(*) > 1`,
     )
     await revisar(
-        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos (sin lo retenido) − egresos ± diferencias de cierre + liquidaciones ± depósitos, traslados y partidas del extracto − pagos a proveedores + ventas de activos − pagos de declaraciones)',
+        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos (sin lo retenido) − egresos ± diferencias de cierre + liquidaciones − entregas recibidas (B1) ± depósitos, traslados, partidas del extracto y diferencias al conciliar (B3) − pagos a proveedores + ventas de activos − pagos de declaraciones)',
         `WITH docs AS (
              SELECT empresa_id, cuenta_id, sum(monto) AS saldo FROM (
                  SELECT p.empresa_id, p.monto - p.comision - p.retenido AS monto,
@@ -1285,6 +1326,16 @@ async function verificarLibroCon(
                     AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'banco' AND a.origen_id = el.id
                                  AND a.reversa_de IS NULL
                                  AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))
+                 UNION ALL
+                 -- B3 (§5.8): la diferencia aceptada al conciliar mueve el banco de su línea (de menos sale,
+                 -- de más entra) mientras su asiento esté vigente; lo pendiente o rechazado no tiene asiento
+                 SELECT d.empresa_id, CASE d.sentido WHEN 'menos' THEN -d.monto ELSE d.monto END, d.cuenta_id
+                   FROM billing.diferencias_conciliacion d
+                  WHERE ${E('d.empresa_id')}
+                    AND EXISTS (SELECT 1 FROM ledger.asientos a
+                                 WHERE a.origen_tipo = 'diferencia_conciliacion' AND a.origen_id = d.id
+                                   AND a.reversa_de IS NULL
+                                   AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))
                  UNION ALL
                  -- fase 5: pago a un proveedor (vigente) desde su caja, banco o cuenta bancaria; el egreso de
                  -- una compra al contado ya está arriba (su dinero sale con el asiento de la compra)
@@ -2267,6 +2318,9 @@ async function verificarLibroCon(
          SELECT 'linea', x.linea_id::text, count(*)::int, 0
            FROM ledger.transitos_acreditados x
           WHERE ${E('x.empresa_id')} AND ${llegadaViva('x.tipo', 'x.documento_id')}
+            -- E11: deshacer la conciliación revierte la llegada (fila con su reatribución); el mismo
+            -- depósito puede llegar otra vez con la misma línea y solo cuenta la llegada vigente
+            AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id)
           GROUP BY x.linea_id HAVING count(*) > 1`,
     )
 
