@@ -50,7 +50,7 @@ const itemsMora: SelectItem[] = [
     { label: 'Monto fijo', value: 'fija' },
     { label: 'Porcentaje de la factura', value: 'porcentaje' },
 ]
-const itemsCertificar: SelectItem[] = (Object.keys(CERTIFICAR_AL) as CertificarAl[]).map(valor => ({ label: CERTIFICAR_AL[valor].etiqueta, value: valor, description: CERTIFICAR_AL[valor].descripcion }))
+const itemsCertificar: SelectItem[] = itemsCertificarAl()
 
 watch(() => estado.ciclo, (ciclo) => {
     if (ciclo === 'aniversario') {

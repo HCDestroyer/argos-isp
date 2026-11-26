@@ -25,7 +25,7 @@ import { nuevaSesion } from '../sesiones/datos'
 import { dinero, estadoFactura } from './datos'
 import { notasDeFactura, rutasNotasCredito } from './notasCredito'
 import { extrasDetalle } from './detalle'
-import { anularConFel, rutasFel } from '../fel/rutas'
+import { accionFelDe, anularConFel, rutasFel } from '../fel/rutas'
 
 type Factura = Schema<'Factura'>
 type FacturaDetalle = Schema<'FacturaDetalle'>
@@ -88,6 +88,7 @@ function detalle(factura: Factura): FacturaDetalle {
     if (factura.cargo_unico && lineasCargo) {
         return {
             ...factura,
+            ...accionFelDe(factura),
             acreditado: factura.acreditado ?? '0.00',
             notas_credito: notasDeFactura(factura.id),
             ...extrasDetalle(factura.id),
@@ -97,6 +98,7 @@ function detalle(factura: Factura): FacturaDetalle {
     }
     return {
         ...factura,
+        ...accionFelDe(factura),
         acreditado: factura.acreditado ?? '0.00',
         notas_credito: notasDeFactura(factura.id),
         ...extrasDetalle(factura.id),
@@ -612,7 +614,7 @@ export const rutasFacturacion: RutasFixture = {
             .filter(f => !periodo || f.periodo === periodo)
             .filter(f => !tipo || (f.tipo ?? 'servicio') === tipo)
             .sort((a, b) => b.id - a.id)
-        return { status: 200, cuerpo: paginar(filas, solicitud) }
+        return { status: 200, cuerpo: paginar(filas.map(f => ({ ...f, ...accionFelDe(f) })), solicitud) }
     }),
 
     'GET /api/v1/facturas/:id': conPermiso('facturas.ver', (solicitud) => {

@@ -1,3 +1,4 @@
+import { CertificarAlObsoleto } from '#fiscal/fel/errores'
 import vine, { errors as erroresVine } from '@vinejs/vine'
 import { ValidacionFallida } from '#shared/errores'
 import { dinero } from '#shared/validadores'
@@ -74,6 +75,7 @@ export async function validarExcepcion(campo: string, valor: unknown): Promise<u
             },
         ])
     }
+    if (campo === 'certificar_al' && valor === 'emitir') throw new CertificarAlObsoleto('valor')
     try {
         const { valor: limpio } = (await VALIDADORES[campo].validate({ valor })) as { valor: unknown }
         return limpio

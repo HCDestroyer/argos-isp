@@ -298,7 +298,8 @@ await plantillaDe('Aniversario empresas', {
     facturas_para_cortar: 3,
     mora_tipo: 'ninguna',
     hora_corte: '09:00',
-    certificar_al: 'emitir',
+    // primero se cobra y después se certifica (decisión del PM, 25-nov-2026): «emitir» ya no se usa
+    certificar_al: 'pagar',
 })
 
 const clientes = [

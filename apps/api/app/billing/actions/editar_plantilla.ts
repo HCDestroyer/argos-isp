@@ -1,3 +1,5 @@
+import { CertificarAlObsoleto } from '#fiscal/fel/errores'
+import { exigirSinNuncaObligatoria } from '#fiscal/fel/configuracion'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ConflictoVersion } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
@@ -77,6 +79,7 @@ export default class EditarPlantilla extends DomainAction<EntradaEditarPlantilla
                     : normalizarReglasPromesa(reglas as ReglasPromesaParciales),
         })
 
+        if (input.certificar_al === 'emitir') throw new CertificarAlObsoleto()
         if (input.por_defecto === true && !antes.por_defecto) await desmarcarPorDefecto(t, input.id)
         await actualizarConVersion(t.trx, 'billing.plantillas_facturacion', input.id, input.version, {
             ...campos,
@@ -84,6 +87,10 @@ export default class EditarPlantilla extends DomainAction<EntradaEditarPlantilla
             ...(input.por_defecto === undefined ? {} : { por_defecto: input.por_defecto }),
         })
 
+        // `nunca` no existe con FEL obligatoria (R2): tampoco por la plantilla de sus servicios
+        if (campos.certificar_al === 'nunca') {
+            await exigirSinNuncaObligatoria(t.trx, { plantillaId: input.id })
+        }
         const despues = await obtenerPlantilla(input.id, t.trx)
         await t.registrarCambios(
             { tipo: 'plantilla_facturacion', id: input.id },

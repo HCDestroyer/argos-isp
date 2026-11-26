@@ -31,7 +31,10 @@ describe('esquemaCliente (espejo de crearClienteValidator)', () => {
         ['nit', '1669394-9', true],
         ['nit', '12521337', true],
         ['nit', '576937K', true],
-        ['nit', '1234567-8', false],
+        // NIT sin módulo 11: aviso, no error (fel-establecimientos R1); sin forma de NIT: error
+        ['nit', '1234567-8', true],
+        ['nit', 'ABC-123', true],
+        ['nit', '12#45', false],
         ['nit', '', false],
         ['cui', '2984561320101', true],
         ['cui', '2984561322301', false],
@@ -58,11 +61,13 @@ describe('esquemaCliente (espejo de crearClienteValidator)', () => {
         expect(entradaDesdeCliente(viejo)).toMatchObject({ tipo_documento_fiscal: 'cui', nit_cui: '2984561320101' })
     })
 
-    it('la API rechaza un NIT con dígito verificador malo con el mismo mensaje (422 en nit_cui)', async () => {
+    it('la API guarda con la marca un NIT sin módulo 11 y rechaza uno sin forma (422 en nit_cui)', async () => {
         reiniciarFixtures()
         sesionFixture('fixture-admin')
-        const malo = await useClientes().crear({ nombre: 'Verificador Malo', tipo_documento_fiscal: 'nit', nit_cui: '1234567-8' }, nuevaClaveIdempotencia())
-        expect(!malo.ok && erroresDeFormulario(malo.problema)).toEqual([{ name: 'nit_cui', message: 'El NIT no es válido (dígito verificador)' }])
+        const marcado = await useClientes().crear({ nombre: 'Verificador Malo', tipo_documento_fiscal: 'nit', nit_cui: '1234567-8' }, nuevaClaveIdempotencia())
+        expect(marcado.ok && marcado.data).toMatchObject({ nit_cui: '12345678', tipo_documento_fiscal: 'nit', nit_cui_invalido: true })
+        const malo = await useClientes().crear({ nombre: 'Sin forma', tipo_documento_fiscal: 'nit', nit_cui: '12#45' }, nuevaClaveIdempotencia())
+        expect(!malo.ok && erroresDeFormulario(malo.problema)).toEqual([{ name: 'nit_cui', message: 'El NIT lleva de 2 a 20 letras o dígitos (se admiten guiones)' }])
         const bueno = await useClientes().crear({ nombre: 'Verificador Bueno', tipo_documento_fiscal: 'nit', nit_cui: '1234567-9' }, nuevaClaveIdempotencia())
         expect(bueno.ok && bueno.data).toMatchObject({ nit_cui: '12345679', tipo_documento_fiscal: 'nit', nit_cui_invalido: false })
         sesionFixture(null)

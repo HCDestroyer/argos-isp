@@ -9,8 +9,8 @@ import * as z from 'zod'
  * la API (`null` para vaciar un campo). Si cambia el validador del backend, cambia esto.
  */
 
-/** Forma de NIT con dígito verificador (numérico o K), CUI de 13 dígitos o CF; el verificador se revisa aparte. */
-export const PATRON_NIT_CUI = /^(CF|\d{13}|\d{1,12}-?[0-9K])$/
+/** Forma de NIT (letras, dígitos y guiones), CUI de 13 dígitos o CF; el verificador es advertencia aparte. */
+export const PATRON_NIT_CUI = /^(CF|\d{13}|[0-9A-Z][0-9A-Z -]{0,24})$/
 /** "lat,lng", igual que `coordenadas()` del backend. */
 export const PATRON_COORDENADAS = /^-?\d+(\.\d+)?, ?-?\d+(\.\d+)?$/
 

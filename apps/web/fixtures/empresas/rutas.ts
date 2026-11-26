@@ -1,6 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { esUrlHttp } from '~/utils/esquemasEmpresa'
+import { limpiarDocumento, revisarNit } from '~/utils/documentoFiscal'
 import { bd, siguienteId } from '../bd'
 import { paisesFiscales } from '../fiscal/datos'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
@@ -11,8 +12,8 @@ type Empresa = Schema<'EmpresaGrupo'>
 const TEXTOS = ['razon_social', 'nombre_comercial', 'direccion_fiscal', 'municipio', 'departamento', 'telefono', 'telefono_alterno', 'whatsapp', 'correo', 'sitio_web', 'horario', 'instrucciones_pago', 'url_corte', 'color_marca'] as const
 const REGIMENES = ['sujeto_pagos_trimestrales', 'retencion_definitiva', 'pequeno_contribuyente'] as const
 
-/** NIT con dígito verificador (`1234567-8`, `123456-K`) o CUI de 13 dígitos. */
-const NIT = /^(\d{4,12}-?[\dK]|\d{13})$/i
+/** NIT tolerante, como `nitEmpresa()` + `revisarNit` de la API (fel-establecimientos R1). */
+const NIT = /^[0-9A-Z][0-9A-Z -]{0,24}$/i
 const COLOR = /^#[0-9a-f]{6}$/i
 /** Como la API: PNG o SVG de hasta 512 KB. */
 export const LOGO_MAX_BYTES = 512 * 1024
@@ -30,8 +31,8 @@ function errores(cuerpo: Record<string, unknown>, creando: boolean): NonNullable
     const lista: NonNullable<Problem['errors']> = []
     const nit = cuerpo.nit
     if (creando || 'nit' in cuerpo) {
-        if (typeof nit !== 'string' || !NIT.test(nit.trim())) {
-            lista.push({ field: 'nit', message: 'NIT con dígito verificador (1234567-8) o CUI de 13 dígitos', rule: 'nit' })
+        if (typeof nit !== 'string' || !NIT.test(nit.trim()) || !revisarNit(nit) || limpiarDocumento(nit) === 'CF') {
+            lista.push({ field: 'nit', message: 'El NIT lleva de 2 a 20 letras o dígitos (se admiten guiones)', rule: 'nit' })
         }
     }
     for (const campo of ['razon_social', 'nombre_comercial'] as const) {
@@ -58,7 +59,7 @@ function errores(cuerpo: Record<string, unknown>, creando: boolean): NonNullable
 }
 
 function nitOcupado(nit: unknown, salvo?: number): boolean {
-    return typeof nit === 'string' && bd.empresas.some(e => e.activa && e.id !== salvo && e.nit?.toUpperCase() === nit.trim().toUpperCase())
+    return typeof nit === 'string' && bd.empresas.some(e => e.activa && e.id !== salvo && e.nit !== null && limpiarDocumento(e.nit) === limpiarDocumento(nit))
 }
 
 function aplicar(empresa: Empresa, cuerpo: Record<string, unknown>): void {
@@ -75,7 +76,9 @@ function aplicar(empresa: Empresa, cuerpo: Record<string, unknown>): void {
         }
     }
     if ('nit' in cuerpo && typeof cuerpo.nit === 'string') {
-        empresa.nit = cuerpo.nit.trim().toUpperCase()
+        const revisado = revisarNit(cuerpo.nit)
+        empresa.nit = revisado?.nit ?? limpiarDocumento(cuerpo.nit)
+        empresa.nit_valido = revisado?.valido ?? false
     }
     if ('regimen_isr' in cuerpo) {
         empresa.regimen_isr = (cuerpo.regimen_isr ?? null) as Empresa['regimen_isr']
@@ -118,7 +121,7 @@ export const rutasEmpresas: RutasFixture = {
             return datosInvalidos(lista)
         }
         if (nitOcupado(cuerpo.nit)) {
-            return problemaTipado(409, 'nit_duplicado', 'Conflicto', `Ya existe una empresa activa con el NIT ${String(cuerpo.nit).trim().toUpperCase()}`)
+            return problemaTipado(409, 'nit_duplicado', 'Conflicto', `Ya existe una empresa activa con el NIT ${limpiarDocumento(String(cuerpo.nit))}`)
         }
         const momento = ahora()
         const empresa: Empresa = {
@@ -145,6 +148,7 @@ export const rutasEmpresas: RutasFixture = {
             logo_tipo: null,
             activa: true,
             principal: false,
+            nit_valido: null,
             version: 1,
             created_at: momento,
             updated_at: momento,
@@ -169,7 +173,7 @@ export const rutasEmpresas: RutasFixture = {
             return datosInvalidos(lista)
         }
         if ('nit' in cuerpo && nitOcupado(cuerpo.nit, empresa.id)) {
-            return problemaTipado(409, 'nit_duplicado', 'Conflicto', `Ya existe una empresa activa con el NIT ${String(cuerpo.nit).trim().toUpperCase()}`)
+            return problemaTipado(409, 'nit_duplicado', 'Conflicto', `Ya existe una empresa activa con el NIT ${limpiarDocumento(String(cuerpo.nit))}`)
         }
         aplicar(empresa, cuerpo)
         empresa.version += 1

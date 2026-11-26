@@ -99,6 +99,11 @@ export interface DteCertificado {
     receptor_id: string
 }
 
+/** Datos de la empresa para probar credenciales (INFILE consulta el NIT del emisor). */
+export interface ContextoPrueba {
+    nit_emisor?: string | null
+}
+
 export interface ResultadoPrueba {
     ok: boolean
     detalle: string
@@ -141,7 +146,16 @@ export type ResultadoConsulta =
 export interface ProveedorFel {
     readonly codigo: string
     readonly capacidades: { contingencia: boolean; consultaNit: boolean; pdf: boolean }
-    probarCredenciales(cred: CredencialesFel, ambiente: AmbienteFel): Promise<ResultadoPrueba>
+    /**
+     * Reenviar con el mismo identificador devuelve el resultado anterior (INFILE lo documenta): el
+     * reintento reenvía en vez de consultar antes. Sin la marca, se consulta primero.
+     */
+    readonly reenvioIdempotente?: boolean
+    probarCredenciales(
+        cred: CredencialesFel,
+        ambiente: AmbienteFel,
+        contexto?: ContextoPrueba,
+    ): Promise<ResultadoPrueba>
     certificar(
         dte: DteParaEnviar,
         cred: CredencialesFel,

@@ -1,3 +1,4 @@
+import { FelDesactivada } from '#fiscal/fel/errores'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -67,6 +68,9 @@ export default class ReintentarDte extends DomainAction<EntradaReintentarDte, Dt
                 )
             }
         }
+        // FEL desactivada: nada nuevo entra a la cola (fel-establecimientos R2)
+        const configActual = await configuracionFel(dte.empresa_id, t.trx)
+        if (configActual.modo === 'desactivada') throw new FelDesactivada()
         const vigente = await dteVigente(t.trx, dte.documento_tipo, dte.documento_id)
         if (vigente) return vigente
 
@@ -80,17 +84,23 @@ export default class ReintentarDte extends DomainAction<EntradaReintentarDte, Dt
                     : 'reglas_snapshot',
             )
             .firstOrFail()) as { cliente_id: number; reglas_snapshot: { receptor?: unknown } | null }
-        const receptor = await receptorDe(
-            t.trx,
-            documento.cliente_id,
-            (documento.reglas_snapshot?.receptor ?? null) as Parameters<typeof receptorDe>[2],
-        )
+        const config = await configuracionFel(dte.empresa_id, t.trx)
+        // NCRE y NDEB: el receptor del documento de origen (INFILE: emisor y receptor deben coincidir
+        // con los del origen registrado en la SAT), no el dato actual del cliente
+        const receptor =
+            dte.tipo_dte === 'NCRE' || dte.tipo_dte === 'NDEB'
+                ? dte.receptor
+                : await receptorDe(
+                      t.trx,
+                      documento.cliente_id,
+                      (documento.reglas_snapshot?.receptor ?? null) as Parameters<typeof receptorDe>[2],
+                      { ambiente: config.ambiente },
+                  )
         const hoy = hoyGuatemala()
         if (await receptorFaltante(dte.empresa_id, receptor, dte.total, hoy, t.trx)) {
             const limite = await valorParametro<string>(dte.empresa_id, 'consumidor_final_limite', hoy, t.trx)
             throw new ReceptorRequerido(aTexto(dec(dte.total)), aTexto(dec(limite)))
         }
-        const config = await configuracionFel(dte.empresa_id, t.trx)
         return insertarDte(t.trx, {
             empresa_id: dte.empresa_id,
             documento_tipo: dte.documento_tipo,

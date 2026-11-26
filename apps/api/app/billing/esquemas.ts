@@ -1,3 +1,4 @@
+import { ACCIONES_FEL, MODOS_FEL } from '#fiscal/fel/accion'
 import {
     Dinero,
     auditable,
@@ -284,6 +285,17 @@ export const Factura = definirEsquema(
             },
             dte_id: { ...nulable(id), description: 'DTE vigente (GET /dte/:id)' },
             fel_error: { ...nulable(texto), description: 'Error visible del DTE (SAT, receptor_requerido…)' },
+            fel_modo: {
+                ...enumerado([...MODOS_FEL]),
+                description: 'Modo FEL de la empresa de la factura (desactivada sin configuración)',
+            },
+            fel_accion: {
+                ...enumerado([...ACCIONES_FEL]),
+                description:
+                    'Qué le toca en la FEL (primero se cobra y después se certifica): ninguna (desactivada, anulada, ' +
+                    'en cero o ya certificada), automatica (DTE en curso, o cubierta con FEL obligatoria), al_cobrar ' +
+                    '(aviso sin cubrir: se certifica al cobrarla), certificar_opcional (FEL opcional, cubierta y sin DTE)',
+            },
             aviso_cobro: {
                 ...booleano,
                 description:

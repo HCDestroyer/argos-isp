@@ -73,7 +73,8 @@ export const esquemaPlantilla = z.object({
     mora_tipo: z.enum(['ninguna', 'fija', 'porcentaje']),
     mora_valor: z.string().trim(),
     mora_recurrente: z.boolean(),
-    certificar_al: z.enum(['emitir', 'pagar', 'nunca']),
+    // `emitir` ya no se usa (primero se cobra y después se certifica): la API responde 422 certificar_al_obsoleto
+    certificar_al: z.enum(['emitir', 'pagar', 'nunca']).refine(valor => valor !== 'emitir', 'Ya no se certifica al emitir: elige «Al pagar»'),
     reglas_promesa: z.object({
         habilitadas: z.boolean(),
         max_por_periodo: entero(0, 12, 'Máximo por periodo'),

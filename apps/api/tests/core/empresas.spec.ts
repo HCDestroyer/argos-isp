@@ -76,12 +76,22 @@ test.group('Empresas: core.empresas', (group) => {
             }),
             409,
         )
-        // NIT inválido: 422
+        assert.isTrue(empresa.nit_valido)
+        // NIT que no cuadra con el módulo 11: se guarda con advertencia (fel-establecimientos R1)
+        const sinVerificador = await estado(
+            client
+                .post('/api/v1/empresas')
+                .bearerToken(token)
+                .json({ nit: '1234567-0', razon_social: 'X', nombre_comercial: unico('X') }),
+            201,
+        )
+        assert.include(sinVerificador.body(), { nit: '12345670', nit_valido: false })
+        // sin forma de NIT: 422
         await estado(
             client
                 .post('/api/v1/empresas')
                 .bearerToken(token)
-                .json({ nit: '1234567-0', razon_social: 'X', nombre_comercial: 'X' }),
+                .json({ nit: '12#45', razon_social: 'X', nombre_comercial: 'X' }),
             422,
         )
 
