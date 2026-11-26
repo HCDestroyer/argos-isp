@@ -105,8 +105,6 @@ Por decidir (cada una con su recomendación en el plan, §8):
 12. Conciliación en el teléfono (amplía la decisión 9).
 13. Revisión de los textos de ayuda por el contador.
 14. Pasos del mes automáticos.
-<<<<<<< HEAD
-=======
 
 
 ### Respuestas del PM (26 nov 2026)
@@ -146,4 +144,3 @@ Por decidir ahora (plan §8.2): N1 caja sin factura con dos tipos; N2 quitar el 
   - «lo deposito yo» está permitido y cada empresa lo puede apagar (N4);
   - la caja chica se repone desde la custodia o desde el banco (N5);
   - el faltante o sobrante al recibir queda a nombre de quien entregó, y Argos no lo descuenta de planilla (N8).
->>>>>>> origin/main
