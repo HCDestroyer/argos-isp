@@ -10,8 +10,8 @@ describe('menú lateral agrupado', () => {
     })
 
     function gruposVisibles(): string[] {
-        const { puede } = usePermisos()
-        return GRUPOS_PANEL.filter(grupo => seccionesDeGrupo(grupo).some(seccion => puede(seccion.permiso))).map(grupo => grupo.id)
+        const { puedeSeccion } = usePermisos()
+        return GRUPOS_PANEL.filter(grupo => seccionesDeGrupo(grupo).some(puedeSeccion)).map(grupo => grupo.id)
     }
 
     it('día a día primero, grupos en orden de uso con su etiqueta corta y cada sección en uno solo', () => {
@@ -37,7 +37,9 @@ describe('menú lateral agrupado', () => {
             }
         }
         const configuracion = GRUPOS_PANEL.find(grupo => grupo.id === 'configuracion')
-        expect(configuracion?.subgrupos?.map(subgrupo => subgrupo.etiqueta)).toEqual(['Empresa y fiscal', 'Facturación y cobro', 'Red y portal', 'Usuarios y acceso', 'Sistema y apariencia', 'Notificaciones e integraciones'])
+        // Ajustes (respuestas del PM, 26 nov 2026): los 8 grupos del catálogo único, con sus nombres.
+        expect(configuracion?.subgrupos?.map(subgrupo => subgrupo.etiqueta)).toEqual(['Empresa y fiscal', 'Facturación y cobro', 'Clientes y portal', 'Red y equipos', 'Comunicación e integraciones', 'Usuarios y seguridad', 'Apariencia y reportes', 'Sistema'])
+        expect(configuracion?.etiqueta).toBe('Ajustes')
         expect(GRUPOS_PANEL.find(grupo => grupo.id === 'inventario')?.subgrupos?.map(subgrupo => subgrupo.id)).toEqual(['inventario-movimientos', 'inventario-catalogos'])
     })
 

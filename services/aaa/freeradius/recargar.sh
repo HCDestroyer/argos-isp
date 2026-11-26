@@ -10,22 +10,52 @@
 #   2. si es válida, para radiusd (TERM) y lo vuelve a levantar (~1 s sin RADIUS; el router reintenta);
 #      si no, lo deja como estaba y lo dice en el log.
 # Varios avisos seguidos se juntan en una recarga. Es por evento: no sondea ni usa TTL.
+# Tras levantar radiusd se espera (hasta RADIUS_ESCUCHA_MAX_S, 30 s) a que escuche en RADIUS_AUTH_PORT
+# antes de seguir con el siguiente aviso; el log lo dice («radiusd escuchando»).
 # Si el FIFO no existe todavía (aaa no arrancó), espera a que aparezca sin bloquear a radiusd.
 set -uo pipefail
 
 CLIENTES_DIR="${RADIUS_CLIENTES_DIR:-/etc/freeradius/clients.d}"
 FIFO="$CLIENTES_DIR/.recargar"
 JUNTAR_S="${RADIUS_RECARGA_JUNTAR_S:-1}"
+PUERTO_AUTH="${RADIUS_AUTH_PORT:-1812}"
+ESCUCHA_MAX_S="${RADIUS_ESCUCHA_MAX_S:-30}"
 
 log() { printf '%s recargar: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
 
 ARGS=("$@")
 HIJO=0
 
+# ¿Hay un socket UDP en el puerto de auth? Se lee de /proc (la imagen no trae ss ni netstat).
+escucha() {
+    local hex
+    hex="$(printf '%04X' "$PUERTO_AUTH")"
+    grep -qi ":$hex " /proc/net/udp /proc/net/udp6 2> /dev/null
+}
+
+# Espera (con límite) a que radiusd, ya con proceso vivo, escuche. Así una recarga no se da por
+# terminada, ni se procesa el aviso siguiente, mientras radiusd arranca sin atender.
+esperar_escucha() {
+    local limite=$((SECONDS + ESCUCHA_MAX_S))
+    while ! escucha; do
+        if ! kill -0 "$HIJO" 2> /dev/null; then
+            log "radiusd terminó mientras arrancaba (pid $HIJO)"
+            return 1
+        fi
+        if [ "$SECONDS" -ge "$limite" ]; then
+            log "radiusd (pid $HIJO) no escucha en ${PUERTO_AUTH}/udp tras ${ESCUCHA_MAX_S}s"
+            return 1
+        fi
+        sleep 0.1
+    done
+    log "radiusd escuchando (pid $HIJO)"
+}
+
 levantar() {
     freeradius -f "${ARGS[@]}" &
     HIJO=$!
     log "radiusd levantado (pid $HIJO)"
+    esperar_escucha || true
 }
 
 parar() {
@@ -47,6 +77,12 @@ recargar() {
     if ! salida="$(freeradius -C 2>&1)"; then
         log "configuración inválida tras regenerar clients.d ($motivo); sigue la anterior"
         printf '%s\n' "$salida" | tail -n 5 >&2
+        # Última línea de la rama: radiusd no se tocó. Quien espere este log sabe que ya terminó.
+        if kill -0 "$HIJO" 2> /dev/null && escucha; then
+            log "radiusd sigue en pie y escuchando (pid $HIJO) con los clientes anteriores ($motivo)"
+        else
+            log "radiusd no está escuchando (pid $HIJO) tras una configuración inválida ($motivo)"
+        fi
         return 0
     fi
     log "recargando clientes ($motivo)"

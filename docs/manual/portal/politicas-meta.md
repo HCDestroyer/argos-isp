@@ -20,7 +20,7 @@ Las tres se abren sin iniciar sesión, salen completas aunque el navegador no ej
 
 ## De dónde salen los datos
 
-El responsable que aparece en las tres páginas es la empresa configurada en **Configuración → Empresa y fiscal → Empresas**:
+El responsable que aparece en las tres páginas es la empresa configurada en **Ajustes → Empresa y fiscal → Datos de la empresa**:
 
 - **Razón social** (nombre legal) y **Nombre comercial.** Si no hay razón social, se usa el nombre comercial.
 - **NIT**, **Dirección fiscal**, **Correo**, **Teléfono** y **Horario de atención.**

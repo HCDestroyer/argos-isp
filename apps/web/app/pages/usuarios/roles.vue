@@ -71,10 +71,15 @@ watch(rol, (actual) => {
     problemaGuardar.value = null
 }, { immediate: true })
 
+/* Si la persona ya pidió otra pantalla mientras cargaban los roles, elegir la primera fila no
+   debe devolverla aquí: el `replace` cancelaría la navegación que está en curso. */
+let saliendo = false
+onBeforeRouteLeave(() => {
+    saliendo = true
+})
 watch(rolId, (id) => {
-    if (id && String(id) !== route.query.rol) {
-        void router.replace({ query: { ...route.query, rol: String(id) } })
-    }
+    if (saliendo || !id || String(id) === route.query.rol) return
+    void router.replace({ path: route.path, query: { ...route.query, rol: String(id) } })
 })
 
 const editable = computed(() => rol.value !== null && !rol.value.base && puede('roles.editar'))
@@ -179,11 +184,10 @@ function alGuardar(guardado: Rol) {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="roles"
-        titulo="Roles y permisos"
-        icono="i-lucide-shield"
         descripcion="Un rol agrupa lo que una persona puede hacer. El alcance dice dónde puede hacerlo."
+        sin-tarjeta
     >
         <template #acciones>
             <UButton
@@ -474,5 +478,5 @@ function alGuardar(guardado: Rol) {
             :solo-lectura="editando !== null && !puede('roles.editar')"
             @guardado="alGuardar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

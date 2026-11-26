@@ -8,7 +8,7 @@ pantallas:
 
 La factura electrónica en línea de cada empresa: el certificador, sus credenciales, el modo de emisión, la contingencia y el momento en que se certifica cada plantilla de facturación.
 
-Está en **Configuración → Empresa y fiscal → FEL**. Como todo lo fiscal, es por empresa: elige una en el selector de empresa.
+Está en **Ajustes → Empresa y fiscal → Factura electrónica (FEL)**. Como todo lo fiscal, es por empresa: elige una en el selector de empresa.
 
 ## Quién la usa
 
@@ -73,4 +73,4 @@ Las plantillas nuevas nacen «al pagar». Cada servicio puede tener su excepció
 ## Relacionado
 
 - [Cola de DTE](./dte.md)
-- [Configuración fiscal](./configuracion-fiscal.md)
+- [Régimen e impuestos](./configuracion-fiscal.md)

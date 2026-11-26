@@ -34,11 +34,12 @@ describe('recibo · comprobante por WhatsApp', () => {
         wrapper.unmount()
     })
 
-    it('canal apagado y quien configura: texto discreto hacia Configuración › Notificaciones', async () => {
+    it('canal apagado y quien configura: texto discreto hacia Ajustes → Canales de aviso', async () => {
         sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
         const wrapper = await mountSuspended(ReciboWhatsapp, { props: { pagoId: pagoId() } })
         await esperar(() => expect(wrapper.text()).toContain('Envío por WhatsApp: actívalo en'))
+        expect(wrapper.text()).toContain('Ajustes → Canales de aviso')
         expect(wrapper.find('a[href="/configuracion/notificaciones"]').exists()).toBe(true)
         expect(wrapper.find('button').exists()).toBe(false)
         wrapper.unmount()

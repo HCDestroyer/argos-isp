@@ -15,7 +15,7 @@ En esta pantalla decides a qué dirección mandan los routers a los clientes sus
 
 - **Ajustes de operación** (pestañas «Caídas y fallas generales» y «Retiro, historial de IP y acceso», y la vigencia del código): ver con `ajustes_operacion.ver`, guardar con `ajustes_operacion.editar` (solo `admin`).
 
-Está en **Configuración → Red y portal**. La tarjeta tiene tres pestañas: **Portal de corte**, **Caídas y fallas generales** y **Retiro, historial de IP y acceso**.
+Está en **Ajustes → Red y equipos → Corte, caídas y retiro**. La tarjeta tiene tres pestañas: **Portal de corte**, **Caídas y fallas generales** y **Retiro, historial de IP y acceso**.
 
 ### Ajustes para todas las empresas o para una
 
@@ -37,7 +37,7 @@ El portal de corte (IP, puerto y modo de suspensión) es uno para toda la instal
 - **Al suspender un servicio**, una de dos opciones:
     - «Desconectar la sesión» (recomendado): el equipo del cliente se vuelve a conectar ya suspendido y ve la página de corte de inmediato.
     - «Mantener la sesión y cambiar velocidad (CoA)»: el cliente no se desconecta; el router le cambia el perfil en caliente. Descargas o llamadas ya abiertas pueden seguir hasta que se cierren.
-- **Página de corte de cada empresa**: con `empresas.ver`, el botón «Ver la URL de corte de cada empresa» lleva a **Configuración → Empresa y fiscal → Empresas**, donde cada empresa puede usar la página de corte de Argos o una propia.
+- **Página de corte de cada empresa**: con `empresas.ver`, el botón «Ver la URL de corte de cada empresa» lleva a **Ajustes → Empresa y fiscal → Datos de la empresa**, donde cada empresa puede usar la página de corte de Argos o una propia.
 
 - **El código que da el personal vale** (en «Cómo se identifica al cliente cortado»): minutos que dura el código de 6 dígitos que se da desde la ficha del servicio, de 5 a 60 (15 de fábrica). Cada empresa puede tener el suyo.
 
