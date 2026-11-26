@@ -19,7 +19,7 @@ function grupoDe(id: string): GrupoSecciones | undefined {
 export function useAccesosRapidos() {
     const api = useApi()
     const { usuario } = useAuth()
-    const { puede } = usePermisos()
+    const { puedeSeccion } = usePermisos()
     const datos = useState<AccesosRapidos | null>('accesos-rapidos', () => null)
     const problema = useState<Problem | null>('accesos-rapidos-problema', () => null)
     const cargando = useState('accesos-rapidos-cargando', () => false)
@@ -38,7 +38,7 @@ export function useAccesosRapidos() {
 
     /** Ids vigentes: los de la API que existen en el menú y el usuario puede abrir. */
     const ids = computed(() => (datos.value?.secciones ?? [])
-        .filter(id => SECCIONES_PANEL.some(seccion => seccion.id === id && puede(seccion.permiso)))
+        .filter(id => SECCIONES_PANEL.some(seccion => seccion.id === id && puedeSeccion(seccion)))
         .slice(0, MAX_ACCESOS_RAPIDOS))
 
     const accesos = computed(() => ids.value.map(id => obtenerSeccion(id)))

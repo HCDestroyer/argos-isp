@@ -8,7 +8,7 @@ import { meAdmin } from '~~/fixtures/auth/sesiones'
 import PaginaNotificaciones from '~/pages/configuracion/notificaciones.vue'
 import { esperar } from '../ayudas/esperar'
 
-/** Configuración → Notificaciones (A6): global y por empresa, secretos `***`, prueba con el error real. */
+/** Ajustes → Canales de aviso (A6): global y por empresa, secretos `***`, prueba con el error real. */
 describe('notificaciones · cuerpo del PUT', () => {
     it('un secreto sin tocar no viaja; reemplazar manda el texto; borrar manda null; nunca ***', () => {
         const form = formularioNotificaciones(configuracionGlobal)

@@ -5,7 +5,7 @@ import type { TableColumn } from '@nuxt/ui'
 /**
  * Mi cuenta: datos del usuario de la sesión y sus vinculaciones de autologin (`contratos/horus.md`
  * §1.5): la cuenta de Horus o Iris con la que entra a ArgosIsp sin volver a escribir la contraseña. Cada
- * usuario quita las suyas; el administrador las revoca todas desde Configuración → Integraciones.
+ * usuario quita las suyas; el administrador las revoca todas desde Ajustes → Integraciones.
  */
 useHead({ title: 'Mi cuenta · ArgosIsp' })
 

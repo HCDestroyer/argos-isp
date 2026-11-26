@@ -37,7 +37,9 @@ Fallas simuladas en modo fixtures (para ver que una pantalla muestra el error y 
 | Sesión: cookie `HttpOnly` `argos_sesion` de la API + `csrf` en memoria (`contratos/sesion-panel.md`), `login`, `logout`, `cargarMe`; 401 y 403 `csrf_invalido` en `plugins/sesion.ts` | `useAuth()`, `useCsrf()` |
 | Permisos: `puede('servicios.suspender')`, `puedeAlguno`, `puedeTodos` | `usePermisos()` |
 | Middleware global: sin sesión → `/login`; `definePageMeta({ permiso })` → `/sin-permiso` | `app/middleware/` |
-| Menú lateral filtrado por permiso | `app/utils/navegacion.ts`, `app/layouts/default.vue` |
+| Menú lateral filtrado por permiso; «Ajustes» es una sola entrada fija abajo | `app/utils/navegacion.ts`, `app/layouts/default.vue` |
+| Ajustes: catálogo único de 8 grupos y 29 pantallas (rutas `/configuracion/…` sin cambios), página de tarjetas con buscador, lista de grupos a la izquierda dentro de cada ajuste y «‹ Ajustes» en el teléfono | `app/utils/configuracionSecciones.ts`, `usePaginasConfiguracion`, `AjustesNavegacion`, `ConfiguracionMarco` |
+| La cuenta: menú desplegable en la computadora y panel desde abajo en el teléfono (también desde la fila arriba de «Más») | `useMenuCuenta`, `MenuUsuario`, `CuentaDrawer` |
 | Formato: `formatearFecha`, `formatearFechaHora` (America/Guatemala), `formatearQuetzales('1234.5')` → `Q 1,234.50` | `app/utils/formato.ts` |
 | Estados del servicio con colores fijos | `EstadoServicioBadge`, `app/utils/estadoServicio.ts` |
 | Estructura de página (`UDashboardPanel` + navbar) | `PanelPagina` |
@@ -57,6 +59,10 @@ Fallas simuladas en modo fixtures (para ver que una pantalla muestra el error y 
 - Llamadas a la API desde composables con `resolver(api.GET(...))` → `Resultado<T>` (`ok` + `data`
   o `problema`). Listas con cursor: `usePaginacionCursor` + `<PaginacionCursor>`; errores con
   `<ProblemaAlerta>`; 422 al formulario con `erroresDeFormulario(problema)`.
+- Un ajuste nuevo (algo que se configura una vez): va en `SECCIONES_CONFIGURACION` con su grupo,
+  `descripcion`, `palabras` para el buscador y el permiso exacto de su página, usa
+  `<ConfiguracionMarco>` y su permiso se agrega a la lista del índice (`pages/configuracion/index.vue`);
+  `ajustesCatalogo.test.ts` vigila las dos cosas.
 - ESLint prohíbe `<button>`, `<input>`, `<select>`, `<textarea>`, `<table>` crudos y `any`; indentación de 4.
 
 ## Pantallas

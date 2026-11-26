@@ -3,7 +3,7 @@ import Decimal from 'decimal.js'
 import * as z from 'zod'
 
 /**
- * Esquemas de Configuración → Fiscal, espejo de `apps/api/app/fiscal/validators.ts` y de la
+ * Esquemas de Ajustes → Régimen e impuestos, espejo de `apps/api/app/fiscal/validators.ts` y de la
  * validación de las acciones (`validarValor`, `CambiarRegimen`, `AgregarFrase`). La API vuelve a
  * validar todo; aquí solo se evita mandar lo que seguro rechaza.
  */

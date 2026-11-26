@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { elegirEmpresa, entrar, ir, llenarFecha } from './ayudas'
 
 /**
- * Configuración → Fiscal (localización GT, fase 2): régimen con su aviso, parámetros con vigencia
+ * Ajustes → Régimen e impuestos (localización GT, fase 2): régimen con su aviso, parámetros con vigencia
  * y la marca «confirmar con contador», e impuestos con la tasa en positivo. Fixtures: la empresa 1
  * (ArgosNet) tiene cerrado 2026-09, así que una vigencia en ese mes responde 422.
  */
@@ -12,7 +12,7 @@ async function elegirArgosNet(page: Page) {
 
 test('parámetros: un valor en un mes cerrado se explica y uno futuro se inserta sin tocar el vigente', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Fiscal', /\/configuracion\/fiscal/)
+    await ir(page, 'Régimen e impuestos', /\/configuracion\/fiscal/)
     await expect(page.locator('[data-prueba="elegir-empresa"]')).toBeVisible()
     await elegirArgosNet(page)
     await expect(page.locator('[data-prueba="regimen-actual"]')).toContainText('Sobre utilidades')
@@ -44,7 +44,7 @@ test('parámetros: un valor en un mes cerrado se explica y uno futuro se inserta
 
 test('impuestos: la retención se muestra con signo menos y la tasa nueva se escribe en positivo', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Fiscal', /\/configuracion\/fiscal/)
+    await ir(page, 'Régimen e impuestos', /\/configuracion\/fiscal/)
     await elegirArgosNet(page)
     await page.locator('#fiscal-impuestos').scrollIntoViewIfNeeded()
     await expect(page.locator('[data-impuesto="RET_IVA_ESP"]')).toBeVisible()

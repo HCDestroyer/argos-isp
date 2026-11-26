@@ -3,7 +3,7 @@ import type { Problem } from '@argosisp/contracts'
 import type { FormError, FormSubmitEvent, TableColumn } from '@nuxt/ui'
 
 /**
- * Configuración → Integraciones → Iris (`contratos/iris.md` §1 y §2.3; API de A1 y A6). Estado
+ * Ajustes → Integraciones → Iris (`contratos/iris.md` §1 y §2.3; API de A1 y A6). Estado
  * del conector (apagado por defecto) y su interruptor, enlace de conexión de 15 min y un uso para
  * pegar en Iris (§1.3), configuración a mano (URL, `iris_pat_`, receptor y su secreto), tokens
  * `atk_` del usuario técnico Iris (§1.1) y los webhooks enviados a Iris. Los secretos nunca

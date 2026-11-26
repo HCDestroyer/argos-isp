@@ -121,8 +121,8 @@ defineExpose({ cargar })
                 icon="i-lucide-lock-open"
                 title="Su empresa no tiene contraseña del portal por defecto"
                 :description="estado.propia
-                    ? 'Si se restaura, solo podrá entrar con código hasta que se configure en Configuración → Contraseña del portal.'
-                    : 'Solo puede entrar con código (o con «Ver mi cuenta» desde la página de corte) hasta que se configure en Configuración → Contraseña del portal.'"
+                    ? 'Si se restaura, solo podrá entrar con código hasta que se configure en Ajustes → Contraseña del portal.'
+                    : 'Solo puede entrar con código (o con «Ver mi cuenta» desde la página de corte) hasta que se configure en Ajustes → Contraseña del portal.'"
                 data-prueba="portal-sin-defecto"
             />
         </div>

@@ -327,8 +327,6 @@ onMounted(() => {
 <template>
     <ConfiguracionMarco
         id="configuracion-portal-corte"
-        titulo="Red y portal"
-        descripcion="A dónde van los clientes suspendidos, caídas y fallas generales, y otros ajustes de operación"
     >
         <template
             v-if="verAjustes && listaEmpresas.length > 1"

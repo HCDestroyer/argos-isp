@@ -6,7 +6,7 @@ import type { SelectItem, TabsItem, TableColumn } from '@nuxt/ui'
  * Avisos a clientes y al equipo (A6, brief semana 2): plantillas por evento y canal con su editor
  * y las variables del evento, los tres recordatorios de pago y el registro de envíos con su
  * estado, error o motivo. Leer pide `notificaciones.ver`; editar, `notificaciones.editar`. Los
- * canales (SMTP, bot de Telegram) se configuran en Configuración → Notificaciones.
+ * canales (SMTP, bot de Telegram) se configuran en Ajustes → Canales de aviso.
  */
 definePageMeta({ permiso: 'notificaciones.ver' })
 
@@ -224,11 +224,10 @@ onMounted(() => {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="notificaciones-plantillas"
-        titulo="Plantillas de avisos"
-        icono="i-lucide-message-square-text"
         descripcion="Un texto por evento y canal. Correo y Telegram se editan aquí; las de WhatsApp se editan en Iris y aquí solo se ven."
+        sin-tarjeta
     >
         <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
             <div class="border-b border-(--ax-borde) p-3 sm:p-4">
@@ -599,5 +598,5 @@ onMounted(() => {
                 </dl>
             </template>
         </UModal>
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

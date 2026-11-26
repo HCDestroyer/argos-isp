@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar } from './ayudas'
+import { abrirCuenta, entrar, opcionCuenta } from './ayudas'
 
 /**
  * Versión instalada y "Qué cambió" en modo fixtures (versión 1.4.2), en escritorio y teléfono: el
@@ -7,8 +7,8 @@ import { entrar } from './ayudas'
  */
 test('qué cambió desde el menú de usuario', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await page.locator('[data-prueba="menu-usuario"]').click()
-    await page.getByRole('menuitem', { name: /Qué cambió/ }).click()
+    await abrirCuenta(page)
+    await opcionCuenta(page, /Qué cambió/).click()
     const modal = page.getByRole('dialog', { name: 'Qué cambió en la versión 1.4.2' })
     await expect(modal.locator('[data-prueba="version-cambios"]')).toContainText('programa de lealtad')
     await expect(modal.locator('[data-prueba="version-cambios"]')).toContainText('<script>alert("no")</script> se ve como texto')

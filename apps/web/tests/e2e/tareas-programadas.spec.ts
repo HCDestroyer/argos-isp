@@ -1,16 +1,14 @@
 import { expect, test } from '@playwright/test'
-import { entrar, menu } from './ayudas'
+import { entrar, irAjuste } from './ayudas'
 
 /**
  * Sistema → Tareas programadas (tablero `SistemaCrons.dc.html`), escritorio y teléfono: el admin la
- * encuentra en el menú, ve las tareas con su estado y la que necesita atención, abre una, ve su
+ * encuentra en Ajustes, ve las tareas con su estado y la que necesita atención, abre una, ve su
  * historial y la ejecuta ahora con una confirmación corta. Si la API falla se ve «Reintentar».
  */
 test('el admin revisa una tarea atrasada y la ejecuta ahora', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    const lateral = await menu(page)
-    await lateral.getByRole('link', { name: 'Tareas programadas' }).click()
-    await expect(page).toHaveURL(/\/sistema\/tareas/, { timeout: 30_000 })
+    await irAjuste(page, 'Tareas programadas', /\/sistema\/tareas/)
 
     await expect(page.locator('[data-prueba="resumen-tareas"]')).toContainText('2 necesitan atención')
     await expect(page.locator('[data-prueba="aviso-atrasada"]')).toContainText('Vencimiento y mora')
