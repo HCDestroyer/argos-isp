@@ -413,3 +413,197 @@ export const DiferenciaCerrada = definirEsquema(
         },
     }),
 )
+
+/*
+| Diferencias al conciliar (plan de contabilidad §5.8, B3)
+*/
+
+export const AjustesConciliacion = definirEsquema(
+    'AjustesConciliacion',
+    objeto({
+        empresa_id: id,
+        tope_linea: { ...Dinero, description: 'Diferencia que quien concilia acepta solo, por línea' },
+        tope_dia: { ...Dinero, description: 'Diferencia que quien concilia acepta solo, en el día' },
+        version: { ...entero, description: '0 = nunca se guardó (valores de fábrica)' },
+        updated_by: nulable(id),
+        updated_at: nulable(instante),
+        aprobadores: {
+            ...lista(objeto({ usuario_id: id, nombre: texto })),
+            description: 'Usuarios activos con bancos.aprobar_diferencia y acceso a la empresa',
+        },
+    }),
+)
+
+export const MotivoDiferencia = definirEsquema(
+    'MotivoDiferencia',
+    objeto({
+        id,
+        empresa_id: {
+            ...nulable(id),
+            description: 'null = motivo de fábrica (al editarlo, la empresa recibe su copia)',
+        },
+        codigo: {
+            ...nulable(texto),
+            description: 'Código de fábrica (comision_banco, redondeo…); null en los propios',
+        },
+        clase: enumerado(['diferencia', 'retencion']),
+        nombre: texto,
+        sentido: enumerado(['menos', 'mas', 'ambos']),
+        se_ofrece_en: enumerado(['cualquiera', 'depositos', 'cobros']),
+        cuenta_banco_id: { ...nulable(id), description: 'Solo en esta cuenta bancaria; null = todas' },
+        texto: { ...nulable(texto), description: 'Solo si el texto del banco lo contiene' },
+        limite_tipo: enumerado(['fijo', 'porcentaje', 'sin_limite']),
+        limite_valor: { ...nulable(Dinero), description: 'Q por línea (fijo) o % de lo emparejado' },
+        cuenta_codigo: { ...nulable(texto), description: 'null = la elige quien concilia' },
+        cuenta_nombre: nulable(texto),
+        cuenta_contra_tope: booleano,
+        siempre_aprobacion: booleano,
+        fija: { ...booleano, description: 'No se apaga (retenciones, lote B10)' },
+        activo: booleano,
+        orden: entero,
+        ...auditable,
+    }),
+)
+
+const ParteDiferencia = definirEsquema(
+    'ParteDiferencia',
+    objeto({
+        motivo_id: id,
+        codigo: nulable(texto),
+        nombre: texto,
+        cuenta: { ...texto, description: 'Código de la cuenta a la que va' },
+        monto: Dinero,
+        nota: nulable(texto),
+        contra_tope: booleano,
+        siempre_aprobacion: booleano,
+        responsable_id: { ...nulable(id), description: 'Quien llevó el depósito (faltante a su cargo)' },
+    }),
+)
+
+export const DiferenciaConciliacion = definirEsquema(
+    'DiferenciaConciliacion',
+    objeto({
+        id,
+        empresa_id: id,
+        cuenta_id: id,
+        linea_id: id,
+        extracto_id: id,
+        linea_fecha: fecha,
+        linea_descripcion: texto,
+        linea_monto: Dinero,
+        sentido: enumerado(['menos', 'mas']),
+        monto: { ...Dinero, description: '|línea − emparejado|' },
+        monto_contra_tope: Dinero,
+        requiere_aprobacion: booleano,
+        razones: lista(enumerado(['motivo', 'tope_linea', 'tope_dia'])),
+        solicitud: objeto({ movimientos: lista(id), depositos: lista(id), traslados: lista(id) }),
+        partes: lista(ParteDiferencia),
+        explicacion: nulable(texto),
+        fecha: { ...fecha, description: 'Día (Guatemala) en que se aceptó o se pidió' },
+        estado: enumerado(['aplicada', 'pendiente', 'aprobada', 'rechazada', 'anulada']),
+        solicitado_por: nulable(id),
+        solicitado_por_nombre: nulable(texto),
+        created_at: instante,
+        decidido_por: nulable(id),
+        decidido_por_nombre: nulable(texto),
+        decidido_en: nulable(instante),
+        motivo_rechazo: nulable(texto),
+        asiento_id: {
+            ...nulable(id),
+            description: 'Asiento de la diferencia (null mientras espera o si se rechazó)',
+        },
+    }),
+)
+
+const camposPorIdentificar = {
+    nota: texto,
+    marcado_por: nulable(id),
+    marcado_por_nombre: nulable(texto),
+    marcado_en: instante,
+}
+const PorIdentificar = objeto(camposPorIdentificar)
+
+export const LineaPorIdentificar = definirEsquema(
+    'LineaPorIdentificar',
+    objeto({ linea_id: id, ...camposPorIdentificar }),
+)
+
+const NIVELES = [
+    'segura',
+    'para_decidir',
+    'con_diferencia',
+    'regla',
+    'sin_pareja',
+    'por_identificar',
+    'esperando_aprobacion',
+] as const
+
+export const SugerenciasExtracto = definirEsquema(
+    'SugerenciasExtracto',
+    objeto({
+        extracto_id: id,
+        empresa_id: id,
+        cuenta_id: id,
+        lineas: lista(
+            objeto({
+                linea_id: id,
+                fecha,
+                descripcion: texto,
+                referencia: nulable(texto),
+                monto: Dinero,
+                nivel: enumerado(NIVELES),
+                candidatos: lista(
+                    objeto({
+                        tipo: enumerado(['movimiento', 'deposito', 'traslado']),
+                        id: {
+                            ...id,
+                            description:
+                                'Movimiento, depósito o traslado (va en POST /bancos/conciliaciones)',
+                        },
+                        origen_tipo: texto,
+                        origen_id: nulable(id),
+                        fecha,
+                        descripcion: texto,
+                        referencia: nulable(texto),
+                        monto: Dinero,
+                        diferencia: { ...Dinero, description: 'línea − candidato' },
+                        referencia_coincide: booleano,
+                    }),
+                ),
+                regla_id: {
+                    ...nulable(id),
+                    description: 'Regla de contrapartida que la reconoce (nivel regla)',
+                },
+                motivos: lista(
+                    objeto({
+                        motivo_id: id,
+                        nombre: texto,
+                        cuenta_codigo: nulable(texto),
+                        aplica: booleano,
+                        razon: { ...nulable(texto), description: 'Por qué no aplica' },
+                        maximo: nulable(Dinero),
+                        cuenta_contra_tope: booleano,
+                        siempre_aprobacion: booleano,
+                    }),
+                ),
+                por_identificar: nulable(PorIdentificar),
+                diferencia_pendiente_id: nulable(id),
+            }),
+        ),
+        resumen: objeto({
+            ...Object.fromEntries(NIVELES.map((n) => [n, entero])),
+            conciliadas: entero,
+            total: entero,
+        }),
+        tope: objeto({ tope_linea: Dinero, tope_dia: Dinero, usado_hoy: Dinero, disponible_hoy: Dinero }),
+    }),
+)
+
+export const ResultadoAceptarSugerencias = definirEsquema(
+    'ResultadoAceptarSugerencias',
+    objeto({
+        extracto_id: id,
+        conciliadas: lista(objeto({ linea_id: id, conciliacion_id: id })),
+        omitidas: lista(objeto({ linea_id: id, nivel: enumerado([...NIVELES, 'conciliada']) })),
+    }),
+)

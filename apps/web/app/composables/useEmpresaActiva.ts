@@ -16,6 +16,8 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/adicionales',
     '/api/v1/adicionales/motivos',
     '/api/v1/bancos/depositos',
+    '/api/v1/bancos/diferencias',
+    '/api/v1/bancos/diferencias-pendientes',
     '/api/v1/bancos/extractos',
     '/api/v1/bancos/fondos-en-transito',
     '/api/v1/bancos/movimientos-sin-conciliar',

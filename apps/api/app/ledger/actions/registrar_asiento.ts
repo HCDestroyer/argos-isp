@@ -78,6 +78,9 @@ export const ORIGENES_ASIENTO = [
     // inventario fase A (`contratos/inventario.md` §5): consumo, ajuste, baja y saldo inicial;
     // origen_id = `inventario.movimientos.id`
     'inventario',
+    // plan de contabilidad B3 (§5.8): diferencia aceptada al conciliar el banco;
+    // origen_id = `billing.diferencias_conciliacion.id`
+    'diferencia_conciliacion',
 ] as const
 
 /**

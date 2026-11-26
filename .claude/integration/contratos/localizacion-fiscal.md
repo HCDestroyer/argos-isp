@@ -583,6 +583,7 @@ El depósito baja el efectivo esperado del turno igual que un egreso.
 - **Diferencia con Odoo.** Odoo registra la transacción contra una cuenta de suspenso y **reescribe** ese asiento al conciliar (odoo §6). ArgosIsp nunca reescribe: la conciliación es una fila que liga una línea del extracto con un movimiento existente; una línea sin documento (comisión, interés, cargo) genera un asiento **nuevo** con `bancos.registrar_desde_extracto` (`5.3.07 / Banco`) y se concilia con él.
 - Importación del extracto: adaptadores por banco en CSV o XLSX (A6, neutral al origen, como `contratos/importacion.md`) que llaman a `bancos.importar_extracto` (A3).
 - Reporte de resumen de conciliación por cuenta y fecha: saldo del libro, saldo del extracto, partidas en tránsito de cada lado (odoo §6).
+- **Diferencias al conciliar (plan de contabilidad §5.8, lote B3).** `POST /bancos/conciliaciones` acepta `diferencias[] { motivo_id, monto, nota, cuenta }`: Σ partes = |línea − emparejado|. La diferencia entra con un asiento **nuevo** de origen `diferencia_conciliacion` (de menos `cuenta del motivo / Banco`, de más `Banco / cuenta`) que se concilia con la línea. Motivos por empresa con cuenta, límite (fijo, % o sin límite) y si cuentan contra el tope de quien concilia (por línea y por día; Q 10 y Q 50 de fábrica). Por encima del tope, o con un motivo que siempre la pide, hace falta la aprobación de **otro** usuario (`bancos.aprobar_diferencia`); mientras espera no hay asiento. Deshacer una conciliación revierte lo que creó (la llegada de un tránsito y su diferencia). Detalle en `app/ledger/README.md`.
 
 ### 10.4 Bloqueos por tipo y excepciones
 
@@ -828,6 +829,13 @@ Cambio de significado: en modo `obligatoria` con `certificar_al = emitir`, `fact
 | `anulacion_fuera_de_plazo`      | 422    | Fuera de la ventana de anulación                                           |
 | `nota_fuera_de_plazo`           | 422    | Nota después de 2 meses                                                    |
 | `compra_duplicada`              | 409    | Mismo proveedor, tipo, serie y número                                      |
+| `diferencias_descuadradas`      | 422    | Los motivos no suman la diferencia de la línea (B3)                        |
+| `motivo_no_aplica`              | 422    | El motivo no se ofrece en esa línea o pasa de su límite (B3)               |
+| `diferencia_requiere_aprobacion` | 422   | Pasa del tope de quien concilia o el motivo siempre pide aprobación (B3)   |
+| `aprobacion_innecesaria`        | 422    | Pedir aprobación de una diferencia que está dentro del tope (B3)           |
+| `diferencia_pendiente`          | 409    | Conciliar una línea con una diferencia esperando aprobación (B3)           |
+| `diferencia_decidida`           | 409    | Aprobar o rechazar una diferencia ya decidida (B3)                         |
+| `autoaprobacion`                | 403    | Aprobar la diferencia que uno mismo pidió (B3)                             |
 | `credito_fiscal_extemporaneo`   | 422    | `periodo_iva` fuera de la ventana                                          |
 | `periodo_sin_bloqueo`           | 422    | Emitir un libro oficial sin bloqueo                                        |
 | `folios_agotados`               | 422    | Sin rango habilitado                                                       |

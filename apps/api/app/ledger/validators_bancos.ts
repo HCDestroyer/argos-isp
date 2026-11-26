@@ -202,22 +202,160 @@ export const listarExtractosValidator = vine.compile(
     }),
 )
 
-export const conciliarValidator = vine.compile(
-    vine.object({
-        linea_id: idEntidad(),
-        movimientos: vine.array(idEntidad()).maxLength(500).nullable().optional().meta({
+/** Partes de la diferencia al conciliar (plan de contabilidad §5.8, B3). */
+const diferenciasConciliacion = () =>
+    vine
+        .array(
+            vine.object({
+                motivo_id: idEntidad().meta({
+                    description: 'Motivo de diferencia (GET /bancos/motivos-diferencia)',
+                }),
+                monto: dinero(),
+                nota: texto(300).nullable().optional(),
+                cuenta: vine.string().trim().maxLength(40).nullable().optional().meta({
+                    description: 'Código de la cuenta, solo para un motivo sin cuenta propia («otra razón»)',
+                }),
+            }),
+        )
+        .maxLength(10)
+        .nullable()
+        .optional()
+        .meta({
             description:
-                'Movimientos del libro en la cuenta del extracto (GET /bancos/movimientos-sin-conciliar)',
+                'Lo que explica que la línea no sea igual a lo emparejado: Σ montos = |línea − emparejado|, todos en el sentido de la diferencia',
+        })
+
+const lineaYEmparejado = () => ({
+    linea_id: idEntidad(),
+    movimientos: vine.array(idEntidad()).maxLength(500).nullable().optional().meta({
+        description:
+            'Movimientos del libro en la cuenta del extracto (GET /bancos/movimientos-sin-conciliar)',
+    }),
+    depositos: vine.array(idEntidad()).maxLength(500).nullable().optional().meta({
+        description: 'Depósitos de caja en tránsito que llegan con esta línea (asiento Banco / 1.1.11)',
+    }),
+    traslados: vine
+        .array(idEntidad())
+        .maxLength(500)
+        .nullable()
+        .optional()
+        .meta({ description: 'Traslados en tránsito que llegan a esta cuenta con esta línea' }),
+    diferencias: diferenciasConciliacion(),
+})
+
+export const conciliarValidator = vine.compile(vine.object({ ...lineaYEmparejado() }))
+
+export const pedirAprobacionDiferenciaValidator = vine.compile(
+    vine.object({
+        ...lineaYEmparejado(),
+        explicacion: vine.string().trim().minLength(5).maxLength(500).meta({
+            description: 'Qué pasó con la diferencia (la lee quien aprueba)',
         }),
-        depositos: vine.array(idEntidad()).maxLength(500).nullable().optional().meta({
-            description: 'Depósitos de caja en tránsito que llegan con esta línea (asiento Banco / 1.1.11)',
+    }),
+)
+
+export const rechazarDiferenciaValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const listarDiferenciasValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        empresas: empresasConsulta(),
+        estado: vine.enum(['aplicada', 'pendiente', 'aprobada', 'rechazada', 'anulada'] as const).optional(),
+        extracto_id: idEntidad().optional(),
+        desde: fechaIso().optional(),
+        hasta: fechaIso().optional(),
+    }),
+)
+
+export const diferenciasPendientesValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        empresas: empresasConsulta(),
+        extracto_id: idEntidad().optional(),
+    }),
+)
+
+export const configurarDiferenciasValidator = vine.compile(
+    vine.object({
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se guardó); si cambió responde 409' }),
+        tope_linea: dinero().optional().meta({
+            description: 'Diferencia que quien concilia acepta solo por línea (Q 10.00 de fábrica)',
         }),
-        traslados: vine
+        tope_dia: dinero().optional().meta({
+            description: 'Diferencia que quien concilia acepta solo en el día (Q 50.00 de fábrica)',
+        }),
+    }),
+)
+
+const camposMotivo = {
+    sentido: vine
+        .enum(['menos', 'mas', 'ambos'] as const)
+        .optional()
+        .meta({ description: 'menos: el banco muestra de menos; mas: de más' }),
+    se_ofrece_en: vine
+        .enum(['cualquiera', 'depositos', 'cobros'] as const)
+        .optional()
+        .meta({
+            description: 'depositos: con un depósito de efectivo; cobros: con un pago o una liquidación',
+        }),
+    cuenta_banco_id: idEntidad()
+        .nullable()
+        .optional()
+        .meta({ description: 'Solo en esta cuenta bancaria (1.1.02.NN); null = todas' }),
+    texto: texto(80).nullable().optional().meta({ description: 'Solo si el texto del banco lo contiene' }),
+    limite_tipo: vine.enum(['fijo', 'porcentaje', 'sin_limite'] as const).optional(),
+    limite_valor: dinero()
+        .nullable()
+        .optional()
+        .meta({ description: 'Q por línea (fijo) o % de lo emparejado (porcentaje)' }),
+    cuenta_codigo: vine.string().trim().maxLength(40).nullable().optional().meta({
+        description:
+            'Cuenta a la que va; null = la elige quien concilia (y entonces siempre pide aprobación)',
+    }),
+    cuenta_contra_tope: vine.boolean().optional(),
+    siempre_aprobacion: vine.boolean().optional(),
+    activo: vine.boolean().optional(),
+    orden: vine.number().withoutDecimals().min(0).max(10000).optional(),
+}
+
+export const crearMotivoDiferenciaValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(3).maxLength(80),
+        ...camposMotivo,
+    }),
+)
+
+export const editarMotivoDiferenciaValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: vine.string().trim().minLength(3).maxLength(80).optional(),
+        ...camposMotivo,
+    }),
+)
+
+export const aceptarSugerenciasValidator = vine.compile(
+    vine.object({
+        lineas: vine
             .array(idEntidad())
-            .maxLength(500)
+            .maxLength(1000)
             .nullable()
             .optional()
-            .meta({ description: 'Traslados en tránsito que llegan a esta cuenta con esta línea' }),
+            .meta({ description: 'Solo estas líneas; sin él, todas las seguras del extracto' }),
+    }),
+)
+
+export const marcarPorIdentificarValidator = vine.compile(
+    vine.object({
+        nota: vine
+            .string()
+            .trim()
+            .minLength(3)
+            .maxLength(500)
+            .meta({ description: 'Qué se sabe de la línea' }),
     }),
 )
 
