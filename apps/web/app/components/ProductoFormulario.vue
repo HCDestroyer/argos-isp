@@ -210,7 +210,7 @@ async function enviar(evento: FormSubmitEvent<SalidaProducto>) {
                 <UFormField
                     label="Precio de venta"
                     name="precio_venta"
-                    :help="estado.modalidad === 'consumible_cobro' ? 'Con IVA. Es el precio del cargo único al consumirlo con un servicio; sin precio, quien consume debe escribirlo.' : 'Con IVA. Lo sugiere el cargo único al vender el producto; vacío = sin precio.'"
+                    :help="estado.modalidad === 'consumible_cobro' ? 'Con IVA. Es el precio de la factura al consumirlo con un servicio; sin precio, quien consume debe escribirlo.' : 'Con IVA. Lo sugiere «Nueva factura» al vender el producto; vacío = sin precio.'"
                     :required="estado.modalidad === 'consumible_cobro'"
                 >
                     <UInput

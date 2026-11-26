@@ -110,13 +110,13 @@ test('cajero: ve el inventario pero no registra movimientos', async ({ page }) =
     await expect(page.locator('[data-prueba="inventario-registrar"]')).toHaveCount(0)
 })
 
-test('cargo único: elegir un producto sugiere su precio de venta y pide el equipo', async ({ page }) => {
+test('nueva factura: elegir un producto sugiere su precio de venta y pide el equipo', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
     await pestanaServicio(page, 'Red y equipo')
     await expect(page.locator('[data-prueba="servicio-equipos"]')).toBeVisible({ timeout: 15_000 })
-    await accionServicio(page, 'Cargo único')
-    const modal = page.getByRole('dialog', { name: 'Cargo único' })
+    await accionServicio(page, 'Nueva factura')
+    const modal = page.getByRole('dialog', { name: 'Nueva factura' })
     await elegir(page, modal, 'cargo-producto-1', /Router TP-Link AX1500/)
     await expect(campo(modal, 'cargo-precio-1')).toHaveValue('650.00')
     await elegir(page, modal, 'cargo-bodega-1', 'Bodega central')

@@ -466,7 +466,7 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
         <AccionMotivoModal
             v-model:open="perdidaAbierto"
             titulo="Declarar pérdida"
-            :efecto="`${aPerder ? identificacionUnidad(aPerder) : 'El equipo'} se da de baja a pérdida (5.3.06). Cobrarlo al cliente va aparte, con un cargo único.`"
+            :efecto="`${aPerder ? identificacionUnidad(aPerder) : 'El equipo'} se da de baja a pérdida (5.3.06). Cobrarlo al cliente va aparte, con una nueva factura.`"
             confirmar="Declarar pérdida"
             placeholder="Ej.: el cliente no lo devolvió al retirar el servicio"
             :ejecutar="declararPerdida"

@@ -66,11 +66,14 @@ test('ficha: saldo una sola vez en la franja, acciones en la misma fila, Contact
         await expect(franja.locator('[data-prueba="franja-saldo"]')).toBeHidden()
         await expect(franja.locator('[data-prueba="franja-vencidas"]')).toHaveText('2')
     }
-    // «Más» junta Promesa, Cargo único, Nuevo servicio, datos y edición.
+    // «Nueva factura» (antes «Cargo único») está a la vista junto a Cobrar, no escondida en «Más».
+    await expect(page.locator('[data-prueba="franja-nueva-factura"], [data-prueba="nueva-factura-telefono"]').locator('visible=true').first()).toBeVisible()
+    // «Más» junta Promesa, Nuevo servicio, datos y edición.
     await page.locator('[data-prueba="mas-cliente"]:visible').click()
-    for (const nombre of ['Promesa de pago', 'Cargo único', 'Nuevo servicio', 'Ver datos del cliente', 'Editar cliente']) {
+    for (const nombre of ['Promesa de pago', 'Nuevo servicio', 'Ver datos del cliente', 'Editar cliente']) {
         await expect(page.getByRole('menuitem', { name: nombre })).toBeVisible()
     }
+    await expect(page.getByRole('menuitem', { name: 'Cargo único' })).toHaveCount(0)
     await page.keyboard.press('Escape')
 
     const pestanas = page.locator('[data-prueba="pestanas-cliente"]')

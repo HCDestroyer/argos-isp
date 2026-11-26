@@ -127,14 +127,14 @@ function alCambiarEmpresa(actualizado: Servicio) {
     void lineaTiempo.value?.recargar()
 }
 const simuladorAbierto = ref(false)
-/** Cargo único (A3): instalación, equipo…; con todo descontado queda como bonificación. */
+/** Nueva factura (antes «Cargo único», A3): instalación, equipo…; con todo descontado queda como bonificación. */
 const puedeCargoUnico = computed(() => puede('facturas.emitir_cargo_unico') && puede('facturas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
 /** Facturas de periodos a mano (A3): pago por adelantado o periodos que el cron no emitió; pantalla propia. */
 const puedeFacturasPeriodo = computed(() => puede('facturas.emitir_periodos') && puede('facturas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
 const cargoAbierto = ref(false)
 const periodosBonificados = useTemplateRef('periodosBonificados')
 
-async function alEmitirCargo(resultado: CargoUnicoEmitido) {
+async function alEmitirCargo(resultado: CargoUnicoEmitido, siguiente: { cobrar: boolean, clienteId: number }) {
     void lineaTiempo.value?.recargar()
     if (resultado.documento === 'bonificacion' && resultado.bonificacion) {
         toast.add({ title: 'Bonificación registrada', description: `Sin costo: ${formatearQuetzales(resultado.bonificacion.bruto)} · ${resultado.bonificacion.motivo_nombre}`, icon: 'i-lucide-hand-heart', color: 'success' })
@@ -143,8 +143,8 @@ async function alEmitirCargo(resultado: CargoUnicoEmitido) {
         return
     }
     if (resultado.factura) {
-        toast.add({ title: 'Cargo único emitido', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
-        await navigateTo(`/facturas/${resultado.factura.id}`)
+        toast.add({ title: 'Factura emitida', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
+        await navigateTo(siguiente.cobrar ? `/cobro?cliente=${siguiente.clienteId}` : `/facturas/${resultado.factura.id}`)
     }
 }
 
@@ -485,7 +485,8 @@ function gruposMas(conPrincipal: boolean): DropdownMenuItem[][] {
     const cobro: DropdownMenuItem[] = [
         ...(puedePromesa.value ? [{ label: 'Promesa de pago', icon: 'i-lucide-hand', onSelect: abrirPromesa }] : []),
         ...(puedeSimular.value ? [{ label: 'Simular promesa', icon: 'i-lucide-flask-conical', onSelect: () => { simuladorAbierto.value = true } }] : []),
-        ...(puedeCargoUnico.value ? [{ label: 'Cargo único', icon: 'i-lucide-receipt', onSelect: () => { cargoAbierto.value = true } }] : []),
+        // En escritorio «Nueva factura» ya está a la vista en la franja; en el teléfono va en la barra de abajo.
+        ...(puedeCargoUnico.value && conPrincipal ? [{ label: 'Nueva factura', icon: 'i-lucide-receipt', onSelect: () => { cargoAbierto.value = true } }] : []),
         ...(puedeFacturasPeriodo.value ? [{ label: 'Emitir facturas de periodos', icon: 'i-lucide-calendar-plus', to: enlace(`/servicios/${actual.id}/facturas-periodo`) }] : []),
     ]
     const red: DropdownMenuItem[] = [
@@ -674,6 +675,16 @@ onMounted(cargar)
                         size="lg"
                         class="hidden rounded-full sm:inline-flex"
                         data-prueba="cobrar-servicio"
+                    />
+                    <UButton
+                        v-if="puedeCargoUnico"
+                        label="Nueva factura"
+                        icon="i-lucide-plus"
+                        color="primary"
+                        size="lg"
+                        class="hidden rounded-full sm:inline-flex"
+                        data-prueba="nueva-factura-servicio"
+                        @click="cargoAbierto = true"
                     />
                     <UButton
                         v-if="puedeActivarInstalacion"
@@ -1552,13 +1563,26 @@ onMounted(cargar)
                 </UDropdownMenu>
                 <UButton
                     v-if="puedePromesa"
-                    label="Promesa"
+                    :label="puedeCargoUnico ? undefined : 'Promesa'"
+                    aria-label="Promesa de pago"
                     icon="i-lucide-hand"
                     color="neutral"
                     variant="outline"
                     size="lg"
-                    class="flex-1 justify-center rounded-full"
+                    class="justify-center rounded-full"
+                    :class="puedeCargoUnico ? '' : 'flex-1'"
                     @click="abrirPromesa"
+                />
+                <UButton
+                    v-if="puedeCargoUnico"
+                    label="Nueva factura"
+                    icon="i-lucide-plus"
+                    color="neutral"
+                    variant="outline"
+                    size="lg"
+                    class="flex-1 justify-center rounded-full"
+                    data-prueba="nueva-factura-telefono"
+                    @click="cargoAbierto = true"
                 />
                 <UButton
                     v-if="puede('pagos.registrar') && debe && saldo"
@@ -1589,7 +1613,7 @@ onMounted(cargar)
                 @creada="alCrearPromesa"
             />
 
-            <CargoUnicoModal
+            <FacturaNuevaPanel
                 v-if="puedeCargoUnico"
                 v-model:open="cargoAbierto"
                 :destino="{ servicio }"
