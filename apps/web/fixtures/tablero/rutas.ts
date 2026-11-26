@@ -7,6 +7,7 @@ import { conPermiso, datosInvalidos, empresasDeLista, problemaTipado, usuariosPo
 import { vistaObligacion } from '../calendario/rutas'
 import { calcularDatos } from '../declaraciones/rutas'
 import { resolverValor } from '../fiscal/rutas'
+import { configuracionFel } from '../fel/rutas'
 
 /**
  * Tablero fiscal (A3, fase 8 PR A; `start/routes/tablero.ts`, `app/fiscal/tablero.ts`). Como la API, cada
@@ -21,6 +22,16 @@ import { resolverValor } from '../fiscal/rutas'
  * de la instalación y no el valor por defecto del paquete; los libros cuentan desde el 1/1/2025, el mismo `inicio_libros` de las declaraciones.
  * Los parámetros que el paquete del fixture no trae usan el valor del paquete gt-2026.1 de la API.
  */
+
+/** Como `alerta_configuracion` del bloque FEL de la API: FEL activa que aún no puede certificar. */
+function alertaConfiguracionFel(empresaId: number, modo: string): string | null {
+    if (modo === 'desactivada') {
+        return null
+    }
+    const { lista, faltantes } = configuracionFel(empresaId)
+    const bloquean = faltantes.filter(f => f === 'proveedor' || f === 'credenciales' || f === 'establecimiento')
+    return lista ? null : `FEL activa sin credenciales: falta ${bloquean.join(', ')} (Configuración › FEL)`
+}
 
 type Tablero = Schema<'TableroFiscal'>
 type Empresa = Tablero['empresas'][number]
@@ -372,6 +383,7 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
             contingencia_activa: config?.contingencia_activa ?? false,
             dte_pendientes: [...pendientes.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([estado, cantidad]) => ({ estado, cantidad })),
             alerta: legal === 'obligatoria' && modo === 'desactivada' ? 'FEL es obligatoria para su régimen: la empresa emite sin DTE (FEL desactivada)' : null,
+            alerta_configuracion: alertaConfiguracionFel(ctx.empresaId, modo),
         }
     },
 

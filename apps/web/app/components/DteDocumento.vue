@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Problem } from '@argosisp/contracts'
+import type { Problem, Schema } from '@argosisp/contracts'
 
 /**
  * Certificación FEL de un documento (factura, mora o nota de crédito): lee su DTE vigente
@@ -19,12 +19,35 @@ const props = withDefaults(defineProps<{
     sinCertificar?: string | null
     /** Cambia cuando el documento cambió (versión, estado FEL): se relee el DTE. */
     refrescar?: string | number | null
+    /**
+     * `fel_accion` de la factura (la decide la API, `#fiscal/fel/accion`): primero se cobra y después
+     * se certifica. Sin ella, el comportamiento anterior (botón si es certificable).
+     */
+    accion?: Schema<'Factura'>['fel_accion'] | null
+    modo?: Schema<'Factura'>['fel_modo'] | null
 }>(), {
     dteId: undefined,
     certificable: false,
     sinCertificar: null,
     refrescar: null,
+    accion: null,
+    modo: null,
 })
+
+/** Texto sin DTE según lo que le toca a la factura (`TEXTOS_ACCION_FEL`). */
+const textoSinDte = computed(() => {
+    if (props.sinCertificar) {
+        return props.sinCertificar
+    }
+    if (props.tipo === 'factura' && props.accion) {
+        return textoAccionFel(props.accion, props.modo ?? null)
+    }
+    return props.tipo === 'factura' ? 'Sin DTE: esta factura no se ha certificado.' : 'Nota interna: sin NCRE (el documento no tenía DTE certificado).'
+})
+
+/** El botón: con `accion`, solo en `certificar_opcional` (pagada o cubierta y sin DTE). */
+const mostrarCertificar = computed(() => props.tipo === 'factura' && !props.sinCertificar && puede('fel.certificar')
+    && (props.accion ? props.accion === 'certificar_opcional' : props.certificable))
 
 const emit = defineEmits<{
     /** El DTE cambió de estado (certificado, reintentado, anulado…). */
@@ -166,13 +189,21 @@ onBeforeUnmount(detener)
                 class="text-sm text-muted"
                 data-prueba="dte-sin"
             >
-                {{ sinCertificar ?? (tipo === 'factura' ? 'Sin DTE: esta factura no se ha certificado.' : 'Nota interna: sin NCRE (el documento no tenía DTE certificado).') }}
+                <UBadge
+                    v-if="accion === 'certificar_opcional' || accion === 'al_cobrar'"
+                    :label="accion === 'al_cobrar' ? 'Aviso de cobro (sin certificar)' : 'Sin certificar'"
+                    color="neutral"
+                    variant="subtle"
+                    class="me-2"
+                    data-prueba="dte-sin-certificar"
+                />
+                {{ textoSinDte }}
             </p>
             <UButton
-                v-if="tipo === 'factura' && certificable && !sinCertificar && puede('fel.certificar')"
-                label="Certificar"
+                v-if="mostrarCertificar"
+                :label="accion === 'certificar_opcional' ? 'Certificar (opcional)' : 'Certificar'"
+                :color="accion === 'certificar_opcional' ? 'primary' : 'neutral'"
                 icon="i-lucide-badge-check"
-                color="neutral"
                 variant="outline"
                 :loading="certificando"
                 data-prueba="dte-certificar"

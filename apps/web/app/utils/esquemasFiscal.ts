@@ -215,6 +215,10 @@ export const esquemaEstablecimiento = z.object({
     direccion: opcional(300),
     municipio: opcional(100),
     departamento: opcional(100),
+    /** del RTU; sin él el DTE sale con 01001 */
+    codigo_postal: z.string().trim().regex(/^(\d{5})?$/, 'Código postal de 5 dígitos').transform(valor => valor || null),
+    /** cajas cuyos cobros certifican con este establecimiento (P1) */
+    cajas: z.array(z.number().int().positive()),
     por_defecto: z.boolean(),
     activo: z.boolean(),
 })
@@ -223,7 +227,7 @@ export type EntradaEstablecimiento = z.input<typeof esquemaEstablecimiento>
 export type SalidaEstablecimiento = z.output<typeof esquemaEstablecimiento>
 
 export function cuerpoEstablecimiento(datos: SalidaEstablecimiento): CuerpoEstablecimiento {
-    return { codigo: datos.codigo, nombre: datos.nombre, direccion: datos.direccion, municipio: datos.municipio, departamento: datos.departamento, por_defecto: datos.por_defecto }
+    return { codigo: datos.codigo, nombre: datos.nombre, direccion: datos.direccion, municipio: datos.municipio, departamento: datos.departamento, codigo_postal: datos.codigo_postal, cajas: datos.cajas, por_defecto: datos.por_defecto }
 }
 
 const entero = (campo: string) => z.string().trim().regex(/^[1-9]\d{0,3}$/, `${campo}: número entero mayor que 0`).transform(Number)

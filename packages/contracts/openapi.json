@@ -19977,6 +19977,92 @@
         "x-implementado": true
       }
     },
+    "/api/v1/contabilidad/inicio": {
+      "get": {
+        "operationId": "contabilidadInicio",
+        "summary": "Inicio de contabilidad: qué toca hoy, pasos del mes e indicadores",
+        "description": "De la empresa activa (con `empresas=todas` y alcance global, todas sumadas). `tareas`: lo que espera por alguien, solo lo que el rol puede atender (cada una pide el permiso de su acción) y solo con pendientes. `pasos`: 7 pasos del mes calculados con datos (nunca casillas a mano). `indicadores`: Te deben (reportes.ver), Debes a proveedores (compras.ver), Dinero disponible (libro.ver) e Impuestos del mes (declaraciones.ver), con las mismas consultas de la cartera por antigüedad, las cuentas por pagar, el efectivo del panel y el borrador de la declaración. Sin datos que lo respondan, `sin_datos`; sin permiso, `sin_permiso`; si una consulta falla, `error` con su problema y sin cifras: nunca ceros inventados.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "periodo",
+            "in": "query",
+            "required": false,
+            "description": "Mes YYYY-MM de los pasos del mes (por defecto el mes en curso de Guatemala; uno futuro = el actual)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inicio de contabilidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InicioContabilidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contabilidad.ver_inicio",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contabilidad.ver_inicio",
+        "x-implementado": true
+      }
+    },
     "/api/v1/contactos/{id}": {
       "put": {
         "operationId": "contactosEditar",
@@ -23947,7 +24033,7 @@
       "post": {
         "operationId": "dteReintentar",
         "summary": "Reintentar un DTE rechazado o con error temporal",
-        "description": "Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.",
+        "description": "Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT (una NCRE o NDEB conserva el receptor de su documento de origen). Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso, fel_desactivada (con la FEL desactivada no entra nada nuevo a la cola).",
         "tags": [
           "fel"
         ],
@@ -25218,8 +25304,8 @@
                 "properties": {
                   "nit": {
                     "type": "string",
-                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite"
                   },
                   "razon_social": {
                     "type": "string",
@@ -25533,8 +25619,8 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite"
                   },
                   "razon_social": {
                     "type": [
@@ -26600,7 +26686,7 @@
       "post": {
         "operationId": "facturasCertificar",
         "summary": "Pedir la certificación FEL de una factura",
-        "description": "Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.",
+        "description": "Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 409 fel_desactivada (la FEL de la empresa está desactivada); 422 fel_no_configurada (falta certificador o credenciales), receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada. El panel ofrece el botón según fel_accion de la factura (primero se cobra y después se certifica).",
         "tags": [
           "fel"
         ],
@@ -27944,7 +28030,7 @@
       "get": {
         "operationId": "felConfiguracion",
         "summary": "Configuración FEL de la empresa (sin secretos)",
-        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
+        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
         "tags": [
           "fel"
         ],
@@ -28019,7 +28105,7 @@
       "put": {
         "operationId": "felConfigurar",
         "summary": "Configurar proveedor, ambiente y modo FEL",
-        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).",
+        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).",
         "tags": [
           "fel"
         ],
@@ -28312,7 +28398,7 @@
       "post": {
         "operationId": "felProbarCredenciales",
         "summary": "Probar las credenciales contra el certificador",
-        "description": "No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
+        "description": "No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
         "tags": [
           "fel"
         ],
@@ -28349,6 +28435,19 @@
                 "null"
               ],
               "minimum": 1
+            }
+          },
+          {
+            "name": "proveedor",
+            "in": "query",
+            "required": false,
+            "description": "Certificador cuyas credenciales se prueban; por defecto el guardado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "infile",
+                "falso"
+              ]
             }
           }
         ],
@@ -28526,7 +28625,7 @@
       "post": {
         "operationId": "felLote",
         "summary": "Pedir la certificación de varias facturas",
-        "description": "facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.",
+        "description": "facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type (fel_desactivada si la empresa tiene la FEL desactivada; el lote de otras empresas sigue).",
         "tags": [
           "fel"
         ],
@@ -29488,6 +29587,23 @@
                     ],
                     "maxLength": 100
                   },
+                  "codigo_postal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{5}$",
+                    "description": "Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001"
+                  },
+                  "cajas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto"
+                  },
                   "por_defecto": {
                     "description": "Establecimiento con el que se emite (uno por empresa)",
                     "type": "boolean"
@@ -29700,6 +29816,23 @@
                       "null"
                     ],
                     "maxLength": 100
+                  },
+                  "codigo_postal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{5}$",
+                    "description": "Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001"
+                  },
+                  "cajas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto"
                   },
                   "activo": {
                     "type": "boolean"
@@ -66742,7 +66875,7 @@
                       "pagar",
                       "nunca"
                     ],
-                    "description": "Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)"
+                    "description": "Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro, el DTE sale al quedar cubierta) o nunca (a mano; no con FEL obligatoria: 422 certificar_al_incompatible). emitir ya no se usa (primero se cobra y después se certifica): 422 certificar_al_obsoleto"
                   },
                   "reglas_promesa": {
                     "type": "object",
@@ -83621,6 +83754,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
                         "cuentas_bancarias.editar",
@@ -84098,6 +84232,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
                         "cuentas_bancarias.editar",
@@ -100551,6 +100686,7 @@
                             "comprobantes.reconexion_temporal",
                             "comprobantes.registrar",
                             "comprobantes.ver",
+                            "contabilidad.ver_inicio",
                             "contactos.buscar",
                             "contactos.gestionar",
                             "cuentas_bancarias.editar",
@@ -107323,7 +107459,8 @@
               "proveedor",
               "contingencia_activa",
               "dte_pendientes",
-              "alerta"
+              "alerta",
+              "alerta_configuracion"
             ],
             "properties": {
               "modo": {
@@ -107374,6 +107511,13 @@
                   "null"
                 ],
                 "description": "«FEL es obligatoria para su régimen» si está desactivada"
+              },
+              "alerta_configuracion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "«FEL activa sin credenciales»: modo distinto de desactivada sin proveedor, credenciales del proveedor y ambiente guardados o establecimiento activo (lista = false de GET /fel/configuracion)"
               }
             },
             "description": "Estado de la FEL (solo con estado ok)"
@@ -111363,7 +111507,7 @@
           },
           "nit_cui_invalido": {
             "type": "boolean",
-            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo"
+            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó), o es un NIT que se guardó con advertencia porque el dígito verificador (módulo 11) no cuadra (NIT de pruebas del certificador); se apaga al corregirlo o cuando la consulta de NIT del certificador lo encuentra"
           },
           "nombre_fiscal": {
             "type": [
@@ -114093,6 +114237,8 @@
           "contingencia_desde",
           "version",
           "updated_at",
+          "lista",
+          "faltantes",
           "credenciales"
         ],
         "properties": {
@@ -114152,11 +114298,30 @@
             ],
             "format": "date-time"
           },
+          "lista": {
+            "type": "boolean",
+            "description": "Lista para certificar con el proveedor y ambiente guardados: hay proveedor, credenciales de ese proveedor y ambiente y un establecimiento activo. No bloquea guardar: es aviso (P7)"
+          },
+          "faltantes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "proveedor",
+                "credenciales",
+                "credenciales_sin_probar",
+                "establecimiento",
+                "nit_emisor"
+              ]
+            },
+            "description": "Lo que falta: proveedor, credenciales y establecimiento impiden certificar (lista = false); credenciales_sin_probar (sin prueba o la última rechazada) y nit_emisor (NIT de la empresa sin dígito verificador válido) solo informan"
+          },
           "credenciales": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CredencialesFel"
-            }
+            },
+            "description": "Las credenciales guardadas de cada proveedor y ambiente (una fila por proveedor + ambiente)"
           }
         }
       },
@@ -120148,6 +120313,7 @@
           "logo_tipo",
           "activa",
           "principal",
+          "nit_valido",
           "version",
           "created_at",
           "updated_at"
@@ -120293,6 +120459,13 @@
           "principal": {
             "type": "boolean",
             "description": "La empresa 1 (la de la instalación original)"
+          },
+          "nit_valido": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Derivado: el NIT cuadra con el dígito verificador (módulo 11). false = guardado con advertencia (sirve para pruebas; la SAT lo rechazará en producción y PUT /fel/configuracion a producción responde 422 `nit_emisor_invalido`). null sin NIT"
           },
           "version": {
             "type": "integer",
@@ -121310,6 +121483,8 @@
           "direccion",
           "municipio",
           "departamento",
+          "codigo_postal",
+          "cajas",
           "activo",
           "por_defecto",
           "version",
@@ -121349,6 +121524,22 @@
               "string",
               "null"
             ]
+          },
+          "codigo_postal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{5}$",
+            "description": "Código postal del RTU; null = el DTE sale con 01001"
+          },
+          "cajas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Cajas cuyos cobros certifican con este establecimiento (P1)"
           },
           "activo": {
             "type": "boolean"
@@ -123379,6 +123570,8 @@
           "fel_serie",
           "fel_numero",
           "fel_estado",
+          "fel_modo",
+          "fel_accion",
           "version",
           "created_at",
           "updated_at"
@@ -123486,6 +123679,25 @@
               "null"
             ],
             "description": "Error visible del DTE (SAT, receptor_requerido…)"
+          },
+          "fel_modo": {
+            "type": "string",
+            "enum": [
+              "obligatoria",
+              "opcional",
+              "desactivada"
+            ],
+            "description": "Modo FEL de la empresa de la factura (desactivada sin configuración)"
+          },
+          "fel_accion": {
+            "type": "string",
+            "enum": [
+              "ninguna",
+              "automatica",
+              "al_cobrar",
+              "certificar_opcional"
+            ],
+            "description": "Qué le toca en la FEL (primero se cobra y después se certifica): ninguna (desactivada, anulada, en cero o ya certificada), automatica (DTE en curso, o cubierta con FEL obligatoria), al_cobrar (aviso sin cubrir: se certifica al cobrarla), certificar_opcional (FEL opcional, cubierta y sin DTE)"
           },
           "aviso_cobro": {
             "type": "boolean",
@@ -126299,6 +126511,553 @@
             "items": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        }
+      },
+      "InicioContabilidad": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "periodo",
+          "generado_en",
+          "empresas",
+          "consolidado",
+          "pendientes",
+          "tareas",
+          "tareas_con_error",
+          "pasos",
+          "paso_actual",
+          "indicadores"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodo": {
+            "type": "string",
+            "description": "Mes de los pasos (YYYY-MM)"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nombre"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "consolidado": {
+            "type": "boolean"
+          },
+          "pendientes": {
+            "type": "integer",
+            "description": "Suma de las cantidades de `tareas`"
+          },
+          "tareas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "cantidad",
+                "monto",
+                "fecha",
+                "proveedores",
+                "urgencia",
+                "permiso"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string",
+                  "enum": [
+                    "comprobantes_por_revisar",
+                    "lineas_banco_sin_pareja",
+                    "depositos_en_camino",
+                    "compras_por_revisar",
+                    "facturas_por_certificar",
+                    "asientos_por_aprobar",
+                    "compras_por_pagar",
+                    "obligaciones_proximas",
+                    "turnos_abiertos_anteriores"
+                  ],
+                  "description": "Qué espera por alguien"
+                },
+                "cantidad": {
+                  "type": "integer",
+                  "description": "Siempre mayor que cero: las tareas sin pendientes no se devuelven"
+                },
+                "monto": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Monto asociado si la tarea mueve dinero"
+                },
+                "fecha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date",
+                  "description": "Más antigua o más cercana (comprobantes, depósitos, turnos, vencimientos); en lineas_banco_sin_pareja, la del último estado de cuenta"
+                },
+                "proveedores": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Solo en compras_por_pagar"
+                },
+                "urgencia": {
+                  "type": "string",
+                  "enum": [
+                    "alta",
+                    "media",
+                    "baja"
+                  ]
+                },
+                "permiso": {
+                  "type": "string",
+                  "description": "Permiso de la acción que resuelve la tarea"
+                }
+              }
+            },
+            "description": "Qué toca hoy: solo lo que el rol puede atender y solo con pendientes, lo más urgente primero"
+          },
+          "tareas_con_error": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "error"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "error": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "pasos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "numero",
+                "clave",
+                "estado",
+                "cantidad",
+                "fecha",
+                "error"
+              ],
+              "properties": {
+                "numero": {
+                  "type": "integer",
+                  "description": "1 a 7, en el orden del mes"
+                },
+                "clave": {
+                  "type": "string",
+                  "enum": [
+                    "facturar",
+                    "cobrar_y_cerrar_cajas",
+                    "compras_y_gastos",
+                    "conciliar_bancos",
+                    "revisar_el_mes",
+                    "declarar_impuestos",
+                    "cerrar_el_mes"
+                  ]
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "listo",
+                    "pendiente",
+                    "sin_datos",
+                    "error"
+                  ],
+                  "description": "Calculado de los datos. sin_datos = no hay con qué decidirlo (sin extractos, sin obligación fiscal, sin cajas); error = la consulta falló (sin cifras)"
+                },
+                "cantidad": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Pendientes (pendiente) o hechos (listo) según el paso; null si no aplica"
+                },
+                "fecha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Solo con estado error"
+                }
+              }
+            },
+            "description": "Los 7 pasos del mes, calculados"
+          },
+          "paso_actual": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Primer paso pendiente; null si ninguno lo está"
+          },
+          "indicadores": {
+            "type": "object",
+            "required": [
+              "te_deben",
+              "debes_proveedores",
+              "dinero_disponible",
+              "impuestos_mes"
+            ],
+            "properties": {
+              "te_deben": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              },
+              "debes_proveedores": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              },
+              "dinero_disponible": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              },
+              "impuestos_mes": {
+                "type": "object",
+                "required": [
+                  "estado",
+                  "valor",
+                  "cantidad",
+                  "monto_alerta",
+                  "fecha",
+                  "permiso",
+                  "error"
+                ],
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "bien",
+                      "atencion",
+                      "urgente",
+                      "sin_datos",
+                      "sin_permiso",
+                      "error"
+                    ],
+                    "description": "sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)"
+                  },
+                  "valor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "null salvo con bien, atencion o urgente"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "monto_alerta": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "permiso": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "El permiso que faltó (solo con sin_permiso)"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Problem"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con estado error"
+                  }
+                }
+              }
             }
           }
         }
@@ -130082,6 +130841,7 @@
           "comprobantes.reconexion_temporal",
           "comprobantes.registrar",
           "comprobantes.ver",
+          "contabilidad.ver_inicio",
           "contactos.buscar",
           "contactos.gestionar",
           "cuentas_bancarias.editar",
@@ -130451,6 +131211,7 @@
           "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
           "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
+          "Ver el inicio de contabilidad: qué toca hoy, los pasos del mes y los indicadores (cada dato pide además su permiso)",
           "Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)",
           "Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)",
           "Crear y editar cuentas bancarias propias",
@@ -147805,6 +148566,7 @@
               "comprobantes.reconexion_temporal",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_inicio",
               "contactos.buscar",
               "contactos.gestionar",
               "cuentas_bancarias.editar",
@@ -148345,6 +149107,7 @@
               "comprobantes.reconectar",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_inicio",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
               "declaraciones.ajustar",
@@ -148474,6 +149237,7 @@
               "clientes.ver",
               "compras.ver",
               "comprobantes.ver",
+              "contabilidad.ver_inicio",
               "cuentas_bancarias.ver",
               "declaraciones.ver",
               "documentos.ver",

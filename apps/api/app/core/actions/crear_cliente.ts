@@ -71,7 +71,8 @@ const CAMPOS_TELEFONO = ['telefono', 'movil'] as const
  * Documento fiscal validado (`validarDocumentoFiscal`). En el alta siempre; al editar, solo si
  * llega alguno de `tipo_documento_fiscal`, `nit_cui` o `pais_fiscal`, combinado con lo guardado:
  * así un cliente migrado con `nit_cui_invalido` se puede editar en lo demás sin corregirlo, y al
- * corregirlo la marca se apaga.
+ * corregirlo la marca se apaga. Un NIT con letras o cuyo dígito verificador no cuadra se guarda con
+ * `nit_cui_invalido = true` (advertencia, no rechazo: R1 de `contratos/fel-establecimientos.md`).
  *
  * Al editar el número sin tipo explícito, el tipo se **reclasifica** con la misma regla del alta
  * (`deducirTipoDocumento`, la de `core.clasificar_documento` en la base): CF → NIT, NIT → CUI,
@@ -89,7 +90,8 @@ function columnasDocumento(datos: DatosCliente, antes?: DocumentoAnterior): Reco
         valor: datos.nit_cui !== undefined ? datos.nit_cui : antes?.nit_cui,
         pais: datos.pais_fiscal ?? antes?.pais_fiscal,
     })
-    return { ...documento, nit_cui_invalido: false }
+    // NIT con forma pero sin módulo 11: se guarda con la marca (`contratos/fel-establecimientos.md` R1)
+    return { ...documento }
 }
 
 function conservaPasaporte(antes: DocumentoAnterior, nitCui: string | null): boolean {

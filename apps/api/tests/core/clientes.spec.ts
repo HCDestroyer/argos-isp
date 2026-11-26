@@ -87,13 +87,26 @@ test.group('Clientes', () => {
         assert.deepEqual(visto.body(), cliente)
     })
 
-    test('NIT o CUI inválido → 422 en nit_cui; zona inexistente → 422', async ({ client, assert }) => {
+    test('NIT sin forma o CUI inválido → 422 en nit_cui; zona inexistente → 422', async ({
+        client,
+        assert,
+    }) => {
         const { token } = await usuarioConRoles(['soporte'])
-        const malo = await estado(
+        // NIT que no cuadra con el módulo 11: se guarda con la marca (fel-establecimientos R1)
+        const sinVerificador = await estado(
             client
                 .post('/api/v1/clientes')
                 .bearerToken(token)
-                .json({ nombre: 'Mal NIT', nit_cui: '1234567-0' }),
+                .json({ nombre: 'NIT de pruebas', nit_cui: '1234567-0' }),
+            201,
+        )
+        assert.include(sinVerificador.body(), {
+            tipo_documento_fiscal: 'nit',
+            nit_cui: '12345670',
+            nit_cui_invalido: true,
+        })
+        const malo = await estado(
+            client.post('/api/v1/clientes').bearerToken(token).json({ nombre: 'Mal NIT', nit_cui: '12#45' }),
             422,
         )
         assert.equal(malo.body().errors[0].field, 'nit_cui')

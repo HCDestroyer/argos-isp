@@ -11,7 +11,7 @@ import { hoyFiscal } from '#fiscal/comun'
 import { ParametroSinConfirmar } from '#fiscal/errores'
 import { datosFiscales, resolver, type DatosFiscales } from '#fiscal/parametros'
 import { instalacionVigente } from '#fiscal/instalador'
-import { configuracionFel } from '#fiscal/fel/configuracion'
+import { configuracionFel, estadoFel } from '#fiscal/fel/configuracion'
 import { libroVentasLegal } from '#fiscal/libros_legales'
 import {
     COLUMNAS_OBLIGACION,
@@ -494,12 +494,20 @@ async function fel(ctx: Contexto) {
         [ctx.empresaId],
     )) as { rows: Array<{ estado: string; n: number }> }
     const obligatoria = legal === 'obligatoria'
+    const estado = config.modo === 'desactivada' ? null : await estadoFel(ctx.empresaId, ctx.c)
     return {
         modo: config.modo,
         obligacion_legal: typeof legal === 'string' ? legal : null,
         proveedor: config.proveedor,
         contingencia_activa: config.contingencia_activa,
         dte_pendientes: rows.map((r) => ({ estado: r.estado, cantidad: Number(r.n) })),
+        // aparte de `alerta` (que es «FEL desactivada» y alimenta el consejo y el panel financiero)
+        alerta_configuracion:
+            estado && !estado.lista
+                ? `FEL activa sin credenciales: falta ${estado.faltantes
+                      .filter((f) => f === 'proveedor' || f === 'credenciales' || f === 'establecimiento')
+                      .join(', ')} (Configuración › FEL)`
+                : null,
         alerta:
             obligatoria && config.modo === 'desactivada'
                 ? 'FEL es obligatoria para su régimen: la empresa emite sin DTE (FEL desactivada)'

@@ -130,14 +130,14 @@ test.group('Clientes: reclasificar el documento fiscal al editar', (group) => {
         assert.deepEqual(await camposDelEvento(otro.id, evento), ['nit_cui'])
     })
 
-    test('NIT inválido: 422 sin tocar lo guardado; un migrado marcado se corrige y se reclasifica', async ({
+    test('NIT sin forma: 422 sin tocar lo guardado; sin módulo 11 se marca; un migrado se corrige', async ({
         client,
         assert,
     }) => {
         const editar = editador(client)
         const c = await crear(client, token, { nit_cui: NIT })
         const evento = await ultimoEvento()
-        const r = await editar(c.id, { version: 1, nit_cui: '1234567-0' }, 422)
+        const r = await editar(c.id, { version: 1, nit_cui: '12#45' }, 422)
         assert.equal(r.body().errors[0].field, 'nit_cui')
         const fila = await db.from('core.clientes').where('id', c.id).first()
         assert.include(fila, {
@@ -147,6 +147,13 @@ test.group('Clientes: reclasificar el documento fiscal al editar', (group) => {
             version: 1,
         })
         assert.isNull(await camposDelEvento(c.id, evento))
+        // NIT que no cuadra con el módulo 11: se guarda con la marca (fel-establecimientos R1)
+        const marcado = await editar(c.id, { version: 1, nit_cui: '1234567-0' }, 200)
+        assert.include(marcado.body(), {
+            tipo_documento_fiscal: 'nit',
+            nit_cui: '12345670',
+            nit_cui_invalido: true,
+        })
 
         // migrado con un NIT inválido (tipo nit, marcado): corregido con un CUI pasa a cui
         const [migrado] = (await db

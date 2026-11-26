@@ -134,7 +134,7 @@ export class ProveedorFelFalso implements ProveedorFel {
         return {
             resultado: 'anulado',
             fecha,
-            xml: xmlAnulacion(dte, motivo, fecha.toISOString()),
+            xml: xmlAnulacion(dte, motivo, fecha),
             respuesta: { resultado: true },
         }
     }

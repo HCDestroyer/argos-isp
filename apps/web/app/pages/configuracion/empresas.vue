@@ -119,6 +119,9 @@ const masAcciones = computed<DropdownMenuItem[][]>(() => [
         : []),
 ])
 
+/** NIT con forma pero sin módulo 11: aviso, no bloquea Guardar (fel-establecimientos R1). */
+const avisoNit = computed(() => avisoDocumentoFiscal('nit', estado.nit ?? ''))
+
 const pais = computed(() => (empresa.value?.pais === 'GT' ? 'Guatemala · GTQ' : empresa.value?.pais ?? '—'))
 </script>
 
@@ -207,10 +210,29 @@ const pais = computed(() => (empresa.value?.pais === 'GT' ? 'Guatemala · GTQ' :
                         label="NIT"
                         required
                     >
+                        <template #hint>
+                            <UBadge
+                                v-if="empresa.nit_valido === false"
+                                label="NIT sin verificar"
+                                color="warning"
+                                variant="subtle"
+                                icon="i-lucide-badge-alert"
+                                data-prueba="nit-sin-verificar"
+                            />
+                        </template>
                         <UInput
                             v-model="estado.nit"
                             class="w-full font-mono"
                             autocomplete="off"
+                        />
+                        <UAlert
+                            v-if="avisoNit"
+                            color="warning"
+                            variant="subtle"
+                            icon="i-lucide-triangle-alert"
+                            :description="avisoNit"
+                            class="mt-2"
+                            data-prueba="aviso-nit-empresa"
                         />
                     </UFormField>
                     <UFormField
