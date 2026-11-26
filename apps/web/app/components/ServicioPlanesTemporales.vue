@@ -256,9 +256,8 @@ const puedeProgramar = computed(() => puede('servicios.programar_plan_temporal')
                             name="inicio"
                             help="Vacío = ahora."
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="estado.inicio"
-                                type="date"
                                 class="w-full"
                             />
                         </UFormField>

@@ -111,7 +111,7 @@ function textoTipo(campo: CampoPersonalizado): string {
         icono="i-lucide-text-cursor-input"
         descripcion="Datos extra que se piden en la ficha de cada cliente, en este orden. Un campo no se borra: al desactivarlo deja de pedirse y los valores ya guardados se conservan."
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('campos_personalizados.crear')"
                 label="Nuevo campo"

@@ -190,9 +190,8 @@ async function enviar() {
                     name="fecha"
                     required
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.fecha"
-                        type="date"
                         :max="hoy"
                         class="w-full"
                         data-prueba="habilitacion-fecha"

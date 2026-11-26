@@ -117,6 +117,9 @@ const FILAS_BLOQUEO: { tipo: 'duro' | 'global' | 'impuestos' | 'ventas' | 'compr
     >
         <template #acciones>
             <ContaSelectorEmpresa />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('libro.reabrir_periodo') && unaEmpresa"
                 label="Reabrir un mes"

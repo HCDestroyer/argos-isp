@@ -188,7 +188,7 @@ describe('calendario fiscal', () => {
 
         await vista.find('[data-prueba="abrir-feriado"]').trigger('click')
         await esperar(() => expect(document.querySelector('[data-prueba="feriado-aviso-recalculo"]')?.textContent).toContain('Recalcula el calendario de todas las empresas'))
-        escribir('[data-prueba="feriado-fecha"] input, input[data-prueba="feriado-fecha"]', '2026-10-20')
+        escribir('[data-prueba="feriado-fecha"] input, input[data-prueba="feriado-fecha"]', '20/10/2026')
         escribir('[data-prueba="feriado-nombre"] input, input[data-prueba="feriado-nombre"]', 'Día de la Revolución')
         escribir('[data-prueba="feriado-motivo"] textarea, textarea[data-prueba="feriado-motivo"]', 'Decreto 19-2018')
         botonDelDialogo('Agregar y recalcular')?.click()

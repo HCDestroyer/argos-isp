@@ -305,7 +305,7 @@ onMounted(async () => {
         titulo="Servicios"
         icono="i-lucide-wifi"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('servicios.crear')"
                 to="/servicios/nuevo"
@@ -313,8 +313,6 @@ onMounted(async () => {
                 label="Nuevo servicio"
                 size="lg"
                 class="glow-brand rounded-full px-5"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nuevo servicio"
             />
         </template>
 

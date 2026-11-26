@@ -3,7 +3,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type Deposito = Schema<'Deposito'>
 export type Traslado = Schema<'Traslado'>
 export type ResumenFondosEnTransito = Schema<'ResumenFondosEnTransito'>
-export type DatosTraslado = paths['/api/v1/bancos/trasladar']['post']['requestBody']['content']['application/json']
+export type DatosTrasladoBancos = paths['/api/v1/bancos/trasladar']['post']['requestBody']['content']['application/json']
 export type EstadoTransito = Deposito['estado']
 export type FiltrosDepositos = Pick<NonNullable<paths['/api/v1/bancos/depositos']['get']['parameters']['query']>, 'caja_id' | 'turno_id'>
 export type DatosReatribucion = paths['/api/v1/bancos/llegadas/reatribuir']['post']['requestBody']['content']['application/json']
@@ -49,7 +49,7 @@ export function useFondosEnTransito() {
     }
 
     /** `POST /bancos/trasladar` (`bancos.trasladar`): solo entre cuentas de la misma empresa; 409 `traslado_duplicado`. */
-    function trasladar(datos: DatosTraslado, claveIdempotencia: string): Promise<Resultado<Traslado>> {
+    function trasladar(datos: DatosTrasladoBancos, claveIdempotencia: string): Promise<Resultado<Traslado>> {
         return resolver(api.POST('/api/v1/bancos/trasladar', {
             params: { header: { 'Idempotency-Key': claveIdempotencia } },
             body: datos,

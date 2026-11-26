@@ -27,13 +27,19 @@ const { puede } = usePermisos()
         class="boton-flotante boton-pastilla"
         data-prueba="registrar-compra"
     />
-    <UButton
+    <!-- La acción principal: en el teléfono, isla fija encima de la navegación (tablero MarcoMovil). -->
+    <PanelBarraAccion
         v-if="puede('compras.cargar_borrador')"
-        to="/compras/cargar"
-        label="Cargar factura"
-        icon="i-lucide-upload"
-        size="lg"
-        class="glow-brand rounded-full px-5"
-        data-prueba="cargar-factura"
-    />
+        estirar
+        data-prueba="accion-principal"
+    >
+        <UButton
+            to="/compras/cargar"
+            label="Cargar factura"
+            icon="i-lucide-upload"
+            size="lg"
+            class="glow-brand rounded-full px-5"
+            data-prueba="cargar-factura"
+        />
+    </PanelBarraAccion>
 </template>

@@ -94,9 +94,8 @@ onMounted(cargar)
                 label="Vigentes al"
                 class="sm:w-44"
             >
-                <UInput
+                <CampoFecha
                     v-model="fecha"
-                    type="date"
                     class="w-full"
                 />
             </UFormField>

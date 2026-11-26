@@ -7,7 +7,11 @@
  * - a la derecha, el título de la sección con su «?», la descripción y las acciones; debajo, si la
  *   sección es por empresa, las pastillas «Empresa: …» y «Nueva»;
  * - la tarjeta isla con las pantallas de la sección como pestañas segmentadas dentro de ella, el
- *   cuerpo con su propio desplazamiento y el pie (`#pie`) fijo abajo con la acción principal.
+ *   cuerpo con su propio desplazamiento y el pie (`#pie`) fijo abajo con la acción principal
+ *   («Descartar / Guardar»); en el teléfono, el pie es la isla fija encima de la navegación
+ *   (`PanelBarraAccion`) y su nota corta va arriba de los botones;
+ * - `#accion-principal`: la acción principal de una sección sin pie (como en `PanelPagina`), en el
+ *   encabezado en escritorio y en la isla fija en el teléfono.
  *
  * En el teléfono (pantallas, no columnas) el submenú solo aparece en el índice: cada sección lleva
  * «‹ Configuración» y su pie queda fijo abajo.
@@ -121,12 +125,19 @@ const conPestanas = computed(() => pestanas.value.length > 1 && ubicacion.value?
                             {{ props.descripcion }}
                         </p>
                     </div>
-                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                    <div class="panel-acciones flex shrink-0 flex-wrap items-center gap-2">
                         <AyudaBoton
                             solo-icono
                             class="boton-flotante boton-circulo"
                         />
                         <slot name="acciones" />
+                        <PanelBarraAccion
+                            v-if="hayContenido(slots['accion-principal']?.())"
+                            estirar
+                            data-prueba="accion-principal"
+                        >
+                            <slot name="accion-principal" />
+                        </PanelBarraAccion>
                     </div>
                 </div>
 
@@ -193,13 +204,16 @@ const conPestanas = computed(() => pestanas.value.length > 1 && ubicacion.value?
                     <div class="flex min-w-0 flex-col gap-4 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                         <slot />
                     </div>
-                    <div
-                        v-if="slots.pie"
-                        class="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-b-2xl border-t border-(--ax-borde) bg-(--ax-tarjeta) px-4 py-3"
+                    <!-- El pie («Descartar / Guardar»): en escritorio, fijo al final de la tarjeta; en el
+                         teléfono, isla fija encima de la navegación y el contenido reserva su alto. -->
+                    <PanelBarraAccion
+                        v-if="hayContenido(slots.pie?.())"
+                        estirar
+                        class="lg:sticky lg:bottom-0 lg:z-10 lg:flex-wrap lg:justify-end lg:rounded-b-2xl lg:border-t lg:border-(--ax-borde) lg:bg-(--ax-tarjeta) lg:px-4 lg:py-3"
                         data-prueba="pie-configuracion"
                     >
                         <slot name="pie" />
-                    </div>
+                    </PanelBarraAccion>
                 </section>
             </div>
         </div>
