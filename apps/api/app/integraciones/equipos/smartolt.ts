@@ -107,12 +107,22 @@ async function pedir(
 export interface OltSmartOlt {
     id: string
     name: string
+    /** `olt_hardware_version` */
+    hardware: string | null
+    ip: string | null
 }
 
+/** Las OLT de la cuenta (prueba y sincronización a la vez; nunca como latido). */
 export async function listarOlts(config: ConfigSmartOlt): Promise<OltSmartOlt[]> {
     const d = await pedir(config, 'GET', '/api/system/get_olts', { reintentos: 0 })
     const lista = Array.isArray(d.response) ? (d.response as Array<Record<string, unknown>>) : []
-    return lista.map((o) => ({ id: String(o.id), name: String(o.name ?? '') }))
+    const texto = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null)
+    return lista.map((o) => ({
+        id: String(o.id),
+        name: String(o.name ?? ''),
+        hardware: texto(o.olt_hardware_version),
+        ip: texto(o.ip),
+    }))
 }
 
 export interface OnuSinConfigurar {

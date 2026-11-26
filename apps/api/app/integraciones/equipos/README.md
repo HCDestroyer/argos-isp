@@ -4,29 +4,44 @@ Contrato Iris 0.9.0 §12 (bloque E): aprovisionar (A32), estado del equipo (A33)
 (A35). Decisión del PM (21 nov 2026): **SmartOLT** para la fibra (ONU/ONT) y **GenieACS** (TR-069,
 servidor propio) para configurar routers, CPE y Wi-Fi. Iris nunca ve credenciales de ninguno.
 
-## Configuración por empresa
+## Configuración: SmartOLT y ACS por separado (`contratos/equipos-olt-acs.md`)
 
-| Ruta                                 | Permiso              | Qué hace                                                                                                                                                           |
-| ------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /integraciones/equipos`         | `equipos.ver`        | Configuración de la empresa activa; token y clave como `***`                                                                                                       |
-| `PUT /integraciones/equipos`         | `equipos.configurar` | URL y token de SmartOLT; URL, usuario y clave de GenieACS; `pppoe_por_acs`; `perfiles[]` (OLT de SmartOLT + plan → `authorization_preset_id`). Con `version` (409) |
-| `POST /integraciones/equipos/probar` | `equipos.probar`     | Prueba los dos con lo guardado y guarda el resultado (devuelve las OLT)                                                                                            |
+SmartOLT y el ACS son **independientes**: una empresa puede tener uno, otro, los dos o ninguno.
 
-- Tabla `integraciones.equipos_config` (una fila por empresa). Secretos cifrados con `#shared/cifrado`
-  (`AAA_PPP_KEY`); nunca salen en respuestas, auditoría (`***`), `audit.red` ni logs.
-- **Capacidad = encendida + probada.** `capacidades.aprovisionamiento` (§4.3, canje y
-  `GET /integraciones/iris/estado`): `ftth` con SmartOLT probado, `tr069` con GenieACS probado,
-  `wireless` con cualquiera de los dos. Cambiar URL o secreto borra la prueba.
+| Ruta                                                 | Permiso                       | Qué hace                                                                                        |
+| ---------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /integraciones/smartolt/instancias` (`/:id`)    | `smartolt.ver`                | Instancias de la empresa activa y compartidas, con sus OLT, vínculos y perfiles; token `***`    |
+| `POST /integraciones/smartolt/instancias`            | `smartolt.crear_instancia`    | Nombre, subdominio, token, nota, encendida; compartida solo con alcance global                  |
+| `PUT /integraciones/smartolt/instancias/:id`         | `smartolt.editar_instancia`   | Con `version` (409); token omitido = se conserva; `perfiles[]` (OLT + plan → preset)            |
+| `DELETE /integraciones/smartolt/instancias/:id`      | `smartolt.eliminar_instancia` | `409 instancia_en_uso` si un equipo o un pedido en curso la usa                                 |
+| `POST /integraciones/smartolt/instancias/:id/probar` | `smartolt.probar_instancia`   | Una llamada a `get_olts`: prueba y sincroniza las OLT; liga solas las del mismo nombre          |
+| `POST /integraciones/smartolt/olts/:id/vincular`     | `smartolt.vincular_olt`       | Liga la OLT de SmartOLT con la OLT de Argos (`409 olt_ya_vinculada`, `422 olt_de_otra_empresa`) |
+| `GET`/`PUT /integraciones/acs`                       | `acs.ver` / `acs.configurar`  | El ACS (GenieACS) de la empresa: URL, usuario, clave `***`, certificado propio, `pppoe_por_acs` |
+| `POST /integraciones/acs/probar`                     | `acs.probar`                  | Prueba el NBI con lo guardado; no llama a SmartOLT                                              |
+
+- Tablas: `integraciones.smartolt_instancias` (0..n por empresa; `empresa_id` null = compartida, decisión
+  del PM), `integraciones.smartolt_olts` (las OLT de cada instancia, ligadas o no a `network.olts`),
+  `integraciones.equipos_perfiles` (por OLT de SmartOLT y plan) y `integraciones.acs_config` (uno por
+  empresa). Secretos cifrados con `#shared/cifrado` (`AAA_PPP_KEY`); nunca salen en respuestas, auditoría
+  (`***`), eventos, `audit.red` ni logs.
+- **Capacidad = encendida + probada**, por sistema (`gestionDe`): `ftth` con al menos una instancia
+  operativa (propia o compartida), `tr069` con el ACS operativo, `wireless = ftth || tr069` (P2 abierta).
+  Cambiar URL o secreto borra la prueba.
+- **La instancia de un servicio** (`instanciaParaServicio`, §4.2): la guardada en el equipo o el pedido;
+  si no, la de la OLT del servicio en Argos (servidor PPPoE → VLAN → puerto PON → OLT, o `planta.olt` por
+  nombre) ligada a una OLT de SmartOLT; si no, la única operativa o la que tenga la serie (en dos:
+  `fallido`, causa `otro`). La autorización usa la OLT que dice SmartOLT; si no es la esperada queda
+  `olt_distinta` en la auditoría.
+- Wi-Fi y PPPoE de la ONU **solo con el ACS** (decisión del PM, P3). `pppoe_por_acs` se decide al aceptar.
 - Solo `https://`; `http://` con `EQUIPOS_PERMITIR_HTTP=true` (laboratorio).
 - **GenieACS va en otro servidor** (decisión del PM): su NBI detrás de un proxy con HTTPS, autenticación
-  básica y lista de IP (`infra/genieacs/`). Argos manda `Authorization: Basic` con el usuario y la clave
-  de la empresa y, si el certificado del proxy es de una autoridad propia, confía en el certificado raíz
-  guardado en `genieacs_ca` (PEM, solo para ese ACS). Errores claros en «Probar conexión»: clave mala
-  (401), IP no permitida (403) y certificado inválido (autofirmado, vencido, de otro nombre; no se
-  reintenta ni se mandan credenciales).
-- **Un ACS y un SmartOLT por empresa**, nada global: cada servicio usa los de su empresa y el equipo
-  gestionado guardado solo vale para la empresa con la que se registró (si el servicio cambia de
-  empresa, se vuelve a descubrir).
+  básica y lista de IP (`infra/genieacs/`). Si el certificado del proxy es de una autoridad propia, Argos
+  confía en el certificado raíz guardado (PEM, solo para ese ACS). Errores claros en «Probar conexión».
+- El equipo gestionado guarda su instancia: si el servicio cambia de empresa, el id del ACS deja de valer
+  y la parte de SmartOLT solo vale si la instancia es compartida.
+
+**Evento** `equipos.config_cambiada` (`sistema`, `empresa_id`, `instancia_id`, `accion`, `campos[]`,
+`operativa`; nunca valores). Sin consumidores obligatorios; no va a Iris.
 
 ## Rutas del contrato
 
@@ -51,7 +66,7 @@ Solo con el token de Iris y un conector con contrato ≥ 0.14.3 (con uno anterio
 
 - **`capacidades.equipos[]`** en el canje y en `GET /integraciones/iris/estado`: una fila por empresa del
   token `{ empresa_id, estado_equipo, wifi, bienvenida, cobro_equipo }` (con Iris < 0.9.0, todas en false).
-  `estado_equipo` = SmartOLT o GenieACS probados; `wifi` = GenieACS probado; `bienvenida` = aviso de
+  `estado_equipo` = una instancia de SmartOLT o el ACS operativos; `wifi` = ACS operativo; `bienvenida` = aviso de
   bienvenida encendido y un canal con plantilla activa y configurado (también decide si notify pide
   `bienvenida_servicio` con `origen` o `bienvenida`); `cobro_equipo` = el concepto con
   `codigo_sistema = 'instalacion'` activo (columna de A3).

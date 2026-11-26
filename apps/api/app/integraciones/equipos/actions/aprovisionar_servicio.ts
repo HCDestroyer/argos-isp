@@ -5,7 +5,9 @@ import { cifrar } from '#shared/cifrado'
 import { PlanNoPermitido, planDisponibleEnRouter } from '#core/instalacion_iris'
 import { normalizarMac, normalizarSerie } from '#inventario/unidades'
 import AsignarComodato from '#inventario/actions/asignar_comodato'
-import { configDeEmpresa, gestionDe } from '#integraciones/equipos/configuracion'
+import { gestionDe } from '#integraciones/equipos/configuracion'
+import { acsDeEmpresa } from '#integraciones/equipos/acs'
+import { instanciaParaServicio } from '#integraciones/equipos/smartolt_instancias'
 import {
     AprovisionamientoEnCurso,
     AprovisionamientoNoDisponible,
@@ -285,8 +287,8 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
         }
         if (input.wifi) validarWifi(input.wifi, 'wifi.')
 
-        const config = await configDeEmpresa(empresaId, t.trx)
-        const gestion = gestionDe(config)
+        const gestion = await gestionDe(empresaId, t.trx)
+        const acs = await acsDeEmpresa(empresaId, t.trx)
         const disponible =
             equipo.tipo === 'ont'
                 ? gestion.ftth
@@ -301,6 +303,19 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
                       ? 'La empresa no tiene el ACS (GenieACS) configurado y probado en Argos'
                       : undefined,
             )
+        }
+        if (equipo.tipo === 'ont') {
+            // §4.2 paso 4: la instancia que ya se sabe (o la de la OLT del servicio) debe estar operativa
+            const eleccion = await instanciaParaServicio(
+                { id: input.servicio_id, empresa_id: empresaId },
+                input.planta ?? null,
+                { cliente: t.trx },
+            )
+            if (eleccion.instancia && !eleccion.instancia.operativa) {
+                throw new AprovisionamientoNoDisponible(
+                    `La instancia «${eleccion.instancia.nombre}» de SmartOLT está apagada o sin probar`,
+                )
+            }
         }
         if (input.wifi && !gestion.tr069) {
             throw reglas0143 ? new CapacidadNoDisponible() : new WifiNoDisponible()
@@ -367,8 +382,9 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
         }
 
         // ¿Qué pasos aplican? Equipo: siempre salvo un CPE sin ACS (solo IP y activación).
-        const usaAcs =
-            equipo.tipo === 'router_tr069' || Boolean(input.wifi) || (config.pppoePorAcs && gestion.tr069)
+        // PPPoE por el ACS: ajuste del ACS, solo con el ACS operativo al aceptar (§4.3); queda en el pedido
+        const pppoePorAcs = acs.operativo && acs.pppoePorAcs
+        const usaAcs = equipo.tipo === 'router_tr069' || Boolean(input.wifi) || pppoePorAcs
         const pasoEquipo = equipo.tipo !== 'cpe_wireless' || usaAcs
         const gestionado = equipo.tipo === 'ont' || usaAcs
         const ahora = new Date()
@@ -390,6 +406,7 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
                     unidad_id: unidadId ?? (reglas0143 ? null : (equipo.unidad_id ?? null)),
                     modelo: equipo.modelo ?? null,
                     gestionado,
+                    pppoe_por_acs: pppoePorAcs,
                 }),
                 planta: input.planta ? JSON.stringify(input.planta) : null,
                 wireless: input.wireless ? JSON.stringify(input.wireless) : null,
