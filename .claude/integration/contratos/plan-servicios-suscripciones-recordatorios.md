@@ -487,6 +487,24 @@ Si la respuesta es notificaciones push (Firebase), el carril cambia de forma: se
 - **P5 Corte en campo: Argos solo avisa a Iris.** Iris lleva tickets y órdenes; no hay cola en Argos; Argos muestra el estado que Iris devuelva.
 - **P7/P8 Recordatorios por lugar:** pendiente de aclarar. El carril R no arranca.
 
+### 6.1 Respuestas del PM (26 nov 2026) a las preguntas nuevas del §5
+
+- **P-N1 → la suscripción también puede ir sobre un servicio.** Una suscripción puede ser independiente o colgar de un servicio de internet o de TV. El PM no dijo si la deuda de una corta a las demás; mientras no lo diga, vale lo recomendado: cada una se suspende por su propia deuda.
+- **Cable e IPTV son tipos distintos.**
+  - Cable (CATV) llega por fibra, con ONU, y se corta por SmartOLT.
+  - IPTV va sobre IP: se corta como un servicio de datos, por RADIUS o RouterOS.
+  - Por eso los tipos quedan así: `internet`, `cable` (CATV), `iptv` y `mixto`. Mixto es una combinación de los anteriores, por ejemplo internet + cable.
+- **P-N3/P-N5 → cobro al emitir, con un reintento.** Se cobra al emitir la factura. Si el banco la rechaza, se reintenta una vez a los 3 días. Después de 3 rechazos seguidos, el débito se desactiva y se avisa al cliente.
+- **P-N7 → el débito no es solo para Recurrente.** Recurrente es una pasarela más.
+  - La tokenización y el cargo recurrente se diseñan independientes de la pasarela: un adaptador por proveedor (Recurrente, NeoNet y las que vengan) detrás de una interfaz común.
+  - La llave va por empresa y por pasarela (regla 14).
+- **P-N8 → no hay TV por coaxial; todo es fibra.**
+  - T2 no necesita un caso «TV sin ONU».
+  - El corte de cable siempre va por SmartOLT.
+  - El aviso a Iris (T3a) queda solo de respaldo: cuando SmartOLT falla o el servicio no tiene ONU registrada.
+- **Sin respuesta todavía:** P-N2 (seguir facturando una suscripción suspendida), P-N4 (texto de consentimiento) y P-N6 (telefonía). Mientras tanto se aplica lo recomendado.
+- **Recordatorios (P-N9):** son plantillas como las de facturación, con nombre, asignadas por servicio o suscripción y con una por defecto en cada empresa. El cliente puede tener recordatorios personalizados por servicio. No van por zona ni son notificaciones push con Firebase. El carril R puede arrancar con ese alcance.
+
 ### Critical Files for Implementation
 - /home/user/wt-plan-servicios/apps/api/app/billing/actions/emitir_factura.ts
 - /home/user/wt-plan-servicios/apps/api/app/billing/actions/emitir_cargo_unico.ts
