@@ -156,6 +156,8 @@ const sincronizarAbierto = ref(false)
             />
         </template>
 
+        <PlanesSecciones actual="planes" />
+
         <div class="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
             <div class="surface-card flex min-w-0 flex-col overflow-hidden rounded-2xl">
                 <div class="flex flex-col gap-3 p-3 sm:p-4 2xl:flex-row 2xl:items-center">
