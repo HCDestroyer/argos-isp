@@ -324,7 +324,9 @@ describe(
             ])
             assert.doesNotMatch(stdout, /198\.51\.100\.7/)
             const logs = await exec('docker', ['logs', contenedor])
-            assert.match(logs.stderr + logs.stdout, /recargando clientes \(router\.conexion_registrada\)/)
+            const texto = logs.stderr + logs.stdout
+            assert.match(texto, /recargando clientes \(router\.conexion_registrada\)/)
+            assert.match(texto, /radiusd escuchando \(pid \d+\)/, 'el script espera a que radiusd escuche')
             const estado = await exec('docker', [
                 'inspect',
                 '-f',
@@ -350,7 +352,7 @@ describe(
             // Cliente con la misma IP que mikrotik-lab de clients.conf: FreeRADIUS no arranca con eso.
             const pidAntes = await pidRadiusd()
             const avisos = await exec('docker', ['logs', contenedor]).then(
-                (l) => (l.stderr + l.stdout).match(/radiusd sigue en pie/g)?.length ?? 0,
+                (l) => (l.stderr + l.stdout).match(/radiusd sigue en pie y escuchando/g)?.length ?? 0,
             )
             await escribirClientes({ routers: [router('192.0.2.250')], clave: CLAVE, dir })
             assert.equal(await avisarRecarga(dir, 'prueba-invalida'), 'avisado')
@@ -360,7 +362,7 @@ describe(
                 const texto = logs.stderr + logs.stdout
                 return (
                     /configuración inválida/.test(texto) &&
-                    (texto.match(/radiusd sigue en pie/g)?.length ?? 0) > avisos
+                    (texto.match(/radiusd sigue en pie y escuchando/g)?.length ?? 0) > avisos
                 )
             }, 30_000)
             const diag = async () => {
