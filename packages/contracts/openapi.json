@@ -60170,6 +60170,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/pagos/{id}/whatsapp": {
+      "get": {
+        "operationId": "notificacionesPagoWhatsapp",
+        "summary": "Comprobante de un pago por WhatsApp (Iris): canal disponible y estado del envío",
+        "description": "Para la pantalla de éxito del cobro (A4). Con permiso `pagos.ver`, no `notificaciones.ver`: el cajero lo ve. El comprobante lo manda Iris al registrarse el pago (`pago_recibido`); aquí solo se lee. `envio` null = aún no se programa. No muestra el número ni el texto.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aviso del pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvisoPagoWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/plantillas": {
       "get": {
         "operationId": "notificacionesPlantillasListar",
@@ -104946,6 +105019,133 @@
           "redirigir_a": {
             "type": "string",
             "description": "`<iris>/administracion/integraciones/argos/vuelta#codigo=…&api=…&state=…` (todo en el fragmento): el panel navega ahí. El código vale 15 min y un solo uso"
+          }
+        }
+      },
+      "AvisoPagoWhatsapp": {
+        "type": "object",
+        "required": [
+          "pago_id",
+          "cliente_id",
+          "empresa_id",
+          "canal",
+          "plantilla_activa",
+          "envio"
+        ],
+        "properties": {
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "object",
+            "required": [
+              "activo",
+              "disponible",
+              "motivo"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean",
+                "description": "Interruptor de WhatsApp en la configuración de la empresa del pago"
+              },
+              "disponible": {
+                "type": "boolean",
+                "description": "Encendido y con el conector Iris activo con contrato ≥ 0.6.0"
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Por qué no está disponible"
+              }
+            }
+          },
+          "plantilla_activa": {
+            "type": "boolean",
+            "description": "La plantilla `whatsapp` de `pago.registrado` o `comprobante.aprobado` (`pago_recibido`) está activa"
+          },
+          "envio": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "evento",
+              "estado",
+              "error",
+              "motivo",
+              "enviado_en",
+              "entregado_en",
+              "leido_en",
+              "created_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "evento": {
+                "type": "string"
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "encolado",
+                  "enviado",
+                  "fallido",
+                  "omitido"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "enviado_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "entregado_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "leido_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "description": "Último envío por WhatsApp (Iris) de este pago; null si aún no se programa o no corresponde"
           }
         }
       },

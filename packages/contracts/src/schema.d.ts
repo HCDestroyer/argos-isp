@@ -8280,6 +8280,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notificaciones/pagos/{id}/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Comprobante de un pago por WhatsApp (Iris): canal disponible y estado del envío
+         * @description Para la pantalla de éxito del cobro (A4). Con permiso `pagos.ver`, no `notificaciones.ver`: el cajero lo ve. El comprobante lo manda Iris al registrarse el pago (`pago_recibido`); aquí solo se lee. `envio` null = aún no se programa. No muestra el número ni el texto.
+         */
+        get: operations["notificacionesPagoWhatsapp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notificaciones/plantillas": {
         parameters: {
             query?: never;
@@ -14475,6 +14495,38 @@ export interface components {
         AutorizacionIris: {
             /** @description `<iris>/administracion/integraciones/argos/vuelta#codigo=…&api=…&state=…` (todo en el fragmento): el panel navega ahí. El código vale 15 min y un solo uso */
             redirigir_a: string;
+        };
+        AvisoPagoWhatsapp: {
+            pago_id: number;
+            cliente_id: number;
+            empresa_id: number;
+            canal: {
+                /** @description Interruptor de WhatsApp en la configuración de la empresa del pago */
+                activo: boolean;
+                /** @description Encendido y con el conector Iris activo con contrato ≥ 0.6.0 */
+                disponible: boolean;
+                /** @description Por qué no está disponible */
+                motivo: string | null;
+            };
+            /** @description La plantilla `whatsapp` de `pago.registrado` o `comprobante.aprobado` (`pago_recibido`) está activa */
+            plantilla_activa: boolean;
+            /** @description Último envío por WhatsApp (Iris) de este pago; null si aún no se programa o no corresponde */
+            envio: {
+                id: number;
+                evento: string;
+                /** @enum {string} */
+                estado: "encolado" | "enviado" | "fallido" | "omitido";
+                error: string | null;
+                motivo: string | null;
+                /** Format: date-time */
+                enviado_en: string | null;
+                /** Format: date-time */
+                entregado_en: string | null;
+                /** Format: date-time */
+                leido_en: string | null;
+                /** Format: date-time */
+                created_at: string;
+            } | null;
         };
         BalanceComprobacion: {
             /** Format: date */
@@ -60007,6 +60059,55 @@ export interface operations {
             };
             /** @description Sin el permiso notificaciones.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesPagoWhatsapp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aviso del pago */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvisoPagoWhatsapp"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
