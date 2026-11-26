@@ -132,14 +132,15 @@ docker exec "$P-router" sh -c '
 ROUTER_PUB="$(docker exec "$P-router" wg show wg0 public-key)"
 
 paso "1. Peer aplicado por evento"
-docker exec "$P-servidor" wg show "$IFACE" peers | grep -q . && fallar "el servidor ya tenía peers"
+grep -q . <<< "$(docker exec "$P-servidor" wg show "$IFACE" peers)" && fallar "el servidor ya tenía peers"
 printf '{"data":[{"router_id":7,"public_key":"%s","ip_tunel":"%s"},{"router_id":8,"public_key":"no-es-clave","ip_tunel":"10.254.0.3"},{"router_id":9,"public_key":"%s","ip_tunel":"192.0.2.9"}]}' \
     "$ROUTER_PUB" "$IP_ROUTER" "$SRV_PUB" > "$TMP/peers.json"
 docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 1 evento router.conexion_registrada \
     payload "{\"router_id\":7,\"empresa_id\":1,\"ip_tunel\":\"$IP_ROUTER\"}" request_id '' > /dev/null
 esperar 20 "peer en wg show" sh -c "docker exec $P-servidor wg show $IFACE allowed-ips | grep -q '$ROUTER_PUB.*$IP_ROUTER/32'"
 [ "$(docker exec "$P-servidor" wg show "$IFACE" peers | grep -c .)" = 1 ] || fallar "se aplicaron peers inválidos"
-# Los logs se leen completos antes de buscar: con pipefail, `docker logs | grep -q` falla al azar
+# Las salidas se leen completas antes de buscar: con pipefail, `comando | grep -q` falla al azar
+# (grep sale al primer acierto y el comando muere por SIGPIPE). Dentro de `sh -c` no hay pipefail.
 # (grep sale al primer acierto y docker logs muere por SIGPIPE).
 LOGS_AGENTE="$(docker logs "$P-agente" 2>&1)"
 grep -q 'router 8: public_key inválida' <<< "$LOGS_AGENTE" || fallar "no avisó la clave inválida"
@@ -180,17 +181,17 @@ printf '{"data":[{"router_id":7,"public_key":"%s","ip_tunel":"%s","allowed_ips":
 docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 6 evento router.redes_cambiadas \
     payload '{"router_id":7,"empresa_id":null}' request_id '' > /dev/null
 esperar 20 "red de clientes en AllowedIPs" sh -c "docker exec $P-servidor wg show $IFACE allowed-ips | grep -q '$RED_CLIENTES'"
-docker exec "$P-servidor" wg show "$IFACE" allowed-ips | grep -q '10.254.0.128/25' &&
+grep -q '10.254.0.128/25' <<< "$(docker exec "$P-servidor" wg show "$IFACE" allowed-ips)" &&
     fallar "el agente aceptó una red dentro de la red del túnel"
 grep -q 'router 7: red 10.254.0.0/25: prueba' <<< "$(docker logs "$P-agente" 2>&1)" || fallar "no escribió los avisos de la API"
 esperar 15 "el portal responde al cliente" docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" "http://$IP_SRV:$PUERTO_CORTE/"
 VISTA="$(docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" "http://$IP_SRV:$PUERTO_CORTE/")"
 [ "$VISTA" = "$IP_CLIENTE" ] || fallar "el portal vio $VISTA en vez de la IP del cliente $IP_CLIENTE"
-docker exec "$P-servidor" ip rule show | grep -q "lookup $TABLA" || fallar "sin la regla de la marca"
+grep -q "lookup $TABLA" <<< "$(docker exec "$P-servidor" ip rule show)" || fallar "sin la regla de la marca"
 # El mismo cliente no llega a RADIUS (solo desde la red del túnel) ni a otros puertos del host
 docker exec "$P-router" sh -c "echo radius-cliente | nc -u -s $IP_CLIENTE -w1 $IP_SRV 1812" || true
 sleep 2
-docker logs "$P-radius" 2>&1 | grep -q radius-cliente && fallar "un cliente del router llegó a RADIUS"
+grep -q radius-cliente <<< "$(docker logs "$P-radius" 2>&1)" && fallar "un cliente del router llegó a RADIUS"
 if docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" -o /dev/null "http://$IP_SRV:$PUERTO_API/"; then
     fallar "un cliente del router llegó a otro puerto del host"
 fi
@@ -210,7 +211,7 @@ for i in 4 5; do # el bus puede entregar dos veces: reconciliar es idempotente
         payload '{"router_id":11,"empresa_id":null}' request_id '' > /dev/null
 done
 esperar 20 "peer del router 11 quitado" sh -c "! docker exec $P-servidor wg show $IFACE peers | grep -q '$OTRO_PUB'"
-docker exec "$P-servidor" wg show "$IFACE" allowed-ips | grep -q "$ROUTER_PUB.*$IP_ROUTER/32" ||
+grep -q "$ROUTER_PUB.*$IP_ROUTER/32" <<< "$(docker exec "$P-servidor" wg show "$IFACE" allowed-ips)" ||
     fallar "router.eliminado quitó también el peer del router 7"
 [ "$(handshake_7)" -gt 0 ] || fallar "el peer del router 7 se recreó (perdió su handshake)"
 docker exec "$P-router" ping -c1 -W2 "$IP_SRV" > /dev/null || fallar "el túnel del router 7 se cortó"
