@@ -160,7 +160,12 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'cobros.crear_proveedor': 'Proveedor de cobro creado',
     'cobros.editar_proveedor': 'Proveedor de cobro editado',
     'cobros.liquidar': 'Liquidación de cobros registrada',
-    'cajas.depositar': 'Depósito de caja al banco',
+    'cajas.depositar': 'Depósito de efectivo al banco',
+    // B1 del plan de contabilidad (A3): caja de cobros → custodia → banco
+    'cajas.entregar': 'Efectivo de la caja entregado otra vez',
+    'cajas.recibir_entrega': 'Efectivo recibido de una caja («Recibí»)',
+    'cajas.rechazar_entrega': 'Entrega de efectivo rechazada («No lo recibí»)',
+    'cajas.configurar': 'Ajustes de cajas y custodia cambiados',
     'bancos.trasladar': 'Traslado entre cuentas bancarias',
     'bancos.importar_extracto': 'Extracto bancario importado',
     'bancos.importar_extracto_archivo': 'Estado de cuenta del banco importado desde archivo',

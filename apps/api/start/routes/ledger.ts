@@ -13,6 +13,9 @@ import {
     Diario,
     CajaTurno,
     ResumenTurnoCaja,
+    AjustesCajas,
+    CustodiaEfectivo,
+    EntregaCaja,
     CategoriaEgreso,
     CierrePeriodo,
     Cuenta,
@@ -41,6 +44,17 @@ import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
 import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
+import EntregarCaja from '#ledger/actions/entregar_caja'
+import RecibirEntrega from '#ledger/actions/recibir_entrega'
+import RechazarEntrega from '#ledger/actions/rechazar_entrega'
+import ConfigurarCajas from '#ledger/actions/configurar_cajas'
+import { ajustesCajas, listarEntregas, resumenCustodia } from '#ledger/custodia'
+import { alcanceDePermiso } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { NoAutenticado, NoEncontrado } from '#shared/errores'
+import { EmpresaRequerida } from '#shared/empresa_activa'
+import db from '@adonisjs/lucid/services/db'
+import type { HttpContext } from '@adonisjs/core/http'
 import { autorizarLecturaDeCaja } from '#ledger/lectura_caja'
 import { SinTurnoAbierto, resumenTurnoAbierto } from '#ledger/resumen_turno'
 import bancos from '#start/routes/bancos'
@@ -93,7 +107,7 @@ const cajas: Ruta[] = [
             const id = Number(params.id)
             exigirAcceso(ctx, await existeCaja(id))
             return new AbrirCaja().execute(
-                { caja_id: id, fondo_inicial: cuerpo.fondo_inicial },
+                { caja_id: id, fondo_inicial: cuerpo.fondo_inicial ?? null },
                 ctx.contextoAccion(),
             )
         },
@@ -108,7 +122,7 @@ const cajas: Ruta[] = [
         cuerpo: v.cerrarCajaValidator,
         idempotente: true,
         descripcion:
-            'esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.',
+            'esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado; sin él y con `entregado_a`, el fondo fijo de la caja) y `entregado_a` (obligatorio si queda resto): el resto se entrega a esa persona (B1: documento EntregaCaja, evento caja.entregada) y tiene asiento cuando dice «Recibí» (1.1.15 / Caja); tu propio usuario = «Lo deposito yo», recibido en el acto. Emite caja.cerrada. 409 si no hay turno abierto.',
         respuesta: { status: 200, descripcion: 'Turno cerrado', esquema: CajaTurno },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
@@ -170,7 +184,152 @@ const cajas: Ruta[] = [
             return listarTurnos(id, query)
         },
     }),
+    ...custodiaRutas(),
 ]
+
+/** Empresa de una lectura por empresa: `empresa_id` o la activa (422 empresa_requerida). */
+function empresaDeLectura(ctx: HttpContext, empresaId: number | undefined): number {
+    const id = empresaId ?? ctx.empresa?.activa ?? null
+    if (id === null) throw new EmpresaRequerida()
+    exigirEmpresaPeticion(ctx.empresa, id)
+    return id
+}
+
+/** null si el usuario ve la custodia de todos (`cajas.ver_custodia`); si no, su id. */
+async function soloLoPropio(ctx: HttpContext): Promise<number | null> {
+    const usuario = ctx.auth.user
+    if (!usuario) throw new NoAutenticado()
+    const todo = await alcanceDePermiso(usuario.id, 'cajas.ver_custodia', alcancesDelToken(ctx))
+    return todo ? null : usuario.id
+}
+
+/** B1 del plan de contabilidad (§5.7): ajustes, custodia y entregas. */
+function custodiaRutas(): Ruta[] {
+    return [
+        definirRuta({
+            metodo: 'get',
+            ruta: '/cajas/ajustes',
+            operacion: 'cajasAjustes',
+            resumen: 'Ajustes de cajas y custodia de la empresa',
+            etiqueta: 'cajas',
+            permiso: 'cajas.ver',
+            query: v.custodiaValidator,
+            descripcion:
+                'Fondo de cambio de las cajas de cobros, plazo (días hábiles) y tope de custodia por persona y «lo deposito yo». Sin configurar, los de fábrica (Q200, 1 día hábil, Q5,000, sí) con version 0.',
+            respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesCajas },
+            handler: (ctx, { query }) => ajustesCajas(empresaDeLectura(ctx, query.empresa_id)),
+        }),
+        definirRuta({
+            metodo: 'put',
+            ruta: '/cajas/ajustes',
+            operacion: 'cajasConfigurar',
+            resumen: 'Configurar fondo de cambio, plazo y tope de custodia y «lo deposito yo»',
+            etiqueta: 'cajas',
+            permiso: 'cajas.configurar',
+            cuerpo: v.configurarCajasValidator,
+            idempotente: true,
+            descripcion:
+                'Solo cambia lo que se envía. `version` de GET /cajas/ajustes (409 conflicto_version). Emite cajas.ajustes_cambiados.',
+            respuesta: { status: 200, descripcion: 'Ajustes', esquema: AjustesCajas },
+            handler: (ctx, { cuerpo }) => new ConfigurarCajas().execute(cuerpo, ctx.contextoAccion()),
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/cajas/custodia',
+            operacion: 'cajasCustodia',
+            resumen: 'Efectivo en custodia por persona (entre la caja de cobros y el banco)',
+            etiqueta: 'cajas',
+            permiso: 'cajas.ver',
+            query: v.custodiaValidator,
+            descripcion:
+                'Por persona: lo recibido con «Recibí» menos lo depositado, desde cuándo (lo más viejo sin depositar), su vencimiento en días hábiles y si pasa el plazo o el tope (avisan, no bloquean), más sus entregas por recibir. Con cajas.ver_custodia, todas las personas de la empresa; sin él, solo la tuya.',
+            respuesta: { status: 200, descripcion: 'Custodia', esquema: CustodiaEfectivo },
+            handler: async (ctx, { query }) =>
+                resumenCustodia(empresaDeLectura(ctx, query.empresa_id), await soloLoPropio(ctx)),
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/cajas/entregas',
+            operacion: 'cajasEntregas',
+            resumen: 'Entregas de efectivo de las cajas de cobros',
+            etiqueta: 'cajas',
+            permiso: 'cajas.ver',
+            query: v.listarEntregasValidator,
+            descripcion:
+                'Filtros estado (por_recibir, recibida, rechazada), caja_id y recibe_id. Con cajas.ver_custodia, todas las de sus empresas; sin él, las que entregaste o te toca recibir.',
+            respuesta: { status: 200, descripcion: 'Página de entregas', esquema: pagina(EntregaCaja) },
+            handler: async (ctx, { query }) =>
+                listarEntregas(
+                    query,
+                    empresasDeLaLista(ctx.empresa, query.empresas),
+                    await soloLoPropio(ctx),
+                ),
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/cajas/turnos/:id/entregar',
+            operacion: 'cajasEntregar',
+            resumen: 'Entregar otra vez el efectivo de un turno cerrado',
+            etiqueta: 'cajas',
+            permiso: 'cajas.entregar',
+            cuerpo: v.entregarCajaValidator,
+            idempotente: true,
+            descripcion:
+                'Para un turno cuya entrega se rechazó («No lo recibí»). El monto es lo que no quedó de fondo al cerrar (422 turno_sin_entrega); 409 entrega_vigente; quien recibe necesita cajas.recibir_entrega (422 receptor_sin_permiso); tu propio usuario = «Lo deposito yo» (422 autoentrega_apagada si la empresa lo apagó). Emite caja.entregada.',
+            respuesta: { status: 201, descripcion: 'Entrega registrada', esquema: EntregaCaja },
+            handler: async (ctx, { cuerpo, params }) => {
+                const turnoId = Number(params.id)
+                const turno = await db
+                    .from('ledger.cajas_turnos')
+                    .where('id', turnoId)
+                    .select('caja_id')
+                    .first()
+                if (!turno) throw new NoEncontrado(`El turno ${turnoId} no existe`)
+                exigirAcceso(ctx, await existeCaja(Number(turno.caja_id)))
+                return new EntregarCaja().execute(
+                    { turno_id: turnoId, entregado_a: cuerpo.entregado_a, origen: 'reentrega' },
+                    ctx.contextoAccion(),
+                )
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/cajas/entregas/:id/recibir',
+            operacion: 'cajasRecibirEntrega',
+            resumen: '«Recibí»: el efectivo pasa a tu custodia',
+            etiqueta: 'cajas',
+            permiso: 'cajas.recibir_entrega',
+            cuerpo: v.recibirEntregaValidator,
+            idempotente: true,
+            descripcion:
+                'Solo la persona a quien va la entrega (403 entrega_de_otra_persona). Asiento entrega_caja: 1.1.15 Efectivo en custodia (contado) / Caja (entregado); la diferencia queda a cargo de quien entregó (Faltantes o Sobrantes de caja) y exige motivo (422). 409 entrega_resuelta. Emite caja.entrega_recibida (sobre_tope avisa, no bloquea).',
+            respuesta: { status: 200, descripcion: 'Entrega recibida', esquema: EntregaCaja },
+            handler: (ctx, { cuerpo, params }) =>
+                new RecibirEntrega().execute(
+                    { entrega_id: Number(params.id), contado: cuerpo.contado, motivo: cuerpo.motivo },
+                    ctx.contextoAccion(),
+                ),
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/cajas/entregas/:id/rechazar',
+            operacion: 'cajasRechazarEntrega',
+            resumen: '«No lo recibí»: el efectivo sigue a nombre del cajero',
+            etiqueta: 'cajas',
+            permiso: 'cajas.rechazar_entrega',
+            cuerpo: v.rechazarEntregaValidator,
+            idempotente: true,
+            descripcion:
+                'Solo la persona a quien va la entrega (403 entrega_de_otra_persona), con motivo. Sin asiento; el turno se puede entregar otra vez (POST /cajas/turnos/:id/entregar). 409 entrega_resuelta. Emite caja.entrega_rechazada.',
+            respuesta: { status: 200, descripcion: 'Entrega rechazada', esquema: EntregaCaja },
+            handler: (ctx, { cuerpo, params }) =>
+                new RechazarEntrega().execute(
+                    { entrega_id: Number(params.id), motivo: cuerpo.motivo },
+                    ctx.contextoAccion(),
+                ),
+        }),
+    ]
+}
 
 const libro: Ruta[] = [
     definirRuta({

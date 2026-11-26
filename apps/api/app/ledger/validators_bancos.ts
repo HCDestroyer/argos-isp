@@ -115,6 +115,25 @@ export const depositarCajaValidator = vine.compile(
         monto: dinero(),
         boleta: vine.string().trim().minLength(1).maxLength(80).meta({ description: 'Número de la boleta' }),
         fecha: fechaIso().nullable().optional().meta({ description: 'Por defecto hoy; no futura' }),
+        desde: vine
+            .enum(['custodia', 'turno'] as const)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'custodia (lo que recibiste con «Recibí») o turno (efectivo del turno abierto de la caja). Sin él: la custodia si alcanza; si no, el turno',
+            }),
+        ...cuentaBanco('Cuenta que recibe el depósito'),
+    }),
+)
+
+/** B1: depósito desde la custodia de quien deposita, sin caja ni turno. */
+export const depositarCustodiaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        monto: dinero(),
+        boleta: vine.string().trim().minLength(1).maxLength(80).meta({ description: 'Número de la boleta' }),
+        fecha: fechaIso().nullable().optional().meta({ description: 'Por defecto hoy; no futura' }),
         ...cuentaBanco('Cuenta que recibe el depósito'),
     }),
 )

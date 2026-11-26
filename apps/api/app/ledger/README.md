@@ -108,13 +108,33 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cajas.abrir`  | `actions/abrir_caja.ts`  | Abre un turno con `fondo_inicial` y `abierto_por`. Uno abierto por caja (409 `turno_abierto`). Sin asiento: el fondo ya está en la cuenta de la caja                                                                                                                                                |
-| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno − egresos − depósitos del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto`. El esperado sale de `resumen_turno.ts` (misma regla que el resumen). Rediseño: `denominaciones` (Q200 … 1¢; sin `contado` es su suma, con los dos deben coincidir), `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto; sin asiento: el dinero sigue en la caja hasta depositarlo) |
+| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno − egresos − depósitos del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto`. El esperado sale de `resumen_turno.ts` (misma regla que el resumen). Rediseño: `denominaciones` (Q200 … 1¢; sin `contado` es su suma, con los dos deben coincidir), `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto; desde B1 es una entrega, ver abajo) |
 
 - Cada pago en efectivo guarda el turno abierto de su caja (`billing.pagos.turno_id`, con `FOR SHARE` frente al cierre). `POST /pagos` con `caja` sin `caja_id` usa la caja del turno abierto del cajero (`cajaDelCajero`: el que él abrió o una caja asignada a él, dentro de su alcance) y, si no tiene, la principal.
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
 - Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
 - Un turno cerrado es inmutable (hallazgo H3): el trigger `cajas_turnos_inmutable` rechaza DELETE, cualquier UPDATE de un turno con `cerrado_en` y, en el abierto, todo UPDATE que no sea su cierre o que cambie los datos de apertura; TRUNCATE también se rechaza. `argosisp_app` no tiene DELETE ni TRUNCATE y su UPDATE se limita a las columnas del cierre.
+
+### Caja de cobros → custodia → banco (B1 del plan de contabilidad, §5.7; corrige E1)
+
+El efectivo de cobros siempre está a nombre de una persona y solo se mueve por documentos con asiento (`custodia.ts`):
+
+| Paso | Acción (permiso) | Documento | Asiento |
+| --- | --- | --- | --- |
+| Cerrar y entregar | `cajas.cerrar` con `entregado_a` → `cajas.entregar` anidada | `ledger.entregas` (lo contado menos el fondo; sin `fondo_siguiente` queda el fondo fijo) | ninguno: «por recibir», sigue en la cuenta de la caja |
+| «Recibí» | `cajas.recibir_entrega` (solo la persona a quien va) | `ledger.entregas_recepciones` (`recibida`, con lo contado) | `entrega_caja`: `1.1.15 Efectivo en custodia` (contado) / Caja (entregado); diferencia a cargo de quien entregó en Faltantes o Sobrantes de caja, con motivo |
+| «No lo recibí» | `cajas.rechazar_entrega` | recepción `rechazada` | ninguno; el turno se vuelve a entregar con `cajas.entregar` (`POST /cajas/turnos/:id/entregar`) |
+| «Lo deposito yo» | `entregado_a` = quien cierra (si `cajas_ajustes.autoentrega`) | entrega + recepción en el acto | igual que «Recibí» |
+| Depositar | `cajas.depositar` (`POST /custodia/depositar`, o `POST /cajas/:id/depositar` sin `desde`) | `ledger.depositos` con `origen = custodia`, sin caja ni turno | `1.1.11 / 1.1.15`; no más que la custodia de quien deposita (422 `deposito_excede_custodia`) |
+
+- Las cajas tienen `tipo` (`cobros`; `gastos` = caja chica, B9) y `fondo_fijo` (null = `cajas_ajustes.fondo_cobros` de la empresa, Q200 de fábrica). `cajas.abrir` sin `fondo_inicial` abre con `fondo_esperado`: lo que quedó del turno anterior o el fondo fijo.
+- `ledger.cajas_ajustes` por empresa (`GET/PUT /cajas/ajustes`, `cajas.configurar`, con `version`): fondo de cambio, plazo de custodia en días hábiles (1), tope por persona (Q5,000) y «lo deposito yo». Pasarse del plazo o del tope avisa (`GET /cajas/custodia`, `sobre_tope` en `caja.entrega_recibida`, check `custodia_en_plazo`), nunca bloquea.
+- `GET /cajas/custodia` y `GET /cajas/entregas`: con `cajas.ver_custodia`, todas las personas; sin él, solo lo propio.
+- Revisiones del cierre (`CHECKS_CUSTODIA` en `checks.ts`): `entregas_recibidas` (ninguna entrega del periodo sin respuesta), `custodia_cuadra` (`1.1.15` = recibido − depositado) y `custodia_en_plazo` (aviso). Calculadas (`calcularChecksCustodia`) pero aún fuera de `CHECKS`: la invariante 18 del auditor solo admite las claves de §10.5; entran cuando AU2 las agregue.
+- Los depósitos desde un turno abierto (`desde = turno`) siguen como antes (los usan las pruebas de E3 hasta B5).
+- Historial: los cierres de antes de B1 con `entregado_monto` quedaron como entregas `migracion` «por recibir» a nombre de su receptor.
+- Eventos: `caja.entregada`, `caja.entrega_recibida`, `caja.entrega_rechazada`, `cajas.ajustes_cambiados`; `caja.depositada` suma `origen` y `custodio_id`.
 
 ## Cierre mensual (`cierres.ts`)
 

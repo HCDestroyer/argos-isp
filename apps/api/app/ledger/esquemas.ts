@@ -114,6 +114,7 @@ export const Asiento = definirEsquema(
                 'nota_credito',
                 'egreso',
                 'cierre_caja',
+                'entrega_caja',
                 'ajuste',
                 'reclasificacion',
                 'liquidacion_cobro',
@@ -246,6 +247,15 @@ export const Caja = definirEsquema(
                 ...enumerado(['pos_80', 'carta']),
                 description: 'Decisión del PM 20: formato de la factura de esta caja (carta de fábrica)',
             },
+            tipo: {
+                ...enumerado(['cobros', 'gastos']),
+                description: 'B1: cobros (turno, cierre y entrega) o gastos (caja chica, B9)',
+            },
+            fondo_fijo: { ...nulable(Dinero), description: 'Fondo fijo propio; null = el de la empresa' },
+            fondo_fijo_efectivo: {
+                ...Dinero,
+                description: 'Fondo con el que abre la caja (el propio o el fondo de cambio de la empresa)',
+            },
             ...auditable,
         },
         // empresa_id y los formatos siempre vienen; opcionales para no romper clientes tipados
@@ -256,6 +266,9 @@ export const Caja = definirEsquema(
             'empresa_id',
             'formato_recibo',
             'formato_factura',
+            'tipo',
+            'fondo_fijo',
+            'fondo_fijo_efectivo',
         ],
     ),
 )
@@ -339,6 +352,16 @@ export const CajaTurno = definirEsquema(
             },
             entregado_a_nombre: nulable(texto),
             entregado_monto: { ...nulable(Dinero), description: 'contado − fondo_siguiente' },
+            fondo_esperado: {
+                ...nulable(Dinero),
+                description:
+                    'B1: lo que debía haber al abrir (lo que quedó del turno anterior o el fondo fijo); null en turnos de antes',
+            },
+            entrega_id: {
+                ...nulable(id),
+                description: 'B1: entrega vigente del turno (GET /cajas/entregas)',
+            },
+            entrega_estado: { ...nulable(enumerado(['por_recibir', 'recibida'])), description: 'B1' },
             ...auditable,
         },
         [
@@ -351,8 +374,84 @@ export const CajaTurno = definirEsquema(
             'entregado_a',
             'entregado_a_nombre',
             'entregado_monto',
+            'fondo_esperado',
+            'entrega_id',
+            'entrega_estado',
         ],
     ),
+)
+
+/*
+| B1 del plan de contabilidad (§5.7): entregas, custodia y ajustes de cajas
+*/
+
+export const EntregaCaja = definirEsquema(
+    'EntregaCaja',
+    objeto({
+        id,
+        empresa_id: id,
+        caja_id: id,
+        caja_nombre: texto,
+        turno_id: id,
+        monto: { ...Dinero, description: 'Lo que no quedó de fondo al cerrar el turno' },
+        entregado_por: nulable(id),
+        entregado_por_nombre: nulable(texto),
+        recibe_id: { ...id, description: 'Quien debe decir «Recibí»' },
+        recibe_nombre: nulable(texto),
+        autoentrega: { ...booleano, description: '«Lo deposito yo»: se recibió en el acto' },
+        origen: {
+            ...enumerado(['cierre', 'reentrega', 'migracion']),
+            description: 'migracion = entrega de un cierre de antes de B1 (sin asiento hasta recibirla)',
+        },
+        estado: {
+            ...enumerado(['por_recibir', 'recibida', 'rechazada']),
+            description: 'por_recibir: el efectivo sigue a nombre del cajero (cuenta de la caja)',
+        },
+        recibido_por: nulable(id),
+        recibido_en: nulable(instante),
+        contado: nulable(Dinero),
+        diferencia: { ...nulable(Dinero), description: 'contado − monto, a cargo de quien entregó' },
+        motivo: nulable(texto),
+        created_at: instante,
+    }),
+)
+
+const AjustesCajasPropiedades = {
+    empresa_id: id,
+    fondo_cobros: { ...Dinero, description: 'Fondo de cambio de cada caja de cobros (Q200 de fábrica)' },
+    custodia_plazo_dias: { ...entero, description: 'Días hábiles para depositar (1 de fábrica)' },
+    custodia_tope: { ...Dinero, description: 'Efectivo máximo en custodia por persona (Q5,000 de fábrica)' },
+    autoentrega: { ...booleano, description: '«Lo deposito yo» permitido (de fábrica sí)' },
+    de_fabrica: { ...booleano, description: 'La empresa usa los valores de fábrica' },
+    version: { ...entero, description: '0 = de fábrica; se envía en PUT /cajas/ajustes' },
+    updated_at: nulable(instante),
+}
+
+export const AjustesCajas = definirEsquema('AjustesCajas', objeto(AjustesCajasPropiedades))
+
+const Conteo0 = objeto({ cantidad: entero, monto: Dinero })
+
+export const CustodiaEfectivo = definirEsquema(
+    'CustodiaEfectivo',
+    objeto({
+        empresa_id: id,
+        ajustes: objeto(AjustesCajasPropiedades),
+        total: { ...Dinero, description: 'Total en custodia de la empresa (= saldo de 1.1.15)' },
+        por_recibir: { ...Conteo0, description: 'Entregas sin «Recibí» (siguen en las cajas de cobros)' },
+        personas: lista(
+            objeto({
+                empresa_id: id,
+                usuario_id: id,
+                usuario_nombre: nulable(texto),
+                saldo: { ...Dinero, description: 'Recibido − depositado' },
+                desde: { ...nulable(fecha), description: 'Recepción más vieja aún sin depositar' },
+                vence: { ...nulable(fecha), description: 'Último día hábil para depositarla' },
+                fuera_de_plazo: { ...booleano, description: 'Avisa, no bloquea' },
+                sobre_tope: { ...booleano, description: 'Avisa, no bloquea' },
+                por_recibir: { ...Conteo0, description: 'Entregas que esta persona aún no confirma' },
+            }),
+        ),
+    }),
 )
 
 const Conteo = objeto({ cantidad: entero, monto: Dinero })

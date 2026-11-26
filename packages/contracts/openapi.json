@@ -9279,6 +9279,25 @@
                     ],
                     "minimum": 1,
                     "description": "Empresa de la caja; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "cobros",
+                      "gastos"
+                    ],
+                    "description": "cobros (de fábrica) o gastos (caja chica: llega en B9, hoy 422 tipo_no_disponible)"
+                  },
+                  "fondo_fijo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Fondo fijo propio; sin él, el fondo de cambio de la empresa (GET /cajas/ajustes)",
+                    "examples": [
+                      "150.00"
+                    ]
                   }
                 },
                 "required": [
@@ -9390,17 +9409,18 @@
                 "type": "object",
                 "properties": {
                   "fondo_inicial": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Ya no se escribe a mano (B1): sin él, el turno abre con lo que quedó al cerrar el anterior o con el fondo fijo de la caja",
                     "examples": [
                       "150.00"
                     ]
                   }
                 },
-                "required": [
-                  "fondo_inicial"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -9476,7 +9496,7 @@
       "post": {
         "operationId": "cajasCerrar",
         "summary": "Cerrar turno de caja (esperado vs contado)",
-        "description": "esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.",
+        "description": "esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado; sin él y con `entregado_a`, el fondo fijo de la caja) y `entregado_a` (obligatorio si queda resto): el resto se entrega a esa persona (B1: documento EntregaCaja, evento caja.entregada) y tiene asiento cuando dice «Recibí» (1.1.15 / Caja); tu propio usuario = «Lo deposito yo», recibido en el acto. Emite caja.cerrada. 409 si no hay turno abierto.",
         "tags": [
           "cajas"
         ],
@@ -9672,8 +9692,8 @@
     "/api/v1/cajas/{id}/depositar": {
       "post": {
         "operationId": "cajasDepositar",
-        "summary": "Depositar al banco efectivo del turno abierto (1.1.11 Fondos en tránsito / Caja)",
-        "description": "Baja el esperado del turno como un egreso; no puede superar el efectivo del turno (422 deposito_excede_efectivo). Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 sin_turno_abierto, 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.",
+        "summary": "Depositar al banco efectivo de tu custodia o del turno abierto de la caja",
+        "description": "B1: sin `desde`, sale de tu custodia si alcanza (1.1.11 / 1.1.15, sin turno; el depósito no queda ligado a la caja) y si no, del turno abierto de la caja (1.1.11 / Caja; baja el esperado del turno y no puede superar su efectivo: 422 deposito_excede_efectivo; 409 sin_turno_abierto). Con `desde = custodia`, 422 deposito_excede_custodia. Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.",
         "tags": [
           "cajas"
         ],
@@ -9736,6 +9756,21 @@
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
                     "description": "Por defecto hoy; no futura"
+                  },
+                  "desde": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "custodia",
+                          "turno"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "custodia (lo que recibiste con «Recibí») o turno (efectivo del turno abierto de la caja). Sin él: la custodia si alcanza; si no, el turno"
                   },
                   "cuenta_bancaria_id": {
                     "type": [
@@ -10099,6 +10134,701 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cajas/ajustes": {
+      "get": {
+        "operationId": "cajasAjustes",
+        "summary": "Ajustes de cajas y custodia de la empresa",
+        "description": "Fondo de cambio de las cajas de cobros, plazo (días hábiles) y tope de custodia por persona y «lo deposito yo». Sin configurar, los de fábrica (Q200, 1 día hábil, Q5,000, sí) con version 0.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesCajas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "cajasConfigurar",
+        "summary": "Configurar fondo de cambio, plazo y tope de custodia y «lo deposito yo»",
+        "description": "Solo cambia lo que se envía. `version` de GET /cajas/ajustes (409 conflicto_version). Emite cajas.ajustes_cambiados.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "La de GET /cajas/ajustes (0 = valores de fábrica)"
+                  },
+                  "fondo_cobros": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Fondo de cambio de cada caja de cobros",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "custodia_plazo_dias": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 30,
+                    "description": "Días hábiles para depositar lo que se tiene en custodia"
+                  },
+                  "custodia_tope": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Efectivo máximo en custodia por persona",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "autoentrega": {
+                    "description": "«Lo deposito yo» permitido",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ajustes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesCajas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/custodia": {
+      "get": {
+        "operationId": "cajasCustodia",
+        "summary": "Efectivo en custodia por persona (entre la caja de cobros y el banco)",
+        "description": "Por persona: lo recibido con «Recibí» menos lo depositado, desde cuándo (lo más viejo sin depositar), su vencimiento en días hábiles y si pasa el plazo o el tope (avisan, no bloquean), más sus entregas por recibir. Con cajas.ver_custodia, todas las personas de la empresa; sin él, solo la tuya.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Custodia",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustodiaEfectivo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/entregas": {
+      "get": {
+        "operationId": "cajasEntregas",
+        "summary": "Entregas de efectivo de las cajas de cobros",
+        "description": "Filtros estado (por_recibir, recibida, rechazada), caja_id y recibe_id. Con cajas.ver_custodia, todas las de sus empresas; sin él, las que entregaste o te toca recibir.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "por_recibir",
+                "recibida",
+                "rechazada"
+              ]
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "recibe_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de entregas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EntregaCaja"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/entregas/{id}/rechazar": {
+      "post": {
+        "operationId": "cajasRechazarEntrega",
+        "summary": "«No lo recibí»: el efectivo sigue a nombre del cajero",
+        "description": "Solo la persona a quien va la entrega (403 entrega_de_otra_persona), con motivo. Sin asiento; el turno se puede entregar otra vez (POST /cajas/turnos/:id/entregar). 409 entrega_resuelta. Emite caja.entrega_rechazada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Entrega rechazada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.rechazar_entrega; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.rechazar_entrega",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/entregas/{id}/recibir": {
+      "post": {
+        "operationId": "cajasRecibirEntrega",
+        "summary": "«Recibí»: el efectivo pasa a tu custodia",
+        "description": "Solo la persona a quien va la entrega (403 entrega_de_otra_persona). Asiento entrega_caja: 1.1.15 Efectivo en custodia (contado) / Caja (entregado); la diferencia queda a cargo de quien entregó (Faltantes o Sobrantes de caja) y exige motivo (422). 409 entrega_resuelta. Emite caja.entrega_recibida (sobre_tope avisa, no bloquea).",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contado": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Lo que contaste; por defecto, lo entregado",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500,
+                    "description": "Obligatorio si lo contado no es lo entregado (queda a cargo de quien entregó)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Entrega recibida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.recibir_entrega; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.recibir_entrega",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cajas/turno-actual/resumen": {
       "get": {
         "operationId": "cajasTurnoActualResumen",
@@ -10170,6 +10900,131 @@
           }
         },
         "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/turnos/{id}/entregar": {
+      "post": {
+        "operationId": "cajasEntregar",
+        "summary": "Entregar otra vez el efectivo de un turno cerrado",
+        "description": "Para un turno cuya entrega se rechazó («No lo recibí»). El monto es lo que no quedó de fondo al cerrar (422 turno_sin_entrega); 409 entrega_vigente; quien recibe necesita cajas.recibir_entrega (422 receptor_sin_permiso); tu propio usuario = «Lo deposito yo» (422 autoentrega_apagada si la empresa lo apagó). Emite caja.entregada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "entregado_a": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Quien recibe (con cajas.recibir_entrega); tu propio usuario = «Lo deposito yo»"
+                  }
+                },
+                "required": [
+                  "entregado_a"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Entrega registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.entregar",
         "x-implementado": true
       }
     },
@@ -21068,6 +21923,163 @@
           }
         },
         "x-permiso": "cuentas_bancarias.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/custodia/depositar": {
+      "post": {
+        "operationId": "cajasDepositarCustodia",
+        "summary": "Depositar al banco el efectivo de tu custodia (1.1.11 Fondos en tránsito / 1.1.15)",
+        "description": "B1 (§5.7): lo que recibiste con «Recibí» y aún no depositaste, sin turno abierto, en la empresa activa o `empresa_id`. No puede superar tu custodia (422 deposito_excede_custodia). Llega al banco al conciliar su línea del extracto. 409 deposito_duplicado. Emite caja.depositada (origen custodia).",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "boleta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "description": "Número de la boleta"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "monto",
+                  "boleta"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Depósito registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deposito"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.depositar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.depositar",
         "x-implementado": true
       }
     },
@@ -54843,6 +55855,7 @@
                 "nota_credito",
                 "egreso",
                 "cierre_caja",
+                "entrega_caja",
                 "ajuste",
                 "reclasificacion",
                 "liquidacion_cobro",
@@ -83627,10 +84640,15 @@
                         "bodegas.editar",
                         "cajas.abrir",
                         "cajas.cerrar",
+                        "cajas.configurar",
                         "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
+                        "cajas.entregar",
+                        "cajas.rechazar_entrega",
+                        "cajas.recibir_entrega",
                         "cajas.ver",
+                        "cajas.ver_custodia",
                         "campos_personalizados.activar",
                         "campos_personalizados.crear",
                         "campos_personalizados.desactivar",
@@ -84104,10 +85122,15 @@
                         "bodegas.editar",
                         "cajas.abrir",
                         "cajas.cerrar",
+                        "cajas.configurar",
                         "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
+                        "cajas.entregar",
+                        "cajas.rechazar_entrega",
+                        "cajas.recibir_entrega",
                         "cajas.ver",
+                        "cajas.ver_custodia",
                         "campos_personalizados.activar",
                         "campos_personalizados.crear",
                         "campos_personalizados.desactivar",
@@ -100557,10 +101580,15 @@
                             "bodegas.editar",
                             "cajas.abrir",
                             "cajas.cerrar",
+                            "cajas.configurar",
                             "cajas.configurar_impresion",
                             "cajas.crear",
                             "cajas.depositar",
+                            "cajas.entregar",
+                            "cajas.rechazar_entrega",
+                            "cajas.recibir_entrega",
                             "cajas.ver",
+                            "cajas.ver_custodia",
                             "campos_personalizados.activar",
                             "campos_personalizados.crear",
                             "campos_personalizados.desactivar",
@@ -103615,6 +104643,56 @@
           }
         }
       },
+      "AjustesCajas": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "fondo_cobros",
+          "custodia_plazo_dias",
+          "custodia_tope",
+          "autoentrega",
+          "de_fabrica",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fondo_cobros": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Fondo de cambio de cada caja de cobros (Q200 de fábrica)"
+          },
+          "custodia_plazo_dias": {
+            "type": "integer",
+            "description": "Días hábiles para depositar (1 de fábrica)"
+          },
+          "custodia_tope": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Efectivo máximo en custodia por persona (Q5,000 de fábrica)"
+          },
+          "autoentrega": {
+            "type": "boolean",
+            "description": "«Lo deposito yo» permitido (de fábrica sí)"
+          },
+          "de_fabrica": {
+            "type": "boolean",
+            "description": "La empresa usa los valores de fábrica"
+          },
+          "version": {
+            "type": "integer",
+            "description": "0 = de fábrica; se envía en PUT /cajas/ajustes"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "AjustesCobro": {
         "type": "object",
         "required": [
@@ -104784,6 +105862,7 @@
               "nota_credito",
               "egreso",
               "cierre_caja",
+              "entrega_caja",
               "ajuste",
               "reclasificacion",
               "liquidacion_cobro",
@@ -109313,6 +110392,29 @@
             ],
             "description": "Decisión del PM 20: formato de la factura de esta caja (carta de fábrica)"
           },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "cobros",
+              "gastos"
+            ],
+            "description": "B1: cobros (turno, cierre y entrega) o gastos (caja chica, B9)"
+          },
+          "fondo_fijo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fondo fijo propio; null = el de la empresa"
+          },
+          "fondo_fijo_efectivo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Fondo con el que abre la caja (el propio o el fondo de cambio de la empresa)"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -109502,6 +110604,36 @@
               }
             ],
             "description": "contado − fondo_siguiente"
+          },
+          "fondo_esperado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "B1: lo que debía haber al abrir (lo que quedó del turno anterior o el fondo fijo); null en turnos de antes"
+          },
+          "entrega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "B1: entrega vigente del turno (GET /cajas/entregas)"
+          },
+          "entrega_estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "por_recibir",
+              "recibida"
+            ],
+            "description": "B1"
           },
           "version": {
             "type": "integer",
@@ -116880,6 +118012,169 @@
           }
         }
       },
+      "CustodiaEfectivo": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "ajustes",
+          "total",
+          "por_recibir",
+          "personas"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ajustes": {
+            "type": "object",
+            "required": [
+              "empresa_id",
+              "fondo_cobros",
+              "custodia_plazo_dias",
+              "custodia_tope",
+              "autoentrega",
+              "de_fabrica",
+              "version",
+              "updated_at"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "fondo_cobros": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Fondo de cambio de cada caja de cobros (Q200 de fábrica)"
+              },
+              "custodia_plazo_dias": {
+                "type": "integer",
+                "description": "Días hábiles para depositar (1 de fábrica)"
+              },
+              "custodia_tope": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Efectivo máximo en custodia por persona (Q5,000 de fábrica)"
+              },
+              "autoentrega": {
+                "type": "boolean",
+                "description": "«Lo deposito yo» permitido (de fábrica sí)"
+              },
+              "de_fabrica": {
+                "type": "boolean",
+                "description": "La empresa usa los valores de fábrica"
+              },
+              "version": {
+                "type": "integer",
+                "description": "0 = de fábrica; se envía en PUT /cajas/ajustes"
+              },
+              "updated_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total en custodia de la empresa (= saldo de 1.1.15)"
+          },
+          "por_recibir": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "Entregas sin «Recibí» (siguen en las cajas de cobros)"
+          },
+          "personas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "usuario_id",
+                "usuario_nombre",
+                "saldo",
+                "desde",
+                "vence",
+                "fuera_de_plazo",
+                "sobre_tope",
+                "por_recibir"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "usuario_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "usuario_nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "saldo": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Recibido − depositado"
+                },
+                "desde": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date",
+                  "description": "Recepción más vieja aún sin depositar"
+                },
+                "vence": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date",
+                  "description": "Último día hábil para depositarla"
+                },
+                "fuera_de_plazo": {
+                  "type": "boolean",
+                  "description": "Avisa, no bloquea"
+                },
+                "sobre_tope": {
+                  "type": "boolean",
+                  "description": "Avisa, no bloquea"
+                },
+                "por_recibir": {
+                  "type": "object",
+                  "required": [
+                    "cantidad",
+                    "monto"
+                  ],
+                  "properties": {
+                    "cantidad": {
+                      "type": "integer"
+                    },
+                    "monto": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  },
+                  "description": "Entregas que esta persona aún no confirma"
+                }
+              }
+            }
+          }
+        }
+      },
       "DecisionIntentoRecuperacion": {
         "type": "object",
         "required": [
@@ -117950,16 +119245,48 @@
             "minimum": 1
           },
           "caja_id": {
-            "type": "integer",
-            "minimum": 1
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Caja de la que salió (null desde la custodia sin caja)"
           },
           "caja_nombre": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "turno_id": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1,
-            "description": "Turno del que salió el efectivo (baja su esperado)"
+            "description": "Turno del que salió el efectivo (baja su esperado); null si salió de la custodia"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "turno",
+              "custodia"
+            ],
+            "description": "B1: turno abierto (1.1.11 / Caja) o custodia de quien deposita (1.1.11 / 1.1.15)"
+          },
+          "custodio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Persona de cuya custodia salió (origen custodia)"
+          },
+          "custodio_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "cuenta_id": {
             "type": "integer",
@@ -120693,6 +122020,146 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "EntregaCaja": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "caja_id",
+          "caja_nombre",
+          "turno_id",
+          "monto",
+          "entregado_por",
+          "entregado_por_nombre",
+          "recibe_id",
+          "recibe_nombre",
+          "autoentrega",
+          "origen",
+          "estado",
+          "recibido_por",
+          "recibido_en",
+          "contado",
+          "diferencia",
+          "motivo",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": "string"
+          },
+          "turno_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo que no quedó de fondo al cerrar el turno"
+          },
+          "entregado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "entregado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recibe_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Quien debe decir «Recibí»"
+          },
+          "recibe_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "autoentrega": {
+            "type": "boolean",
+            "description": "«Lo deposito yo»: se recibió en el acto"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "cierre",
+              "reentrega",
+              "migracion"
+            ],
+            "description": "migracion = entrega de un cierre de antes de B1 (sin asiento hasta recibirla)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "por_recibir",
+              "recibida",
+              "rechazada"
+            ],
+            "description": "por_recibir: el efectivo sigue a nombre del cajero (cuenta de la caja)"
+          },
+          "recibido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "recibido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "contado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diferencia": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "contado − monto, a cargo de quien entregó"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -130164,10 +131631,15 @@
           "bodegas.editar",
           "cajas.abrir",
           "cajas.cerrar",
+          "cajas.configurar",
           "cajas.configurar_impresion",
           "cajas.crear",
           "cajas.depositar",
+          "cajas.entregar",
+          "cajas.rechazar_entrega",
+          "cajas.recibir_entrega",
           "cajas.ver",
+          "cajas.ver_custodia",
           "campos_personalizados.activar",
           "campos_personalizados.crear",
           "campos_personalizados.desactivar",
@@ -130533,10 +132005,15 @@
           "Editar bodegas",
           "Abrir turno de caja",
           "Cerrar turno de caja",
+          "Configurar el fondo de cambio, el plazo y el tope de custodia y «lo deposito yo» de la empresa",
           "Elegir el formato de impresión de recibos y facturas de una caja",
           "Crear cajas de una empresa (multiempresa: cada NIT tiene sus cajas)",
-          "Depositar en el banco el efectivo de un turno de caja (queda en fondos en tránsito)",
+          "Depositar en el banco el efectivo de tu custodia o de un turno de caja (queda en fondos en tránsito)",
+          "Entregar otra vez el efectivo de un turno cerrado cuando quien debía recibirlo dijo «No lo recibí»",
+          "Rechazar una entrega de efectivo dirigida a ti («No lo recibí»)",
+          "Recibir efectivo de una caja de cobros («Recibí»): pasa a tu custodia",
           "Ver cajas y turnos",
+          "Ver la custodia y las entregas de todas las personas (sin él, solo las tuyas)",
           "Volver a activar un campo personalizado",
           "Agregar campos al catálogo de campos personalizados del cliente",
           "Desactivar un campo personalizado (no se borra; los valores se conservan)",
@@ -147887,10 +149364,15 @@
               "bodegas.editar",
               "cajas.abrir",
               "cajas.cerrar",
+              "cajas.configurar",
               "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
+              "cajas.entregar",
+              "cajas.rechazar_entrega",
+              "cajas.recibir_entrega",
               "cajas.ver",
+              "cajas.ver_custodia",
               "campos_personalizados.activar",
               "campos_personalizados.crear",
               "campos_personalizados.desactivar",
@@ -148223,6 +149705,7 @@
               "cajas.abrir",
               "cajas.cerrar",
               "cajas.depositar",
+              "cajas.entregar",
               "cajas.ver",
               "clientes.asignar_responsable_pago",
               "clientes.estado_cuenta",
@@ -148443,10 +149926,15 @@
               "bodegas.crear",
               "bodegas.desactivar",
               "bodegas.editar",
+              "cajas.configurar",
               "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
+              "cajas.entregar",
+              "cajas.rechazar_entrega",
+              "cajas.recibir_entrega",
               "cajas.ver",
+              "cajas.ver_custodia",
               "cartera.castigar",
               "cartera.provisionar",
               "cierres.revisar_check",

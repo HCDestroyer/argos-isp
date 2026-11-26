@@ -108,25 +108,46 @@ const estadoTransito = {
 
 export const Deposito = definirEsquema(
     'Deposito',
-    objeto({
-        id,
-        empresa_id: id,
-        caja_id: id,
-        caja_nombre: texto,
-        turno_id: { ...id, description: 'Turno del que salió el efectivo (baja su esperado)' },
-        cuenta_id: { ...id, description: 'Subcuenta 1.1.02.NN que recibe el depósito' },
-        cuenta_codigo: texto,
-        cuenta_nombre: texto,
-        cuenta_bancaria_id: nulable(id),
-        banco_id: nulable(id),
-        monto: Dinero,
-        boleta: texto,
-        fecha,
-        estado: estadoTransito,
-        acreditado_en: { ...nulable(fecha), description: 'Fecha de la línea del extracto que lo concilió' },
-        registrado_por: nulable(id),
-        created_at: instante,
-    }),
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            caja_id: {
+                ...nulable(id),
+                description: 'Caja de la que salió (null desde la custodia sin caja)',
+            },
+            caja_nombre: nulable(texto),
+            turno_id: {
+                ...nulable(id),
+                description:
+                    'Turno del que salió el efectivo (baja su esperado); null si salió de la custodia',
+            },
+            origen: {
+                ...enumerado(['turno', 'custodia']),
+                description:
+                    'B1: turno abierto (1.1.11 / Caja) o custodia de quien deposita (1.1.11 / 1.1.15)',
+            },
+            custodio_id: { ...nulable(id), description: 'Persona de cuya custodia salió (origen custodia)' },
+            custodio_nombre: nulable(texto),
+            cuenta_id: { ...id, description: 'Subcuenta 1.1.02.NN que recibe el depósito' },
+            cuenta_codigo: texto,
+            cuenta_nombre: texto,
+            cuenta_bancaria_id: nulable(id),
+            banco_id: nulable(id),
+            monto: Dinero,
+            boleta: texto,
+            fecha,
+            estado: estadoTransito,
+            acreditado_en: {
+                ...nulable(fecha),
+                description: 'Fecha de la línea del extracto que lo concilió',
+            },
+            registrado_por: nulable(id),
+            created_at: instante,
+        },
+        // B1: siempre vienen; opcionales para no romper clientes tipados
+        ['origen', 'custodio_id', 'custodio_nombre'],
+    ),
 )
 
 export const Traslado = definirEsquema(
