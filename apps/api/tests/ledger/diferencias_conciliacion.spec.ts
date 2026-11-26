@@ -32,7 +32,8 @@ import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
-import { afirmarLibroConDiferencias, prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 
 /**
  * Plan de contabilidad B3 (§5.8): diferencias al conciliar con motivo, tope por línea y por día,
@@ -171,7 +172,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
         const [reporte] = await reporteConciliacion([e.B], { cuenta_id: banco.cuenta_id })
         assert.isTrue(reporte!.cuadra)
         assert.lengthOf(reporte!.libro_en_transito, 0)
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('tope por línea y por día; la aprobación la da otro usuario; rechazar deja la línea libre', async ({
@@ -312,7 +313,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
             new RevertirAsiento().execute({ asiento_id: aprobada.asiento_id!, motivo: 'probar' }, e.ctx),
         )
         assert.equal(directo.codigo, 'reverso_por_documento')
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('«otra razón» siempre pide aprobación con la cuenta que se elija; faltante a cargo de quien llevó el depósito', async ({
@@ -413,7 +414,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
         assert.equal(dif.partes[0]!.responsable_id, e.usuarioId)
         assert.equal(dif.partes[0]!.cuenta, CUENTAS.FALTANTES_CAJA)
         assert.equal(await saldoCuenta(e.B, CUENTAS.FALTANTES_CAJA), '10.00')
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('E11: deshacer la conciliación de un depósito revierte su llegada y su diferencia; el depósito vuelve a tránsito', async ({
@@ -449,7 +450,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
         let [reporte] = await reporteConciliacion([e.B], { cuenta_id: banco.cuenta_id })
         assert.lengthOf(reporte!.libro_en_transito, 0)
         assert.isTrue(reporte!.cuadra)
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
         // y se concilia otra vez como al principio
         await new ConciliarLinea().execute(entrada, e.ctx)
         ;[reporte] = await reporteConciliacion([e.B], { cuenta_id: banco.cuenta_id })
@@ -464,7 +465,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
             [e.B],
         )
         assert.lengthOf(descuadres.rows, 0)
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('sugerencias por nivel, aceptar las seguras en lote (sin duplicar) y «por identificar»', async ({
@@ -532,7 +533,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
         const check = checks.find((c) => c.clave === 'extractos_conciliados')!
         assert.equal(check.obtenido, '2')
         assert.deepEqual(check.detalle, { por_identificar: 1 })
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('multiempresa: motivo de fábrica cambiado en una empresa no cambia en la otra; nada cruza de empresa', async ({
@@ -666,7 +667,7 @@ test.group('B3 · diferencias al conciliar', (group) => {
         assert.lengthOf(await diferencias({}, [e.C]), 0)
         const vistaB = await verDiferencia(difB[0]!.id)
         assert.equal(vistaB.empresa_id, e.B)
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
     test('HTTP: ajustes, motivos, conciliar con diferencia, pedir y aprobar, sugerencias; permisos', async ({
         client,
@@ -759,6 +760,6 @@ test.group('B3 · diferencias al conciliar', (group) => {
         const todas = respTodas.body()
         assert.lengthOf(todas.data, 1)
         await estado(admin('post', `/bancos/extractos/${ext.id}/aceptar-seguras`, {}), 200)
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

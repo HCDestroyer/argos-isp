@@ -27,7 +27,7 @@ import {
     marcasAuditoria,
     afirmarLibro,
 } from '#tests/contabilidad/verificar_libro'
-import { afirmarLibroConDiferencias, prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 
 /**
  * Fase 4 (§10.3): extractos y conciliación bancaria de solo inserción. Conciliar liga líneas con lo
@@ -289,7 +289,7 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         // nada de lo que ya estaba en el libro cambió: conciliar y deshacer solo agregan filas
         const despues = await fotoLibro([e.B], marcas.acciones, marcas.outbox)
         assert.deepEqual(compararFotoLibro(antes, despues), [])
-        await afirmarLibroConDiferencias(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
         const eventos = await db
             .from('audit.outbox')
             .whereIn('evento', ['banco.extracto_importado', 'banco.conciliado'])
