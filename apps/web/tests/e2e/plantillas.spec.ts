@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar, menu } from './ayudas'
+import { abrirAjustes, entrar } from './ayudas'
 
 /**
  * Plantillas de facturación (tarea 8): crear una con reglas de promesas por canal, verla en la lista
@@ -13,8 +13,9 @@ function campo(contenedor: Locator, prueba: string): Locator {
 
 test('crear y editar una plantilla con reglas de promesas por canal', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    // El menú lleva a la sección; se entra por URL para no depender de la primera compilación de `nuxt dev`.
-    await expect((await menu(page)).getByRole('link', { name: 'Plantillas de facturación', exact: true })).toBeVisible()
+    // Ajustes lleva a la sección; se entra por URL para no depender de la primera compilación de `nuxt dev`.
+    await abrirAjustes(page)
+    await expect(page.locator('[data-prueba="indice-ajustes"]').getByRole('link', { name: 'Plantillas de facturación', exact: true })).toBeVisible()
     await page.goto('/plantillas')
 
     const tabla = page.locator('[data-prueba="tabla-plantillas"]')

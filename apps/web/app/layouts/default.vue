@@ -147,15 +147,12 @@ function itemGrupoExpandido(grupo: (typeof gruposVisibles.value)[number], etique
 
 /**
  * Menú expandido (IslasA5): Inicio y un acordeón por área; Ajustes va abajo, aparte (pie del menú,
- * `itemsExpandidoAjustes`), igual que en el compacto.
+ * `itemsAjustes`), igual que en el compacto.
  */
 const itemsExpandido = computed<NavigationMenuItem[]>(() => [
     itemInicio.value,
     ...gruposVisibles.value.filter(grupo => grupo.id !== 'configuracion').map(grupo => itemGrupoExpandido(grupo)),
 ])
-const itemsExpandidoAjustes = computed<NavigationMenuItem[]>(() => gruposVisibles.value
-    .filter(grupo => grupo.id === 'configuracion')
-    .map(grupo => itemGrupoExpandido(grupo, grupo.corta ?? grupo.etiqueta)))
 
 /** Estilo común de los dos menús expandidos (áreas y Ajustes). */
 const UI_EXPANDIDO = {
@@ -191,7 +188,26 @@ const itemsRail = computed<NavigationMenuItem[]>(() => [
     { ...itemInicio.value, active: route.path === inicio.value },
     ...gruposVisibles.value.filter(grupo => grupo.id !== 'configuracion').map(itemArea),
 ])
-const itemsRailAjustes = computed<NavigationMenuItem[]>(() => gruposVisibles.value.filter(grupo => grupo.id === 'configuracion').map(itemArea))
+
+/**
+ * «Ajustes» (tablero MenuLateral; respuestas del PM del 26 nov 2026): una sola entrada fija abajo,
+ * en el menú compacto y en el expandido, que abre la página de Ajustes. No despliega nada: sus
+ * grupos viven en esa página (y en Ctrl K). Aparece si el usuario puede abrir algún ajuste.
+ */
+const { hayAjustes } = usePaginasConfiguracion()
+const enAjustes = computed(() => route.path === RUTA_AJUSTES || ubicacionConfiguracion(route.path) !== null)
+const itemsAjustes = computed<NavigationMenuItem[]>(() => (hayAjustes.value
+    ? [{
+            'label': 'Ajustes',
+            'corta': 'Ajustes',
+            'icon': 'i-lucide-settings',
+            'to': RUTA_AJUSTES,
+            'aria-label': 'Ajustes',
+            'active': enAjustes.value,
+            'trailingIcon': 'i-lucide-chevron-right',
+            'onSelect': cerrarMovil,
+        }]
+    : []))
 
 /** Para el slot del rail: el grupo con sus permisos ya filtrados. */
 function grupoDeItem(item: NavigationMenuItem): (typeof gruposVisibles.value)[number] | null {
@@ -246,7 +262,7 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             :ui="{
                 header: 'h-auto flex-row items-center gap-3 px-4 pt-[max(0.875rem,env(safe-area-inset-top))] pb-1.5 lg:flex-col lg:items-stretch lg:px-3 lg:pt-3.5',
                 body: 'gap-1 px-3',
-                footer: 'max-h-[55%] min-h-0 flex-col items-stretch gap-2 overflow-y-auto px-3 pb-3.5',
+                footer: 'flex-col items-stretch gap-2 px-3 pb-3.5',
                 content: 'menu-movil lg:hidden',
             }"
         >
@@ -382,14 +398,15 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
 
             <template #footer="{ collapsed }">
                 <UNavigationMenu
-                    v-if="collapsed && itemsRailAjustes.length"
+                    v-if="collapsed && itemsAjustes.length"
                     collapsed
-                    :items="itemsRailAjustes"
+                    :items="itemsAjustes"
                     orientation="vertical"
-                    :popover="{ content: { side: 'right', align: 'end', sideOffset: 10 } }"
+                    tooltip
                     aria-label="Ajustes"
                     class="w-full"
-                    :ui="{ link: 'px-0 py-0 justify-center before:hidden', content: 'min-w-0 rounded-xl bg-(--ax-tarjeta) ring ring-(--ax-borde) shadow-(--ax-sombra-flotante)' }"
+                    data-prueba="menu-ajustes"
+                    :ui="{ link: 'px-0 py-0 justify-center before:hidden', linkTrailingIcon: 'hidden' }"
                 >
                     <template #item="{ item, active }">
                         <span
@@ -403,25 +420,15 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                             <span class="text-[0.625rem] leading-tight font-semibold">{{ item.corta ?? item.label }}</span>
                         </span>
                     </template>
-                    <template #item-content="{ item, close }">
-                        <MenuArea
-                            v-if="grupoDeItem(item)"
-                            :grupo="grupoDeItem(item)!"
-                            :contadores="contadores"
-                            :estado-seccion="estadoSeccion"
-                            @elegir="close?.(); cerrarMovil()"
-                        />
-                    </template>
                 </UNavigationMenu>
                 <UNavigationMenu
-                    v-else-if="!collapsed && itemsExpandidoAjustes.length"
-                    :key="`ajustes-${grupoActual}-${subgrupoActual}`"
-                    :items="itemsExpandidoAjustes"
+                    v-else-if="!collapsed && itemsAjustes.length"
+                    :items="itemsAjustes"
                     orientation="vertical"
                     aria-label="Ajustes"
                     data-prueba="menu-ajustes"
                     class="w-full"
-                    :ui="UI_EXPANDIDO"
+                    :ui="{ ...UI_EXPANDIDO, linkTrailingIcon: 'size-4 text-muted lg:hidden' }"
                 />
             </template>
         </UDashboardSidebar>

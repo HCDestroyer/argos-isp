@@ -171,3 +171,34 @@ test('teléfono: la acción fija de la ficha queda encima de la isla, sin tapars
     expect(acciones!.y + acciones!.height).toBeLessThanOrEqual(isla!.y)
     await expect(barra).toContainText('Cobrar Q 300.00')
 })
+
+test('«Ajustes» es una sola entrada abajo: no despliega nada y abre su página', async ({ page, isMobile }) => {
+    await entrar(page, 'admin@argos.test')
+    if (!isMobile) {
+        await page.setViewportSize({ width: 1280, height: 720 })
+    }
+    const lateral = page.locator('#dashboard-sidebar-principal')
+    if (isMobile) {
+        await botonMasIsla(page).click()
+    }
+    else if (await lateral.locator('[data-prueba="menu-rail"]').isVisible()) {
+        // Compacto: Ajustes es un icono abajo, igual de una sola entrada; se revisa en el expandido.
+        await expect(lateral.locator('[data-prueba="menu-ajustes"]').getByRole('link')).toHaveCount(1)
+        await lateral.locator('[data-prueba="alternar-menu"]').click()
+    }
+    const contenedor = isMobile ? page.getByRole('dialog') : lateral
+    const ajustes = contenedor.locator('[data-prueba="menu-ajustes"]')
+    await expect(ajustes.getByRole('link')).toHaveCount(1)
+    await expect(ajustes.locator('button[aria-expanded]')).toHaveCount(0)
+    if (!isMobile) {
+        // Con un grupo abierto, el menú de todos los días cabe sin desplazamiento propio (el pie ya no crece).
+        await contenedor.locator('[data-prueba="menu-principal"]').getByRole('button', { name: 'Día a día' }).click()
+        const cuerpo = contenedor.locator('[data-prueba="menu-principal"]').locator('xpath=..')
+        const sobra = await cuerpo.evaluate(el => el.scrollHeight - el.clientHeight)
+        expect(sobra).toBeLessThanOrEqual(1)
+    }
+    await ajustes.getByRole('link', { name: 'Ajustes' }).click()
+    await expect(page).toHaveURL(/\/configuracion$/)
+    await expect(page.locator('[data-prueba="indice-ajustes"]')).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+})

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { elegirEmpresa, entrar, menu, verDatosCliente } from './ayudas'
+import { abrirAjustes, elegirEmpresa, entrar, irAjuste, verDatosCliente } from './ayudas'
 
 /**
  * Contraseña del portal (pedido del PM; contrato A5), en modo fixtures, a 1280 y 390 px:
@@ -28,9 +28,7 @@ async function sinScrollHorizontal(page: Page): Promise<void> {
 
 test('el admin configura la contraseña del portal por defecto de una empresa', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    const lateral = await menu(page)
-    await lateral.getByRole('link', { name: 'Contraseña del portal' }).click()
-    await expect(page).toHaveURL(/\/configuracion\/portal-contrasena/, { timeout: 20_000 })
+    await irAjuste(page, 'Contraseña del portal', /\/configuracion\/portal-contrasena/)
 
     // Con «Todas las empresas» la API pide una empresa activa.
     await expect(page.getByText('Elige una empresa', { exact: true })).toBeVisible()
@@ -90,8 +88,8 @@ test('el admin restaura la contraseña del portal de un cliente desde su ficha',
 
 test('el cajero ve cómo entra el cliente, sin restaurar ni configurar', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
-    const lateral = await menu(page)
-    await expect(lateral.getByRole('link', { name: 'Contraseña del portal' })).toHaveCount(0)
+    await abrirAjustes(page)
+    await expect(page.locator('[data-prueba="indice-ajustes"]').getByRole('link', { name: 'Contraseña del portal' })).toHaveCount(0)
     await page.goto('/configuracion/portal-contrasena')
     await expect(page).toHaveURL(/\/sin-permiso/)
 

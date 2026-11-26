@@ -89,7 +89,8 @@ test('las 29 pantallas de Ajustes mantienen la lista en escritorio y «‹ Ajust
         if (esTelefono(page) && (await page.locator('[data-prueba="volver-ajustes"]').isVisible())) {
             await page.locator('[data-prueba="volver-ajustes"]').click()
         }
-        await irAjuste(page, pagina.etiqueta, new RegExp(`${pagina.ruta.replace(/[/-]/g, '\\$&')}$`))
+        // Algunas pantallas eligen la primera fila al cargar (Roles: `?rol=1`): la consulta no cuenta.
+        await irAjuste(page, pagina.etiqueta, new RegExp(`${pagina.ruta.replace(/[/-]/g, '\\$&')}(\\?.*)?$`))
         await expect(page.getByRole('heading', { name: pagina.etiqueta, level: 1 }), pagina.ruta).toBeVisible({ timeout: 20_000 })
         if (esTelefono(page)) {
             await expect(page.locator('[data-prueba="volver-ajustes"]'), pagina.ruta).toHaveText('Ajustes')
@@ -98,5 +99,7 @@ test('las 29 pantallas de Ajustes mantienen la lista en escritorio y «‹ Ajust
         else {
             await expect(page.locator('[data-prueba="navegacion-ajustes"] [aria-current="page"]'), pagina.ruta).toHaveText(pagina.etiqueta)
         }
+        // Que la pantalla termine de cargar (y de elegir su fila) antes de pasar a la siguiente.
+        await page.waitForLoadState('networkidle')
     }
 })

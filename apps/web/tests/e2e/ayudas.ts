@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { HOY_FIXTURES } from '../../fixtures/facturacion/datos'
+import { SECCIONES_CONFIGURACION } from '../../app/utils/configuracionSecciones'
 
 /**
  * Piezas comunes de las pruebas de flujo. En modo fixtures los datos viven en memoria: después
@@ -41,7 +42,8 @@ export async function menu(page: Page) {
     const abrir = botonMasIsla(page)
     // Esperar a que el layout pinte el menú (escritorio) o la isla que lo abre (teléfono).
     await expect(lateral.getByRole('link', { name: 'Inicio' }).or(abrir).first()).toBeVisible()
-    if (!(await lateral.isVisible())) {
+    const yaAbierto = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Inicio' }) })
+    if (!(await lateral.isVisible()) && !(await yaAbierto.isVisible())) {
         await abrir.click()
     }
     else if (await lateral.locator('[data-prueba="menu-rail"]').isVisible()) {
@@ -60,7 +62,7 @@ export async function menu(page: Page) {
  * pruebas vean cada enlace permitido. Un grupo sin secciones permitidas no existe.
  */
 export async function expandirGrupos(contenedor: Locator): Promise<void> {
-    const cerrados = contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]')
+    const cerrados = contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]')
     while (await cerrados.count()) {
         await cerrados.first().click()
     }
@@ -89,8 +91,14 @@ export function empresaActiva(page: Page): Locator {
     return page.locator('[data-prueba="empresa-activa"]').first()
 }
 
-/** Va a una sección por el menú lateral. */
+/** Nombres de los ajustes: no están en el menú, se llega por la página de Ajustes. */
+const AJUSTES = new Set(SECCIONES_CONFIGURACION.flatMap(grupo => grupo.paginas.map(pagina => pagina.etiqueta)))
+
+/** Va a una sección por el menú lateral (a un ajuste, por la página de Ajustes: `irAjuste`). */
 export async function ir(page: Page, seccion: string, url: RegExp): Promise<void> {
+    if (AJUSTES.has(seccion)) {
+        return irAjuste(page, seccion, url)
+    }
     const contenedor = await menu(page)
     const enlace = contenedor.getByRole('link', { name: seccion, exact: true })
     // Los grupos se abren con animación: con el menú largo, un enlace del final (Integraciones)
@@ -111,7 +119,7 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
             url: page.url(),
             dialogos: await page.getByRole('dialog').count(),
             lateralVisible: await page.locator('#dashboard-sidebar-principal').isVisible(),
-            gruposPlegados: await contenedor.locator(':is([data-prueba="menu-principal"], [data-prueba="menu-ajustes"]) button[aria-expanded="false"]').count().catch(() => -1),
+            gruposPlegados: await contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]').count().catch(() => -1),
             enlaceAntes: antes,
             enlaceDespues: await enlace.boundingBox({ timeout: 1000 }).catch(() => null),
         }
