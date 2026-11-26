@@ -62,8 +62,6 @@ function porcentajeDe(bytes: number, total: number): number {
 <template>
     <ConfiguracionMarco
         id="almacenamiento"
-        titulo="Sistema"
-        descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
         <template #accion-principal>
             <UButton

@@ -188,10 +188,9 @@ function textoLock(tarea: TareaProgramada): string {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="tareas"
-        titulo="Tareas programadas"
-        icono="i-lucide-calendar-clock"
+        sin-tarjeta
     >
         <template #acciones>
             <UButton
@@ -579,5 +578,5 @@ function textoLock(tarea: TareaProgramada): string {
             :ejecutar="ejecutarSeleccionada"
             @hecho="encolada"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

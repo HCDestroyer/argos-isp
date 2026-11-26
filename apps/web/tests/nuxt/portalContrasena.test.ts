@@ -14,7 +14,7 @@ import { esperar } from '../ayudas/esperar'
 
 /**
  * Contraseña del portal (pedido del PM, contrato A5 en `.claude/integration/a5.md`):
- * - Configuración → Contraseña del portal: estado sin mostrar nunca la contraseña, formulario con
+ * - Ajustes → Contraseña del portal: estado sin mostrar nunca la contraseña, formulario con
  *   esquema espejo (8 a 128 y confirmación), 409 que relee, 422 `empresa_requerida`, solo lectura
  *   sin `portal.configurar_contrasena_defecto` y error con «Reintentar».
  * - Ficha del cliente: propia o por defecto, «Restaurar contraseña por defecto» con confirmación,

@@ -2,6 +2,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type EnvioReporte = Schema<'EnvioReporte'>
 export type CorridaEnvioReporte = Schema<'CorridaEnvioReporte'>
+export type DatosEnvioReporte = paths['/api/v1/reportes/envios']['post']['requestBody']['content']['application/json']
 export type CambiosEnvioReporte = paths['/api/v1/reportes/envios/{id}']['put']['requestBody']['content']['application/json']
 
 /**
@@ -47,5 +48,17 @@ export function useEnviosReportes() {
         }))
     }
 
-    return { listar, corridas, cambiarActivo }
+    /**
+     * `POST /reportes/envios` (`reportes.programar_envio`): de la empresa activa o consolidado.
+     * Destinatarios: usuarios activos o correos de la lista aprobada; a un correo externo solo va un
+     * reporte compartible (422 `no_compartible`). Quien programa debe poder ver el reporte (403).
+     */
+    function programar(datos: DatosEnvioReporte, claveIdempotencia: string): Promise<Resultado<EnvioReporte>> {
+        return resolver(api.POST('/api/v1/reportes/envios', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { listar, corridas, cambiarActivo, programar }
 }

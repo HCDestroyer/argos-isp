@@ -119,6 +119,36 @@ describe('FuenteApi por lotes', () => {
         )
     })
 
+    it('ráfaga escalonada con un POST en vuelo: se juntan en un solo lote, no uno por turno', async () => {
+        // Reproduce lo visto en CI bajo carga: las lecturas de Redis regresan en turnos distintos del
+        // bucle de eventos, mientras la API todavía responde al primer lote.
+        const usuarios = registrar(150)
+        api.recibidas = 0
+        let soltar: () => void = () => {}
+        api.retener = new Promise<void>((r) => (soltar = r))
+        const pausa = () => new Promise((r) => setTimeout(r, 1))
+        try {
+            const todos: Promise<RegistroAaa | null>[] = []
+            for (const u of usuarios.slice(0, 10)) todos.push(fuente.obtener(u))
+            // Sin depender del reloj: se espera a que el primer POST esté en vuelo (retenido).
+            while (api.recibidas === 0) await pausa()
+            for (let i = 10; i < 150; i += 10) {
+                for (const u of usuarios.slice(i, i + 10)) todos.push(fuente.obtener(u))
+                await pausa()
+            }
+            soltar()
+            const resultados = await Promise.all(todos)
+            assert.ok(resultados.every((r, i) => id(r) === i + 1))
+        } finally {
+            soltar()
+            api.retener = null
+        }
+        const tamanos = api.llamadas.map((l) => `${l.metodo}x${l.usuarios?.length ?? 1}`)
+        // El primer despacho sale solo (10, sin espera añadida); los otros 140 esperan a que termine
+        // y salen juntos: 100 + 40. Antes eran ~un POST por cada 10.
+        assert.deepEqual(tamanos, ['POSTx10', 'POSTx100', 'POSTx40'])
+    })
+
     it('lotes: false (AAA_API_LOTES=0) consulta de uno en uno', async () => {
         fuente.cerrar()
         fuente = new FuenteApi({ url: `${api.url}/api/v1/`, token: 't', timeoutMs: 1000, lotes: false })

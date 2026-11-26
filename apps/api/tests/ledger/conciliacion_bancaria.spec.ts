@@ -263,20 +263,21 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         )
         assert.equal(dos.codigo, 'linea_registrada')
 
-        // deshacer no toca el libro y deja volver a conciliar
+        // deshacer revierte la llegada que la conciliación creó (E11, plan de contabilidad): el depósito
+        // vuelve a fondos en tránsito y se puede conciliar otra vez
         const anulada = await new AnularConciliacion().execute(
             { conciliacion_id: llegada.id, motivo: 'línea equivocada' },
             e.ctx,
         )
         assert.isTrue(anulada.anulada)
+        assert.equal(await saldoCuenta(e.B, CUENTAS_GT.FONDOS_EN_TRANSITO), '100.00')
+        const enCamino = await listarDepositos({}, [e.B])
+        assert.equal(enCamino.data.find((d) => d.id === deposito.id)!.estado, 'en_transito')
         const anularDos = await errorDe(
             new AnularConciliacion().execute({ conciliacion_id: llegada.id, motivo: 'otra vez' }, e.ctx),
         )
         assert.equal(anularDos.codigo, 'conciliacion_anulada')
-        await new ConciliarLinea().execute(
-            { linea_id: lCaja!.id, movimientos: [llegada.movimientos[0]!.movimiento_id] },
-            e.ctx,
-        )
+        await new ConciliarLinea().execute({ linea_id: lCaja!.id, depositos: [deposito.id] }, e.ctx)
 
         ;[reporte] = await reporteConciliacion([e.B], { cuenta_id: banco.cuenta_id })
         assert.equal(reporte!.saldo_libro, '333.85')
@@ -285,7 +286,7 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         assert.lengthOf(reporte!.extracto_en_transito, 0)
         assert.isTrue(reporte!.cuadra)
 
-        // nada de lo que ya estaba en el libro cambió: conciliar solo agrega filas
+        // nada de lo que ya estaba en el libro cambió: conciliar y deshacer solo agregan filas
         const despues = await fotoLibro([e.B], marcas.acciones, marcas.outbox)
         assert.deepEqual(compararFotoLibro(antes, despues), [])
         await afirmarLibro(assert, [e.B, e.C])

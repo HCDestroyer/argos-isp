@@ -68,8 +68,6 @@ onMounted(cargar)
 <template>
     <ConfiguracionMarco
         id="proveedores-cobro"
-        titulo="Facturación y cobro"
-        descripcion="Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos"
         empresas
     >
         <div class="flex flex-col gap-4">

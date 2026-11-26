@@ -51,4 +51,4 @@ El calendario se genera solo cada hora para todo lo pendiente hasta el periodo e
 ## Relacionado
 
 - [Declaraciones](./declaraciones.md)
-- [Configuración fiscal](./configuracion-fiscal.md)
+- [Régimen e impuestos](./configuracion-fiscal.md)

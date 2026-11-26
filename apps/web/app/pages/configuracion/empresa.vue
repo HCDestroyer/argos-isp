@@ -72,8 +72,6 @@ onMounted(cargar)
 <template>
     <ConfiguracionMarco
         id="empresa"
-        titulo="Empresa y fiscal"
-        descripcion="Los datos legales con los que se factura y se declara"
     >
         <div class="flex w-full max-w-4xl flex-col gap-4">
             <ProblemaAlerta

@@ -147,11 +147,10 @@ function nombreEstadoPlantilla(plantilla: PlantillaFacturacion): { etiqueta: str
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="plantillas"
-        titulo="Plantillas de facturación"
-        icono="i-lucide-file-cog"
         descripcion="Cuándo se emite, cuándo vence, cuándo se corta y qué promesas se aceptan. Cada servicio usa una."
+        sin-tarjeta
     >
         <template #acciones>
             <UButton
@@ -463,5 +462,5 @@ function nombreEstadoPlantilla(plantilla: PlantillaFacturacion): { etiqueta: str
             :solo-lectura="soloLectura"
             @guardado="alGuardar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

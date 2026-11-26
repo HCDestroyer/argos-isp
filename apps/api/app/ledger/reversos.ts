@@ -39,6 +39,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'cobros.liquidar',
         documento: 'la liquidación con un asiento de ajuste que la explique (las liquidaciones no se anulan)',
     },
+    // B1 (§5.7): la recepción de una entrega es de solo inserción; su diferencia es de quien entregó
+    entrega_caja: {
+        accion: 'cajas.recibir_entrega',
+        documento: 'la entrega con un asiento de ajuste (una entrega recibida no se anula)',
+    },
     deposito: { accion: 'cajas.depositar', documento: 'el depósito con un asiento de ajuste (no se anula)' },
     traslado: { accion: 'bancos.trasladar', documento: 'el traslado con otro traslado en sentido contrario' },
     banco: {
@@ -72,6 +77,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
     diferencia_cobro: {
         accion: 'pagos.anular',
         documento: 'el pago aplicado a la factura (POST /pagos/:id/anular): revierte sus diferencias',
+    },
+    // B3 (§5.8): la diferencia aceptada al conciliar se revierte al deshacer su conciliación
+    diferencia_conciliacion: {
+        accion: 'bancos.conciliar',
+        documento: 'la conciliación (POST /bancos/conciliaciones/:id/anular): revierte su diferencia',
     },
     // fase 6 PR C (§9.1): los asientos del cierre anual se revierten al reabrir el ejercicio
     cierre_anual: {

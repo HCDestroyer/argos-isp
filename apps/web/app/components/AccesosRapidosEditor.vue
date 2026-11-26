@@ -5,7 +5,7 @@
  */
 const abierto = defineModel<boolean>('open', { default: false })
 const { ids, guardar } = useAccesosRapidos()
-const { puede } = usePermisos()
+const { puedeSeccion } = usePermisos()
 const toast = useToast()
 
 const borrador = ref<string[]>([])
@@ -29,7 +29,7 @@ function normalizar(texto: string): string {
 const disponibles = computed(() => {
     const termino = normalizar(busqueda.value.trim())
     return SECCIONES_PANEL
-        .filter(seccion => puede(seccion.permiso) && !borrador.value.includes(seccion.id))
+        .filter(seccion => puedeSeccion(seccion) && !borrador.value.includes(seccion.id))
         .filter(seccion => !termino || normalizar(`${seccion.etiqueta} ${seccion.descripcion}`).includes(termino))
 })
 

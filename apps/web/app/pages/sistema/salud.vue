@@ -7,8 +7,6 @@ useHead({ title: 'Salud del sistema · ArgosIsp' })
 <template>
     <ConfiguracionMarco
         id="salud-sistema"
-        titulo="Sistema"
-        descripcion="Cómo está el servidor: salud, registro de fallos y espacio en disco"
     >
         <SaludSistemaTarjeta class="bg-transparent! p-0! shadow-none! sm:p-0!" />
     </ConfiguracionMarco>

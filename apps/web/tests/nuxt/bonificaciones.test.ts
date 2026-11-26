@@ -122,7 +122,9 @@ describe('bonificaciones', () => {
         const servicio = await mountSuspended(PaginaServicio, { route: '/servicios/5?pestana=facturas' })
         await vi.waitFor(() => expect(servicio.find('[data-prueba="periodos-bonificados"] [data-bonificacion="1"]').exists()).toBe(true))
         expect(servicio.find('[data-prueba="periodos-bonificados"]').text()).toContain('agosto 2026')
-        expect(await opcionesMasServicio(servicio)).toContain('Cargo único')
+        // «Nueva factura» (antes «Cargo único») está a la vista en la franja, no escondida en «Más».
+        expect(servicio.find('[data-prueba="nueva-factura-servicio"]').text()).toBe('Nueva factura')
+        expect(await opcionesMasServicio(servicio)).not.toContain('Cargo único')
         servicio.unmount()
 
         const cuenta = await mountSuspended(ClienteEstadoCuenta, { props: { clienteId: 6 } })

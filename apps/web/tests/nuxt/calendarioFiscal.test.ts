@@ -176,7 +176,7 @@ describe('calendario fiscal', () => {
         expect(rota.find('[data-prueba="calendario-vencidas"]').exists()).toBe(false)
     })
 
-    it('Configuración → Fiscal → Feriados: vacía con «confirmar con contador», alta con aviso de recálculo y retiro', async () => {
+    it('Ajustes → Régimen e impuestos → Feriados: vacía con «confirmar con contador», alta con aviso de recálculo y retiro', async () => {
         useEmpresaActiva().elegir('todas')
         const vista = await mountSuspended(PaginaFiscal, { route: '/configuracion/fiscal?pestana=feriados' })
         await esperar(() => expect(vista.find('[data-prueba="feriados-confirmar-contador"]').exists()).toBe(true))

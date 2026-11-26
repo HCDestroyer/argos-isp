@@ -64,8 +64,6 @@ const plantillasVigentes = computed(() => plantillas.datos.filter(p => !p.retira
 <template>
     <ConfiguracionMarco
         id="plantillas-conceptos"
-        titulo="Facturación y cobro"
-        descripcion="Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos"
         empresas
     >
         <div class="grid gap-4 xl:grid-cols-3">

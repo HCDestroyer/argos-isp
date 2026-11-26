@@ -16,6 +16,11 @@ const props = withDefaults(defineProps<{
     servicios: () => [],
 })
 
+const emit = defineEmits<{
+    /** «Nueva factura» (antes «Cargo único»): la ficha del cliente abre el panel. */
+    nuevaFactura: []
+}>()
+
 type Factura = Schema<'Factura'>
 type Movimiento = Schema<'MovimientoEstadoCuenta'>
 
@@ -197,7 +202,7 @@ onMounted(cargar)
 
         <div
             v-if="puede('facturas.ver') || puede('pagos.ver')"
-            class="flex flex-wrap gap-2"
+            class="flex flex-wrap items-center gap-2"
         >
             <UButton
                 v-if="puede('facturas.ver')"
@@ -225,6 +230,15 @@ onMounted(cargar)
                 color="neutral"
                 variant="outline"
                 size="sm"
+            />
+            <UButton
+                v-if="puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
+                label="Nueva factura"
+                icon="i-lucide-plus"
+                size="sm"
+                class="ms-auto rounded-full"
+                data-prueba="nueva-factura-cuenta"
+                @click="emit('nuevaFactura')"
             />
         </div>
 

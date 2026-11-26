@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Problem } from '@argosisp/contracts'
+
 definePageMeta({ permiso: 'reportes.ver' })
 
 useHead({ title: 'Reportes · ArgosIsp' })
@@ -9,8 +11,9 @@ useHead({ title: 'Reportes · ArgosIsp' })
  * la empresa activa y se descarga con los mismos filtros.
  * - «Rentabilidad» (ganancia por zona, plan y router) no se muestra: decisión 5 del PM, más adelante.
  * - Los envíos programados (decisión 6) viven en Reportes › Envíos programados (`/reportes/envios`).
- * - Favoritos y descargas recientes esperan la API de A3 (`agente/a3-reportes-pm`); se dice qué
- *   falta, sin listas inventadas.
+ * - Favoritos (`GET /reportes/catalogo`, `PUT/DELETE /reportes/favoritos/:reporte`): la estrella de
+ *   cada reporte del catálogo de la API; se guardan en el usuario. Si el catálogo no se puede leer
+ *   se dice con «Reintentar», sin lista inventada. Las descargas recientes están en la bitácora.
  */
 const { puede } = usePermisos()
 
@@ -64,6 +67,46 @@ const entradas = computed<EntradaCatalogo[]>(() => [
     ...(puede('fiscal.ver') ? [{ clave: 'comparador', titulo: 'Comparador de regímenes', descripcion: 'Cuánto ISR pagarías en cada régimen con los datos del libro.', icono: 'i-lucide-git-compare', to: '/fiscal/comparador', categoria: 'fiscal' as const }] : []),
 ])
 
+/* Favoritos: el catálogo de la API dice cuáles reportes se pueden marcar y cuáles están marcados. */
+const toast = useToast()
+const catalogo = shallowRef<ReporteCatalogo[] | null>(null)
+const problemaCatalogo = ref<Problem | null>(null)
+const cambiando = ref<string | null>(null)
+
+async function cargarCatalogo() {
+    problemaCatalogo.value = null
+    const r = await useReportesCatalogo().listar()
+    catalogo.value = r.ok ? r.data : null
+    problemaCatalogo.value = r.ok ? null : r.problema
+}
+
+function esFavorito(clave: string): boolean {
+    return catalogo.value?.find(r => r.codigo === clave)?.favorito ?? false
+}
+
+/** Solo los reportes del catálogo de la API se pueden marcar (balance, lealtad y libros legales no). */
+function esMarcable(clave: string): boolean {
+    return catalogo.value?.some(r => r.codigo === clave) ?? false
+}
+
+async function alternarFavorito(entrada: EntradaCatalogo) {
+    if (cambiando.value) {
+        return
+    }
+    const activo = !esFavorito(entrada.clave)
+    cambiando.value = entrada.clave
+    const r = await useReportesCatalogo().favorito(entrada.clave, activo)
+    cambiando.value = null
+    if (!r.ok) {
+        toast.add({ title: 'No se pudo cambiar el favorito', description: r.problema.detail ?? r.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    catalogo.value = (catalogo.value ?? []).map(e => (e.codigo === entrada.clave ? { ...e, favorito: r.data.favorito } : e))
+    toast.add({ title: r.data.favorito ? `«${entrada.titulo}» es favorito` : `«${entrada.titulo}» ya no es favorito`, icon: 'i-lucide-star', color: 'success' })
+}
+
+onMounted(cargarCatalogo)
+
 const categoria = ref<Categoria | 'todos' | 'favoritos'>('todos')
 const busqueda = ref('')
 
@@ -73,13 +116,13 @@ function sinAcentos(texto: string): string {
 
 const visibles = computed(() => {
     const q = sinAcentos(busqueda.value.trim())
-    return entradas.value.filter(e => (categoria.value === 'todos' || e.categoria === categoria.value)
+    return entradas.value.filter(e => (categoria.value === 'todos' || (categoria.value === 'favoritos' ? esFavorito(e.clave) : e.categoria === categoria.value))
         && (!q || sinAcentos(`${e.titulo} ${e.descripcion}`).includes(q)))
 })
 
 function cuenta(id: Categoria | 'todos' | 'favoritos'): number | null {
     if (id === 'favoritos') {
-        return null
+        return catalogo.value ? entradas.value.filter(e => esFavorito(e.clave)).length : null
     }
     return id === 'todos' ? entradas.value.length : entradas.value.filter(e => e.categoria === id).length
 }
@@ -164,11 +207,21 @@ const vistaMovil = ref<'lista' | 'categorias'>('lista')
                         <span class="text-xs text-muted tabular-nums">{{ visibles.length }} de {{ entradas.length }}</span>
                     </template>
 
-                    <SeccionSinApi
-                        v-if="categoria === 'favoritos'"
-                        titulo="Tus favoritos llegan pronto"
-                        descripcion="Marcar un reporte como favorito se guarda en tu usuario; llega con la API de reportes."
-                        icono="i-lucide-star"
+                    <div
+                        v-if="problemaCatalogo && categoria === 'favoritos'"
+                        class="p-4"
+                    >
+                        <ProblemaAlerta
+                            :problema="problemaCatalogo"
+                            :reintentar="cargarCatalogo"
+                        />
+                    </div>
+                    <UEmpty
+                        v-else-if="categoria === 'favoritos' && !visibles.length"
+                        icon="i-lucide-star"
+                        title="Aún no tienes favoritos"
+                        description="Toca la estrella de un reporte para tenerlo aquí, a un toque."
+                        variant="naked"
                     />
                     <UEmpty
                         v-else-if="!visibles.length"
@@ -185,10 +238,11 @@ const vistaMovil = ref<'lista' | 'categorias'>('lista')
                         <li
                             v-for="entrada in visibles"
                             :key="entrada.clave"
+                            class="flex items-center hover:bg-(--ax-fila-hover)"
                         >
                             <ULink
                                 :to="entrada.to"
-                                class="flex items-center gap-3 px-4 py-3 hover:bg-(--ax-fila-hover)"
+                                class="flex min-w-0 flex-1 items-center gap-3 py-3 ps-4"
                                 :data-prueba="`reporte-${entrada.clave}`"
                             >
                                 <span class="pastilla-icono pastilla-tono tono-marca size-10 shrink-0 rounded-xl">
@@ -212,6 +266,23 @@ const vistaMovil = ref<'lista' | 'categorias'>('lista')
                                     class="size-4 shrink-0 text-muted"
                                 />
                             </ULink>
+                            <UButton
+                                v-if="esMarcable(entrada.clave)"
+                                icon="i-lucide-star"
+                                color="neutral"
+                                variant="ghost"
+                                class="mx-2 shrink-0"
+                                :class="esFavorito(entrada.clave) ? 'text-warning' : ''"
+                                :aria-label="`${esFavorito(entrada.clave) ? 'Quitar de favoritos' : 'Marcar como favorito'}: ${entrada.titulo}`"
+                                :aria-pressed="esFavorito(entrada.clave)"
+                                :loading="cambiando === entrada.clave"
+                                :data-favorito="entrada.clave"
+                                @click="alternarFavorito(entrada)"
+                            />
+                            <span
+                                v-else
+                                class="w-14 shrink-0"
+                            />
                         </li>
                     </ul>
                 </ContaIsla>

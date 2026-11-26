@@ -87,7 +87,7 @@ describe('cobro · cinco métodos', () => {
         // Transferencia por ACH: banco de origen del catálogo; del mismo banco, el de la cuenta.
         estado.metodo = 'ach'
         await esperar(() => expect(vista.text()).toContain('Banco de origen'))
-        expect(vista.text()).toContain('De la lista de bancos de Configuración')
+        expect(vista.text()).toContain('De la lista de bancos de Ajustes')
         expect(vista.text()).toContain('Cuenta que recibió')
         expect(vista.text()).toContain('Número de referencia')
         estado.metodo = 'transferencia'

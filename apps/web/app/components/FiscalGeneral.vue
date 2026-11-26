@@ -2,7 +2,7 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Configuración → Fiscal · General de la empresa activa: país y paquete de localización, régimen
+ * Ajustes → Régimen e impuestos · General de la empresa activa: país y paquete de localización, régimen
  * de ISR (con su aviso de ley e historial) y banderas de la empresa (sí/no con vigencia). Cada
  * bloque se lee por separado: si uno falla, muestra su error con «Reintentar» y nada inventado.
  */
