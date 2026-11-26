@@ -2,7 +2,7 @@
 
 Lote L0 del plan v3 (`plan-servicios-suscripciones-recordatorios.md`, §2.1, §2.2 y §3.1). Respuestas del PM del 25 y 26 nov 2026 (plan §6). Es la fuente de verdad para los lotes T1 a T6. Cambios a este contrato: en la misma PR que el código que lo cumple (regla 12 de `CLAUDE.md`).
 
-Dueños: A1 (modelo y alta), A2 (red sin router), A3 (facturación y estado), A6 (corte por SmartOLT y aviso a Iris), A4 y A5 (pantallas). El contrato con Iris (bloques A y B) está en `iris.md` 0.15.0, propuesta.
+Dueños: A1 (modelo y alta), A2 (red sin router), A3 (facturación y estado), A6 (corte por SmartOLT y aviso a Iris), A4 y A5 (pantallas). El contrato con Iris (bloques A y B) está en `iris.md` 0.15.0, propuesta aceptada por Iris con ajustes y pendiente de la PR espejo (la versión vigente sigue en 0.14.3).
 
 ## 1. Tipos
 
@@ -15,6 +15,7 @@ Dueños: A1 (modelo y alta), A2 (red sin router), A3 (facturación y estado), A6
 
 - Las capacidades viven en un solo archivo de código, `apps/api/app/core/tipos_servicio.ts` (nuevo), que es la única fuente para validadores, facturación, corte y pantallas. Nadie compara `tipo_servicio === 'cable'` fuera de ese módulo: pregunta por la capacidad (`requiereRouter`, `admiteLimitado`, `componentes`, `corteSmartolt`).
 - **Mixto con deuda: se corta todo** (decisión del PM, 25 nov). Al pasar a `suspendido`, lo que va sobre IP se corta por red y el cable por SmartOLT. En `limitado` no se toca el CATV: respeta la restricción de SmartOLT de no deshabilitar la misma ONU varias veces por semana.
+- **Qué tiene router y velocidad (A1 de Iris).** Un servicio tiene router y velocidad si sus `componentes` incluyen `internet` o `iptv`. Iris trata un tipo que no conoce como `internet`, salvo con `router_id` null: ahí no tiene router.
 - Telefonía (VoIP) no entra en esta ronda (P-N6 sigue abierta, recomendado: no). SmartOLT tiene `enable_onu_voip_port` y `disable_onu_voip_port`; se sumarían después como un tipo más con el mismo patrón del cable.
 
 ## 2. Modelo de datos
@@ -22,7 +23,7 @@ Dueños: A1 (modelo y alta), A2 (red sin router), A3 (facturación y estado), A6
 - `network.planes.tipo_servicio` y `core.servicios.tipo_servicio`: `internet` (por defecto), `cable`, `iptv`, `mixto`. Un trigger exige que el del servicio coincida con el del plan. `planes.tipo` (`residencial`, `empresarial`, `dedicado`) es comercial y no cambia.
 - `network.planes.componentes text[]`: en los tipos simples es el mismo tipo; en `mixto`, dos o tres de `internet`, `cable`, `iptv`. `core.servicios` no la duplica: se lee del plan.
 - `network.planes.precio_cable` y `precio_iptv` (`numeric(14,2)` nulos): solo en `mixto`, para desglosar la factura. La línea de internet es el precio del plan menos esas dos. En un mixto sin internet (cable + IPTV), `precio_iptv` es el resto. La suma de las líneas es siempre el precio del plan.
-- `network.planes.bajada_kbps` y `subida_kbps` anulables solo en `cable`.
+- `network.planes.bajada_kbps` y `subida_kbps` anulables solo en `cable`: en un plan de cable pueden ser null (A2 de Iris).
 - `core.servicios.router_id` anulable, con CHECK: obligatorio en todo tipo salvo `cable`.
 - `core.servicios.puntos smallint NULL` (televisores o decodificadores; informativo).
 - Migración: todo lo existente queda `internet` con `componentes = {internet}`. Ninguna prueba ni pantalla actual cambia.
@@ -34,7 +35,8 @@ Dueños: A1 (modelo y alta), A2 (red sin router), A3 (facturación y estado), A6
 - **IPTV y mixto:** se dan de alta como un internet (router, IP, usuario PPP, velocidad).
 - **ACL:** un usuario con alcance por router no ve servicios de cable (no tienen router). Por zona y por empresa sí. Se documenta en `core/README.md`.
 - **Consumidores de red:** `coa` y `routeros` ignoran `servicio.estado_cambiado` de un cable sin fallar y sin emitir `coa.fallido`.
-- **Eventos con el tipo:** `servicio.creado` suma `tipo_servicio` y `componentes[]` (`router_id` puede ser null). `servicio.config_cambiada` admite `tipo_servicio` en `campos[]`. `catalogo.cambiado` de plan admite `tipo_servicio` y `componentes` en `campos[]`. Todo aditivo; el detalle está en `eventos.md`.
+- **Eventos con el tipo:** `servicio.creado` suma `tipo_servicio` y `componentes[]` (`router_id` puede ser null). `servicio.config_cambiada` admite `tipo_servicio` en `campos[]`. `catalogo.cambiado` de plan admite `tipo_servicio` y `componentes` en `campos[]`. **Si cambia el tipo de un plan o de un servicio, cada servicio afectado emite `servicio.config_cambiada` con `tipo_servicio` en `campos[]`** (A5 de Iris): `catalogo.cambiado` solo no alcanza. Todo aditivo; el detalle está en `eventos.md`.
+- **Lecturas y rutas con Iris (A3, A6 de Iris).** `GET /planes` suma el filtro `tipo_servicio` (`GET /planes?tipo_servicio=cable` lista los planes de cable). `GET /servicios` (lista, ficha y relectura de la primera sincronización) trae siempre `tipo_servicio` y `componentes[]`. Con un servicio de cable, `POST /servicios/:id/reservar-ip`, `POST /servicios/:id/aprovisionar`, `GET /planes?router_id=` y `POST /servicios/:id/cambiar-plan` responden `422 tipo_sin_router` y no hacen ningún cambio. La factibilidad de un cable en Iris es `indeterminado` con motivo `tipo_sin_router` hasta que Argos exponga la planta CATV.
 
 ## 4. Facturación y estado (T4)
 
@@ -82,17 +84,21 @@ Los nombres `disable_onu_catv` / `enable_onu_catv` **no existen**. Límites por 
 - Permisos: `servicios.ver_equipo` (existe en la rama `a6-olt-acs`) para ver el estado; `catv.reintentar` (admin, soporte) para reintentar una orden fallida.
 - Endpoints: `GET /servicios/:id/catv` (estado, última orden y solicitud de respaldo) y `POST /servicios/:id/catv/reintentar`.
 
-## 6. Respaldo: corte manual avisado a Iris (T3a, A6; Iris 0.15.0 bloque B)
+## 6. Respaldo: corte manual avisado a Iris (T3a, A6; Iris 0.15.0 bloque B, aceptado con ajustes)
 
-Decisión del PM (25 nov): Argos solo avisa a Iris; Iris lleva tickets y órdenes; **no hay cola en Argos**, solo un registro de estado que Argos muestra.
+Decisión del PM (25 nov): Argos solo avisa a Iris; Iris lleva las órdenes; **no hay cola en Argos**, solo un registro de estado que Argos muestra.
 
 Solo en tres casos: el servicio de cable no tiene ONU registrada, su instancia de SmartOLT no está operativa, o la orden agotó sus reintentos (incluye «CATV not supported by ONU-Type»).
 
-- `integraciones.cortes_manuales`: `empresa_id`, `servicio_id`, `catv_orden_id` (o null si no hubo orden), `componente` (`cable`), `accion` (`corte` | `reconexion`), `causa` (`sin_onu` | `instancia_no_operativa` | `smartolt_fallo` | `catv_no_soportado`), `estado` (`solicitada`, `en_curso`, `resuelta`, `cancelada`, `sin_iris`), `iris_ticket_numero`, `resuelta_en`, `version`. Único parcial: una abierta por servicio y acción. Sin pantalla de cola.
-- Argos → Iris (solo a conectores con contrato ≥ 0.15.0 y la marca `corte_manual`): `servicio.corte_manual_solicitado` y `servicio.corte_manual_cancelado`. Sin datos personales.
-- Iris → Argos, por el receptor existente `/integraciones/iris/webhook`: `corte_manual.estado_cambiado` (`solicitud_id`, `empresa_id`, `estado` = `en_curso` | `resuelta` | `cancelada`, `ticket_numero`, `ocurrido_en`). Se deduplica por `X-Webhook-Id`. Un `solicitud_id` de otra empresa da 404.
+- `integraciones.cortes_manuales`: `empresa_id`, `servicio_id`, `catv_orden_id` (o null si no hubo orden), `componente` (`cable`), `accion` (`corte` | `reconexion`), `causa` (`sin_onu` | `instancia_no_operativa` | `smartolt_fallo` | `catv_no_soportado`), `estado` (`solicitada`, `en_curso`, `resuelta`, `cancelada`, `no_realizada`, `sin_iris`, `sin_respuesta`), `motivo_codigo` (solo con `no_realizada`: `sin_acceso`, `equipo_no_encontrado`, `otro`), `referencia` y `referencia_tipo` (`orden` | `ticket`; reemplazan a `iris_ticket_numero`), `solicitada_en`, `resuelta_en`, `version` (la de la solicitud, creciente). Único parcial: una abierta por servicio y acción. Sin pantalla de cola.
+- Argos → Iris (solo a conectores con contrato ≥ 0.15.0 y la marca `corte_manual`): `servicio.corte_manual_solicitado` y `servicio.corte_manual_cancelado`, ambos con `version`, `solicitada_en` y `accion`. Sin datos personales. Iris abre una orden de trabajo nueva de tipo `corte_catv` o `reconexion_catv`.
+- Iris → Argos, por el receptor existente `/integraciones/iris/webhook`: `corte_manual.estado_cambiado` (`solicitud_id`, `empresa_id`, `version`, `estado` = `en_curso` | `resuelta` | `cancelada` | `no_realizada`, `motivo_codigo`, `referencia`, `referencia_tipo`, `ocurrido_en`). Se deduplica por `X-Webhook-Id`. Argos **solo aplica una `version` mayor** que la que tiene y los estados terminales (`resuelta`, `cancelada`, `no_realizada`) no retroceden. Un `solicitud_id` de otra empresa da 404.
+- Cancelaciones fuera de orden: si llega tarde y el corte ya se hizo, Iris informa `resuelta` y Argos pide la reconexión con una solicitud nueva; si llega antes que `solicitado`, Iris la guarda y no abre nada.
+- `sin_respuesta` es solo de Argos: si a las 24 h de `solicitada_en` Iris no avisó `en_curso`, la ficha muestra `sin_respuesta`. Si la empresa está fuera del alcance del conector o el servicio es desconocido, Iris guarda la solicitud sin abrir nada y sin devolver error, y se ve igual como `sin_respuesta`.
+- `no_realizada` es terminal: la ficha muestra el `motivo_codigo` y sale una alerta interna de notify.
 - Sin conector de Iris o con contrato anterior: la solicitud queda `sin_iris`, se ve en la ficha del servicio y sale una alerta interna de notify.
-- Reactivación con un corte `resuelta`: nueva solicitud de `reconexion`. Cancelar antes de resolver: `servicio.corte_manual_cancelado`.
+- Reactivación con un corte `resuelta`: nueva solicitud de `reconexion` (la reconexión tiene siempre prioridad alta en Iris). Cancelar antes de resolver: `servicio.corte_manual_cancelado`.
+- La orden de corte de Iris no aparece en el portal de Argos ni genera `ticket.*` hacia Argos; Iris no avisa al cliente por su cuenta (esos avisos los pide Argos); cerrar la orden no activa ni retira el servicio. En un `mixto` solo se toca el componente `cable`.
 
 ## 7. Lotes y dependencias
 

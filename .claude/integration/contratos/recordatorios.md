@@ -1,6 +1,6 @@
 # Contrato: plantillas de recordatorio
 
-Lote L0 del plan v3 (`plan-servicios-suscripciones-recordatorios.md`, §1.5, §2.6, §2.7 y §3.6). Decisión del PM (26 nov 2026, P-N9 y P-N12): plantillas con nombre como las de facturación, asignadas por servicio o suscripción, con una por defecto en cada empresa y excepción personalizada por servicio; **no van por zona ni son push**; **con Iris conectado, Iris entrega WhatsApp, correo y Telegram**; Argos usa sus canales propios solo si Iris no está conectado. Argos decide qué y cuándo. Dueño: A6 (`notify`), con A3 para `fechaCortePrevista`. Lotes R1 a R5. Contrato con Iris: `iris.md` 0.15.0 bloque C (propuesta).
+Lote L0 del plan v3 (`plan-servicios-suscripciones-recordatorios.md`, §1.5, §2.6, §2.7 y §3.6). Decisión del PM (26 nov 2026, P-N9 y P-N12): plantillas con nombre como las de facturación, asignadas por servicio o suscripción, con una por defecto en cada empresa y excepción personalizada por servicio; **no van por zona ni son push**; **con Iris conectado, Iris entrega por los canales que declara para la empresa** (ajuste de Iris: hoy solo WhatsApp; Telegram sigue en Argos, decisión del líder); Argos usa sus canales propios para los que Iris no declara y todos si Iris no está conectado. Argos decide qué y cuándo. Dueño: A6 (`notify`), con A3 para `fechaCortePrevista`. Lotes R1 a R5. Contrato con Iris: `iris.md` 0.15.0 bloque C (propuesta aceptada por Iris con ajustes, pendiente de la PR espejo; la versión vigente sigue en 0.14.3).
 
 ## 1. Estado actual (lo que se reemplaza)
 
@@ -11,7 +11,7 @@ Lote L0 del plan v3 (`plan-servicios-suscripciones-recordatorios.md`, §1.5, §2
 ## 2. Modelo (R1; schema `notify`)
 
 - `notify.plantillas_recordatorio`: `empresa_id NOT NULL`, `nombre`, `descripcion`; `por_defecto boolean` (índice único parcial: una por empresa); `servicio_id bigint NULL` (con valor es la plantilla **personalizada** de ese servicio: única por servicio, no aparece en la lista general ni se asigna a otros); `retirada_en`, `retirada_por`, `motivo_retiro`, `version`. `UNIQUE (empresa_id, nombre)` entre las que no son personalizadas.
-- `notify.plantillas_recordatorio_pasos` (hasta **8** por plantilla): `plantilla_id`, `orden` (`UNIQUE (plantilla_id, orden)`); `disparador`: `vencimiento` (días antes o después de `vence_en`), `corte_proximo` (días antes del corte previsto), `promesa_por_vencer` (días antes de que venza la promesa); `dias integer` (negativo antes, positivo después; −60 a 60); `hora time` (hora de Guatemala); `aviso`: código que se pide a Iris (`factura_por_vencer`, `factura_vencida`, `corte_proximo`, `promesa_por_vencer`); `evento_plantilla`: texto local de respaldo en `notify.plantillas` (`recordatorio.1` a `.3` y los nuevos `recordatorio.corte_proximo`, `recordatorio.promesa_por_vencer`); `canales text[]` (`whatsapp`, `correo`, `telegram`; vacío = el que elija Iris según su configuración); `activo`, `version`.
+- `notify.plantillas_recordatorio_pasos` (hasta **8** por plantilla): `plantilla_id`, `orden` (`UNIQUE (plantilla_id, orden)`); `disparador`: `vencimiento` (días antes o después de `vence_en`), `corte_proximo` (días antes del corte previsto), `promesa_por_vencer` (días antes de que venza la promesa); `dias integer` (negativo antes, positivo después; −60 a 60); `hora time` (hora de Guatemala); `aviso`: código que se pide a Iris (`factura_por_vencer`, `factura_vencida`, `corte_proximo`, `promesa_por_vencer`); `evento_plantilla`: texto local de respaldo en `notify.plantillas` (`recordatorio.1` a `.3` y los nuevos `recordatorio.corte_proximo`, `recordatorio.promesa_por_vencer`); `canales text[]` (`whatsapp`, `correo`, `telegram`; vacío = los que Iris declare para la empresa, más los propios de Argos para el resto); `activo`, `version`.
 - `notify.recordatorios_asignaciones`: `empresa_id`, `plantilla_id`, `servicio_id NULL`, `suscripcion_id NULL`, `asignada_por`, `version`. CHECK: exactamente uno de los dos; único por servicio y único por suscripción. Vive en `notify`: no agrega columnas a `core.servicios` ni a `billing.suscripciones`.
 - Un servicio solo recibe plantillas de su empresa (trigger). Las plantillas de facturación son globales; las de recordatorio **sí** llevan `empresa_id`.
 
@@ -43,24 +43,31 @@ Una factura sin servicio ni suscripción (cargo único suelto) usa la por defect
 
 ## 6. Entrega (R3)
 
-Con la decisión del PM del 26 nov:
+Con la decisión del PM del 26 nov y los ajustes de Iris (`iris.md` §13.3, C1 a C14):
 
 | Situación | Qué hace Argos |
 | --- | --- |
-| Iris con contrato ≥ 0.15.0 y `capacidades.mensajeria[].entrega_auto` para la empresa | **Un solo envío**, canal `iris`, con `canal_preferido: "auto"` y `canales_permitidos` del paso. Iris aplica su configuración de comunicación, permiso, límite diario y silencio. Argos **no** manda ese aviso por su correo ni Telegram. El estado final y el canal real llegan con `aviso.entregado` o `aviso.fallido` |
+| Iris con contrato ≥ 0.15.0 y `capacidades.mensajeria[].entrega_auto` para la empresa, y los canales del paso tienen intersección con `canales[].canal` | **Un solo envío**, canal `iris`, con `canal_preferido: "auto"` y `canales_permitidos` = esa intersección. Iris usa **un solo canal por aviso**, en el orden de la empresa, y pasa al siguiente solo antes del primer envío y por causas del canal; aplica permiso, límite diario y silencio. Argos **no** manda ese aviso por su correo ni Telegram. El estado final y el canal real llegan en un único `aviso.entregado` o `aviso.fallido` |
+| La intersección queda vacía | No se usa `auto`: Argos envía por sus propios canales |
+| Los canales del paso que Iris no declara | Los sigue enviando Argos, con el texto de `evento_plantilla` |
 | Iris entre 0.6.0 y 0.14.x | Como hoy: WhatsApp por Iris con `canal_preferido: "whatsapp"` (solo los códigos que ese Iris conoce) y correo y Telegram desde Argos |
 | Sin Iris | Correo y Telegram desde Argos con el texto de `evento_plantilla`. Un paso sin canal posible queda `omitido` con su motivo; nada se inventa |
 
-- Un aviso `bloqueado` por Iris queda `omitido` con el motivo, sin reintento ni respaldo.
-- Código nuevo pedido a un Iris que no lo declara en `capacidades.mensajeria[].codigos`: ese paso cae al texto local, sin 422.
-- Reintento tras timeout: mismos bytes y misma `Idempotency-Key` (`argos:aviso:<plantilla>:<envio_id>`). El número y el correo del cliente nunca van en el cuerpo.
-- `notify.envios.canal` admite `iris`. `aviso.entregado` con `canal: correo` deja el envío `enviado` con ese canal.
-- Contactos: los avisos de cobro siguen copiándose a los contactos con `permisos.avisos` del servicio; con entrega por Iris, el contacto y su permiso por número los resuelve Iris (`iris.md` §6.4).
+- `entrega_auto` es `true` solo si la empresa tiene al menos un canal declarado. Argos lee las marcas solo de `GET …/capacidades` y las relee al activar la integración, en la revisión periódica de versión y ante un `422 canal_no_permitido` o un `bloqueado` con `canal_no_disponible`.
+- Un aviso `bloqueado` por Iris queda `omitido` con el motivo, sin reintento ni respaldo. **Excepción:** un `auto` `bloqueado` con `canal_no_disponible`: Argos relee `capacidades` y reenvía por sus propios canales con otro `envio_id`.
+- **Un `envio_id` nunca se reenvía con otro `canal_preferido`:** si cambia el canal, el `envio_id` es nuevo (la `Idempotency-Key` es `argos:aviso:<plantilla>:<envio_id>`).
+- `422 canal_no_permitido`: `canales_permitidos` sin `auto`, vacío o con valores repetidos; Argos nunca manda la lista vacía (omite el campo solo si quiere «todos los declarados»).
+- Código nuevo pedido a un Iris que no lo declara en `capacidades.mensajeria[].canales[].codigos` del canal: ese paso cae al texto local, sin 422.
+- **Vencimiento dentro del silencio (Iris, C9):** `corte_proximo` vence en `fecha_corte`; `promesa_por_vencer`, en `vence_en`; `debito_fallido`, en `reintenta_el` o a las 72 h si no viene; los demás, a las 72 h. Lo descarta Iris con `aviso.fallido` y `motivo = vencido`. El silencio y el tope diario aplican a todos los canales.
+- **Bajas:** los avisos de cobro por correo y Telegram son transaccionales (sin alta). Argos respeta la baja que Iris informe con `contacto.baja` para `correo` y `telegram`, también cuando envía él.
+- Reintento tras timeout: mismos bytes y misma `Idempotency-Key`. El número y el correo del cliente nunca van en el cuerpo.
+- `notify.envios.canal` admite `iris`. `aviso.entregado` con `canal: correo` deja el envío `enviado` con ese canal; en correo, `entregado_en` es la aceptación del SMTP de destino, `leido_en` es siempre null y el fallo por un correo inválido llega con `motivo: destino_invalido`.
+- Contactos: con `auto`, el correo va solo al titular. Los contactos con `permisos.avisos` del servicio reciben solo por WhatsApp, con el permiso de cada número que resuelve Iris (`iris.md` §6.4); los avisos por los canales propios de Argos siguen copiándose como hoy.
 - A52: Argos lee `GET <iris>/api/v1/integraciones/argosisp/plantillas-whatsapp?empresa_id=` (no implementado hoy en Argos). Si la lectura falla, el panel muestra el error con «Reintentar», nunca una lista vacía ni «aprobada» por defecto.
 
 ## 7. Avisos de suscripciones y débito (R5)
 
-Facturas con `suscripcion_id` usan la plantilla asignada a la suscripción o la por defecto, y llevan la variable opcional `concepto` (nombre del producto del catálogo, nunca texto libre). Se agregan los textos `debito.fallido`, `debito.desactivado` y `suscripcion.estado_cambiada`. `debito.fallido` avisa una vez por intento; `debito.desactivado` una vez.
+Facturas con `suscripcion_id` usan la plantilla asignada a la suscripción o la por defecto, y llevan la variable opcional `concepto` (nombre del producto del catálogo, nunca texto libre; máximo 60 caracteres, sin saltos de línea ni URL, o `422 variable_invalida`; nunca datos de tarjeta ni del débito). En `debito_fallido`, la variable `reintenta_el` se omite cuando no hay reintento, nunca se manda vacía. Se agregan los textos `debito.fallido`, `debito.desactivado` y `suscripcion.estado_cambiada`. `debito.fallido` avisa una vez por intento; `debito.desactivado` una vez.
 
 ## 8. Eventos, permisos y endpoints
 
