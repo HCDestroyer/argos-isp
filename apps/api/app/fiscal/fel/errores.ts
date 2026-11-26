@@ -25,6 +25,46 @@ export class ReceptorRequerido extends Problema {
     }
 }
 
+/**
+ * 422 al pasar a producción con un NIT de empresa que falta o no cuadra con el módulo 11
+ * (`contratos/fel-establecimientos.md` R1): en pruebas es solo advertencia (`nit_valido`).
+ */
+export class NitEmisorInvalido extends Problema {
+    constructor(nit: string | null) {
+        const detalle = nit
+            ? `El NIT de la empresa (${nit}) no cuadra con el dígito verificador: sirve para pruebas, pero la SAT lo rechazará en producción. Corrígelo en Empresas antes de pasar a producción`
+            : 'La empresa no tiene NIT: agrégalo en Empresas antes de pasar a producción'
+        super(422, 'nit_emisor_invalido', 'NIT del emisor inválido', detalle, [
+            { field: 'ambiente', message: detalle, rule: 'nit_emisor_invalido' },
+        ])
+    }
+}
+
+/**
+ * 422: `certificar_al = emitir` ya no se usa (decisión del PM, 25-nov-2026: primero se cobra y
+ * después se certifica). Las facturas nacen como aviso de cobro y el DTE sale al cubrirse.
+ */
+export class CertificarAlObsoleto extends Problema {
+    constructor(campo = 'certificar_al') {
+        const detalle =
+            'Ya no se certifica al emitir: primero se cobra y después se certifica. Usa «pagar» (el DTE sale cuando la factura queda cubierta) o «nunca» (a mano, solo sin FEL obligatoria)'
+        super(422, 'certificar_al_obsoleto', 'certificar_al = emitir ya no se usa', detalle, [
+            { field: campo, message: detalle, rule: 'certificar_al_obsoleto' },
+        ])
+    }
+}
+
+/** 409: la FEL de la empresa está desactivada (R2): no se certifica ni se reintenta. */
+export class FelDesactivada extends Problema {
+    constructor() {
+        const detalle =
+            'La FEL de la empresa está desactivada: no se certifica. Actívala en Configuración › FEL'
+        super(409, 'fel_desactivada', 'FEL desactivada', detalle, [
+            { field: 'empresa_id', message: detalle, rule: 'fel_desactivada' },
+        ])
+    }
+}
+
 export class CertificarAlIncompatible extends Problema {
     constructor(detalle: string) {
         super(422, 'certificar_al_incompatible', 'certificar_al incompatible', detalle, [

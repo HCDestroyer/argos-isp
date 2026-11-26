@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { cifrar, descifrar } from '#shared/cifrado'
+import { nitValido } from '#core/nit_cui'
 import {
     camposProveedor,
     proveedorFel,
@@ -10,6 +11,7 @@ import {
 } from '#fiscal/fel/proveedor'
 import { ProveedorFelFalso } from '#fiscal/fel/falso'
 import { ProveedorFelInfile } from '#fiscal/fel/infile'
+import { CertificarAlIncompatible } from '#fiscal/fel/errores'
 
 /**
  * Configuración FEL por empresa (`fiscal.fel_configuracion`) y credenciales cifradas
@@ -92,6 +94,104 @@ export function modoEmision(config: ConfiguracionFel, certificarAl: CertificarAl
     if (certificarAl === 'pagar') return 'aviso'
     if (config.modo === 'opcional') return 'sin_fel'
     return config.contingencia_activa ? 'contingencia' : 'por_certificar'
+}
+
+/**
+ * Lo que falta para certificar con el proveedor y el ambiente **guardados**
+ * (`contratos/fel-establecimientos.md` lote 2). `lista` es false con `proveedor`, `credenciales` o
+ * `establecimiento`; `credenciales_sin_probar` (sin prueba o con la última prueba rechazada) y
+ * `nit_emisor` (NIT de la empresa sin módulo 11) solo informan: activar la FEL sin credenciales
+ * probadas se permite con un aviso (decisión del PM, P7).
+ */
+export const FALTANTES_FEL = [
+    'proveedor',
+    'credenciales',
+    'credenciales_sin_probar',
+    'establecimiento',
+    'nit_emisor',
+] as const
+export type FaltanteFel = (typeof FALTANTES_FEL)[number]
+const FALTANTES_QUE_BLOQUEAN: readonly FaltanteFel[] = ['proveedor', 'credenciales', 'establecimiento']
+
+export async function estadoFel(
+    empresaId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<{ lista: boolean; faltantes: FaltanteFel[] }> {
+    const config = await configuracionFel(empresaId, cliente)
+    const faltantes: FaltanteFel[] = []
+    if (!config.proveedor) {
+        faltantes.push('proveedor')
+    } else {
+        const cred = (await cliente
+            .from('fiscal.fel_credenciales')
+            .where({ empresa_id: empresaId, proveedor: config.proveedor, ambiente: config.ambiente })
+            .select('probada_en', 'resultado_prueba')
+            .first()) as { probada_en: Date | null; resultado_prueba: { ok?: boolean } | null } | null
+        if (!cred) {
+            faltantes.push('credenciales')
+        } else if (!cred.probada_en || cred.resultado_prueba?.ok !== true) {
+            faltantes.push('credenciales_sin_probar')
+        }
+    }
+    const establecimiento = await cliente
+        .from('fiscal.establecimientos')
+        .where({ empresa_id: empresaId, activo: true })
+        .select('id')
+        .first()
+    if (!establecimiento) faltantes.push('establecimiento')
+    const empresa = (await cliente.from('core.empresas').where('id', empresaId).select('nit').first()) as {
+        nit: string | null
+    } | null
+    if (!empresa?.nit || !nitValido(empresa.nit)) faltantes.push('nit_emisor')
+    return { lista: !faltantes.some((f) => FALTANTES_QUE_BLOQUEAN.includes(f)), faltantes }
+}
+
+/**
+ * Servicios no retirados con `certificar_al = nunca` efectivo (excepción o plantilla) en empresas con
+ * FEL `obligatoria` (o en `empresaId`, aunque aún no lo esté: `fel.configurar` la valida antes de
+ * guardar el modo). Filtros opcionales por plantilla o servicio. `contratos/fel-establecimientos.md`
+ * R2: `nunca` no existe con FEL obligatoria, se cambie por donde se cambie.
+ */
+export async function serviciosConNunca(
+    cliente: QueryClientContract,
+    filtro: { empresaId?: number; plantillaId?: number; servicioId?: number },
+    limite = 20,
+): Promise<number[]> {
+    const consulta = cliente
+        .from('core.servicios as s')
+        .leftJoin('billing.plantillas_facturacion as p', 'p.id', 's.plantilla_facturacion_id')
+        .leftJoin('core.servicios_excepciones as x', (j) =>
+            j.on('x.servicio_id', 's.id').andOnVal('x.campo', 'certificar_al'),
+        )
+        .whereNot('s.estado', 'retirado')
+        .whereRaw(`coalesce(x.valor #>> '{}', p.certificar_al) = 'nunca'`)
+        .orderBy('s.id')
+        .limit(limite)
+        .select('s.id')
+    if (filtro.empresaId !== undefined) {
+        consulta.where('s.empresa_id', filtro.empresaId)
+    } else {
+        consulta.whereIn(
+            's.empresa_id',
+            cliente.from('fiscal.fel_configuracion').where('modo', 'obligatoria').select('empresa_id'),
+        )
+    }
+    if (filtro.plantillaId !== undefined) consulta.where('s.plantilla_facturacion_id', filtro.plantillaId)
+    if (filtro.servicioId !== undefined) consulta.where('s.id', filtro.servicioId)
+    return ((await consulta) as Array<{ id: number }>).map((s) => Number(s.id))
+}
+
+/** 422 `certificar_al_incompatible` si el cambio dejó `nunca` en un servicio de empresa obligatoria. */
+export async function exigirSinNuncaObligatoria(
+    cliente: QueryClientContract,
+    filtro: { plantillaId?: number; servicioId?: number },
+): Promise<void> {
+    const ids = await serviciosConNunca(cliente, filtro)
+    if (ids.length > 0) {
+        throw new CertificarAlIncompatible(
+            `Con FEL obligatoria ningún servicio puede tener certificar_al = nunca (servicios ${ids.join(', ')}): usa pagar`,
+        )
+    }
 }
 
 export function cifrarCredenciales(datos: CredencialesFel): string {

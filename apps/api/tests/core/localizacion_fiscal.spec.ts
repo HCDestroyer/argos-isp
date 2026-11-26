@@ -96,21 +96,36 @@ test.group('Localización fiscal: NIT, CUI y documento del receptor', () => {
             tipo_documento_fiscal: 'nit',
             nit_cui: '16693949',
             pais_fiscal: 'GT',
+            nit_cui_invalido: false,
         })
         assert.deepEqual(validarDocumentoFiscal({ tipo: 'cui', valor: '1234 56789 0101' }), {
             tipo_documento_fiscal: 'cui',
             nit_cui: '1234567890101',
             pais_fiscal: 'GT',
+            nit_cui_invalido: false,
         })
         assert.deepEqual(validarDocumentoFiscal({ tipo: 'pasaporte', valor: 'x1234567', pais: 'us' }), {
             tipo_documento_fiscal: 'pasaporte',
             nit_cui: 'X1234567',
             pais_fiscal: 'US',
+            nit_cui_invalido: false,
         })
         assert.deepEqual(validarDocumentoFiscal({ tipo: 'cf', valor: null }), {
             tipo_documento_fiscal: 'cf',
             nit_cui: null,
             pais_fiscal: 'GT',
+            nit_cui_invalido: false,
+        })
+        // NIT que no cuadra con el módulo 11: advertencia, no rechazo (fel-establecimientos R1)
+        assert.deepEqual(validarDocumentoFiscal({ tipo: 'nit', valor: '1669394-8' }), {
+            tipo_documento_fiscal: 'nit',
+            nit_cui: '16693948',
+            pais_fiscal: 'GT',
+            nit_cui_invalido: true,
+        })
+        assert.include(validarDocumentoFiscal({ valor: '1170142K' }), {
+            tipo_documento_fiscal: 'nit',
+            nit_cui_invalido: true,
         })
         // sin tipo: se deduce como antes de la localización
         assert.equal(validarDocumentoFiscal({ valor: '12521337' }).tipo_documento_fiscal, 'nit')
@@ -129,7 +144,7 @@ test.group('Localización fiscal: NIT, CUI y documento del receptor', () => {
             assert.fail('debía fallar')
         }
         assert.equal(
-            campo(() => validarDocumentoFiscal({ tipo: 'nit', valor: '16693948' })),
+            campo(() => validarDocumentoFiscal({ tipo: 'nit', valor: '12#45' })),
             'nit_cui:nit',
         )
         assert.equal(
@@ -203,11 +218,13 @@ test.group('Localización fiscal: NIT, CUI y documento del receptor', () => {
             tipo_documento_fiscal: 'cui',
             nit_cui_invalido: true,
         })
+        // con letras: NIT marcado (fel-establecimientos R1; antes caía a cf)
         assert.include(await insertar('abc'), {
-            tipo_documento_fiscal: 'cf',
+            tipo_documento_fiscal: 'nit',
             nit_cui: 'abc',
             nit_cui_invalido: true,
         })
+        assert.include(await insertar('a#c'), { tipo_documento_fiscal: 'cf', nit_cui_invalido: true })
         assert.include(await insertar('12521337'), { tipo_documento_fiscal: 'nit', nit_cui_invalido: false })
         assert.include(await insertar(null), { tipo_documento_fiscal: 'cf', nit_cui_invalido: false })
         assert.include(await insertar('CF'), { tipo_documento_fiscal: 'cf', nit_cui_invalido: false })
@@ -267,8 +284,17 @@ test.group('Localización fiscal: clientes por la API', () => {
         )
         assert.include(cf.body(), { tipo_documento_fiscal: 'cf', nit_cui: null, pais_fiscal: 'GT' })
 
+        // NIT que no cuadra: 201 con la marca (fel-establecimientos R1)
+        const marcado = await estado(
+            client
+                .post('/api/v1/clientes')
+                .bearerToken(token)
+                .json({ nombre: 'Marcado', tipo_documento_fiscal: 'nit', nit_cui: '16693948' }),
+            201,
+        )
+        assert.include(marcado.body(), { tipo_documento_fiscal: 'nit', nit_cui_invalido: true })
         const malos = [
-            [{ tipo_documento_fiscal: 'nit', nit_cui: '16693948' }, 'nit_cui'],
+            [{ tipo_documento_fiscal: 'nit', nit_cui: '12#45' }, 'nit_cui'],
             [{ tipo_documento_fiscal: 'cui', nit_cui: '1234567892301' }, 'nit_cui'],
             [{ tipo_documento_fiscal: 'cf', nit_cui: '16693949' }, 'nit_cui'],
             [{ tipo_documento_fiscal: 'nit', nit_cui: '16693949', pais_fiscal: 'SV' }, 'pais_fiscal'],
@@ -314,12 +340,12 @@ test.group('Localización fiscal: clientes por la API', () => {
         )
         assert.include(telefono.body(), { nit_cui: '1234567-0', nit_cui_invalido: true, version: 2 })
 
-        // cambiar solo el tipo revalida el número guardado
+        // cambiar solo el tipo revalida el número guardado (como NIT tendría la marca: se prueba con CUI)
         await estado(
             client
                 .put(`/api/v1/clientes/${id}`)
                 .bearerToken(token)
-                .json({ version: 2, tipo_documento_fiscal: 'nit' }),
+                .json({ version: 2, tipo_documento_fiscal: 'cui' }),
             422,
         )
         const corregido = await estado(

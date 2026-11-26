@@ -12,7 +12,7 @@ function factura(id: number, vence: string, total: string, pagado = '0.00', esta
     return {
         id, empresa_id: 1, empresa_nombre: 'ArgosNet', cliente_id: 1, servicio_id: 1, periodo: `${vence.slice(0, 7)}-01`, clave_unica: `1-${id}`,
         emitida_en: `${vence.slice(0, 7)}-01T14:00:00.000Z`, vence_en: vence, estado,
-        subtotal: total, iva: '0.00', total, pagado, fel_uuid: null, fel_serie: null, fel_numero: null, fel_estado: null,
+        subtotal: total, iva: '0.00', total, pagado, fel_uuid: null, fel_serie: null, fel_numero: null, fel_estado: null, fel_modo: 'desactivada', fel_accion: 'ninguna',
         tipo: 'servicio', factura_origen_id: null, vencida_en: null, version: 1,
         created_at: '2026-09-01T14:00:00.000Z', updated_at: '2026-09-01T14:00:00.000Z',
     }

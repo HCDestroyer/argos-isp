@@ -1,3 +1,4 @@
+import { columnasAccionFel, type AccionFel, type MODOS_FEL } from '#fiscal/fel/accion'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
@@ -209,6 +210,9 @@ export interface FacturaFila {
     /** DTE vigente (o el último rechazado) y su error visible */
     dte_id?: number | null
     fel_error?: string | null
+    /** modo FEL de la empresa y qué le toca a la factura (`#fiscal/fel/accion`) */
+    fel_modo?: (typeof MODOS_FEL)[number]
+    fel_accion?: AccionFel
     /** aviso de cobro: su IVA está en 2.1.11 hasta certificarse (§10.1) */
     aviso_cobro?: boolean
     certificar_al?: 'emitir' | 'pagar' | 'nunca' | null
@@ -261,6 +265,7 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
                and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = n.id)) as acreditado`,
         ),
         ...columnasDte(cliente, alias),
+        ...columnasAccionFel(cliente, alias),
         c('aviso_cobro'),
         c('certificar_al'),
         c('tipo_dte'),

@@ -103,3 +103,17 @@ test('integridad del libro: con la cadena rota, el cierre del mes lo explica y l
     await expect(page.locator('[data-prueba="integridad-ruptura"]')).toContainText('Ruptura en el sello 5')
     await page.evaluate(() => localStorage.removeItem('argos_fixtures_cadena_rota'))
 })
+
+test('Configuración → FEL: cambiar de empresa recarga el certificador, el modo y las credenciales de la otra', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await ir(page, 'FEL', /\/configuracion\/fel/)
+    await elegirEmpresa(page, /ArgosNet/)
+    await expect(page.locator('[data-prueba="fel-modo"]')).toHaveText('Obligatoria')
+    await expect(page.locator('[data-credenciales="pruebas"]')).toContainText('argosnet')
+    await expect(page.getByText('ArgosNet · NIT').first()).toBeVisible()
+
+    await elegirEmpresa(page, /Fibra del Sur/)
+    await expect(page.locator('[data-prueba="fel-modo"]')).toHaveText('Desactivada')
+    await expect(page.getByText('Fibra del Sur · NIT').first()).toBeVisible()
+    await expect(page.locator('[data-credenciales="pruebas"]')).not.toContainText('argosnet')
+})

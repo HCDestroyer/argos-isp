@@ -3234,7 +3234,7 @@ export interface paths {
         put?: never;
         /**
          * Reintentar un DTE rechazado o con error temporal
-         * @description Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.
+         * @description Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT (una NCRE o NDEB conserva el receptor de su documento de origen). Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso, fel_desactivada (con la FEL desactivada no entra nada nuevo a la cola).
          */
         post: operations["dteReintentar"];
         delete?: never;
@@ -3580,7 +3580,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir la certificación FEL de una factura
-         * @description Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.
+         * @description Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 409 fel_desactivada (la FEL de la empresa está desactivada); 422 fel_no_configurada (falta certificador o credenciales), receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada. El panel ofrece el botón según fel_accion de la factura (primero se cobra y después se certifica).
          */
         post: operations["facturasCertificar"];
         delete?: never;
@@ -3775,12 +3775,12 @@ export interface paths {
         };
         /**
          * Configuración FEL de la empresa (sin secretos)
-         * @description Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.
+         * @description Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.
          */
         get: operations["felConfiguracion"];
         /**
          * Configurar proveedor, ambiente y modo FEL
-         * @description 409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).
+         * @description 409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).
          */
         put: operations["felConfigurar"];
         post?: never;
@@ -3821,7 +3821,7 @@ export interface paths {
         put?: never;
         /**
          * Probar las credenciales contra el certificador
-         * @description No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.
+         * @description No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.
          */
         post: operations["felProbarCredenciales"];
         delete?: never;
@@ -3861,7 +3861,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir la certificación de varias facturas
-         * @description facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.
+         * @description facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type (fel_desactivada si la empresa tiene la FEL desactivada; el lote de otras empresas sigue).
          */
         post: operations["felLote"];
         delete?: never;
@@ -15347,6 +15347,8 @@ export interface components {
                 }[];
                 /** @description «FEL es obligatoria para su régimen» si está desactivada */
                 alerta: string | null;
+                /** @description «FEL activa sin credenciales»: modo distinto de desactivada sin proveedor, credenciales del proveedor y ambiente guardados o establecimiento activo (lista = false de GET /fel/configuracion) */
+                alerta_configuracion: string | null;
             } | null;
         };
         BloqueIncobrables: {
@@ -16375,7 +16377,7 @@ export interface components {
             tipo_documento_fiscal: "nit" | "cui" | "pasaporte" | "cf";
             /** @description Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf. Al usuario técnico Iris le sale `***` (contrato Iris 0.6.0 §1.1; null sigue null) */
             nit_cui: string | null;
-            /** @description true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo */
+            /** @description true: el número no pasó la validación al migrar a la localización fiscal (se conservó), o es un NIT que se guardó con advertencia porque el dígito verificador (módulo 11) no cuadra (NIT de pruebas del certificador); se apaga al corregirlo o cuando la consulta de NIT del certificador lo encuentra */
             nit_cui_invalido: boolean;
             nombre_fiscal: string | null;
             direccion_fiscal: string | null;
@@ -17133,6 +17135,11 @@ export interface components {
             version: number;
             /** Format: date-time */
             updated_at: string | null;
+            /** @description Lista para certificar con el proveedor y ambiente guardados: hay proveedor, credenciales de ese proveedor y ambiente y un establecimiento activo. No bloquea guardar: es aviso (P7) */
+            lista: boolean;
+            /** @description Lo que falta: proveedor, credenciales y establecimiento impiden certificar (lista = false); credenciales_sin_probar (sin prueba o la última rechazada) y nit_emisor (NIT de la empresa sin dígito verificador válido) solo informan */
+            faltantes: ("proveedor" | "credenciales" | "credenciales_sin_probar" | "establecimiento" | "nit_emisor")[];
+            /** @description Las credenciales guardadas de cada proveedor y ambiente (una fila por proveedor + ambiente) */
             credenciales: components["schemas"]["CredencialesFel"][];
         };
         ConfiguracionIa: {
@@ -18695,6 +18702,8 @@ export interface components {
             activa: boolean;
             /** @description La empresa 1 (la de la instalación original) */
             principal: boolean;
+            /** @description Derivado: el NIT cuadra con el dígito verificador (módulo 11). false = guardado con advertencia (sirve para pruebas; la SAT lo rechazará en producción y PUT /fel/configuracion a producción responde 422 `nit_emisor_invalido`). null sin NIT */
+            nit_valido: boolean | null;
             /** @description Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó) */
             version: number;
             /** Format: date-time */
@@ -18950,6 +18959,10 @@ export interface components {
             direccion: string | null;
             municipio: string | null;
             departamento: string | null;
+            /** @description Código postal del RTU; null = el DTE sale con 01001 */
+            codigo_postal: string | null;
+            /** @description Cajas cuyos cobros certifican con este establecimiento (P1) */
+            cajas: number[];
             activo: boolean;
             por_defecto: boolean;
             version: number;
@@ -19501,6 +19514,16 @@ export interface components {
             dte_id?: number | null;
             /** @description Error visible del DTE (SAT, receptor_requerido…) */
             fel_error?: string | null;
+            /**
+             * @description Modo FEL de la empresa de la factura (desactivada sin configuración)
+             * @enum {string}
+             */
+            fel_modo: "obligatoria" | "opcional" | "desactivada";
+            /**
+             * @description Qué le toca en la FEL (primero se cobra y después se certifica): ninguna (desactivada, anulada, en cero o ya certificada), automatica (DTE en curso, o cubierta con FEL obligatoria), al_cobrar (aviso sin cubrir: se certifica al cobrarla), certificar_opcional (FEL opcional, cubierta y sin DTE)
+             * @enum {string}
+             */
+            fel_accion: "ninguna" | "automatica" | "al_cobrar" | "certificar_opcional";
             /** @description Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse */
             aviso_cobro?: boolean;
             /** @enum {string|null} */
@@ -42125,7 +42148,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas */
+                    /** @description NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite */
                     nit: string;
                     razon_social: string;
                     nombre_comercial: string;
@@ -42268,7 +42291,7 @@ export interface operations {
                 "application/json": {
                     /** @description version leída (0 si la empresa 1 nunca se guardó); si cambió responde 409 */
                     version: number;
-                    /** @description NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas */
+                    /** @description NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las empresas activas; `CF` no se admite */
                     nit?: string | null;
                     razon_social?: string | null;
                     nombre_comercial?: string;
@@ -43815,6 +43838,8 @@ export interface operations {
             query?: {
                 /** @description Empresa; por defecto la activa (X-Empresa-Id) */
                 empresa_id?: number | null;
+                /** @description Certificador cuyas credenciales se prueban; por defecto el guardado */
+                proveedor?: "infile" | "falso";
             };
             header?: never;
             path: {
@@ -44511,6 +44536,10 @@ export interface operations {
                     direccion?: string | null;
                     municipio?: string | null;
                     departamento?: string | null;
+                    /** @description Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001 */
+                    codigo_postal?: string | null;
+                    /** @description Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto */
+                    cajas?: number[];
                     /** @description Establecimiento con el que se emite (uno por empresa) */
                     por_defecto?: boolean;
                     /** @description Empresa; por defecto la activa (X-Empresa-Id) */
@@ -44633,6 +44662,10 @@ export interface operations {
                     direccion?: string | null;
                     municipio?: string | null;
                     departamento?: string | null;
+                    /** @description Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001 */
+                    codigo_postal?: string | null;
+                    /** @description Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto */
+                    cajas?: number[];
                     activo?: boolean;
                     /** @description Establecimiento con el que se emite (uno por empresa) */
                     por_defecto?: boolean;
@@ -64930,7 +64963,7 @@ export interface operations {
                     /** @description HH:MM hora de Guatemala */
                     hora_corte?: string;
                     /**
-                     * @description Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)
+                     * @description Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro, el DTE sale al quedar cubierta) o nunca (a mano; no con FEL obligatoria: 422 certificar_al_incompatible). emitir ya no se usa (primero se cobra y después se certifica): 422 certificar_al_obsoleto
                      * @enum {string}
                      */
                     certificar_al?: "emitir" | "pagar" | "nunca";

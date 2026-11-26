@@ -717,6 +717,8 @@ onMounted(cargar)
                             :certificable="factura.estado !== 'anulada' && factura.estado !== 'acreditada'"
                             :sin-certificar="factura.estado === 'acreditada' ? 'Sin DTE: acreditada por notas de crédito internas, no es una venta y no se certifica.' : null"
                             :refrescar="`${factura.version}-${factura.estado}-${factura.fel_estado ?? ''}`"
+                            :accion="factura.fel_accion ?? null"
+                            :modo="factura.fel_modo ?? null"
                             @cambiado="alCambiarDte"
                         />
                     </div>

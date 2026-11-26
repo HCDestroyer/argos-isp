@@ -156,15 +156,23 @@ export default class CompletarDatosServicio extends DomainAction<EntradaCompleta
         if (datos.tipo_documento_fiscal !== undefined || datos.nit_cui !== undefined) {
             if (!vacio(antes.nit_cui) && antes.nit_cui !== 'CF') yaRegistrados.push('nit_cui')
             else {
-                Object.assign(
-                    columnas,
-                    validarDocumentoFiscal({
-                        tipo: datos.tipo_documento_fiscal,
-                        valor: datos.nit_cui,
-                        pais: String(antes.pais_fiscal ?? 'GT'),
-                    }),
-                    { nit_cui_invalido: false },
-                )
+                const documento = validarDocumentoFiscal({
+                    tipo: datos.tipo_documento_fiscal,
+                    valor: datos.nit_cui,
+                    pais: String(antes.pais_fiscal ?? 'GT'),
+                })
+                // Iris (completar datos, `contratos/iris.md`) sigue estricto: el NIT tolerante de fel-establecimientos R1 es
+                // solo para el panel; desde Iris un NIT sin dígito verificador sigue siendo 422.
+                if (documento.nit_cui_invalido) {
+                    throw new ValidacionFallida([
+                        {
+                            field: 'nit_cui',
+                            message: 'El NIT no es válido (dígito verificador)',
+                            rule: 'nit',
+                        },
+                    ])
+                }
+                Object.assign(columnas, documento)
             }
         }
         if (yaRegistrados.length > 0) throw new CampoYaRegistrado(yaRegistrados)
