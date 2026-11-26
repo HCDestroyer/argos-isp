@@ -130,6 +130,9 @@ function alDesactivar(producto: Producto) {
                 :ui="{ label: 'hidden sm:inline' }"
                 data-prueba="productos-lote"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('productos.crear')"
                 label="Nuevo producto"

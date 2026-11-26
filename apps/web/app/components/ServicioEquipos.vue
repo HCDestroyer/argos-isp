@@ -331,9 +331,8 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
                         name="fecha"
                         help="Vacío = hoy."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="asignacion.fecha"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>
@@ -409,9 +408,8 @@ function declararPerdida(motivo: string, clave: string): Promise<Resultado<Unida
                             name="fecha"
                             help="Vacío = hoy."
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="devolucion.fecha"
-                                type="date"
                                 class="w-full"
                             />
                         </UFormField>

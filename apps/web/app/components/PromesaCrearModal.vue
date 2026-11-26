@@ -180,9 +180,8 @@ function otra() {
                         required
                         :help="cobertura ? `Hasta el final de ese día (hora de Guatemala); el último posible es el ${formatearFecha(cobertura.fechaMaxima)}.` : 'Hasta el final de ese día (hora de Guatemala).'"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.vence"
-                            type="date"
                             :min="hoy"
                             class="w-full"
                         />

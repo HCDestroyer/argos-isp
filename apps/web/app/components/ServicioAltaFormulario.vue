@@ -1004,9 +1004,8 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             hint="Opcional"
                             help="Con ciclo de aniversario, la facturación toma este día."
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="estado.fecha_instalacion"
-                                type="date"
                                 class="w-full"
                             />
                         </UFormField>

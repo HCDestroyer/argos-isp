@@ -368,9 +368,8 @@ async function enviar(evento: FormSubmitEvent<SalidaOperacion>) {
                         name="fecha"
                         help="Vacío = hoy."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             class="w-full"
                             data-prueba="mov-fecha"
                         />

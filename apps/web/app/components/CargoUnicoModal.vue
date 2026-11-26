@@ -373,9 +373,8 @@ async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
                         name="vence_en"
                         help="Vacío: hoy más los días de gracia del servicio."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.vence_en"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>

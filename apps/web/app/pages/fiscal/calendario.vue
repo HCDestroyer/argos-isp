@@ -499,16 +499,14 @@ onMounted(() => {
                         aria-label="Obligaciones"
                     >
                         <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-                            <UInput
+                            <CampoFecha
                                 v-model="desde"
-                                type="date"
                                 aria-label="Vence desde"
                                 class="w-full sm:w-44"
                                 data-prueba="filtro-desde"
                             />
-                            <UInput
+                            <CampoFecha
                                 v-model="hasta"
-                                type="date"
                                 aria-label="Vence hasta"
                                 class="w-full sm:w-44"
                                 data-prueba="filtro-hasta"

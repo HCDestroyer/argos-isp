@@ -145,16 +145,6 @@ onMounted(() => {
         <template #acciones>
             <div class="flex flex-wrap gap-2">
                 <UButton
-                    v-if="proveedor && puede('compras.registrar')"
-                    :to="`/compras/nueva?proveedor=${proveedor.id}`"
-                    label="Registrar compra"
-                    :aria-label="'Registrar compra'"
-                    :ui="{ label: 'hidden sm:inline' }"
-                    icon="i-lucide-shopping-cart"
-                    color="neutral"
-                    variant="outline"
-                />
-                <UButton
                     v-if="proveedor && cuenta && puede('compras.pagar') && cuenta.pendientes.length"
                     label="Registrar pago"
                     :aria-label="'Registrar pago'"
@@ -164,6 +154,17 @@ onMounted(() => {
                     @click="pagando = true"
                 />
             </div>
+        </template>
+
+        <template #accion-principal>
+            <UButton
+                v-if="proveedor && puede('compras.registrar')"
+                :to="`/compras/nueva?proveedor=${proveedor.id}`"
+                label="Registrar compra"
+                icon="i-lucide-shopping-cart"
+                color="neutral"
+                variant="outline"
+            />
         </template>
 
         <ContaCuerpo libre>

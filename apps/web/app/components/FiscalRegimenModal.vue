@@ -115,9 +115,8 @@ async function enviar(evento: FormSubmitEvent<CuerpoRegimen>) {
                     required
                     :help="primera ? 'La fecha de inscripción en el régimen.' : `Solo el 1 de enero de un año futuro (p. ej. ${proximoEnero}).`"
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.vigente_desde"
-                        type="date"
                         class="w-full"
                     />
                 </UFormField>
@@ -140,9 +139,8 @@ async function enviar(evento: FormSubmitEvent<CuerpoRegimen>) {
                         :required="!primera"
                         :help="primera ? undefined : 'Presentado en diciembre del año anterior.'"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.aviso_fecha"
-                            type="date"
                             :max="hoy"
                             class="w-full"
                         />

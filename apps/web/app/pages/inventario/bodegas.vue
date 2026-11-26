@@ -222,6 +222,18 @@ const MOTIVOS_RECHAZO: Record<string, string> = {
     >
         <template #acciones>
             <UButton
+                v-if="puede('inventario.crear_traslado')"
+                label="Nuevo traslado"
+                icon="i-lucide-truck"
+                size="lg"
+                to="/inventario/traslados/nueva"
+                class="glow-brand rounded-full px-5"
+                data-prueba="nuevo-traslado"
+            />
+        </template>
+
+        <template #accion-principal>
+            <UButton
                 v-if="puede('bodegas.crear')"
                 label="Nueva bodega"
                 icon="i-lucide-plus"
@@ -230,15 +242,6 @@ const MOTIVOS_RECHAZO: Record<string, string> = {
                 class="boton-flotante rounded-full"
                 data-prueba="nueva-bodega"
                 @click="abrir(null)"
-            />
-            <UButton
-                v-if="puede('inventario.crear_traslado')"
-                label="Nuevo traslado"
-                icon="i-lucide-truck"
-                size="lg"
-                to="/inventario/traslados/nueva"
-                class="glow-brand rounded-full px-5"
-                data-prueba="nuevo-traslado"
             />
         </template>
 

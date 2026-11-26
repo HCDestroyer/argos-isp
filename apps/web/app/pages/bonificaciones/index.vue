@@ -125,15 +125,13 @@ onMounted(() => {
                         class="w-full"
                         data-prueba="filtro-origen-bonificacion"
                     />
-                    <UInput
+                    <CampoFecha
                         v-model="desde"
-                        type="date"
                         aria-label="Desde"
                         class="w-full"
                     />
-                    <UInput
+                    <CampoFecha
                         v-model="hasta"
-                        type="date"
                         aria-label="Hasta"
                         class="w-full"
                     />
