@@ -14,6 +14,7 @@ const props = defineProps<{
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ guardado: [establecimiento: EstablecimientoFiscal, nuevo: boolean], recargar: [] }>()
 
+const { puede } = usePermisos()
 const formulario = useTemplateRef('formulario')
 const idFormulario = useId()
 const estado = reactive<EntradaEstablecimiento>({ codigo: '', nombre: '', direccion: '', municipio: '', departamento: '', codigo_postal: '', cajas: [], por_defecto: false, activo: true })
