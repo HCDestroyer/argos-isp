@@ -27,6 +27,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/bodegas',
     '/api/v1/bonificaciones',
     '/api/v1/cajas',
+    '/api/v1/cajas/entregas',
     '/api/v1/cartera/castigos',
     '/api/v1/cartera/provisiones',
     '/api/v1/clientes',

@@ -245,7 +245,16 @@ export const PERMISOS = {
     'cobros.configurar':
         'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
     'cobros.liquidar': 'Registrar la liquidación de un proveedor de cobro (banco neto y comisión)',
-    'cajas.depositar': 'Depositar en el banco el efectivo de un turno de caja (queda en fondos en tránsito)',
+    'cajas.depositar':
+        'Depositar en el banco el efectivo de tu custodia o de un turno de caja (queda en fondos en tránsito)',
+    // B1 del plan de contabilidad (§5.7): caja de cobros → custodia → banco
+    'cajas.entregar':
+        'Entregar otra vez el efectivo de un turno cerrado cuando quien debía recibirlo dijo «No lo recibí»',
+    'cajas.recibir_entrega': 'Recibir efectivo de una caja de cobros («Recibí»): pasa a tu custodia',
+    'cajas.rechazar_entrega': 'Rechazar una entrega de efectivo dirigida a ti («No lo recibí»)',
+    'cajas.ver_custodia': 'Ver la custodia y las entregas de todas las personas (sin él, solo las tuyas)',
+    'cajas.configurar':
+        'Configurar el fondo de cambio, el plazo y el tope de custodia y «lo deposito yo» de la empresa',
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
@@ -613,6 +622,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'gestiones_cobro.adjuntar',
             'fel.ver',
             'cajas.depositar',
+            // B1: entregar otra vez un turno cuya entrega no se recibió
+            'cajas.entregar',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
             // egresos.ver: lee solo los de su caja con cajas.ver, como antes)
             'egresos.registrar',
@@ -864,6 +875,12 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'cobros.configurar',
             'cobros.liquidar',
             'cajas.depositar',
+            // B1 (decisión N4 del PM): recibir entregas de fábrica lo tienen admin y contabilidad
+            'cajas.entregar',
+            'cajas.recibir_entrega',
+            'cajas.rechazar_entrega',
+            'cajas.ver_custodia',
+            'cajas.configurar',
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',

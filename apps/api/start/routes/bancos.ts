@@ -199,19 +199,34 @@ const transitos: Ruta[] = [
         metodo: 'post',
         ruta: '/cajas/:id/depositar',
         operacion: 'cajasDepositar',
-        resumen: 'Depositar al banco efectivo del turno abierto (1.1.11 Fondos en tránsito / Caja)',
+        resumen: 'Depositar al banco efectivo de tu custodia o del turno abierto de la caja',
         etiqueta: 'cajas',
         permiso: 'cajas.depositar',
         cuerpo: v.depositarCajaValidator,
         idempotente: true,
         descripcion:
-            'Baja el esperado del turno como un egreso; no puede superar el efectivo del turno (422 deposito_excede_efectivo). Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 sin_turno_abierto, 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.',
+            'B1: sin `desde`, sale de tu custodia si alcanza (1.1.11 / 1.1.15, sin turno; el depósito no queda ligado a la caja) y si no, del turno abierto de la caja (1.1.11 / Caja; baja el esperado del turno y no puede superar su efectivo: 422 deposito_excede_efectivo; 409 sin_turno_abierto). Con `desde = custodia`, 422 deposito_excede_custodia. Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.',
         respuesta: { status: 201, descripcion: 'Depósito registrado', esquema: Deposito },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             exigirAcceso(ctx, await existeCaja(id))
             return new DepositarCaja().execute({ ...cuerpo, caja_id: id }, ctx.contextoAccion())
         },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/custodia/depositar',
+        operacion: 'cajasDepositarCustodia',
+        resumen: 'Depositar al banco el efectivo de tu custodia (1.1.11 Fondos en tránsito / 1.1.15)',
+        etiqueta: 'cajas',
+        permiso: 'cajas.depositar',
+        cuerpo: v.depositarCustodiaValidator,
+        idempotente: true,
+        descripcion:
+            'B1 (§5.7): lo que recibiste con «Recibí» y aún no depositaste, sin turno abierto, en la empresa activa o `empresa_id`. No puede superar tu custodia (422 deposito_excede_custodia). Llega al banco al conciliar su línea del extracto. 409 deposito_duplicado. Emite caja.depositada (origen custodia).',
+        respuesta: { status: 201, descripcion: 'Depósito registrado', esquema: Deposito },
+        handler: (ctx, { cuerpo }) =>
+            new DepositarCaja().execute({ ...cuerpo, desde: 'custodia' }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',
