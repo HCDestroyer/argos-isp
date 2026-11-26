@@ -256,7 +256,11 @@ test.group('Portal: mis contactos y servicios a cargo (Iris 0.10.x §3.5 y §3.8
         assert.isNull(aCargo.servicios[0].monto_adeudado)
         const texto = JSON.stringify(r.body())
         assert.notInclude(texto, 'Rosa')
-        assert.notInclude(texto, String(otroDeMama.servicioId) + ',')
+        // Por campo, no por texto: el id del servicio puede coincidir con otro id de la respuesta (contacto_id).
+        const idsServicios = r
+            .body()
+            .data.flatMap((a: { servicios: Array<{ id: number }> }) => a.servicios.map((s) => s.id))
+        assert.notInclude(idsServicios, otroDeMama.servicioId)
 
         await db
             .from('core.contactos_cliente')
