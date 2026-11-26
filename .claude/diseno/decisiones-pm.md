@@ -58,3 +58,24 @@ Sin cambiar ninguna decisión; así quedaron en los tableros y lo que falta conf
 - Diseños de «Pendientes del backend» aprobados tal como están en los tableros.
 - Promociones de velocidad: pestaña dentro de Red › Planes (no entrada propia en el menú).
 - Días de gracia (decisión 21): campo al emitir facturas de meses pasados, no ajuste fijo de cobro.
+
+## Menú lateral, Ajustes y perfil (pendiente de aprobación del PM)
+
+Propuesta del 26 nov 2026 al pedido del PM sobre el menú lateral cortado, el menú de Ajustes y el menú del perfil en el teléfono. Tableros `MenuLateral`, `AjustesEscritorio`, `AjustesMovil` y `PerfilDrawer`; imágenes en `imagenes/menu-ajustes/`; diagnóstico, auditoría y lotes en `plan-menu-ajustes.md`. **Nada de esto es regla hasta que el PM lo apruebe**, salvo el primer punto, que es un arreglo.
+
+- **Menú lateral cortado (arreglo, no espera aprobación):** la isla del menú queda a 16 px de los cuatro bordes en cualquier alto de pantalla y «Ajustes» se ve entero.
+- **Propuesto, por aprobar:**
+  - «Ajustes» es una sola entrada fija abajo del menú. Ya no despliega su lista dentro del menú.
+  - Ajustes se ordena en 8 grupos por tarea, y cada pantalla aparece una sola vez: Empresa y fiscal; Facturación y cobro; Clientes y portal; Red y equipos; Comunicación e integraciones; Usuarios y seguridad; Apariencia y reportes; Sistema.
+  - Dentro de Ajustes hay una lista propia con todos los grupos y un solo buscador, que también encuentra por lo que hay dentro («correo», «NIT», «mora», «logo»). En el teléfono, esa lista es la pantalla de Ajustes y cada ajuste se abre a pantalla completa con «‹ Ajustes».
+  - Lo que un usuario no puede abrir no aparece, y un grupo sin nada permitido tampoco.
+  - En la computadora, «Ajustes» abre la última pantalla usada; desaparece la página de tarjetas.
+  - Todo se llama «Ajustes» (hoy el menú dice «Ajustes» y la pantalla «Configuración»).
+  - En el teléfono, el círculo de la cuenta abre un panel desde abajo (drawer) con la cuenta, la empresa activa, el tema, Mi cuenta, Ayuda, Qué cambió y Cerrar sesión. El menú «Más» sigue a pantalla completa y lleva arriba una fila de la cuenta que abre ese mismo panel.
+- **Cambia respecto a lo aprobado el 21 nov:** en los tableros `OperConfig*`, la isla de la izquierda listaba secciones y sus pantallas iban en pestañas. Con esta propuesta la isla lista las pantallas por grupo y esas pestañas desaparecen (quedan las que dividen una misma pantalla).
+- **Preguntas al PM:**
+  1. ¿Aprueba los 8 grupos y los nombres nuevos («Datos de la empresa», «Régimen e impuestos», «Conceptos y adicionales», «Corte, caídas y retiro», «Canales de aviso», «Registro de fallos»)?
+  2. ¿«Ajustes» en todas partes en lugar de «Configuración»?
+  3. ¿Que «Ajustes» abra directo la última pantalla usada, sin la página de tarjetas?
+  4. ¿El panel de la cuenta desde abajo y, además, la fila de la cuenta arriba de «Más»?
+  5. ¿«Sistema» (salud, registro, almacenamiento, tareas) se queda dentro de Ajustes?

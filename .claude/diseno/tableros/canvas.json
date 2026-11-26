@@ -960,6 +960,46 @@
       "w": 390,
       "x": 0,
       "y": 13840
+    },
+    "MenuLateral.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "menu",
+      "title": "1 · Menú lateral corregido: isla a 16 px de los cuatro bordes y «Ajustes» como una sola entrada (estados: modo expandido, tema)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "AjustesEscritorio.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "menu",
+      "title": "2 · Ajustes reestructurado · escritorio: lista agrupada con un buscador y la pantalla (estados: buscar, rol, tema)",
+      "w": 1440,
+      "x": 0,
+      "y": 1100
+    },
+    "AjustesMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "menu",
+      "title": "2 · Ajustes reestructurado · teléfono: lista a pantalla completa, buscar y una pantalla",
+      "w": 390,
+      "x": 1520,
+      "y": 1100
+    },
+    "PerfilDrawer.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "menu",
+      "title": "3 · Perfil en el teléfono: drawer desde abajo (cuenta, empresa, tema, ayuda, salir) y su fila en «Más»",
+      "w": 390,
+      "x": 1990,
+      "y": 1100
     }
   },
   "createdOnFiles": {
@@ -1175,7 +1215,11 @@
     "PendEnviosReportes.dc.html",
     "PendIntentosRecuperacion.dc.html",
     "PendVinculosTecnicos.dc.html",
-    "MarcoMovil.dc.html"
+    "MarcoMovil.dc.html",
+    "MenuLateral.dc.html",
+    "AjustesEscritorio.dc.html",
+    "AjustesMovil.dc.html",
+    "PerfilDrawer.dc.html"
   ],
   "pages": [
     {
@@ -1213,6 +1257,10 @@
     {
       "id": "pendientes",
       "name": "Pendientes del backend"
+    },
+    {
+      "id": "menu",
+      "name": "Menú lateral, Ajustes y perfil (por aprobar)"
     }
   ],
   "title": "Rediseño ArgosIsp"

@@ -83,6 +83,14 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
   - **Inventario 0.14.0**: declarar no recuperado con los intentos y su verificación de Iris, decidir los anteriores y el progreso hacia el mínimo (`PendIntentosRecuperacion`); técnicos de Iris con sus vínculos y «Conciliar» (`PendVinculosTecnicos`).
   - **Inicio de sesión** (`OperLogin`, `OperLoginMovil`): recuperar (correo), enviado (misma respuesta exista o no), demasiadas solicitudes, nueva contraseña (cierra las sesiones), listo, enlace vencido y recuperación apagada.
 
+## Menú lateral, Ajustes y perfil (propuesta del 26 nov 2026, pendiente de aprobación)
+
+- Tableros `MenuLateral`, `AjustesEscritorio`, `AjustesMovil` y `PerfilDrawer` (página «Menú lateral, Ajustes y perfil» de `canvas.json`). Generador: `generadores/menu_ajustes.py` (`python3 menu_ajustes.py` escribe en `tableros/`).
+- Imágenes ya dibujadas en `imagenes/menu-ajustes/`; en `antes/`, las capturas del panel real con las que se hizo el diagnóstico.
+- Estados para `render.js`: `{"tema":"osc"}` en los cuatro; `MenuLateral` `{"modo":"expandido"}`; `AjustesEscritorio` `{"v":"buscar"}` y `{"v":"rol"}`; `AjustesMovil` `{"p":"buscar"}` y `{"p":"pagina"}`; `PerfilDrawer` `{"p":"mas"}` y `{"p":"una"}` (una sola empresa).
+- Diagnóstico del corte, auditoría de Ajustes, justificación y lotes: `plan-menu-ajustes.md`. Lo que falta aprobar: última sección de `decisiones-pm.md`.
+- No es diseño aprobado todavía: el código no lo sigue hasta que el PM lo confirme (salvo el arreglo del corte del menú).
+
 ## Portal del cliente
 
 - Tableros: `Portal` (teléfono: inicio, corte y entrar), `NuevoPortal` (escritorio) y los de la página «Portal del cliente» del artifact: `PortalFacturas` (Facturas y pagos con pestañas segmentadas y el corte con la acción fija abajo), `PortalSoporte` (tickets y solicitudes, reportar un problema, conversación) y `PortalContactos` («Mis contactos», un contacto con sus permisos, «Está a tu cargo»). Generador: `generadores/portal_tableros.py`.
