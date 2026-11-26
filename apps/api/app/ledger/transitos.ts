@@ -174,6 +174,32 @@ export async function depositosDelTurno(cliente: QueryClientContract, turnoId: n
     return fila.total
 }
 
+/** Condición SQL: el depósito `alias` aún no se acreditó en el banco (o su acreditación se reatribuyó). */
+export const SQL_DEPOSITO_SIN_ACREDITAR = (alias: string) =>
+    `NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = ${alias}.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))`
+
+export interface DepositosEnCamino {
+    cantidad: number
+    monto: string
+    /** fecha (YYYY-MM-DD) del depósito más viejo que el banco aún no muestra; null si no hay */
+    mas_viejo: string | null
+}
+
+/** Depósitos de caja sin acreditar de las empresas (el aviso «el banco aún no los muestra» del inicio de contabilidad). */
+export async function depositosEnCamino(
+    empresas: number[],
+    cliente: QueryClientContract = db.connection(),
+): Promise<DepositosEnCamino> {
+    const { rows } = (await cliente.rawQuery(
+        `SELECT count(*)::int AS cantidad, coalesce(sum(d.monto), 0)::numeric(14,2)::text AS monto,
+                to_char(min(d.fecha), 'YYYY-MM-DD') AS mas_viejo
+           FROM ledger.depositos d
+          WHERE d.empresa_id = ANY(?::bigint[]) AND ${SQL_DEPOSITO_SIN_ACREDITAR('d')}`,
+        [empresas],
+    )) as { rows: Array<{ cantidad: number; monto: string; mas_viejo: string | null }> }
+    return rows[0]!
+}
+
 export interface ResumenTransito {
     empresa_id: number
     /** saldo de 1.1.11 en el libro de la empresa */
@@ -209,7 +235,7 @@ export async function resumenFondosEnTransito(
         const pendientes = (await cliente.rawQuery(
             `SELECT tipo, count(*)::int AS n, coalesce(sum(monto), 0)::text AS monto FROM (
                  SELECT 'deposito' AS tipo, d.monto FROM ledger.depositos d
-                  WHERE d.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = d.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))
+                  WHERE d.empresa_id = ? AND ${SQL_DEPOSITO_SIN_ACREDITAR('d')}
                  UNION ALL
                  SELECT 'traslado', t.monto FROM ledger.traslados t
                   WHERE t.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'traslado' AND x.documento_id = t.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))

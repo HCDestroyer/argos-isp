@@ -2,6 +2,7 @@ import { DENOMINACIONES } from '#ledger/resumen_turno'
 import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import {
     Dinero,
+    Problem,
     auditable,
     booleano,
     definirEsquema,
@@ -711,5 +712,96 @@ export const IntegridadLibro = definirEsquema(
                 obtenido: { ...texto, description: 'Valor recalculado o encontrado' },
             }),
         ),
+    }),
+)
+
+const TareaInicio = objeto({
+    clave: {
+        ...enumerado([
+            'comprobantes_por_revisar',
+            'lineas_banco_sin_pareja',
+            'depositos_en_camino',
+            'compras_por_revisar',
+            'facturas_por_certificar',
+            'asientos_por_aprobar',
+            'compras_por_pagar',
+            'obligaciones_proximas',
+            'turnos_abiertos_anteriores',
+        ]),
+        description: 'Qué espera por alguien',
+    },
+    cantidad: { ...entero, description: 'Siempre mayor que cero: las tareas sin pendientes no se devuelven' },
+    monto: { ...nulable(Dinero), description: 'Monto asociado si la tarea mueve dinero' },
+    fecha: {
+        ...nulable(fecha),
+        description:
+            'Más antigua o más cercana (comprobantes, depósitos, turnos, vencimientos); en lineas_banco_sin_pareja, la del último estado de cuenta',
+    },
+    proveedores: { ...nulable(entero), description: 'Solo en compras_por_pagar' },
+    urgencia: enumerado(['alta', 'media', 'baja']),
+    permiso: { ...texto, description: 'Permiso de la acción que resuelve la tarea' },
+})
+
+const PasoInicio = objeto({
+    numero: { ...entero, description: '1 a 7, en el orden del mes' },
+    clave: enumerado([
+        'facturar',
+        'cobrar_y_cerrar_cajas',
+        'compras_y_gastos',
+        'conciliar_bancos',
+        'revisar_el_mes',
+        'declarar_impuestos',
+        'cerrar_el_mes',
+    ]),
+    estado: {
+        ...enumerado(['listo', 'pendiente', 'sin_datos', 'error']),
+        description:
+            'Calculado de los datos. sin_datos = no hay con qué decidirlo (sin extractos, sin obligación fiscal, sin cajas); error = la consulta falló (sin cifras)',
+    },
+    cantidad: {
+        ...nulable(entero),
+        description: 'Pendientes (pendiente) o hechos (listo) según el paso; null si no aplica',
+    },
+    fecha: nulable(fecha),
+    error: { ...nulable(Problem), description: 'Solo con estado error' },
+})
+
+const IndicadorInicio = objeto({
+    estado: {
+        ...enumerado(['bien', 'atencion', 'urgente', 'sin_datos', 'sin_permiso', 'error']),
+        description:
+            'sin_datos = la empresa no tiene con qué calcularlo; sin_permiso = el usuario no tiene el permiso del dato; error = falló (sin cifras)',
+    },
+    valor: { ...nulable(Dinero), description: 'null salvo con bien, atencion o urgente' },
+    cantidad: nulable(entero),
+    monto_alerta: nulable(Dinero),
+    fecha: nulable(fecha),
+    permiso: { ...nulable(texto), description: 'El permiso que faltó (solo con sin_permiso)' },
+    error: { ...nulable(Problem), description: 'Solo con estado error' },
+})
+
+export const InicioContabilidad = definirEsquema(
+    'InicioContabilidad',
+    objeto({
+        hoy: fecha,
+        periodo: { ...texto, description: 'Mes de los pasos (YYYY-MM)' },
+        generado_en: instante,
+        empresas: lista(objeto({ id, nombre: texto })),
+        consolidado: booleano,
+        pendientes: { ...entero, description: 'Suma de las cantidades de `tareas`' },
+        tareas: {
+            ...lista(TareaInicio),
+            description:
+                'Qué toca hoy: solo lo que el rol puede atender y solo con pendientes, lo más urgente primero',
+        },
+        tareas_con_error: lista(objeto({ clave: texto, error: Problem })),
+        pasos: { ...lista(PasoInicio), description: 'Los 7 pasos del mes, calculados' },
+        paso_actual: { ...nulable(entero), description: 'Primer paso pendiente; null si ninguno lo está' },
+        indicadores: objeto({
+            te_deben: IndicadorInicio,
+            debes_proveedores: IndicadorInicio,
+            dinero_disponible: IndicadorInicio,
+            impuestos_mes: IndicadorInicio,
+        }),
     }),
 )

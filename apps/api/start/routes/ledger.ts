@@ -23,6 +23,7 @@ import {
     Mayor,
     BalanceSaldos,
     EstadoResultados,
+    InicioContabilidad,
     IntegridadLibro,
 } from '#ledger/esquemas'
 import { integridadLibro } from '#ledger/sellos'
@@ -41,6 +42,9 @@ import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/ca
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
 import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
+import { inicioContabilidad } from '#ledger/inicio_contabilidad'
+import { permisosDeUsuario } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
@@ -440,6 +444,30 @@ const libro: Ruta[] = [
         query: v.mayorValidator,
         respuesta: { status: 200, descripcion: 'Mayor de la cuenta', esquema: Mayor },
         handler: (ctx, { query }) => libroMayor(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/contabilidad/inicio',
+        operacion: 'contabilidadInicio',
+        resumen: 'Inicio de contabilidad: qué toca hoy, pasos del mes e indicadores',
+        etiqueta: 'libro',
+        permiso: 'contabilidad.ver_inicio',
+        query: v.inicioContabilidadValidator,
+        descripcion:
+            'De la empresa activa (con `empresas=todas` y alcance global, todas sumadas). `tareas`: lo que espera por alguien, solo lo que el rol puede atender (cada una pide el permiso de su acción) y solo con pendientes. `pasos`: 7 pasos del mes calculados con datos (nunca casillas a mano). `indicadores`: Te deben (reportes.ver), Debes a proveedores (compras.ver), Dinero disponible (libro.ver) e Impuestos del mes (declaraciones.ver), con las mismas consultas de la cartera por antigüedad, las cuentas por pagar, el efectivo del panel y el borrador de la declaración. Sin datos que lo respondan, `sin_datos`; sin permiso, `sin_permiso`; si una consulta falla, `error` con su problema y sin cifras: nunca ceros inventados.',
+        respuesta: { status: 200, descripcion: 'Inicio de contabilidad', esquema: InicioContabilidad },
+        handler: async (ctx, { query }) => {
+            const permisos = new Set(
+                await permisosDeUsuario(ctx.auth.getUserOrFail().id, alcancesDelToken(ctx)),
+            )
+            return inicioContabilidad({
+                empresas: empresasDeLaLista(ctx.empresa, query.empresas),
+                consolidado: query.empresas === 'todas',
+                permisos,
+                alcance: ctx.alcance,
+                periodo: query.periodo,
+            })
+        },
     }),
     definirRuta({
         metodo: 'get',

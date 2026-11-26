@@ -211,6 +211,8 @@ export const PERMISOS = {
     'comprobantes.reconexion_temporal':
         'Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)',
     'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
+    'contabilidad.ver_inicio':
+        'Ver el inicio de contabilidad: qué toca hoy, los pasos del mes y los indicadores (cada dato pide además su permiso)',
     'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
     'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
     'libro.aprobar_asiento':
@@ -844,6 +846,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'gestiones_cobro.ver',
             'gestiones_cobro.registrar',
             'gestiones_cobro.adjuntar',
+            'contabilidad.ver_inicio',
             'libro.ver',
             'libro.registrar_asiento',
             'libro.revertir_asiento',
@@ -917,6 +920,6 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
     },
     lectura: {
         descripcion: 'Solo lectura',
-        permisos: [...lectura, 'clientes.estado_cuenta', 'incidentes_red.leer'],
+        permisos: [...lectura, 'contabilidad.ver_inicio', 'clientes.estado_cuenta', 'incidentes_red.leer'],
     },
 }

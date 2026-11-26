@@ -816,6 +816,11 @@ export async function reservaIncobrables(c: QueryClientContract, empresaId: numb
     return { base, porcentaje, tope, estimacion }
 }
 
+/** Los checks del tipo que se calculan solos (los que exige `exigirChecks`). */
+export function checksAutomaticosDelTipo(tipo: TipoCheck): readonly DefinicionCheck[] {
+    return checksDelTipo(tipo).filter((d) => CALCULOS[d.clave])
+}
+
 /** Corre los checks automáticos del tipo (sin escribir). */
 export async function calcularChecks(
     c: QueryClientContract,
