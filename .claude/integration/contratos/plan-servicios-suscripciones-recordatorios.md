@@ -926,3 +926,16 @@ Ninguna bloquea el arranque: mientras no haya respuesta se aplica lo recomendado
 - /home/user/wt-plan-servicios/apps/api/app/notify/whatsapp.ts
 - /home/user/wt-plan-servicios/apps/api/app/integraciones/iris/envios.ts
 - /home/user/wt-plan-servicios/.claude/integration/contratos/iris.md
+
+### 6.3 26 nov 2026 (segunda tanda)
+
+- **P-N11 → factura propia.** Una suscripción ligada a un servicio sale siempre en su propia factura. Si se quiere una sola factura, se usa un adicional.
+- **P-N10 → la IPTV tiene conexión propia.** Es un servicio de datos con su router y su plan. Un servicio de solo IPTV nunca se «limita»: se corta o se activa.
+- **P-N12 → con Iris conectado, Iris entrega todo.** WhatsApp, correo y Telegram salen por Iris. Argos usa sus canales propios solo cuando Iris no está conectado.
+- **P-N13 → primero Recurrente.** El débito sale primero con Recurrente. D4 (NeoNet) sigue bloqueado hasta tener su documentación y sus credenciales de prueba.
+- **Siguen abiertas** (mientras tanto se aplica lo recomendado):
+  - P-N2: ¿una suscripción suspendida sigue facturando?
+  - P-N4: ¿quién aprueba el texto de consentimiento del débito?
+  - P-N6: ¿entra telefonía ahora?
+  - P-N14: cuentas contables para cable e IPTV. Las confirma el contador, y T4 no se fusiona sin ellas.
+  - P-N15: ¿quién crea recordatorios personalizados por servicio?
