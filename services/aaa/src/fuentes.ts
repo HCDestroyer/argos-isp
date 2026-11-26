@@ -45,7 +45,7 @@ interface Pendiente {
  * esperan socket cuentan dentro del mismo `timeoutMs`.
  *
  * Lotes (`lotes`, por defecto sí; `AAA_API_LOTES=0` los apaga): las consultas que llegan en el mismo
- * turno del bucle de eventos se agrupan en un `POST <API_INTERNAL_URL>internal/aaa/servicios
+ * turno del bucle de eventos, y todas las que llegan mientras hay una consulta en vuelo, se agrupan en un `POST <API_INTERNAL_URL>internal/aaa/servicios
  * { user_ppp: [...] }` de hasta 100 (`contratos/aaa.md`, "Carga por lotes"). Una consulta sola sigue
  * por el GET (sin espera añadida). Con Redis vacío, 200 reconexiones simultáneas eran 200 GET en
  * serie sobre 16 sockets (p95 ~200 ms en la prueba de carga); con lotes son unas pocas consultas
@@ -60,6 +60,9 @@ export class FuenteApi implements FuenteRespaldo {
     private readonly agente: AgenteHttp | AgenteHttps
     private lotes: boolean
     private pendientes: Pendiente[] = []
+    /** Despachos (GET o POST de lote) en vuelo; mientras haya uno, las consultas nuevas esperan. */
+    private enVuelo = 0
+    private programado = false
 
     constructor(opciones: {
         url: string
@@ -92,8 +95,18 @@ export class FuenteApi implements FuenteRespaldo {
     obtener(userPpp: string, contexto: ContextoConsulta = {}): Promise<RegistroAaa | null> {
         if (!this.lotes) return this.obtenerUno(userPpp, contexto.requestId)
         return new Promise((resolver, rechazar) => {
-            if (this.pendientes.length === 0) setImmediate(() => this.despachar())
             this.pendientes.push({ userPpp, requestId: contexto.requestId, resolver, rechazar })
+            // Sin nada en vuelo se despacha en el siguiente turno (una consulta sola no espera).
+            // Con un despacho en vuelo, las que llegan se juntan y salen cuando este termine
+            // (`terminarDespacho`): las lecturas de Redis regresan escalonadas y cortar el lote en
+            // cada turno del bucle de eventos partía una reconexión masiva en varios POST pequeños.
+            if (this.enVuelo === 0 && !this.programado) {
+                this.programado = true
+                setImmediate(() => {
+                    this.programado = false
+                    this.despachar()
+                })
+            }
         })
     }
 
@@ -133,8 +146,14 @@ export class FuenteApi implements FuenteRespaldo {
     private despachar(): void {
         const pendientes = this.pendientes
         this.pendientes = []
+        if (pendientes.length === 0) return
         if (pendientes.length === 1 || !this.lotes) {
-            for (const p of pendientes) this.obtenerUno(p.userPpp, p.requestId).then(p.resolver, p.rechazar)
+            for (const p of pendientes) {
+                this.enVuelo++
+                this.obtenerUno(p.userPpp, p.requestId)
+                    .then(p.resolver, p.rechazar)
+                    .finally(() => this.terminarDespacho())
+            }
             return
         }
         // Un usuario repetido en el mismo turno (reintento del NAS) viaja una sola vez.
@@ -142,8 +161,17 @@ export class FuenteApi implements FuenteRespaldo {
         for (const p of pendientes) porUsuario.set(p.userPpp, [...(porUsuario.get(p.userPpp) ?? []), p])
         const grupos = [...porUsuario.values()]
         for (let i = 0; i < grupos.length; i += MAXIMO_POR_LOTE) {
-            void this.obtenerLote(grupos.slice(i, i + MAXIMO_POR_LOTE).flat())
+            this.enVuelo++
+            void this.obtenerLote(grupos.slice(i, i + MAXIMO_POR_LOTE).flat()).finally(() =>
+                this.terminarDespacho(),
+            )
         }
+    }
+
+    /** Al terminar el último despacho en vuelo sale todo lo que se juntó mientras tanto. */
+    private terminarDespacho(): void {
+        this.enVuelo--
+        if (this.enVuelo === 0 && this.pendientes.length > 0) this.despachar()
     }
 
     private async obtenerLote(lote: Pendiente[]): Promise<void> {
