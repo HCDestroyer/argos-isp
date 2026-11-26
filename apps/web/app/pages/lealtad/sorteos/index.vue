@@ -55,7 +55,7 @@ onMounted(() => {
         icono="i-lucide-ticket"
         descripcion="Sorteos para clientes al día, con bases públicas, semilla verificable y acta"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('sorteos.gestionar')"
                 label="Nuevo sorteo"

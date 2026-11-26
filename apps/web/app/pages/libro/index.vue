@@ -320,6 +320,9 @@ onMounted(async () => {
                 class="boton-flotante w-48 rounded-full"
                 data-prueba="periodo-libro"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('libro.registrar_asiento')"
                 title="Llega con la API del asiento manual con aprobación"
@@ -397,17 +400,15 @@ onMounted(async () => {
                         <template #content>
                             <div class="flex flex-col gap-2 p-3">
                                 <UFormField label="Desde">
-                                    <UInput
+                                    <CampoFecha
                                         v-model="desde"
-                                        type="date"
                                         :max="hasta || undefined"
                                         class="w-full"
                                     />
                                 </UFormField>
                                 <UFormField label="Hasta">
-                                    <UInput
+                                    <CampoFecha
                                         v-model="hasta"
-                                        type="date"
                                         :min="desde || undefined"
                                         class="w-full"
                                     />

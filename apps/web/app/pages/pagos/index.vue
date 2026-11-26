@@ -179,7 +179,7 @@ onMounted(async () => {
         titulo="Pagos"
         icono="i-lucide-hand-coins"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('pagos.registrar')"
                 :to="clienteId ? `/cobro?cliente=${clienteId}` : '/cobro'"
@@ -188,8 +188,6 @@ onMounted(async () => {
                 color="success"
                 size="lg"
                 class="rounded-full px-5"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Cobrar"
             />
         </template>
 
@@ -297,17 +295,15 @@ onMounted(async () => {
                         label="Desde"
                         help="Días en hora de Guatemala"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="desde"
-                            type="date"
                             :max="hasta || undefined"
                             class="w-full"
                         />
                     </UFormField>
                     <UFormField label="Hasta">
-                        <UInput
+                        <CampoFecha
                             v-model="hasta"
-                            type="date"
                             :min="desde || undefined"
                             class="w-full"
                         />

@@ -163,9 +163,8 @@ async function enviar(evento: FormSubmitEvent<SalidaEgreso>) {
                         name="fecha"
                         help="Vacía: hoy. No puede ser futura ni de un mes cerrado."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             :max="hoy"
                             class="w-full"
                         />

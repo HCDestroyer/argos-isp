@@ -102,7 +102,7 @@ function alDesactivar(tipo: TipoProducto) {
         titulo="Tipos de producto"
         icono="i-lucide-tags"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('tipos_producto.crear')"
                 label="Nuevo tipo"

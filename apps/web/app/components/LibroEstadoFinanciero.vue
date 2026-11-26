@@ -69,17 +69,15 @@ const rango = computed(() => {
         :data-prueba="`libro-${tipo}`"
     >
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <UInput
+            <CampoFecha
                 v-if="tipo === 'resultados'"
                 v-model="desde"
-                type="date"
                 :max="hasta || undefined"
                 aria-label="Desde"
                 class="w-full"
             />
-            <UInput
+            <CampoFecha
                 v-model="hasta"
-                type="date"
                 :min="desde || undefined"
                 :aria-label="tipo === 'balance' ? 'Saldos al' : 'Hasta'"
                 class="w-full"

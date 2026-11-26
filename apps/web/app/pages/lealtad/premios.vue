@@ -60,7 +60,7 @@ function alGuardar(premio: PremioLealtad) {
         icono="i-lucide-gift"
         descripcion="El catálogo de premios por los que los clientes cambian sus puntos"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="programa && puede('lealtad.configurar')"
                 label="Nuevo premio"
