@@ -973,9 +973,12 @@ const nitEmpresa = () =>
         .string()
         .trim()
         .toUpperCase()
-        .regex(/^(\d{13}|\d{1,12}-?[0-9K])$/)
+        .regex(/^[0-9A-Z][0-9A-Z -]{0,24}$/)
         .meta({
-            description: 'NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas',
+            description:
+                'NIT: letras, dígitos y guiones (se guarda sin espacios ni guiones, en mayúsculas). El dígito ' +
+                'verificador (módulo 11) es advertencia: `nit_valido` en la respuesta. Único entre las ' +
+                'empresas activas; `CF` no se admite',
         })
 
 export const crearEmpresaValidator = vine.compile(

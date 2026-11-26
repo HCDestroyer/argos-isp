@@ -316,8 +316,10 @@ export const Cliente = definirEsquema(
             nit_cui_invalido: {
                 ...booleano,
                 description:
-                    'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
-                    'se apaga al corregirlo',
+                    'true: el número no pasó la validación al migrar a la localización fiscal (se conservó), ' +
+                    'o es un NIT que se guardó con advertencia porque el dígito verificador (módulo 11) no ' +
+                    'cuadra (NIT de pruebas del certificador); se apaga al corregirlo o cuando la consulta de ' +
+                    'NIT del certificador lo encuentra',
             },
             nombre_fiscal: nulable(texto),
             direccion_fiscal: nulable(texto),
@@ -1209,6 +1211,13 @@ export const EmpresaGrupo = definirEsquema(
         logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
         activa: booleano,
         principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
+        nit_valido: {
+            ...nulable(booleano),
+            description:
+                'Derivado: el NIT cuadra con el dígito verificador (módulo 11). false = guardado con ' +
+                'advertencia (sirve para pruebas; la SAT lo rechazará en producción y PUT /fel/configuracion ' +
+                'a producción responde 422 `nit_emisor_invalido`). null sin NIT',
+        },
         version: {
             type: 'integer',
             minimum: 0,

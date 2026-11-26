@@ -16,9 +16,12 @@ import {
     TelegramWebhookRespuesta,
     ConsentimientoWhatsapp,
     WhatsappCliente,
+    AvisoPagoWhatsapp,
 } from '#notify/esquemas'
 import { exigirCliente } from '#core/acceso_empresa'
-import { verWhatsappCliente } from '#notify/consentimientos'
+import { dimensionesDePago } from '#billing/pagos'
+import { exigirAcceso } from '#billing/empresa'
+import { verAvisoPagoWhatsapp, verWhatsappCliente } from '#notify/consentimientos'
 import RegistrarConsentimientoWhatsapp from '#notify/actions/registrar_consentimiento_whatsapp'
 import { listarEnvios, listarPlantillas, listarRecordatorios } from '#notify/consultas'
 import { catalogoEventos, vistaPrevia } from '#notify/catalogo'
@@ -95,6 +98,24 @@ const notify: Ruta[] = [
         handler: async (ctx, { params }) => {
             await exigirCliente(ctx, Number(params.id))
             return verWhatsappCliente(Number(params.id), ctx.empresa?.activa ?? null)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/notificaciones/pagos/:id/whatsapp',
+        operacion: 'notificacionesPagoWhatsapp',
+        resumen: 'Comprobante de un pago por WhatsApp (Iris): canal disponible y estado del envío',
+        descripcion:
+            'Para la pantalla de éxito del cobro (A4). Con permiso `pagos.ver`, no `notificaciones.ver`: el ' +
+            'cajero lo ve. El comprobante lo manda Iris al registrarse el pago (`pago_recibido`); aquí solo ' +
+            'se lee. `envio` null = aún no se programa. No muestra el número ni el texto.',
+        etiqueta: 'notificaciones',
+        permiso: 'pagos.ver',
+        respuesta: { status: 200, descripcion: 'Aviso del pago', esquema: AvisoPagoWhatsapp },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDePago(id))
+            return verAvisoPagoWhatsapp(id)
         },
     }),
     definirRuta({

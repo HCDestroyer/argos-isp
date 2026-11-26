@@ -318,6 +318,58 @@ describe('FEL · pantallas', () => {
         expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').text()).toMatch(/\d+ avisos de cobro sin certificar/)
     })
 
+    it('Configuración → FEL: la tarjeta muestra y prueba las credenciales del certificador elegido, no las de otro', async () => {
+        // ArgosNet guarda INFILE como certificador y tiene credenciales de los dos en pruebas
+        bd.fel.configuraciones[1] = { ...bd.fel.configuraciones[1]!, proveedor: 'infile' }
+        bd.fel.credenciales.push({
+            vista: {
+                id: 99,
+                empresa_id: 1,
+                proveedor: 'infile',
+                ambiente: 'pruebas',
+                campos_visibles: { usuario_api: 'demo-api', usuario_firma: 'demo-firma' },
+                probada_en: null,
+                resultado_prueba: null,
+                version: 1,
+                updated_at: '2026-11-25T15:00:00.000Z',
+            },
+            rechaza: false,
+        })
+        const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
+        const pruebas = () => vista.find('[data-credenciales="pruebas"]')
+        await esperar(() => expect(pruebas().text()).toContain('demo-api'))
+        expect(vista.text()).toContain('Credenciales de INFILE')
+        expect(pruebas().text()).not.toContain('argosnet')
+        expect(pruebas().text()).toContain('Sin probar')
+        expect(pruebas().find('[data-prueba="credenciales-otras"]').text()).toContain('Certificador de laboratorio (falso)')
+
+        await pruebas().find('[data-prueba="credenciales-probar-pruebas"]').trigger('click')
+        await esperar(() => expect(pruebas().text()).toContain('Válidas'))
+        const infile = bd.fel.credenciales.find(c => c.vista.proveedor === 'infile')!
+        const falso = bd.fel.credenciales.find(c => c.vista.proveedor === 'falso')!
+        expect(infile.vista.probada_en).not.toBeNull()
+        expect(falso.vista.probada_en).toBe('2026-10-01T15:36:27.394Z')
+    })
+
+    it('Configuración → FEL: con la FEL activa y sin credenciales, el aviso dice qué falta', async () => {
+        bd.fel.configuraciones[2] = {
+            empresa_id: 2,
+            proveedor: 'infile',
+            ambiente: 'pruebas',
+            modo: 'opcional',
+            contingencia_activa: false,
+            contingencia_motivo: null,
+            contingencia_desde: null,
+            version: 1,
+            updated_at: '2026-11-25T15:00:00.000Z',
+        }
+        useEmpresaActiva().elegir(2)
+        const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
+        await esperar(() => expect(vista.find('[data-prueba="fel-faltantes"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="fel-faltantes"]').text()).toContain('Faltan las credenciales de INFILE para Pruebas.')
+        expect(vista.text()).toContain('NIT sin verificar')
+    })
+
     it('Configuración → FEL: la contingencia activa se ve en el aviso con su fecha y su motivo', async () => {
         const activa = await useFel().cambiarContingencia(true, 'El certificador no responde', nuevaClaveIdempotencia(), 1)
         expect(activa.ok).toBe(true)

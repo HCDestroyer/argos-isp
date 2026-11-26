@@ -58,8 +58,9 @@ export async function exigirNitLibre(t: Transaccion, nit: string | null | undefi
 
 /** Instantánea auditable (sin campos derivados). */
 export function sinDerivados(empresa: EmpresaCompleta) {
-    const { logo_url: url, principal, ...resto } = empresa
+    const { logo_url: url, principal, nit_valido: nitValido, ...resto } = empresa
     void principal
+    void nitValido
     return { ...resto, logo: url }
 }
 

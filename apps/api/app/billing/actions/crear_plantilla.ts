@@ -1,3 +1,4 @@
+import { CertificarAlObsoleto } from '#fiscal/fel/errores'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { normalizarReglasPromesa, type ReglasPromesaParciales } from '#billing/reglas_promesa'
 import {
@@ -72,6 +73,7 @@ export default class CrearPlantilla extends DomainAction<EntradaCrearPlantilla, 
             reglas_promesa: normalizarReglasPromesa(input.reglas_promesa),
         })
 
+        if (input.certificar_al === 'emitir') throw new CertificarAlObsoleto()
         const [fila] = (await t.trx
             .insertQuery()
             .table('billing.plantillas_facturacion')
