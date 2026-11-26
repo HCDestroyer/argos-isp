@@ -58,3 +58,35 @@ Sin cambiar ninguna decisión; así quedaron en los tableros y lo que falta conf
 - Diseños de «Pendientes del backend» aprobados tal como están en los tableros.
 - Promociones de velocidad: pestaña dentro de Red › Planes (no entrada propia en el menú).
 - Días de gracia (decisión 21): campo al emitir facturas de meses pasados, no ajuste fijo de cobro.
+
+
+## Contabilidad (pendiente de aprobación del PM)
+
+Propuesta del 26 nov 2026. Nada de esto es regla todavía. Análisis completo, errores encontrados y plan por lotes: `.claude/integration/contratos/plan-contabilidad.md`. Tableros: `PlanContaInicio`, `PlanContaConciliar`, `PlanClienteFiscal`, `PlanIndicadorAyuda` y sus versiones de teléfono (generador `generadores/conta_plan.py`). Imágenes: `capturas/contabilidad/propuesta/`; el panel de hoy, en `capturas/contabilidad/antes/`.
+
+Lo que se propone:
+
+- **Inicio de contabilidad:** «Qué toca hoy» (tareas con contador y un botón), «Pasos del mes» (facturar, cobrar y cerrar cajas, compras y gastos, conciliar, revisar, declarar, cerrar), «Crear» y cuatro indicadores.
+- **Menú Finanzas en 7 entradas:** Inicio, Ventas y cobros, Compras y pagos, Bancos y cajas, Impuestos, Cierre y libro, Panel del dueño. Cambia la decisión 1.
+- **«Nueva factura» a la vista** en la ficha del cliente, en Facturas y en la ficha del servicio (hoy es «Cargo único» dentro de «Más»).
+- **Tipo de impuesto del cliente:** Normal, Agente retenedor de IVA, Exento y «me retiene ISR». La factura y el cobro se comportan según el tipo.
+- **Conciliación guiada:** cuatro pasos, parejas seguras que se aceptan juntas, diferencia explicada en el mismo paso y cuatro salidas para lo que no tiene pareja.
+- **Indicador con ayuda:** nombre en simple, «?» con qué es, cómo se calcula, qué hacer y nombre contable. Amplía la decisión 11.
+- **Palabras:** «Dinero en camino al banco» (fondos en tránsito), «Gasto sin factura» (egreso), «Gastos pagados por adelantado» (diferidos), «Te deben» y «Debes a proveedores».
+
+Por decidir (cada una con su recomendación en el plan, §8):
+
+1. Menú Finanzas en 7 entradas con Inicio primero.
+2. «Cargo único» pasa a «Nueva factura».
+3. Tipos de impuesto del cliente.
+4. «Exento» apagado hasta tener la frase de exención del contador.
+5. Efectivo entregado al cerrar la caja a nombre de quien lo recibe.
+6. Tope de diferencia al conciliar.
+7. Una sola puerta para gastos.
+8. Anular depósito, devolver saldo a favor y anticipo a proveedor.
+9. Gastos que se repiten cada mes.
+10. Aprobación de compras y pagos a proveedores.
+11. Subcuentas de gasto e ingreso creadas por contabilidad.
+12. Conciliación en el teléfono (amplía la decisión 9).
+13. Revisión de los textos de ayuda por el contador.
+14. Pasos del mes automáticos.
