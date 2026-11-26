@@ -79,3 +79,12 @@ Propuesta del 26 nov 2026 al pedido del PM sobre el menú lateral cortado, el me
   3. ¿Que «Ajustes» abra directo la última pantalla usada, sin la página de tarjetas?
   4. ¿El panel de la cuenta desde abajo y, además, la fila de la cuenta arriba de «Más»?
   5. ¿«Sistema» (salud, registro, almacenamiento, tareas) se queda dentro de Ajustes?
+
+### Respuestas del PM (26 nov 2026): menú lateral, Ajustes y perfil
+
+- **Aprobado:** los 8 grupos de Ajustes, con sus nombres: Empresa y fiscal · Facturación y cobro · Clientes y portal · Red y equipos · Comunicación e integraciones · Usuarios y seguridad · Apariencia y reportes · Sistema. «Sistema» queda dentro de Ajustes.
+- **Nombre:** «Ajustes» en todas partes (menú, migas y títulos), en lugar de «Configuración».
+- **Entrada en computadora:** «Ajustes» abre una **página de tarjetas** por grupo. No abre la última pantalla usada (el PM descartó esa opción).
+  - La página de tarjetas es el índice: una tarjeta por grupo, con sus ajustes y el buscador arriba.
+  - Dentro de cada ajuste se mantiene la lista de grupos a la izquierda.
+- **Teléfono:** el menú de la cuenta es un panel que sube desde abajo (`UDrawer`). Arriba del menú «Más» hay además una fila de la cuenta que abre ese mismo panel.
