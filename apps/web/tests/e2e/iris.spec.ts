@@ -59,8 +59,9 @@ test('Iris: generar el enlace de conexión y verlo una sola vez', async ({ page 
     await page.locator('[data-prueba="cerrar-valor-una-vez"]').click()
     await expect(modal).toHaveCount(0)
 
-    // La entrada directa del menú lleva a la misma pantalla.
+    // Iris vive dentro de Integraciones (Ajustes, catálogo único): sin entrada propia en el menú.
     await ir(page, 'Integraciones', /\/configuracion\/integraciones$/)
-    await ir(page, 'Iris', /\/configuracion\/integraciones\/iris$/)
+    await page.locator('[data-prueba="configurar-iris"]').click()
+    await expect(page).toHaveURL(/\/configuracion\/integraciones\/iris$/)
     await expect(page.locator('[data-prueba="estado-conector-iris"]')).toHaveText('Sin conectar')
 })

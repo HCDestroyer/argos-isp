@@ -37,7 +37,7 @@ test('cambiar la empresa de un servicio con saldo explica qué hacer', async ({ 
 
 test('notificaciones: la prueba de correo muestra el error real y la empresa hereda la global', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Notificaciones', /\/configuracion\/notificaciones/)
+    await ir(page, 'Canales de aviso', /\/configuracion\/notificaciones/)
     await expect(page.locator('[data-prueba="origen-notificaciones"]')).toContainText('Del entorno')
     await page.getByLabel('Correo de destino de la prueba').fill('cobros@argosnet.gt')
     await page.locator('[data-prueba="probar-correo"]').click()

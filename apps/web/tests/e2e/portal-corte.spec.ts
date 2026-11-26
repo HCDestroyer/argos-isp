@@ -9,7 +9,7 @@ import { entrar, menu } from './ayudas'
 test('el admin guarda la dirección del portal de corte y el modo de suspensión', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     const lateral = await menu(page)
-    await lateral.getByRole('link', { name: 'Portal de corte' }).click()
+    await lateral.getByRole('link', { name: 'Corte, caídas y retiro' }).click()
     await expect(page).toHaveURL(/\/configuracion\/portal-corte/)
 
     await expect(page.getByText('Valores iniciales del servidor, todavía no guardados')).toBeVisible()
@@ -55,7 +55,7 @@ test('si la API falla se ve el error con «Reintentar», sin valores inventados'
 test('el cajero no ve el portal de corte ni puede abrirlo', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     const lateral = await menu(page)
-    await expect(lateral.getByRole('link', { name: 'Portal de corte' })).toHaveCount(0)
+    await expect(lateral.getByRole('link', { name: 'Corte, caídas y retiro' })).toHaveCount(0)
     await page.goto('/configuracion/portal-corte')
     await expect(page).toHaveURL(/\/sin-permiso/)
 })

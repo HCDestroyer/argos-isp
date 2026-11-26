@@ -19,6 +19,14 @@ export function usePermisos() {
         return typeof permiso === 'string' ? permisos.value.has(permiso) : puedeAlguno(permiso)
     }
 
+    /**
+     * Si el usuario puede abrir una sección del menú: su `permiso` o, en las pantallas que todavía no
+     * tienen permiso propio (`soloRol`, como Importar desde Mikrowisp), ese rol.
+     */
+    function puedeSeccion(seccion: { permiso: string | readonly string[], soloRol?: string }): boolean {
+        return seccion.soloRol ? usuario.value?.roles?.includes(seccion.soloRol) === true : puede(seccion.permiso)
+    }
+
     function puedeAlguno(lista: readonly string[]): boolean {
         return lista.some(permiso => permisos.value.has(permiso))
     }
@@ -47,5 +55,5 @@ export function usePermisos() {
         return puedeAbrir(ruta) ? ruta : alterna
     }
 
-    return { permisos, puede, puedeAlguno, puedeTodos, puedeAbrir, enlace, destinoPermitido }
+    return { permisos, puede, puedeSeccion, puedeAlguno, puedeTodos, puedeAbrir, enlace, destinoPermitido }
 }

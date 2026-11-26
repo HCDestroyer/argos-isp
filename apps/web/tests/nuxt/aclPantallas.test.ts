@@ -394,6 +394,14 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
             .map(relativo)
         expect(sinPermiso).toEqual([])
         for (const seccion of SECCIONES_PANEL) {
+            if (seccion.soloRol) {
+                // Sin permiso propio todavía (Importar desde Mikrowisp): la página exige ese rol en su
+                // middleware y el menú la muestra solo a ese rol (`puedeSeccion`).
+                const archivo = PAGINAS.find(ruta => ruta.endsWith(`pages${seccion.ruta}.vue`) || ruta.endsWith(`pages${seccion.ruta}/index.vue`))
+                expect([seccion.ruta, archivo && leer(archivo).includes(`roles?.includes('${seccion.soloRol}')`)]).toEqual([seccion.ruta, true])
+                expect([seccion.ruta, seccion.permiso]).toEqual([seccion.ruta, SIN_PERMISO])
+                continue
+            }
             expect([seccion.ruta, rutas.get(seccion.ruta)]).toEqual([seccion.ruta, seccion.permiso])
         }
     })

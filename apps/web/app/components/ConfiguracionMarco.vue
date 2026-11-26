@@ -38,34 +38,15 @@ const props = withDefaults(defineProps<{
 
 const route = useRoute()
 const { puede, enlace } = usePermisos()
-const { puedePagina } = usePaginasConfiguracion()
 const { empresas: listaEmpresas, empresaId, elegir } = useEmpresaActiva()
 const slots = useSlots()
 
 const ubicacion = computed(() => ubicacionConfiguracion(route.path))
 
-const pestanas = computed(() => {
-    const lugar = ubicacion.value
-    if (!lugar) {
-        return []
-    }
-    return lugar.seccion.paginas
-        .filter(pagina => pagina.pestana && puedePagina(pagina))
-        .map(pagina => ({ label: pagina.etiqueta, value: pagina.id, icon: pagina.icono }))
-})
-
-const pestana = computed({
-    get: () => ubicacion.value?.pagina.id,
-    set: (valor) => {
-        const destino = ubicacion.value?.seccion.paginas.find(p => p.id === valor)
-        if (destino && destino.ruta !== route.path) {
-            void navigateTo(destino.ruta)
-        }
-    },
-})
-
-/** Las pestañas solo en las pantallas de la sección; una subpágina (con `volver`) lleva «Atrás». */
-const conPestanas = computed(() => pestanas.value.length > 1 && ubicacion.value?.pagina.pestana === true && ubicacion.value.pagina.ruta === route.path)
+/** El catálogo único ya no tiene pestañas de navegación (plan del menú y Ajustes, lote 1). */
+const conPestanas = false
+const pestanas: { label: string, value: string, icon: string }[] = []
+const pestana = ref<string>()
 </script>
 
 <template>

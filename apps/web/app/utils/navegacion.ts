@@ -1,3 +1,5 @@
+import { PERMISOS_AJUSTES, RUTA_AJUSTES, SECCIONES_CONFIGURACION } from './configuracionSecciones'
+
 /**
  * Menú lateral del panel. Cada sección se muestra solo si el usuario tiene `permiso`, y la página
  * repite el mismo permiso en `definePageMeta({ permiso })` (`pnpm verificar:permisos`).
@@ -15,14 +17,16 @@ export interface SeccionPanel {
     ruta: string
     /** Uno, o una lista de la que basta uno (igual que el `permiso` de `definePageMeta`). */
     permiso: string | readonly string[]
+    /** Pantalla sin permiso propio todavía: solo la ve este rol (su `permiso` es `SIN_PERMISO`). Ver `puedeSeccion`. */
+    soloRol?: string
 }
 
-/** Subgrupo plegable dentro de un grupo (Finanzas y Configuración). */
+/** Subgrupo plegable dentro de un grupo (Finanzas, y los grupos de Ajustes para el buscador). */
 export interface SubgrupoSecciones {
     id: string
     etiqueta: string
     icono: string
-    /** Frase corta para las páginas índice (Configuración). */
+    /** Frase corta del subgrupo (los grupos de Ajustes). */
     descripcion?: string
     secciones: SeccionPanel[]
 }
@@ -45,6 +49,9 @@ export interface GrupoSecciones {
     /** Subgrupos plegables, después de las secciones sueltas del grupo. */
     subgrupos?: SubgrupoSecciones[]
 }
+
+/** El `permiso` de una sección que todavía no tiene uno propio (con `soloRol`): nadie lo cumple. */
+export const SIN_PERMISO: readonly string[] = []
 
 export const GRUPOS_PANEL: GrupoSecciones[] = [
     {
@@ -226,93 +233,34 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         ],
     },
     {
+        // Ajustes (respuestas del PM, 26 nov 2026): en el menú es una sola entrada fija abajo que abre
+        // la página de tarjetas; aquí sus grupos salen del catálogo único (`configuracionSecciones.ts`)
+        // para el buscador Ctrl K, las migas y los accesos rápidos.
         id: 'configuracion',
-        etiqueta: 'Configuración',
+        etiqueta: 'Ajustes',
         icono: 'i-lucide-settings',
         bloque: 'Sistema',
         corta: 'Ajustes',
         secciones: [
-            // Índice de la configuración: basta con poder abrir alguna de sus secciones.
-            { id: 'configuracion', etiqueta: 'Toda la configuración', descripcion: 'Todas las opciones de configuración por categoría, con buscador.', icono: 'i-lucide-layout-grid', ruta: '/configuracion', permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'portal_corte.ver', 'nodos_portal.administrar', 'inventario.configurar', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'notificaciones.ver', 'horus.ver', 'iris.ver', 'sistema.ver_salud', 'sistema.ver_registro', 'sistema.ver_almacenamiento', 'sistema.ver_crons', 'apariencia.ver'] },
+            // Página de Ajustes: basta con poder abrir alguno de sus ajustes.
+            { id: 'configuracion', etiqueta: 'Ajustes', descripcion: 'Todos los ajustes por grupo, con buscador.', icono: 'i-lucide-settings', ruta: RUTA_AJUSTES, permiso: PERMISOS_AJUSTES },
         ],
-        subgrupos: [
-            {
-                id: 'config-empresa',
-                etiqueta: 'Empresa y fiscal',
-                icono: 'i-lucide-building-2',
-                descripcion: 'Empresas (NIT), régimen fiscal, certificador FEL y datos de contacto y pago.',
-                secciones: [
-                    { id: 'empresas', etiqueta: 'Empresas', descripcion: 'Empresas (NIT) con su logo y datos fiscales, y la empresa sugerida por zona y router.', icono: 'i-lucide-building-2', ruta: '/configuracion/empresas', permiso: 'empresas.ver' },
-                    { id: 'fiscal', etiqueta: 'Fiscal', descripcion: 'País, régimen, establecimientos, frases, parámetros con vigencia, aviso de pequeño contribuyente e impuestos de cada empresa, y feriados.', icono: 'i-lucide-landmark', ruta: '/configuracion/fiscal', permiso: 'fiscal.ver' },
-                    { id: 'fel', etiqueta: 'FEL', descripcion: 'Certificador, credenciales, modo de emisión, contingencia y momento de certificar de cada empresa.', icono: 'i-lucide-shield-check', ruta: '/configuracion/fel', permiso: 'fel.ver' },
-                    { id: 'empresa', etiqueta: 'Contacto y pagos', descripcion: 'Contacto, horario e instrucciones de pago del aviso y el portal (empresa principal).', icono: 'i-lucide-contact', ruta: '/configuracion/empresa', permiso: 'empresa.ver' },
-                ],
-            },
-            {
-                id: 'config-cobro',
-                etiqueta: 'Facturación y cobro',
-                icono: 'i-lucide-file-cog',
-                descripcion: 'Ciclos de facturación y corte, documentos, cuentas propias, pasarelas y datos extra del cliente.',
-                secciones: [
-                    { id: 'plantillas', etiqueta: 'Plantillas de facturación', descripcion: 'Ciclos de facturación, corte, mora y reglas de promesas.', icono: 'i-lucide-file-cog', ruta: '/plantillas', permiso: 'plantillas.ver' },
-                    { id: 'aviso-cobro', etiqueta: 'Plantillas de documentos', descripcion: 'Plantillas en carta o POS 80 mm del aviso de cobro, la factura FEL, el recibo de cobro y la nota de crédito.', icono: 'i-lucide-file-code-2', ruta: '/configuracion/aviso-cobro', permiso: 'documentos.ver' },
-                    { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', descripcion: 'Cuentas propias para depósitos, transferencias, ACH y remesas.', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver' },
-                    { id: 'bancos-origen', etiqueta: 'Bancos de origen', descripcion: 'Catálogo de bancos de donde viene el dinero de una transferencia o ACH.', icono: 'i-lucide-list', ruta: '/configuracion/bancos-origen', permiso: 'cuentas_bancarias.ver' },
-                    { id: 'plantillas-conceptos', etiqueta: 'Plantillas y conceptos', descripcion: 'Resumen de plantillas de facturación, de documentos y conceptos de cargo único.', icono: 'i-lucide-file-text', ruta: '/configuracion/plantillas-conceptos', permiso: ['plantillas.ver', 'documentos.ver'] },
-                    { id: 'proveedores-cobro', etiqueta: 'Proveedores de cobro', descripcion: 'Pasarelas, agentes y débitos con su cuenta puente y fecha de corte.', icono: 'i-lucide-credit-card', ruta: '/configuracion/proveedores-cobro', permiso: 'bancos.ver' },
-                    { id: 'campos-personalizados', etiqueta: 'Campos personalizados', descripcion: 'Datos extra de la ficha del cliente: tipo, obligatorio, orden; activar y desactivar.', icono: 'i-lucide-text-cursor-input', ruta: '/campos-personalizados', permiso: 'campos_personalizados.editar' },
-                ],
-            },
-            {
-                id: 'config-red',
-                etiqueta: 'Red y portal',
-                icono: 'i-lucide-globe',
-                descripcion: 'Portal de corte y del cliente, nodos externos e inventario de equipos.',
-                secciones: [
-                    { id: 'portal-corte', etiqueta: 'Portal de corte', descripcion: 'A dónde mandan los routers a los suspendidos (IP y puerto) y cómo se suspende la sesión.', icono: 'i-lucide-octagon-pause', ruta: '/configuracion/portal-corte', permiso: 'portal_corte.ver' },
-                    { id: 'portal-contrasena', etiqueta: 'Contraseña del portal', descripcion: 'Contraseña por defecto con la que entran al portal los clientes sin contraseña propia (por empresa).', icono: 'i-lucide-key-round', ruta: '/configuracion/portal-contrasena', permiso: 'empresa.ver' },
-                    { id: 'nodos-portal', etiqueta: 'Nodos del portal', descripcion: 'Portales del cliente instalados en otro sitio: alta con token y revocar.', icono: 'i-lucide-server', ruta: '/configuracion/nodos-portal', permiso: 'nodos_portal.administrar' },
-                    { id: 'inventario', etiqueta: 'Inventario', descripcion: 'Firma al recibir traslados y la IA que lee facturas de compra (proveedor, modelo y clave).', icono: 'i-lucide-package-search', ruta: '/configuracion/inventario', permiso: 'inventario.configurar' },
-                ],
-            },
-            {
-                id: 'config-acceso',
-                etiqueta: 'Usuarios y acceso',
-                icono: 'i-lucide-shield',
-                descripcion: 'Quién entra al panel, con qué rol y alcance, y los tokens de integraciones.',
-                secciones: [
-                    { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios del panel: alta, edición, roles con su alcance, desactivar y empresas.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
-                    { id: 'roles', etiqueta: 'Roles y permisos', descripcion: 'Roles con sus permisos y el catálogo de permisos del ACL.', icono: 'i-lucide-shield', ruta: '/usuarios/roles', permiso: 'roles.ver' },
-                    { id: 'tokens', etiqueta: 'Tokens de API', descripcion: 'Tokens para integraciones y agentes de IA: crear (se ven una vez) y revocar.', icono: 'i-lucide-key-round', ruta: '/usuarios/tokens', permiso: 'tokens.ver' },
-                ],
-            },
-            {
-                id: 'config-sistema',
-                etiqueta: 'Sistema y apariencia',
-                icono: 'i-lucide-activity',
-                descripcion: 'Salud del servidor, registro de fallos, espacio en disco, tareas programadas y colores y marca del panel.',
-                secciones: [
-                    { id: 'salud', etiqueta: 'Salud del sistema', descripcion: 'Estado del servidor, la base, Redis, colas, RADIUS, routers, respaldos y recursos.', icono: 'i-lucide-heart-pulse', ruta: '/sistema/salud', permiso: 'sistema.ver_salud' },
-                    { id: 'registro', etiqueta: 'Registro del sistema', descripcion: 'Errores y avisos recientes de la API, la red, RADIUS, CoA, colas y contabilidad.', icono: 'i-lucide-scroll', ruta: '/sistema/registro', permiso: 'sistema.ver_registro' },
-                    { id: 'almacenamiento', etiqueta: 'Almacenamiento', descripcion: 'Qué ocupa espacio: disco, archivos por tipo, base de datos y Redis.', icono: 'i-lucide-hard-drive', ruta: '/sistema/almacenamiento', permiso: 'sistema.ver_almacenamiento' },
-                    { id: 'tareas', etiqueta: 'Tareas programadas', descripcion: 'Las tareas automáticas: cuándo corrieron, cuándo corren, cuáles se atrasaron y ejecutarlas ahora.', icono: 'i-lucide-calendar-clock', ruta: '/sistema/tareas', permiso: 'sistema.ver_crons' },
-                    { id: 'config-reportes', etiqueta: 'Ajustes de reportes', descripcion: 'Cuándo un servicio cuenta como baja en los reportes.', icono: 'i-lucide-chart-pie', ruta: '/configuracion/reportes', permiso: 'reportes.ver' },
-                    { id: 'apariencia', etiqueta: 'Apariencia', descripcion: 'Color del panel y del portal, modo claro u oscuro, marca y logo y fondo del inicio de sesión.', icono: 'i-lucide-palette', ruta: '/configuracion/apariencia', permiso: 'apariencia.ver' },
-                ],
-            },
-            {
-                id: 'config-avisos',
-                etiqueta: 'Notificaciones e integraciones',
-                icono: 'i-lucide-bell-ring',
-                descripcion: 'Correo, Telegram y WhatsApp, textos de los avisos, Horus Flow e Iris.',
-                secciones: [
-                    { id: 'notificaciones', etiqueta: 'Notificaciones', descripcion: 'Correo, Telegram y WhatsApp (por Iris): servidor, bot, interruptores por canal y por aviso, global y por empresa.', icono: 'i-lucide-bell-ring', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver' },
-                    { id: 'notificaciones-plantillas', etiqueta: 'Plantillas de avisos', descripcion: 'Texto de cada aviso por evento y canal, recordatorios de pago y registro de envíos.', icono: 'i-lucide-message-square-text', ruta: '/notificaciones', permiso: 'notificaciones.ver' },
-                    { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow, Iris, SmartOLT y GenieACS: conexión, credenciales y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'equipos.ver'] },
-                    { id: 'integracion-iris', etiqueta: 'Iris', descripcion: 'Conector con Iris: enlace de conexión, configuración a mano, tokens y envíos.', icono: 'i-lucide-clipboard-list', ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' },
-                ],
-            },
-        ],
+        subgrupos: SECCIONES_CONFIGURACION.map(grupo => ({
+            id: grupo.id,
+            etiqueta: grupo.etiqueta,
+            icono: grupo.icono,
+            descripcion: grupo.resumen,
+            secciones: grupo.paginas.map(pagina => ({
+                id: pagina.id,
+                etiqueta: pagina.etiqueta,
+                descripcion: pagina.descripcion,
+                icono: pagina.icono,
+                ruta: pagina.ruta,
+                // Sin permiso propio (Importar desde Mikrowisp): solo el rol `admin`.
+                permiso: pagina.permiso ?? SIN_PERMISO,
+                ...(pagina.permiso === null ? { soloRol: 'admin' } : {}),
+            })),
+        })),
     },
 ]
 

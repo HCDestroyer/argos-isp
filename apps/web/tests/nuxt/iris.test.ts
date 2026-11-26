@@ -238,9 +238,9 @@ describe('iris · pantalla', () => {
         expect(puede(obtenerSeccion('integraciones').permiso)).toBe(false)
     })
 
-    it('menú: Configuración → Iris con el permiso iris.ver', () => {
-        const seccion = SECCIONES_PANEL.find(s => s.id === 'integracion-iris')
-        expect(seccion).toMatchObject({ ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' })
+    it('Ajustes → Integraciones → Iris: Iris vive dentro de Integraciones (sin entrada propia en el menú)', () => {
+        expect(SECCIONES_PANEL.find(s => s.id === 'integracion-iris')).toBeUndefined()
+        expect(ubicacionConfiguracion('/configuracion/integraciones/iris')).toMatchObject({ seccion: { etiqueta: 'Comunicación e integraciones' }, pagina: { id: 'integraciones' } })
         expect(grupoDeRuta('/configuracion/integraciones/iris')?.id).toBe('configuracion')
     })
 })

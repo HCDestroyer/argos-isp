@@ -2,7 +2,7 @@
 import type { CommandPaletteGroup, CommandPaletteItem, NavigationMenuItem } from '@nuxt/ui'
 import type { SeccionPanel } from '~/utils/navegacion'
 
-const { puede } = usePermisos()
+const { puede, puedeSeccion } = usePermisos()
 const comprobantes = useComprobantes()
 const route = useRoute()
 
@@ -66,9 +66,9 @@ function personalizarAccesos() {
 const gruposVisibles = computed(() => GRUPOS_PANEL
     .map(grupo => ({
         ...grupo,
-        secciones: grupo.secciones.filter(seccion => puede(seccion.permiso)),
+        secciones: grupo.secciones.filter(puedeSeccion),
         subgrupos: (grupo.subgrupos ?? [])
-            .map(subgrupo => ({ ...subgrupo, secciones: subgrupo.secciones.filter(seccion => puede(seccion.permiso)) }))
+            .map(subgrupo => ({ ...subgrupo, secciones: subgrupo.secciones.filter(puedeSeccion) }))
             .filter(subgrupo => subgrupo.secciones.length > 0),
     }))
     .filter(grupo => grupo.secciones.length > 0 || grupo.subgrupos.length > 0))
