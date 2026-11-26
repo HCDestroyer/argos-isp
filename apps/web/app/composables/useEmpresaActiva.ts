@@ -36,6 +36,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/comprobantes',
     '/api/v1/conceptos-cargo',
     '/api/v1/constancias',
+    '/api/v1/contabilidad/inicio',
     '/api/v1/cuentas-bancarias',
     '/api/v1/dashboard/resumen',
     '/api/v1/declaraciones',
