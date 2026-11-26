@@ -9,7 +9,7 @@ import { CODIGOS_INTERNOS_GT } from '#fiscal/l10n/gt/cuentas'
  *
  * - `ledger.cajas.fiscal` (true de fábrica): una caja de cobros o una caja chica puede ser «sin
  *   factura». Se permite aunque la empresa tenga FEL obligatoria (la API devuelve el aviso).
- * - `ledger.cajas_usuarios`: quiénes ven y usan una caja sin factura (vacía = todos los que la
+ * - `ledger.cajas.usuarios`: quiénes ven y usan una caja sin factura (vacía = todos los que la
  *   alcanzan por el ACL). La visibilidad de las cuentas internas es el permiso
  *   `contabilidad.ver_cuentas_internas`, por usuario.
  * - `ledger.cuentas.interna`: atributo verificable de las cuentas internas (fuera de los libros
@@ -34,12 +34,8 @@ export default class extends BaseSchema {
         this.schema.raw(`
             ALTER TABLE ledger.cajas ADD COLUMN fiscal boolean NOT NULL DEFAULT true;
 
-            CREATE TABLE ledger.cajas_usuarios (
-                caja_id bigint NOT NULL REFERENCES ledger.cajas (id),
-                usuario_id bigint NOT NULL REFERENCES core.usuarios (id),
-                created_at timestamptz NOT NULL DEFAULT now(),
-                PRIMARY KEY (caja_id, usuario_id)
-            );
+            -- quiénes ven y usan la caja (vacía = todos los del ACL); se cambia con cajas.editar (version)
+            ALTER TABLE ledger.cajas ADD COLUMN usuarios bigint[] NOT NULL DEFAULT '{}';
 
             ALTER TABLE ledger.cuentas ADD COLUMN interna boolean NOT NULL DEFAULT false;
 
@@ -145,7 +141,6 @@ export default class extends BaseSchema {
                     REVOKE UPDATE, DELETE, TRUNCATE ON billing.recibos, billing.facturas_no_fiscales,
                         billing.facturas_no_fiscales_anulaciones FROM argosisp_app;
                     GRANT SELECT, INSERT, UPDATE ON billing.recibos_secuencias TO argosisp_app;
-                    GRANT SELECT, INSERT, DELETE ON ledger.cajas_usuarios TO argosisp_app;
                 END IF;
             END
             $do$;
@@ -184,8 +179,7 @@ export default class extends BaseSchema {
             DROP TABLE IF EXISTS billing.recibos_secuencias;
             ALTER TABLE billing.conceptos_cargo DROP COLUMN IF EXISTS facturable;
             ALTER TABLE ledger.cuentas DROP COLUMN IF EXISTS interna;
-            DROP TABLE IF EXISTS ledger.cajas_usuarios;
-            ALTER TABLE ledger.cajas DROP COLUMN IF EXISTS fiscal;
+            ALTER TABLE ledger.cajas DROP COLUMN IF EXISTS usuarios, DROP COLUMN IF EXISTS fiscal;
         `)
     }
 }

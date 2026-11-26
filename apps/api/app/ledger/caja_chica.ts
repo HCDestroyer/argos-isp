@@ -237,7 +237,10 @@ export async function estadoCajaChica(
         diferencias: { cantidad: diferencias.length, monto: aTexto(totalDiferencias) },
         cuadra: efectivo.plus(totalGastos).minus(totalDiferencias).eq(vigente),
         por_reponer: aTexto(porReponer.isNegative() ? CERO : porReponer),
-        porcentaje: fondoFijo.gt(0) ? Math.floor(efectivo.div(fondoFijo).times(100).toNumber()) : 0,
+        // indicador (no dinero): % entero del fondo
+        porcentaje: fondoFijo.gt(0)
+            ? Number.parseInt(efectivo.times(100).div(fondoFijo).floor().toFixed(0), 10)
+            : 0,
         ultima_reposicion: reposicion
             ? { id: Number(reposicion.id), fecha: reposicion.fecha, monto: aTexto(reposicion.monto) }
             : null,

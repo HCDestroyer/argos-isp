@@ -142,9 +142,7 @@ export async function listarCajas(
                     ELSE coalesce((SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_cobros}) END)::text AS fondo_fijo_efectivo`,
             ),
             'c.fiscal',
-            db.raw(
-                "(SELECT coalesce(array_agg(cu.usuario_id ORDER BY cu.usuario_id), '{}') FROM ledger.cajas_usuarios cu WHERE cu.caja_id = c.id) AS usuarios",
-            ),
+            'c.usuarios',
             db.raw(
                 `CASE WHEN NOT c.fiscal AND (SELECT fc.modo FROM fiscal.fel_configuracion fc WHERE fc.empresa_id = c.empresa_id) = 'obligatoria'
                       THEN ? END AS aviso_sin_factura`,
@@ -181,8 +179,7 @@ export async function veTodasLasCajas(usuarioId: number): Promise<boolean> {
     return permisos.includes('contabilidad.ver_cuentas_internas')
 }
 
-const SQL_VISIBLE = `(NOT EXISTS (SELECT 1 FROM ledger.cajas_usuarios v WHERE v.caja_id = c.id)
-    OR c.cajero_id = ? OR EXISTS (SELECT 1 FROM ledger.cajas_usuarios v WHERE v.caja_id = c.id AND v.usuario_id = ?))`
+const SQL_VISIBLE = `(cardinality(c.usuarios) = 0 OR c.cajero_id = ? OR ?::bigint = ANY (c.usuarios))`
 
 /** 404 si la caja tiene lista de usuarios y el usuario no está (ni puede ver todas). */
 export async function exigirCajaVisible(cajaId: number, usuarioId: number | null) {
@@ -197,12 +194,14 @@ export async function exigirCajaVisible(cajaId: number, usuarioId: number | null
 
 /** Usuarios de la lista de visibilidad de la caja (vacía = todos los del ACL). */
 export async function usuariosDeCaja(cliente: QueryClientContract, cajaId: number): Promise<number[]> {
-    const filas = (await cliente
-        .from('ledger.cajas_usuarios')
-        .where('caja_id', cajaId)
-        .orderBy('usuario_id')
-        .select('usuario_id')) as Array<{ usuario_id: number }>
-    return filas.map((f) => Number(f.usuario_id))
+    const fila = (await cliente
+        .from('ledger.cajas')
+        .where('id', cajaId)
+        .select('usuarios')
+        .firstOrFail()) as {
+        usuarios: Array<number | string> | null
+    }
+    return (fila.usuarios ?? []).map(Number).sort((a, b) => a - b)
 }
 
 /** 404 si la caja no existe; devuelve sus dimensiones (alcance por caja y empresa). */

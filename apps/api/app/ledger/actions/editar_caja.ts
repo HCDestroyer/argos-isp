@@ -97,18 +97,10 @@ export default class EditarCaja extends DomainAction<EntradaEditarCaja, CajaVist
             .update({
                 fiscal: despues.fiscal,
                 cajero_id: despues.cajero_id,
+                usuarios: despues.usuarios,
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
-        if (campos.includes('usuarios')) {
-            await t.trx.from('ledger.cajas_usuarios').where('caja_id', caja.id).delete()
-            if (despues.usuarios.length > 0) {
-                await t.trx
-                    .insertQuery()
-                    .table('ledger.cajas_usuarios')
-                    .multiInsert(despues.usuarios.map((u) => ({ caja_id: caja.id, usuario_id: u })))
-            }
-        }
         await t.registrarCambios({ tipo: 'caja', id: caja.id }, antes, despues)
         const cajas = await listarCajas(undefined, [empresaId], t.trx)
         const vista = cajas.find((c) => c.id === caja.id)!

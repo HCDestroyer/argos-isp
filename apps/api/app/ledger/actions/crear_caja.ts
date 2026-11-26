@@ -142,14 +142,9 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
                 tipo,
                 fondo_fijo: fondoFijo,
                 fiscal: input.fiscal ?? true,
+                usuarios,
             })
             .returning('id')) as Array<{ id: number }>
-        if (usuarios.length > 0) {
-            await t.trx
-                .insertQuery()
-                .table('ledger.cajas_usuarios')
-                .multiInsert(usuarios.map((u) => ({ caja_id: fila!.id, usuario_id: u })))
-        }
         t.fijarEntidad('caja', fila!.id)
         await t.registrarCambios({ tipo: 'caja', id: fila!.id }, null, {
             empresa_id: empresaId,
