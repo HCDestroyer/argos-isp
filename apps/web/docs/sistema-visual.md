@@ -243,4 +243,5 @@ pruebas de axe (`tests/e2e/accesibilidad.spec.ts`) recorren las pantallas princi
 - **Login** (OperLogin): fondo de la marca a todo lo ancho y la tarjeta a la derecha; en el
   teléfono, la tarjeta sobre una franja de color.
 - **Lealtad:** `LealtadPestanas` (Programa y premios, Canjes, Referidos) con el interruptor del
-  programa; **Usuarios:** `UsuariosNavegacion` segmentada.
+  programa; **Usuarios, roles y tokens:** dentro de Ajustes (grupo «Usuarios y seguridad»), con la
+  lista de Ajustes a la izquierda (`ConfiguracionMarco`).

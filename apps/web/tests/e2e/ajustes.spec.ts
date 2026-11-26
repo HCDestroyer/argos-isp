@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { abrirAjustes, entrar, irAjuste } from './ayudas'
+import { SECCIONES_CONFIGURACION } from '../../app/utils/configuracionSecciones'
 
 /**
  * Ajustes (plan del menú y Ajustes, lotes 2 y 3; respuestas del PM del 26 nov 2026; tableros
@@ -78,4 +79,24 @@ test('el cajero ve solo lo suyo: 2 grupos de 8, sin grupos vacíos', async ({ pa
     await expect(page.locator('[data-prueba="ajustes-sin-resultados"]')).toContainText('Nada coincide con «logo»')
     await page.getByRole('button', { name: 'Borrar búsqueda' }).click()
     await expect(indice.locator('[data-grupo-ajustes]')).toHaveCount(2)
+})
+
+test('las 29 pantallas de Ajustes mantienen la lista en escritorio y «‹ Ajustes» en el teléfono', async ({ page }) => {
+    test.setTimeout(240_000)
+    await entrar(page, 'admin@argos.test')
+    for (const pagina of SECCIONES_CONFIGURACION.flatMap(seccion => seccion.paginas)) {
+        // Por la SPA, como el usuario: la lista de la izquierda o, en el teléfono, «‹ Ajustes» y la lista.
+        if (esTelefono(page) && (await page.locator('[data-prueba="volver-ajustes"]').isVisible())) {
+            await page.locator('[data-prueba="volver-ajustes"]').click()
+        }
+        await irAjuste(page, pagina.etiqueta, new RegExp(`${pagina.ruta.replace(/[/-]/g, '\\$&')}$`))
+        await expect(page.getByRole('heading', { name: pagina.etiqueta, level: 1 }), pagina.ruta).toBeVisible({ timeout: 20_000 })
+        if (esTelefono(page)) {
+            await expect(page.locator('[data-prueba="volver-ajustes"]'), pagina.ruta).toHaveText('Ajustes')
+            await expect(page.locator('[data-prueba="navegacion-ajustes"]'), pagina.ruta).toBeHidden()
+        }
+        else {
+            await expect(page.locator('[data-prueba="navegacion-ajustes"] [aria-current="page"]'), pagina.ruta).toHaveText(pagina.etiqueta)
+        }
+    }
 })

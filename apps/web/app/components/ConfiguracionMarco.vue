@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<{
     id: string
     /** Solo en subpáginas: en la pantalla de un ajuste, el título es el del catálogo. */
     titulo?: string
-    /** Solo en subpáginas: en la pantalla de un ajuste, la frase es la del catálogo. */
+    /** Frase propia de la pantalla (más precisa que la del catálogo, como en Campos personalizados). */
     descripcion?: string
     /** Pastillas de la empresa activa (los ajustes que son de cada NIT). */
     empresas?: boolean
@@ -51,7 +51,7 @@ const ubicacion = computed(() => ubicacionConfiguracion(route.path))
 const enPantalla = computed(() => ubicacion.value?.pagina.ruta === route.path)
 
 const titulo = computed(() => (enPantalla.value || !props.titulo ? ubicacion.value?.pagina.etiqueta ?? props.titulo ?? 'Ajustes' : props.titulo))
-const descripcion = computed(() => (enPantalla.value ? ubicacion.value?.pagina.descripcion : props.descripcion ?? ubicacion.value?.pagina.descripcion))
+const descripcion = computed(() => props.descripcion ?? ubicacion.value?.pagina.descripcion)
 
 const migas = computed<BreadcrumbItem[]>(() => {
     const lista: BreadcrumbItem[] = [{ label: 'Ajustes', to: RUTA_AJUSTES }]
@@ -192,9 +192,15 @@ const conPastillas = computed(() => props.empresas && listaEmpresas.value.length
 
                 <slot name="alcance" />
 
-                <slot
+                <!-- Sin tarjeta: la pantalla pinta las suyas; en escritorio el contenido se desplaza aquí,
+                     con la lista de Ajustes quieta a la izquierda. -->
+                <div
                     v-if="props.sinTarjeta"
-                />
+                    class="flex min-w-0 flex-col gap-4 lg:-m-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-1"
+                    data-prueba="contenido-ajuste"
+                >
+                    <slot />
+                </div>
                 <section
                     v-else
                     class="surface-card flex min-w-0 flex-col rounded-[1.25rem] lg:min-h-0 lg:flex-1"

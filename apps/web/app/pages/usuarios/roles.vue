@@ -179,11 +179,10 @@ function alGuardar(guardado: Rol) {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="roles"
-        titulo="Roles y permisos"
-        icono="i-lucide-shield"
         descripcion="Un rol agrupa lo que una persona puede hacer. El alcance dice dónde puede hacerlo."
+        sin-tarjeta
     >
         <template #acciones>
             <UButton
@@ -474,5 +473,5 @@ function alGuardar(guardado: Rol) {
             :solo-lectura="editando !== null && !puede('roles.editar')"
             @guardado="alGuardar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

@@ -132,10 +132,11 @@ export async function abrirAjustes(page: Page): Promise<void> {
  */
 export async function irAjuste(page: Page, nombre: string, url: RegExp): Promise<void> {
     const lateral = page.locator('[data-prueba="navegacion-ajustes"]')
-    if (!(await lateral.isVisible())) {
+    const indice = page.locator('[data-prueba="indice-ajustes"]')
+    if (!(await lateral.isVisible()) && !(await indice.isVisible())) {
         await abrirAjustes(page)
     }
-    const contenedor = (await lateral.isVisible()) ? lateral : page.locator('[data-prueba="indice-ajustes"]')
+    const contenedor = (await lateral.isVisible()) ? lateral : indice
     await contenedor.getByRole('link', { name: nombre, exact: true }).click()
     await expect(page).toHaveURL(url, { timeout: 20_000 })
 }

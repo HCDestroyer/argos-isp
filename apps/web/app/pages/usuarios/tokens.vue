@@ -97,11 +97,10 @@ const columnas: TableColumn<TokenApi>[] = [
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="tokens"
-        titulo="Tokens de API"
-        icono="i-lucide-key-round"
         descripcion="Un token actúa como su usuario y pasa por el mismo ACL, recortado a sus alcances. Se muestra una sola vez al crearlo; revocarlo lo apaga de inmediato."
+        sin-tarjeta
     >
         <template #accion-principal>
             <UButton
@@ -116,9 +115,6 @@ const columnas: TableColumn<TokenApi>[] = [
         </template>
 
         <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
-            <div class="border-b border-(--ax-borde) p-3 sm:p-4">
-                <UsuariosNavegacion />
-            </div>
             <div
                 v-if="lista.problema.value"
                 class="p-4"
@@ -223,5 +219,5 @@ const columnas: TableColumn<TokenApi>[] = [
             :ejecutar="revocar"
             @hecho="alRevocar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>
