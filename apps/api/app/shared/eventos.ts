@@ -1488,6 +1488,33 @@ export interface CatalogoEventos {
         /** contado − esperado */
         diferencia: Dinero
     }
+    /**
+     * B11: cambió una caja (caja sin factura, lista de usuarios que la ven, cajero o encargado). Solo
+     * nombres de campos.
+     */
+    'caja.cambiada': {
+        caja_id: number
+        empresa_id: number
+        campos: Array<'fiscal' | 'cajero_id' | 'usuarios'>
+        /** después del cambio */
+        fiscal: boolean
+        tipo: 'cobros' | 'gastos'
+    }
+    /**
+     * B11: recibo no fiscal de un pago (caja sin factura o cargo no facturable), con numeración propia
+     * por empresa; `facturas_no_fiscales`: las que este cobro dejó fuera de la SAT.
+     */
+    'recibo.emitido': {
+        recibo_id: number
+        empresa_id: number
+        numero: number
+        pago_id: number
+        caja_id: number | null
+        cliente_id: number
+        monto: Dinero
+        motivo: 'caja_sin_factura' | 'cargo_no_facturable'
+        facturas_no_fiscales: number[]
+    }
     /** B9: el archivo del comprobante de un egreso (una vez por egreso). */
     'egreso.comprobante_adjuntado': {
         egreso_id: number
@@ -2206,6 +2233,8 @@ export const EVENTOS = [
     'caja_chica.repuesta',
     'caja.contada',
     'egreso.comprobante_adjuntado',
+    'caja.cambiada',
+    'recibo.emitido',
     'banco_origen.cambiado',
     'cartera.castigada',
     'compra.registrada',

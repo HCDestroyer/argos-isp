@@ -28,6 +28,7 @@ export interface EntradaEditarConceptoCargo {
     tipo?: TipoConceptoCargo
     cuenta_codigo?: string
     gravable?: boolean
+    facturable?: boolean
     activo?: boolean
     /** Solo lectura: distinto del actual → `422 concepto_de_sistema`. */
     codigo_sistema?: string | null
@@ -35,7 +36,15 @@ export interface EntradaEditarConceptoCargo {
 
 type FilaConcepto = Pick<
     ConceptoCargoVista,
-    'id' | 'nombre' | 'tipo' | 'cuenta_codigo' | 'gravable' | 'activo' | 'codigo_sistema' | 'version'
+    | 'id'
+    | 'nombre'
+    | 'tipo'
+    | 'cuenta_codigo'
+    | 'gravable'
+    | 'facturable'
+    | 'activo'
+    | 'codigo_sistema'
+    | 'version'
 > & { empresa_id: number }
 
 export default class EditarConceptoCargo extends DomainAction<
@@ -57,6 +66,7 @@ export default class EditarConceptoCargo extends DomainAction<
                 'tipo',
                 'cuenta_codigo',
                 'gravable',
+                'facturable',
                 'activo',
                 'codigo_sistema',
                 'version',
@@ -87,6 +97,7 @@ export default class EditarConceptoCargo extends DomainAction<
             tipo: input.tipo ?? previo.tipo,
             cuenta_codigo: input.cuenta_codigo ?? previo.cuenta_codigo,
             gravable: input.gravable ?? previo.gravable,
+            facturable: input.facturable ?? previo.facturable,
             activo: input.activo ?? previo.activo,
         }
         if (despues.cuenta_codigo !== previo.cuenta_codigo) {
@@ -121,6 +132,7 @@ export default class EditarConceptoCargo extends DomainAction<
                 tipo: previo.tipo,
                 cuenta_codigo: previo.cuenta_codigo,
                 gravable: previo.gravable,
+                facturable: previo.facturable,
                 activo: previo.activo,
             },
             despues,

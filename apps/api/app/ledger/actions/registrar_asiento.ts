@@ -85,6 +85,9 @@ export const ORIGENES_ASIENTO = [
     // y conteo con diferencia (Faltantes / Caja chica o Caja chica / Sobrantes; origen_id = `ledger.conteos_caja.id`)
     'reposicion_caja',
     'conteo_caja',
+    // B11 (caja sin factura): la factura cobrada solo en cajas sin factura pasa su ingreso y su IVA por
+    // certificar a 4.3.01; origen_id = `billing.facturas_no_fiscales.id`
+    'recibo_interno',
 ] as const
 
 /**

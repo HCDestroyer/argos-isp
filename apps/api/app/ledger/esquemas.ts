@@ -57,9 +57,15 @@ export const Cuenta = definirEsquema(
                 ...nulable(enumerado(['efectivo', 'operacion', 'inversion', 'financiamiento'])),
                 description: 'Clasificación del flujo de efectivo (método indirecto)',
             },
+            interna: {
+                ...booleano,
+                description:
+                    'B11: cuenta interna (caja sin factura): fuera de los libros fiscales; solo con contabilidad.ver_cuentas_internas',
+            },
             ...auditable,
         },
         [
+            'interna',
             'empresa_id',
             'pais',
             'naturaleza',
@@ -118,6 +124,7 @@ export const Asiento = definirEsquema(
                 'entrega_caja',
                 'reposicion_caja',
                 'conteo_caja',
+                'recibo_interno',
                 'ajuste',
                 'reclasificacion',
                 'liquidacion_cobro',
@@ -255,6 +262,18 @@ export const Caja = definirEsquema(
                 description: 'B1: cobros (turno, cierre y entrega) o gastos (caja chica, B9)',
             },
             fondo_fijo: { ...nulable(Dinero), description: 'Fondo fijo propio; null = el de la empresa' },
+            fiscal: {
+                ...booleano,
+                description: 'B11: false = caja sin factura (recibo no fiscal, cuentas internas)',
+            },
+            usuarios: {
+                ...lista(id),
+                description: 'B11: quiénes ven y usan la caja (vacía = todos los que la alcanzan por el ACL)',
+            },
+            aviso_sin_factura: {
+                ...nulable(texto),
+                description: 'B11: aviso de una caja sin factura en una empresa con FEL obligatoria',
+            },
             fondo_fijo_efectivo: {
                 ...Dinero,
                 description: 'Fondo con el que abre la caja (el propio o el fondo de cambio de la empresa)',
@@ -272,6 +291,9 @@ export const Caja = definirEsquema(
             'tipo',
             'fondo_fijo',
             'fondo_fijo_efectivo',
+            'fiscal',
+            'usuarios',
+            'aviso_sin_factura',
         ],
     ),
 )

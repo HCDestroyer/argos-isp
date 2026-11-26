@@ -1,6 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, Problema } from '#shared/errores'
 import { paginar, decodificarCursor, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
@@ -28,21 +28,35 @@ const COLUMNAS_CUENTA = [
     'categoria_fiscal',
     'libro_inventario',
     'categoria_flujo',
+    'interna',
     'version',
     'created_at',
     'updated_at',
 ] as const
 
-/** Plan de cuentas: el catálogo común y las subcuentas de las empresas pedidas (null = todas). */
-export async function listarCuentas(empresas: number[] | null = null) {
+/**
+ * Plan de cuentas: el catálogo común y las subcuentas de las empresas pedidas (null = todas). B11: sin
+ * `verInternas` (permiso `contabilidad.ver_cuentas_internas`) no salen las cuentas internas.
+ */
+export async function listarCuentas(empresas: number[] | null = null, verInternas = true) {
     return db
         .from('ledger.cuentas')
         .select(...COLUMNAS_CUENTA)
         .if(empresas !== null, (q) =>
             q.where((w) => w.whereNull('empresa_id').orWhereIn('empresa_id', empresas!)),
         )
+        .if(!verInternas, (q) => q.where('interna', false))
         .orderBy('codigo', 'asc')
 }
+
+/**
+ * B11 (visibilidad de las cuentas internas, decisión del PM del 25 nov 2026): quien no tiene
+ * `contabilidad.ver_cuentas_internas` no ve los asientos que tocan una cuenta interna en el diario, ni
+ * su mayor (403), y en los estados las ve agregadas en una línea «Interno (restringido)» (así los
+ * totales siguen cuadrando). No es para esconder nada a una auditoría: todo sigue en el libro.
+ */
+export const SQL_ASIENTO_INTERNO = `EXISTS (SELECT 1 FROM ledger.movimientos mi JOIN ledger.cuentas ci ON ci.id = mi.cuenta_id
+    WHERE mi.asiento_id = a.id AND ci.interna)`
 
 /*
 |--------------------------------------------------------------------------
@@ -124,7 +138,11 @@ export async function verAsiento(id: number, cliente: QueryClientContract = db.c
 }
 
 /** `empresas`: las del libro a mostrar (`empresasDeLaLista`); null = todas (consolidado). */
-export async function libroDiario(filtros: FiltrosDiario, empresas: number[] | null = null) {
+export async function libroDiario(
+    filtros: FiltrosDiario,
+    empresas: number[] | null = null,
+    verInternas = true,
+) {
     const conexion = db.connection()
     const consulta = conexion
         .from('ledger.asientos as a')
@@ -134,6 +152,7 @@ export async function libroDiario(filtros: FiltrosDiario, empresas: number[] | n
         .if(filtros.hasta, (q) => q.where('a.fecha', '<=', filtros.hasta!))
         .if(filtros.origen_tipo, (q) => q.where('a.origen_tipo', filtros.origen_tipo!))
         .if(filtros.origen_id, (q) => q.where('a.origen_id', filtros.origen_id!))
+        .if(!verInternas, (q) => q.whereRaw(`NOT ${SQL_ASIENTO_INTERNO}`))
 
     const pagina = await paginar<FilaAsiento>(consulta, filtros, { columna: 'a.id' })
     const movimientos = await movimientosDeAsientos(
@@ -221,13 +240,25 @@ export function saldoSegunNaturaleza(naturalezaOTipo: string, debe: Dec, haber: 
  * Mayor de una cuenta (o auxiliar de un cliente), en orden de registro. Cada línea lleva el saldo
  * acumulado; `saldo_inicial` es lo anterior a `desde` y `saldo_final` el saldo hasta `hasta`.
  */
-export async function libroMayor(filtros: FiltrosMayor, empresas: number[] | null = null) {
+export async function libroMayor(
+    filtros: FiltrosMayor,
+    empresas: number[] | null = null,
+    verInternas = true,
+) {
     const cuenta = (await db
         .from('ledger.cuentas')
         .where('id', filtros.cuenta_id)
         .select(...COLUMNAS_CUENTA)
-        .first()) as ({ tipo: string; naturaleza: string } & Record<string, unknown>) | null
+        .first()) as ({ tipo: string; naturaleza: string; interna: boolean } & Record<string, unknown>) | null
     if (!cuenta) throw new NoEncontrado(`La cuenta ${filtros.cuenta_id} no existe`)
+    if (cuenta.interna && !verInternas) {
+        throw new Problema(
+            403,
+            'cuenta_interna_restringida',
+            'Cuenta interna',
+            `La cuenta ${String(cuenta.codigo)} es interna: la ve quien tiene contabilidad.ver_cuentas_internas`,
+        )
+    }
 
     const base = () =>
         db

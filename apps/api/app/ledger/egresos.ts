@@ -67,7 +67,8 @@ function consultaEgresos(cliente: QueryClientContract) {
         cliente
             .from('ledger.egresos as e')
             .join('ledger.egresos_categorias as ec', 'ec.id', 'e.categoria_id')
-            .join('ledger.cuentas as cu', 'cu.id', 'ec.cuenta_id')
+            // B11: la cuenta propia del egreso (caja sin factura: 5.7.01) o la de su categoría
+            .joinRaw('JOIN ledger.cuentas cu ON cu.id = coalesce(e.cuenta_id, ec.cuenta_id)')
             .leftJoin('ledger.cajas as cj', 'cj.id', 'e.caja_id')
             .leftJoin('ledger.bancos as bl', 'bl.id', 'e.banco_id')
             .leftJoin('billing.cuentas_bancarias as cb', 'cb.id', 'e.cuenta_bancaria_id')

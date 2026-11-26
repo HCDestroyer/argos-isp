@@ -23,6 +23,7 @@ import {
 import { pendienteDe } from '#billing/facturas'
 import { cajaPrincipalId, verPago, type PagoVista } from '#billing/pagos'
 import { cajaDelCajero } from '#ledger/cajas'
+import { emitirRecibo, sacarDeLaSat, sqlNoFiscalVigente } from '#billing/recibos'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
@@ -535,6 +536,73 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         return cajas
     }
 
+    /**
+     * B11: recibo no fiscal del pago si se cobró en una caja sin factura (y las facturas que quedan
+     * cubiertas solo con dinero sin factura salen de la SAT) o si cubre un cargo no facturable.
+     */
+    private async reciboNoFiscal(
+        t: Transaccion,
+        datos: {
+            empresaId: number
+            pagoId: number
+            cajaId: number | null
+            clienteId: number
+            monto: Dec
+            facturas: number[]
+        },
+    ) {
+        const caja =
+            datos.cajaId === null
+                ? null
+                : ((await t.trx
+                      .from('ledger.cajas')
+                      .where('id', datos.cajaId)
+                      .select('fiscal')
+                      .firstOrFail()) as {
+                      fiscal: boolean
+                  })
+        const sinFactura = caja !== null && !caja.fiscal
+        const cargoControl =
+            datos.facturas.length > 0 &&
+            Boolean(
+                await t.trx
+                    .from('billing.facturas as f')
+                    .whereIn('f.id', datos.facturas)
+                    .whereRaw(sqlNoFiscalVigente('f'))
+                    .select('f.id')
+                    .first(),
+            )
+        if (!sinFactura && !cargoControl) return
+        const motivo = sinFactura ? 'caja_sin_factura' : 'cargo_no_facturable'
+        const recibo = await emitirRecibo(t, {
+            empresa_id: datos.empresaId,
+            pago_id: datos.pagoId,
+            caja_id: datos.cajaId,
+            cliente_id: datos.clienteId,
+            monto: datos.monto,
+            motivo,
+        })
+        const fuera = sinFactura
+            ? await sacarDeLaSat(t, {
+                  empresa_id: datos.empresaId,
+                  pago_id: datos.pagoId,
+                  recibo_id: recibo.id,
+                  facturas: datos.facturas,
+              })
+            : []
+        await t.emit('recibo.emitido', {
+            recibo_id: recibo.id,
+            empresa_id: datos.empresaId,
+            numero: recibo.numero,
+            pago_id: datos.pagoId,
+            caja_id: datos.cajaId,
+            cliente_id: datos.clienteId,
+            monto: aTexto(datos.monto),
+            motivo,
+            facturas_no_fiscales: fuera,
+        })
+    }
+
     private async registrarCobro(t: Transaccion, input: EntradaRegistrarPago, monto: Dec): Promise<number> {
         const [fila] = (await t.trx
             .insertQuery()
@@ -681,6 +749,14 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             { trx: t.trx },
         )
         await guardarRecuperacion(t.trx, parte.empresaId, pagoId, recuperacion)
+        await this.reciboNoFiscal(t, {
+            empresaId: parte.empresaId,
+            pagoId,
+            cajaId: caja?.cajaId ?? null,
+            clienteId: input.cliente_id,
+            monto: parte.monto,
+            facturas: aplicaciones.map((a) => a.factura_id),
+        })
 
         await t.emit('pago.registrado', {
             pago_id: pagoId,

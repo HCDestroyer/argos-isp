@@ -20,6 +20,8 @@ import { listarCajas, type CajaVista } from '#ledger/cajas'
  *   `fondo_caja_chica`).
  * - B9: una caja chica no tiene turnos ni cobra; su `cajero_id` es su encargado. Nace vacía: la
  *   primera reposición (`POST /cajas/:id/reponer`) le pone su fondo fijo desde la custodia o el banco.
+ * - B11: `fiscal = false` = caja sin factura (de cobros o caja chica; aviso si la empresa tiene FEL
+ *   obligatoria) y `usuarios` = quiénes la ven y usan (vacío = todos los del ACL).
  */
 
 export interface EntradaCrearCaja {
@@ -28,6 +30,8 @@ export interface EntradaCrearCaja {
     empresa_id?: number | null
     tipo?: TipoCaja
     fondo_fijo?: string | null
+    fiscal?: boolean
+    usuarios?: number[]
 }
 
 /** Mismo lock que las subcuentas de bancos (`crear_cuenta_bancaria`): numeración sin carreras. */
@@ -64,20 +68,27 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
 
-        if (input.cajero_id) {
-            const usuario = await t.trx
+        const usuarios = [...new Set(input.usuarios ?? [])].sort((a, b) => a - b)
+        for (const [campo, ids] of [
+            ['cajero_id', input.cajero_id ? [input.cajero_id] : []],
+            ['usuarios', usuarios],
+        ] as const) {
+            if (ids.length === 0) continue
+            const existen = (await t.trx
                 .from('core.usuarios')
-                .where('id', input.cajero_id)
-                .select('id')
-                .first()
-            if (!usuario) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'cajero_id',
-                        message: `El usuario ${input.cajero_id} no existe`,
+                .whereIn('id', [...ids])
+                .select('id')) as Array<{
+                id: number
+            }>
+            const faltan = ids.filter((id) => !existen.some((e) => Number(e.id) === id))
+            if (faltan.length > 0) {
+                throw new ValidacionFallida(
+                    faltan.map((id) => ({
+                        field: campo,
+                        message: `El usuario ${id} no existe`,
                         rule: 'exists',
-                    },
-                ])
+                    })),
+                )
             }
         }
         const repetida = await t.trx
@@ -130,8 +141,15 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
                 cuenta_id: cuenta!.id,
                 tipo,
                 fondo_fijo: fondoFijo,
+                fiscal: input.fiscal ?? true,
             })
             .returning('id')) as Array<{ id: number }>
+        if (usuarios.length > 0) {
+            await t.trx
+                .insertQuery()
+                .table('ledger.cajas_usuarios')
+                .multiInsert(usuarios.map((u) => ({ caja_id: fila!.id, usuario_id: u })))
+        }
         t.fijarEntidad('caja', fila!.id)
         await t.registrarCambios({ tipo: 'caja', id: fila!.id }, null, {
             empresa_id: empresaId,
@@ -140,6 +158,8 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
             cuenta_id: cuenta!.id,
             tipo,
             fondo_fijo: fondoFijo,
+            fiscal: input.fiscal ?? true,
+            usuarios,
         })
         const cajas = await listarCajas(undefined, [empresaId], t.trx)
         return cajas.find((c) => c.id === fila!.id)!

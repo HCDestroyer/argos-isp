@@ -171,6 +171,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'caja_chica.reponer': 'Caja chica repuesta',
     'caja_chica.contar': 'Caja chica contada',
     'egresos.adjuntar_comprobante': 'Comprobante adjuntado a un egreso',
+    // B11 del plan de contabilidad (A3): caja sin factura
+    'cajas.editar': 'Caja editada (sin factura, quiénes la ven o su cajero)',
     'bancos.trasladar': 'Traslado entre cuentas bancarias',
     'bancos.importar_extracto': 'Extracto bancario importado',
     'bancos.importar_extracto_archivo': 'Estado de cuenta del banco importado desde archivo',

@@ -42,7 +42,7 @@ import { libroDiario, libroMayor, listarCuentas, verAsiento } from '#ledger/cons
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { listarBancosLibro } from '#ledger/bancos'
 import { listarDiarios, verDiario } from '#ledger/diarios'
-import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
+import { cajaDelCajero, exigirCajaVisible, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
 import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
@@ -56,6 +56,7 @@ import EntregarCaja from '#ledger/actions/entregar_caja'
 import RecibirEntrega from '#ledger/actions/recibir_entrega'
 import RechazarEntrega from '#ledger/actions/rechazar_entrega'
 import ConfigurarCajas from '#ledger/actions/configurar_cajas'
+import EditarCaja from '#ledger/actions/editar_caja'
 import RegistrarGastoCajaChica from '#ledger/actions/registrar_gasto_caja_chica'
 import ReponerCajaChica from '#ledger/actions/reponer_caja_chica'
 import ContarCaja from '#ledger/actions/contar_caja'
@@ -101,7 +102,13 @@ const cajas: Ruta[] = [
         descripcion:
             'Cajas de la empresa activa (o de todas las del alcance; `empresas=todas` = consolidado con alcance global). Cada caja es de una empresa (`empresa_id`).',
         respuesta: { status: 200, descripcion: 'Cajas', esquema: lista(Caja) },
-        handler: (ctx, { query }) => listarCajas(ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: (ctx, { query }) =>
+            listarCajas(
+                ctx.alcance,
+                empresasDeLaLista(ctx.empresa, query.empresas),
+                undefined,
+                ctx.auth.user?.id ?? null,
+            ),
     }),
     definirRuta({
         metodo: 'post',
@@ -118,6 +125,24 @@ const cajas: Ruta[] = [
         handler: (ctx, { cuerpo }) => new CrearCaja().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
+        metodo: 'put',
+        ruta: '/cajas/:id',
+        operacion: 'cajasEditar',
+        resumen: 'Editar una caja: sin factura, quiénes la ven y usan, cajero o encargado',
+        etiqueta: 'cajas',
+        permiso: 'cajas.editar',
+        cuerpo: v.editarCajaValidator,
+        idempotente: true,
+        descripcion:
+            'B11. `fiscal = false` = caja sin factura (de cobros o caja chica): sus cobros emiten un recibo no fiscal con numeración propia por empresa y no van a la SAT (la factura cubierta solo con cobros sin factura pasa a 4.3.01); sus gastos van a 5.7.01. Se permite con FEL obligatoria y la respuesta trae `aviso_sin_factura`. `usuarios`: quiénes ven y usan la caja ([] = todos los del ACL; con contabilidad.ver_cuentas_internas se ve igual). Solo cambia lo que se envía; `version` (409). Emite caja.cambiada.',
+        respuesta: { status: 200, descripcion: 'Caja', esquema: Caja },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await cajaAccesible(ctx, id)
+            return new EditarCaja().execute({ ...cuerpo, caja_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
         metodo: 'post',
         ruta: '/cajas/:id/abrir',
         operacion: 'cajasAbrir',
@@ -129,7 +154,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Turno abierto', esquema: CajaTurno },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAcceso(ctx, await existeCaja(id))
+            await cajaAccesible(ctx, id)
             return new AbrirCaja().execute(
                 { caja_id: id, fondo_inicial: cuerpo.fondo_inicial ?? null },
                 ctx.contextoAccion(),
@@ -150,7 +175,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Turno cerrado', esquema: CajaTurno },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAcceso(ctx, await existeCaja(id))
+            await cajaAccesible(ctx, id)
             return new CerrarCaja().execute(
                 {
                     caja_id: id,
@@ -178,7 +203,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Resumen del turno', esquema: ResumenTurnoCaja },
         handler: async (ctx, { query }) => {
             let cajaId = query.caja_id ?? null
-            if (cajaId !== null) exigirAcceso(ctx, await existeCaja(cajaId))
+            if (cajaId !== null) await cajaAccesible(ctx, cajaId)
             else {
                 cajaId = await cajaDelCajero(
                     ctx.auth.user?.id ?? null,
@@ -204,7 +229,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de turnos', esquema: pagina(CajaTurno) },
         handler: async (ctx, { query, params }) => {
             const id = Number(params.id)
-            exigirAcceso(ctx, await existeCaja(id))
+            await cajaAccesible(ctx, id)
             return listarTurnos(id, query)
         },
     }),
@@ -243,7 +268,7 @@ function cajaChicaRutas(): Ruta[] {
             respuesta: { status: 200, descripcion: 'Caja chica', esquema: EstadoCajaChica },
             handler: async (ctx, { params }) => {
                 const id = Number(params.id)
-                exigirAcceso(ctx, await existeCaja(id))
+                await cajaAccesible(ctx, id)
                 return estadoCajaChica(id)
             },
         }),
@@ -262,7 +287,7 @@ function cajaChicaRutas(): Ruta[] {
             respuesta: { status: 201, descripcion: 'Gasto registrado', esquema: GastoCajaChica },
             handler: async (ctx, { cuerpo, params }) => {
                 const id = Number(params.id)
-                exigirAcceso(ctx, await existeCaja(id))
+                await cajaAccesible(ctx, id)
                 return new RegistrarGastoCajaChica().execute(
                     { ...cuerpo, caja_id: id, archivo: await archivoSubido(ctx) },
                     ctx.contextoAccion(),
@@ -283,7 +308,7 @@ function cajaChicaRutas(): Ruta[] {
             respuesta: { status: 201, descripcion: 'Reposición registrada', esquema: ReposicionCaja },
             handler: async (ctx, { cuerpo, params }) => {
                 const id = Number(params.id)
-                exigirAcceso(ctx, await existeCaja(id))
+                await cajaAccesible(ctx, id)
                 return new ReponerCajaChica().execute({ ...cuerpo, caja_id: id }, ctx.contextoAccion())
             },
         }),
@@ -301,7 +326,7 @@ function cajaChicaRutas(): Ruta[] {
             respuesta: { status: 201, descripcion: 'Conteo registrado', esquema: ConteoCaja },
             handler: async (ctx, { cuerpo, params }) => {
                 const id = Number(params.id)
-                exigirAcceso(ctx, await existeCaja(id))
+                await cajaAccesible(ctx, id)
                 return new ContarCaja().execute({ ...cuerpo, caja_id: id }, ctx.contextoAccion())
             },
         }),
@@ -320,7 +345,7 @@ function cajaChicaRutas(): Ruta[] {
             },
             handler: async (ctx, { params, query }) => {
                 const id = Number(params.id)
-                exigirAcceso(ctx, await existeCaja(id))
+                await cajaAccesible(ctx, id)
                 return listarReposiciones(id, query)
             },
         }),
@@ -335,11 +360,31 @@ function cajaChicaRutas(): Ruta[] {
             respuesta: { status: 200, descripcion: 'Página de conteos', esquema: pagina(ConteoCaja) },
             handler: async (ctx, { params, query }) => {
                 const id = Number(params.id)
-                exigirAcceso(ctx, await existeCaja(id))
+                await cajaAccesible(ctx, id)
                 return listarConteos(id, query)
             },
         }),
     ]
+}
+
+/**
+ * B11: ¿el usuario ve las cuentas internas (`contabilidad.ver_cuentas_internas`)? Sin él, el plan de
+ * cuentas, el diario, el mayor y los estados las ocultan o las agregan en «Interno (restringido)».
+ */
+async function veInternas(ctx: HttpContext): Promise<boolean> {
+    const usuario = ctx.auth.user
+    if (!usuario) return false
+    return Boolean(
+        await alcanceDePermiso(usuario.id, 'contabilidad.ver_cuentas_internas', alcancesDelToken(ctx)),
+    )
+}
+
+/** B11: con lista de usuarios, la caja solo la ven y usan los de la lista (404 a los demás). */
+async function cajaAccesible(ctx: HttpContext, cajaId: number) {
+    const dimensiones = await existeCaja(cajaId)
+    exigirAcceso(ctx, dimensiones)
+    await exigirCajaVisible(cajaId, ctx.auth.user?.id ?? null)
+    return dimensiones
 }
 
 /** Empresa de una lectura por empresa: `empresa_id` o la activa (422 empresa_requerida). */
@@ -498,7 +543,8 @@ const libro: Ruta[] = [
         descripcion:
             'Catálogo común a todas las empresas; las subcuentas de una caja o cuenta bancaria (`empresa_id`) solo aparecen para su empresa.',
         respuesta: { status: 200, descripcion: 'Cuentas', esquema: lista(Cuenta) },
-        handler: (ctx, { query }) => listarCuentas(empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) =>
+            listarCuentas(empresasDeLaLista(ctx.empresa, query.empresas), await veInternas(ctx)),
     }),
     definirRuta({
         metodo: 'get',
@@ -549,7 +595,8 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.diarioValidator,
         respuesta: { status: 200, descripcion: 'Página de asientos', esquema: pagina(Asiento) },
-        handler: (ctx, { query }) => libroDiario(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) =>
+            libroDiario(query, empresasDeLaLista(ctx.empresa, query.empresas), await veInternas(ctx)),
     }),
     definirRuta({
         metodo: 'get',
@@ -594,7 +641,8 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.mayorValidator,
         respuesta: { status: 200, descripcion: 'Mayor de la cuenta', esquema: Mayor },
-        handler: (ctx, { query }) => libroMayor(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) =>
+            libroMayor(query, empresasDeLaLista(ctx.empresa, query.empresas), await veInternas(ctx)),
     }),
     definirRuta({
         metodo: 'get',
@@ -631,7 +679,8 @@ const libro: Ruta[] = [
         descripcion:
             'Saldo de cada cuenta con movimiento al `hasta`, una sección por empresa (cada NIT tiene su libro) y `total` del grupo. cuadra = debe igual a haber y activo = pasivo + resultado.',
         respuesta: { status: 200, descripcion: 'Balance', esquema: BalanceSaldos },
-        handler: (ctx, { query }) => balanceSaldos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) =>
+            balanceSaldos(query, empresasDeLaLista(ctx.empresa, query.empresas), await veInternas(ctx)),
     }),
     definirRuta({
         metodo: 'get',
@@ -642,7 +691,8 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.estadoResultadosValidator,
         respuesta: { status: 200, descripcion: 'Estado de resultados', esquema: EstadoResultados },
-        handler: (ctx, { query }) => estadoResultados(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) =>
+            estadoResultados(query, empresasDeLaLista(ctx.empresa, query.empresas), await veInternas(ctx)),
     }),
     definirRuta({
         metodo: 'get',

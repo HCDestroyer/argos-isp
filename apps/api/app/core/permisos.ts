@@ -263,6 +263,12 @@ export const PERMISOS = {
     'caja_chica.contar': 'Contar la caja chica sin aviso; la diferencia queda a cargo de su encargado',
     'egresos.adjuntar_comprobante':
         'Adjuntar el archivo del comprobante (foto o PDF) a un egreso que no lo tiene',
+    // B11 del plan de contabilidad: caja sin factura (decisiones del PM del 25 y 26 nov 2026)
+    'cajas.editar': 'Editar una caja: marcarla sin factura, quiénes la ven y usan, y su cajero o encargado',
+    'contabilidad.ver_cuentas_internas':
+        'Ver las cuentas internas (caja sin factura), sus asientos, todas las cajas y el reporte «Cobros en cajas sin factura»',
+    'facturas.cargo_no_facturable':
+        'Decidir al emitir un cargo único si se factura o es un cobro de control (recibo)',
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
@@ -892,6 +898,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'caja_chica.reponer',
             'caja_chica.contar',
             'egresos.adjuntar_comprobante',
+            // B11: caja sin factura (la visibilidad de las cuentas internas se da por usuario o rol)
+            'cajas.editar',
+            'contabilidad.ver_cuentas_internas',
+            'facturas.cargo_no_facturable',
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',

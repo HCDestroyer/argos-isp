@@ -76,6 +76,30 @@ export const crearCajaValidator = vine.compile(
             description:
                 'Fondo fijo propio; sin él, el de la empresa (GET /cajas/ajustes): fondo_cobros o fondo_caja_chica',
         }),
+        fiscal: vine.boolean().optional().meta({
+            description:
+                'B11: false = caja sin factura (recibo no fiscal, cuentas internas; aviso con FEL obligatoria)',
+        }),
+        usuarios: vine.array(idEntidad()).maxLength(200).optional().meta({
+            description: 'B11: quiénes ven y usan la caja (vacío = todos los que la alcanzan por el ACL)',
+        }),
+    }),
+)
+
+/** B11: `PUT /cajas/:id` (caja sin factura, visibilidad y cajero o encargado). */
+export const editarCajaValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1).meta({ description: 'La de GET /cajas' }),
+        fiscal: vine.boolean().optional().meta({ description: 'false = caja sin factura' }),
+        usuarios: vine
+            .array(idEntidad())
+            .maxLength(200)
+            .optional()
+            .meta({ description: 'Quiénes ven y usan la caja; [] = todos los del ACL' }),
+        cajero_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Cajero (en una caja chica, su encargado)' }),
     }),
 )
 
@@ -202,6 +226,7 @@ export const diarioValidator = vine.compile(
                 'entrega_caja',
                 'reposicion_caja',
                 'conteo_caja',
+                'recibo_interno',
                 'ajuste',
                 'reclasificacion',
                 'liquidacion_cobro',

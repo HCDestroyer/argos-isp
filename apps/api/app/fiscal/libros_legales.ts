@@ -620,6 +620,11 @@ export async function libroVentasLegal(
                FROM billing.facturas f
                JOIN debito o ON o.id = f.id AND o.clase = CASE WHEN f.tipo = 'mora' THEN 'mora' ELSE 'factura' END
               WHERE f.empresa_id = :empresa AND f.clave_externa IS NULL
+                -- B11: un cargo no facturable o una factura cobrada solo en cajas sin factura no es
+                -- documento fiscal (su ingreso va a la cuenta interna 4.3.01)
+                AND NOT EXISTS (SELECT 1 FROM billing.facturas_no_fiscales nf WHERE nf.factura_id = f.id
+                                  AND NOT EXISTS (SELECT 1 FROM billing.facturas_no_fiscales_anulaciones nx
+                                                   WHERE nx.no_fiscal_id = nf.id))
                 -- la mora sin IVA y sin DTE no es documento fiscal (no mueve 2.1.02)
                 AND (f.tipo <> 'mora' OR o.debito_iva)
                 AND NOT EXISTS (SELECT 1 FROM fiscal.dte d

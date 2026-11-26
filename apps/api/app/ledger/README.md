@@ -156,6 +156,16 @@ Una caja de `tipo = gastos` con **fondo fijo** (`cajas.fondo_fijo` o `cajas_ajus
 - Lecturas: `GET /cajas/:id/caja-chica` (estado), `GET /cajas/:id/reposiciones`, `GET /cajas/:id/conteos`, `GET /egresos/:id/comprobante` (el archivo).
 - Eventos: `caja_chica.gasto_registrado` (`bajo_minimo` bajo el 30 % del fondo), `caja_chica.repuesta`, `caja.contada`, `egreso.comprobante_adjuntado`; `cajas.ajustes_cambiados` suma `fondo_caja_chica`.
 
+### Caja sin factura (B11; decisiones del PM del 25 y 26 nov 2026)
+
+Para operaciones reales que no llevan factura (paso por un camino, permiso de un poste). No es para esconder nada a la SAT ni a una auditoría: todo queda en el libro inmutable y en la bitácora; solo no se mezcla con la declaración.
+
+- `ledger.cajas.fiscal = false` (`POST /cajas { fiscal }` o `PUT /cajas/:id`, `cajas.editar`, con `version`; evento `caja.cambiada`): **caja de cobros sin factura** o **caja chica sin factura** (N1). Se permite con FEL obligatoria y la caja trae `aviso_sin_factura`. El efectivo sigue el mismo camino de B1 y B9 (entrega → custodia → banco; reposición).
+- **Cuentas internas** (gt-2026.7, `ledger.cuentas.interna`): `4.3.01 Ingresos por recibos internos (caja sin factura)` y `5.7.01 Gastos internos sin factura` (no deducible). Quedan fuera de las declaraciones (ISR: `resultadosDelRango` excluye `interna`) y de los libros fiscales (libro de ventas sin `billing.facturas_no_fiscales`). Códigos por confirmar con el contador.
+- **Salidas**: el egreso de una caja sin factura va a `5.7.01` (`egresos.cuenta_id`), con su categoría como dato; no paga compras, proveedores ni impuestos (422 `caja_sin_factura_solo_internos`) y su egreso no pasa a Compras (409 `egreso_sin_factura`).
+- **Entradas**: ver `billing/README.md` («Caja sin factura y recibo no fiscal»).
+- **Visibilidad** (por usuario): `ledger.cajas_usuarios` = quiénes ven y usan una caja (vacía = todos los del ACL; `GET /cajas` y las rutas de la caja responden 404 a los demás). Las cuentas internas las ve quien tiene `contabilidad.ver_cuentas_internas`: sin él, `GET /libro/cuentas` no las lista, `GET /libro/diario` no trae los asientos que las tocan, `GET /libro/mayor` de una interna responde 403 `cuenta_interna_restringida`, y el balance y el estado de resultados las juntan en una línea «Interno (restringido)» por tipo (los totales no cambian: el estado sigue cuadrando). Se eligió agregar y no quitar para que nadie vea un balance que no cuadra.
+
 ## Cierre mensual (`cierres.ts`)
 
 | Acción                  | Archivo                      | Permiso                 | Qué hace                                                                                                                                                                                  |

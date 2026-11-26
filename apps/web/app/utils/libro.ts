@@ -14,6 +14,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     entrega_caja: { etiqueta: 'Entrega de caja recibida', icono: 'i-lucide-hand-coins' },
     reposicion_caja: { etiqueta: 'Reposición de caja chica', icono: 'i-lucide-wallet' },
     conteo_caja: { etiqueta: 'Conteo de caja chica', icono: 'i-lucide-calculator' },
+    recibo_interno: { etiqueta: 'Cobro sin factura (recibo)', icono: 'i-lucide-receipt' },
     ajuste: { etiqueta: 'Ajuste', icono: 'i-lucide-scale' },
     reclasificacion: { etiqueta: 'Reclasificación de IVA', icono: 'i-lucide-arrow-left-right' },
     liquidacion_cobro: { etiqueta: 'Liquidación de cobros', icono: 'i-lucide-hand-coins' },

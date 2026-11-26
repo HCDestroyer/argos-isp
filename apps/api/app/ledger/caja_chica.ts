@@ -40,6 +40,8 @@ export interface CajaChicaFila {
     cajero_id: number | null
     fondo_fijo: string | null
     activa: boolean
+    /** B11: false = caja sin factura */
+    fiscal: boolean
 }
 
 /** Fondo fijo configurado de una caja chica: el suyo o el de la empresa. */
@@ -61,7 +63,17 @@ export async function leerCaja(
     const consulta = cliente
         .from('ledger.cajas')
         .where('id', cajaId)
-        .select('id', 'empresa_id', 'nombre', 'tipo', 'cuenta_id', 'cajero_id', 'fondo_fijo', 'activa')
+        .select(
+            'id',
+            'empresa_id',
+            'nombre',
+            'tipo',
+            'cuenta_id',
+            'cajero_id',
+            'fondo_fijo',
+            'activa',
+            'fiscal',
+        )
     if (bloquear) consulta.forUpdate()
     const fila = (await consulta.first()) as CajaChicaFila | null
     if (!fila) throw new NoEncontrado(`La caja ${cajaId} no existe`)
@@ -260,15 +272,26 @@ export type UsoSalidaCaja = 'egreso' | 'compra' | 'pago_proveedor' | 'pago_impue
  *   proveedores o de impuestos) y hasta su efectivo (422 `efectivo_insuficiente`). Bloquea la caja
  *   para que dos gastos no saquen el mismo efectivo.
  * - Caja de cobros: 422 `gasto_desde_caja_chica` si la empresa ya tiene una caja chica activa (N2).
+ * - B11, caja sin factura (`fiscal = false`): solo gastos internos (egresos a `5.7.01`); una compra
+ *   con factura, un pago a proveedor o de impuesto no sale de ella (422 `caja_sin_factura_solo_internos`).
  */
 export async function exigirSalidaDeCaja(
     cliente: QueryClientContract,
     cajaId: number,
     monto: Dec,
     uso: UsoSalidaCaja,
-): Promise<{ caja_chica: boolean }> {
+): Promise<{ caja_chica: boolean; fiscal: boolean }> {
     // solo la caja chica se bloquea (una caja de cobros la ordena el lock de su turno)
     const caja = await leerCaja(cliente, cajaId)
+    if (!caja.fiscal && uso !== 'egreso') {
+        throw new Problema(
+            422,
+            'caja_sin_factura_solo_internos',
+            'La caja sin factura solo paga gastos internos',
+            `La caja ${caja.nombre} es sin factura: de ella solo salen gastos internos (sin factura); una compra, un pago a proveedor o un impuesto sale de una caja con factura o del banco`,
+            [{ field: 'caja_id', message: 'Caja sin factura', rule: 'caja_sin_factura_solo_internos' }],
+        )
+    }
     if (caja.tipo === 'gastos') {
         await leerCaja(cliente, cajaId, true)
         if (uso === 'pago_proveedor' || uso === 'pago_impuesto') {
@@ -302,7 +325,7 @@ export async function exigirSalidaDeCaja(
                 ],
             )
         }
-        return { caja_chica: true }
+        return { caja_chica: true, fiscal: caja.fiscal }
     }
     if (await empresaTieneCajaChica(cliente, caja.empresa_id)) {
         throw new Problema(
@@ -313,7 +336,7 @@ export async function exigirSalidaDeCaja(
             [{ field: 'caja_id', message: 'Elige la caja chica', rule: 'gasto_desde_caja_chica' }],
         )
     }
-    return { caja_chica: false }
+    return { caja_chica: false, fiscal: caja.fiscal }
 }
 
 /** ¿El egreso ya se repuso (sellado)? */

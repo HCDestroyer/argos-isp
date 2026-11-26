@@ -9298,6 +9298,19 @@
                     "examples": [
                       "150.00"
                     ]
+                  },
+                  "fiscal": {
+                    "description": "B11: false = caja sin factura (recibo no fiscal, cuentas internas; aviso con FEL obligatoria)",
+                    "type": "boolean"
+                  },
+                  "usuarios": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "B11: quiénes ven y usan la caja (vacío = todos los que la alcanzan por el ACL)"
                   }
                 },
                 "required": [
@@ -9361,6 +9374,152 @@
           }
         },
         "x-permiso": "cajas.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}": {
+      "put": {
+        "operationId": "cajasEditar",
+        "summary": "Editar una caja: sin factura, quiénes la ven y usan, cajero o encargado",
+        "description": "B11. `fiscal = false` = caja sin factura (de cobros o caja chica): sus cobros emiten un recibo no fiscal con numeración propia por empresa y no van a la SAT (la factura cubierta solo con cobros sin factura pasa a 4.3.01); sus gastos van a 5.7.01. Se permite con FEL obligatoria y la respuesta trae `aviso_sin_factura`. `usuarios`: quiénes ven y usan la caja ([] = todos los del ACL; con contabilidad.ver_cuentas_internas se ve igual). Solo cambia lo que se envía; `version` (409). Emite caja.cambiada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "La de GET /cajas"
+                  },
+                  "fiscal": {
+                    "description": "false = caja sin factura",
+                    "type": "boolean"
+                  },
+                  "usuarios": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Quiénes ven y usan la caja; [] = todos los del ACL"
+                  },
+                  "cajero_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cajero (en una caja chica, su encargado)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caja",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Caja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.editar",
         "x-implementado": true
       }
     },
@@ -21192,6 +21351,10 @@
                     "description": "Lleva IVA (por defecto sí)",
                     "type": "boolean"
                   },
+                  "facturable": {
+                    "description": "B11: false = cargo no facturable (sin DTE ni IVA, a la cuenta interna); por defecto sí",
+                    "type": "boolean"
+                  },
                   "activo": {
                     "type": "boolean"
                   },
@@ -21384,6 +21547,9 @@
                     "maxLength": 20
                   },
                   "gravable": {
+                    "type": "boolean"
+                  },
+                  "facturable": {
                     "type": "boolean"
                   },
                   "activo": {
@@ -29200,6 +29366,17 @@
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
                     "description": "Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)"
+                  },
+                  "facturable": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "B11: por defecto lo de sus conceptos; false = cargo no facturable (sin DTE ni IVA, a la cuenta interna 4.3.01; recibo al cobrarlo). Cambiar lo del concepto exige facturas.cargo_no_facturable"
                   },
                   "lineas": {
                     "type": "array",
@@ -56949,6 +57126,7 @@
                 "entrega_caja",
                 "reposicion_caja",
                 "conteo_caja",
+                "recibo_interno",
                 "ajuste",
                 "reclasificacion",
                 "liquidacion_cobro",
@@ -64813,6 +64991,79 @@
           }
         },
         "x-permiso": "pagos.cerrar_diferencia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pagos/{id}/recibo": {
+      "get": {
+        "operationId": "pagosRecibo",
+        "summary": "Recibo no fiscal del pago (caja sin factura o cargo no facturable)",
+        "description": "B11: lo que se entrega al cobrar en una caja sin factura o al cubrir un cargo no facturable. No es factura (sin DTE, serie ni número de la SAT); numeración propia por empresa. 404 si el pago no tiene recibo.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recibo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recibo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
         "x-implementado": true
       }
     },
@@ -80801,6 +81052,243 @@
         "x-implementado": true
       }
     },
+    "/api/v1/recibos": {
+      "get": {
+        "operationId": "recibosListar",
+        "summary": "Cobros en cajas sin factura (recibos no fiscales)",
+        "description": "B11: el reporte «Cobros en cajas sin factura» (con los cargos no facturables): número, caja, cliente, monto, si el pago se anuló y las facturas que quedaron fuera de la SAT. Filtros desde/hasta (fecha de Guatemala), caja_id, cliente_id, motivo; por empresa activa o `empresas=todas`.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "motivo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja_sin_factura",
+                "cargo_no_facturable"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de recibos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Recibo"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contabilidad.ver_cuentas_internas",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contabilidad.ver_cuentas_internas",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/recibos/{id}": {
+      "get": {
+        "operationId": "recibosVer",
+        "summary": "Ver un recibo no fiscal",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recibo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recibo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/red/caidas-repetidas": {
       "get": {
         "operationId": "redCaidasRepetidas",
@@ -85740,6 +86228,7 @@
                         "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
+                        "cajas.editar",
                         "cajas.entregar",
                         "cajas.rechazar_entrega",
                         "cajas.recibir_entrega",
@@ -85782,6 +86271,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_cuentas_internas",
                         "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
@@ -85815,6 +86305,7 @@
                         "empresas.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
+                        "facturas.cargo_no_facturable",
                         "facturas.cargo_sin_costo",
                         "facturas.configurar_conceptos",
                         "facturas.configurar_motivos",
@@ -86227,6 +86718,7 @@
                         "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
+                        "cajas.editar",
                         "cajas.entregar",
                         "cajas.rechazar_entrega",
                         "cajas.recibir_entrega",
@@ -86269,6 +86761,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_cuentas_internas",
                         "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
@@ -86302,6 +86795,7 @@
                         "empresas.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
+                        "facturas.cargo_no_facturable",
                         "facturas.cargo_sin_costo",
                         "facturas.configurar_conceptos",
                         "facturas.configurar_motivos",
@@ -102690,6 +103184,7 @@
                             "cajas.configurar_impresion",
                             "cajas.crear",
                             "cajas.depositar",
+                            "cajas.editar",
                             "cajas.entregar",
                             "cajas.rechazar_entrega",
                             "cajas.recibir_entrega",
@@ -102732,6 +103227,7 @@
                             "comprobantes.reconexion_temporal",
                             "comprobantes.registrar",
                             "comprobantes.ver",
+                            "contabilidad.ver_cuentas_internas",
                             "contabilidad.ver_inicio",
                             "contactos.buscar",
                             "contactos.gestionar",
@@ -102765,6 +103261,7 @@
                             "empresas.ver",
                             "facturas.anular",
                             "facturas.anular_nota_credito",
+                            "facturas.cargo_no_facturable",
                             "facturas.cargo_sin_costo",
                             "facturas.configurar_conceptos",
                             "facturas.configurar_motivos",
@@ -106978,6 +107475,7 @@
               "entrega_caja",
               "reposicion_caja",
               "conteo_caja",
+              "recibo_interno",
               "ajuste",
               "reclasificacion",
               "liquidacion_cobro",
@@ -111526,6 +112024,25 @@
             ],
             "description": "Fondo fijo propio; null = el de la empresa"
           },
+          "fiscal": {
+            "type": "boolean",
+            "description": "B11: false = caja sin factura (recibo no fiscal, cuentas internas)"
+          },
+          "usuarios": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "B11: quiénes ven y usan la caja (vacía = todos los que la alcanzan por el ACL)"
+          },
+          "aviso_sin_factura": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "B11: aviso de una caja sin factura en una empresa con FEL obligatoria"
+          },
           "fondo_fijo_efectivo": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Fondo con el que abre la caja (el propio o el fondo de cambio de la empresa)"
@@ -115237,6 +115754,10 @@
           "gravable": {
             "type": "boolean",
             "description": "Lleva IVA (incluido en el precio)"
+          },
+          "facturable": {
+            "type": "boolean",
+            "description": "B11: false = cargo no facturable: cobro de control sin DTE ni IVA, a la cuenta interna 4.3.01; se cubre con un recibo no fiscal"
           },
           "activo": {
             "type": "boolean",
@@ -119089,6 +119610,10 @@
               "financiamiento"
             ],
             "description": "Clasificación del flujo de efectivo (método indirecto)"
+          },
+          "interna": {
+            "type": "boolean",
+            "description": "B11: cuenta interna (caja sin factura): fuera de los libros fiscales; solo con contabilidad.ver_cuentas_internas"
           },
           "version": {
             "type": "integer",
@@ -126474,6 +126999,24 @@
             "type": "boolean",
             "description": "Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse"
           },
+          "no_fiscal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "caja_sin_factura",
+              "cargo_no_facturable"
+            ],
+            "description": "B11: fuera de la SAT (cobrada solo en cajas sin factura, o cargo no facturable): no se certifica; el panel la muestra «Pagada · Recibo #N»"
+          },
+          "recibo_numero": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "B11: número del recibo no fiscal vigente de un pago aplicado (o null)"
+          },
           "certificar_al": {
             "type": [
               "string",
@@ -133598,6 +134141,7 @@
           "cajas.configurar_impresion",
           "cajas.crear",
           "cajas.depositar",
+          "cajas.editar",
           "cajas.entregar",
           "cajas.rechazar_entrega",
           "cajas.recibir_entrega",
@@ -133640,6 +134184,7 @@
           "comprobantes.reconexion_temporal",
           "comprobantes.registrar",
           "comprobantes.ver",
+          "contabilidad.ver_cuentas_internas",
           "contabilidad.ver_inicio",
           "contactos.buscar",
           "contactos.gestionar",
@@ -133673,6 +134218,7 @@
           "empresas.ver",
           "facturas.anular",
           "facturas.anular_nota_credito",
+          "facturas.cargo_no_facturable",
           "facturas.cargo_sin_costo",
           "facturas.configurar_conceptos",
           "facturas.configurar_motivos",
@@ -133977,6 +134523,7 @@
           "Elegir el formato de impresión de recibos y facturas de una caja",
           "Crear cajas de una empresa (multiempresa: cada NIT tiene sus cajas)",
           "Depositar en el banco el efectivo de tu custodia o de un turno de caja (queda en fondos en tránsito)",
+          "Editar una caja: marcarla sin factura, quiénes la ven y usan, y su cajero o encargado",
           "Entregar otra vez el efectivo de un turno cerrado cuando quien debía recibirlo dijo «No lo recibí»",
           "Rechazar una entrega de efectivo dirigida a ti («No lo recibí»)",
           "Recibir efectivo de una caja de cobros («Recibí»): pasa a tu custodia",
@@ -134019,6 +134566,7 @@
           "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
           "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
+          "Ver las cuentas internas (caja sin factura), sus asientos, todas las cajas y el reporte «Cobros en cajas sin factura»",
           "Ver el inicio de contabilidad: qué toca hoy, los pasos del mes y los indicadores (cada dato pide además su permiso)",
           "Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)",
           "Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)",
@@ -134052,6 +134600,7 @@
           "Ver las empresas (NIT) de la instalación",
           "Anular facturas",
           "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)",
+          "Decidir al emitir un cargo único si se factura o es un cobro de control (recibo)",
           "Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)",
           "Administrar el catálogo de conceptos de cargo único por empresa (cuenta de ingreso e IVA)",
           "Administrar el catálogo de motivos de facturas en Q0 por empresa",
@@ -143587,6 +144136,120 @@
           }
         }
       },
+      "Recibo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "numero",
+          "pago_id",
+          "caja_id",
+          "caja_nombre",
+          "cliente_id",
+          "cliente_nombre",
+          "monto",
+          "motivo",
+          "anulado",
+          "metodo",
+          "facturas",
+          "facturas_no_fiscales",
+          "emitido_por",
+          "emitido_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "integer",
+            "description": "Correlativo propio por empresa, sin huecos (no es número de la SAT)"
+          },
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "caja_sin_factura",
+              "cargo_no_facturable"
+            ],
+            "description": "Cobro en una caja sin factura, o cobro de un cargo no facturable"
+          },
+          "anulado": {
+            "type": "boolean",
+            "description": "Su pago se anuló (el recibo queda como historia)"
+          },
+          "metodo": {
+            "type": "string"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Facturas a las que se aplicó el pago"
+          },
+          "facturas_no_fiscales": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Las que este cobro dejó fuera de la SAT (sin DTE; ingreso a 4.3.01)"
+          },
+          "emitido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "emitido_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ReconciliacionEncolada": {
         "type": "object",
         "required": [
@@ -151475,6 +152138,7 @@
               "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
+              "cajas.editar",
               "cajas.entregar",
               "cajas.rechazar_entrega",
               "cajas.recibir_entrega",
@@ -151517,6 +152181,7 @@
               "comprobantes.reconexion_temporal",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_cuentas_internas",
               "contabilidad.ver_inicio",
               "contactos.buscar",
               "contactos.gestionar",
@@ -151550,6 +152215,7 @@
               "empresas.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
+              "facturas.cargo_no_facturable",
               "facturas.cargo_sin_costo",
               "facturas.configurar_conceptos",
               "facturas.configurar_motivos",
@@ -152044,6 +152710,7 @@
               "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
+              "cajas.editar",
               "cajas.entregar",
               "cajas.rechazar_entrega",
               "cajas.recibir_entrega",
@@ -152070,6 +152737,7 @@
               "comprobantes.reconectar",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_cuentas_internas",
               "contabilidad.ver_inicio",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
@@ -152088,6 +152756,7 @@
               "egresos.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
+              "facturas.cargo_no_facturable",
               "facturas.cargo_sin_costo",
               "facturas.configurar_conceptos",
               "facturas.configurar_motivos",
