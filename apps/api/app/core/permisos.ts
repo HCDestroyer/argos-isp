@@ -300,11 +300,22 @@ export const PERMISOS = {
     'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
     'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
 
-    'equipos.ver':
-        'Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización',
-    'equipos.configurar':
-        'Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin',
-    'equipos.probar': 'Probar la conexión con SmartOLT y GenieACS con la configuración guardada',
+    // SmartOLT (varias instancias, compartidas solo con alcance global) y ACS por separado
+    // (`contratos/equipos-olt-acs.md` §5.2)
+    'smartolt.ver':
+        'Ver las instancias de SmartOLT (sin token), sus OLT, a qué OLT de Argos están vinculadas y sus perfiles',
+    'smartolt.crear_instancia':
+        'Registrar una instancia (subdominio y token) de SmartOLT; compartida solo con alcance global',
+    'smartolt.editar_instancia':
+        'Editar una instancia de SmartOLT (nombre, URL, token, encendido y perfiles por OLT y plan)',
+    'smartolt.eliminar_instancia':
+        'Eliminar una instancia de SmartOLT que ningún equipo ni pedido en curso usa',
+    'smartolt.vincular_olt': 'Vincular una OLT de SmartOLT con una OLT de la red de acceso de Argos',
+    'smartolt.probar_instancia': 'Probar la conexión con una instancia de SmartOLT y sincronizar sus OLT',
+    'acs.ver': 'Ver la configuración del ACS (GenieACS) de la empresa (sin la clave)',
+    'acs.configurar':
+        'Configurar el ACS (GenieACS) de la empresa (URL, usuario, clave, certificado, PPPoE por ACS)',
+    'acs.probar': 'Probar la conexión con el ACS (GenieACS) de la empresa con la configuración guardada',
 
     'iris.ver': 'Ver el conector con Iris (sin secretos) y los tokens de su usuario técnico (sin el valor)',
     'iris.configurar':

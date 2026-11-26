@@ -1744,6 +1744,22 @@ export interface CatalogoEventos {
     // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
     /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
     'horus.config_cambiada': { activo: boolean; campos: string[] }
+    /**
+     * Cambió la configuración de SmartOLT (una instancia) o del ACS de una empresa
+     * (`contratos/equipos-olt-acs.md` §5.3). Solo nombres de campos, nunca valores ni secretos. Sin
+     * consumidores obligatorios (las capacidades se calculan en cada lectura); no va a Iris.
+     */
+    'equipos.config_cambiada': {
+        sistema: 'smartolt' | 'acs'
+        /** null = instancia compartida */
+        empresa_id: number | null
+        /** null en `acs` */
+        instancia_id: number | null
+        accion: 'creada' | 'editada' | 'eliminada' | 'probada' | 'olts_sincronizadas' | 'olt_vinculada'
+        campos: string[]
+        /** operativa (encendida y probada) después del cambio */
+        operativa: boolean
+    }
     /** Horus abrió un hallazgo de seguridad de un cliente (§3.4 `finding.opened`). */
     'horus.hallazgo_abierto': PayloadHallazgoHorus
     /** Horus resolvió un hallazgo (§3.4 `finding.resolved`). */
@@ -2169,6 +2185,7 @@ export const EVENTOS = [
     'sorteo.acta_cerrada',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
+    'equipos.config_cambiada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',
     'horus.estado_seguridad_cambiado',
