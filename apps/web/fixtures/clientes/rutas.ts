@@ -126,7 +126,8 @@ function aplicar(base: CamposCliente, cuerpo: Record<string, unknown>): CamposCl
         const tipo = TIPOS_DOCUMENTO.find(t => t === cuerpo.tipo_documento_fiscal) ?? deducirTipoDocumento(resultado.nit_cui) ?? 'nit'
         resultado.tipo_documento_fiscal = tipo
         resultado.nit_cui = tipo === 'cf' ? (resultado.nit_cui === 'CF' ? 'CF' : null) : (resultado.nit_cui ? limpiarDocumento(resultado.nit_cui) : null)
-        resultado.nit_cui_invalido = false
+        // NIT con forma pero sin módulo 11: se guarda con la marca (fel-establecimientos R1)
+        resultado.nit_cui_invalido = tipo === 'nit' && resultado.nit_cui !== null && !nitValido(resultado.nit_cui)
     }
     if (typeof cuerpo.pais_fiscal === 'string') {
         resultado.pais_fiscal = cuerpo.pais_fiscal.toUpperCase()

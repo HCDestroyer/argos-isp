@@ -64,10 +64,17 @@ export function useFel() {
         }))
     }
 
-    /** `POST /fel/credenciales/:ambiente/probar`: no certifica; 422 `fel_no_configurada`, 503 sin certificador. */
-    function probarCredenciales(ambiente: AmbienteFel, empresaId?: number): Promise<Resultado<CredencialesFel>> {
+    /**
+     * `POST /fel/credenciales/:ambiente/probar`: no certifica; 422 `fel_no_configurada`, 503 sin
+     * certificador. `proveedor` = el de la tarjeta (por defecto la API usa el guardado): así se
+     * prueba lo recién guardado aunque el certificador aún no se haya guardado.
+     */
+    function probarCredenciales(ambiente: AmbienteFel, empresaId?: number, proveedor?: ProveedorFel): Promise<Resultado<CredencialesFel>> {
         return resolver(api.POST('/api/v1/fel/credenciales/{ambiente}/probar', {
-            params: { path: { ambiente }, query: empresaId ? { empresa_id: empresaId } : {} },
+            params: {
+                path: { ambiente },
+                query: { ...(empresaId ? { empresa_id: empresaId } : {}), ...(proveedor ? { proveedor } : {}) },
+            },
         }))
     }
 

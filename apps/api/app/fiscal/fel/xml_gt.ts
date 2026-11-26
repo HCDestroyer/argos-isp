@@ -1,19 +1,37 @@
+import { DateTime } from 'luxon'
+import { ZONA_NEGOCIO } from '#ledger/fechas'
 import type { DteCertificado, DteParaEnviar, LineaDte } from '#fiscal/fel/proveedor'
 
 /**
  * XML de la SAT de Guatemala para la FEL (esquema `GT_Documento` y `GT_AnulacionDocumento`), común
  * a todos los certificadores (contrato §8.1): el adaptador solo lo firma y lo envía.
  *
- * Armado según la documentación pública de la SAT (Reglas y Validaciones, esquemas XSD de FEL) y
- * de INFILE. **Confirmar** con el certificador antes de producción (contrato, fila 6 de §15):
- * versión del namespace (`0.2.0` del DTE, `0.1.0` de la anulación), la unidad de medida (`UNI`),
- * el complemento `ReferenciasNota` de NCRE y NDEB y el atributo de contingencia
- * (`NumeroAcceso`). Las pruebas lo validan contra el proveedor falso, nunca contra la SAT.
+ * Armado según los ejemplos de XML de la «Documentación INFILE (docs.infile.com, sección
+ * Guatemala)» (`contratos/fel-establecimientos.md` B6, lote 5): unidad de medida `UND`, emisor con
+ * `DireccionEmisor` en nodos separados, complemento de notas `Notas` con `cno:ReferenciasNota`,
+ * contingencia con `NumeroAcceso` (100 000 000 a 999 999 999) y la anulación
+ * `GTAnulacionDocumento`. Lo que el ambiente demo de INFILE aceptó (lote 6) queda anotado en
+ * `localizacion-fiscal.md` §17. Las pruebas automáticas nunca llaman a la SAT ni a INFILE.
  */
 
 export const NS_DTE = 'http://www.sat.gob.gt/dte/fel/0.2.0'
 export const NS_ANULACION = 'http://www.sat.gob.gt/dte/fel/0.1.0'
 export const NS_REFERENCIA = 'http://www.sat.gob.gt/face2/ComplementoReferenciaNota/0.1.0'
+
+/** Complemento de NCRE y NDEB como en los ejemplos de INFILE. */
+export const COMPLEMENTO_NOTAS = {
+    IDComplemento: 'Notas',
+    NombreComplemento: 'Notas',
+    URIComplemento: 'http://www.sat.gob.gt/fel/notas.xsd',
+} as const
+
+/** Unidad de medida de las líneas (`UND` en todos los ejemplos de INFILE). */
+export const UNIDAD_MEDIDA = 'UND'
+
+/** Fecha y hora con la zona de Guatemala (`2026-11-25T12:00:00-06:00`), como la piden los XML. */
+export function fechaHoraGt(instante: Date): string {
+    return DateTime.fromJSDate(instante).setZone(ZONA_NEGOCIO).toISO({ suppressMilliseconds: true })!
+}
 
 export function escaparXml(valor: string | number | null | undefined): string {
     return String(valor ?? '')
@@ -81,11 +99,7 @@ export function xmlDte(dte: DteParaEnviar): string {
         '</dte:Totales>'
     const complementos = dte.referencia
         ? '<dte:Complementos>' +
-          `<dte:Complemento${atributos({
-              IDComplemento: 'ReferenciasNota',
-              NombreComplemento: dte.tipo === 'NCRE' ? 'Nota de Credito' : 'Nota de Debito',
-              URIComplemento: NS_REFERENCIA,
-          })}>` +
+          `<dte:Complemento${atributos(COMPLEMENTO_NOTAS)}>` +
           `<cno:ReferenciasNota xmlns:cno="${NS_REFERENCIA}"${atributos({
               FechaEmisionDocumentoOrigen: dte.referencia.fecha,
               MotivoAjuste: dte.referencia.motivo,
@@ -148,21 +162,53 @@ export function numeroAcceso(identificador: string): string {
     return String(100_000_000 + (Number(digitos.slice(0, 8)) % 900_000_000)).slice(0, 9)
 }
 
-/** XML de la anulación (`GTAnulacionDocumento`). */
-export function xmlAnulacion(dte: DteCertificado, motivo: string, fechaAnulacion: string): string {
+/**
+ * Forma del XML de anulación: `documentada` (elementos hijos de `dte:DatosAnulacion`, namespace
+ * `0.2.0`, como el manual de INFILE) o `atributos` (`dte:DatosGenerales` con atributos, namespace
+ * `0.1.0`, la forma anterior de Argos). El lote 6 prueba las dos en el ambiente demo.
+ */
+export type FormaAnulacion = 'documentada' | 'atributos'
+/*
+ * Resultado del ambiente demo de INFILE (lote 6, 25-nov-2026): la forma `documentada` se rechaza
+ * por el XSD («No matching global declaration available for the validation root»); `atributos` se
+ * anula («Validado y Anulado Exitosamente»). Por eso la forma por defecto es `atributos`.
+ */
+
+/** XML de la anulación (`GTAnulacionDocumento`). `dte.fecha_emision` es la que se envió al certificar. */
+export function xmlAnulacion(
+    dte: DteCertificado,
+    motivo: string,
+    fechaAnulacion: Date,
+    forma: FormaAnulacion = 'atributos',
+): string {
+    const anulacion = fechaHoraGt(fechaAnulacion)
+    if (forma === 'atributos') {
+        return (
+            '<?xml version="1.0" encoding="UTF-8"?>' +
+            `<dte:GTAnulacionDocumento xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:dte="${NS_ANULACION}" Version="0.1">` +
+            '<dte:SAT><dte:AnulacionDTE ID="DatosCertificados">' +
+            `<dte:DatosGenerales${atributos({
+                ID: 'DatosAnulacion',
+                NumeroDocumentoAAnular: dte.autorizacion,
+                NITEmisor: dte.emisor_nit,
+                IDReceptor: dte.receptor_id,
+                FechaEmisionDocumentoAnular: dte.fecha_emision,
+                FechaHoraAnulacion: anulacion,
+                MotivoAnulacion: motivo,
+            })}/>` +
+            '</dte:AnulacionDTE></dte:SAT></dte:GTAnulacionDocumento>'
+        )
+    }
     return (
         '<?xml version="1.0" encoding="UTF-8"?>' +
-        `<dte:GTAnulacionDocumento xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:dte="${NS_ANULACION}" Version="0.1">` +
-        '<dte:SAT><dte:AnulacionDTE ID="DatosCertificados">' +
-        `<dte:DatosGenerales${atributos({
-            ID: 'DatosAnulacion',
-            NumeroDocumentoAAnular: dte.autorizacion,
-            NITEmisor: dte.emisor_nit,
-            IDReceptor: dte.receptor_id,
-            FechaEmisionDocumentoAnular: dte.fecha_emision,
-            FechaHoraAnulacion: fechaAnulacion,
-            MotivoAnulacion: motivo,
-        })}/>` +
-        '</dte:AnulacionDTE></dte:SAT></dte:GTAnulacionDocumento>'
+        `<dte:GTAnulacionDocumento xmlns:dte="${NS_DTE}" Version="0.1">` +
+        '<dte:SAT><dte:AnulacionDTE ID="DatosCertificados"><dte:DatosAnulacion ID="DatosAnulacion">' +
+        `<dte:NumeroDocumentoAAnular>${escaparXml(dte.autorizacion)}</dte:NumeroDocumentoAAnular>` +
+        `<dte:NITEmisor>${escaparXml(dte.emisor_nit)}</dte:NITEmisor>` +
+        `<dte:IDReceptor>${escaparXml(dte.receptor_id)}</dte:IDReceptor>` +
+        `<dte:FechaEmisionDocumentoAnular>${escaparXml(dte.fecha_emision)}</dte:FechaEmisionDocumentoAnular>` +
+        `<dte:FechaAnulacion>${escaparXml(anulacion)}</dte:FechaAnulacion>` +
+        `<dte:MotivoAnulacion>${escaparXml(motivo)}</dte:MotivoAnulacion>` +
+        '</dte:DatosAnulacion></dte:AnulacionDTE></dte:SAT></dte:GTAnulacionDocumento>'
     )
 }

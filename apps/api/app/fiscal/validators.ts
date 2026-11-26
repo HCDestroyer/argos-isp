@@ -101,6 +101,17 @@ const camposEstablecimiento = {
     direccion: vine.string().trim().maxLength(300).nullable().optional(),
     municipio: vine.string().trim().maxLength(100).nullable().optional(),
     departamento: vine.string().trim().maxLength(100).nullable().optional(),
+    codigo_postal: vine
+        .string()
+        .trim()
+        .regex(/^\d{5}$/)
+        .nullable()
+        .optional()
+        .meta({ description: 'Código postal (5 dígitos) del RTU; sin él el DTE sale con 01001' }),
+    cajas: vine.array(vine.number().withoutDecimals().min(1)).maxLength(200).optional().meta({
+        description:
+            'Cajas cuyos cobros certifican con este establecimiento (reemplaza el conjunto; una caja asignada a otro se mueve). P1: la factura sale de la sucursal de la caja que la cobra; lo que no pasa por caja, del por defecto',
+    }),
     por_defecto: vine
         .boolean()
         .optional()
@@ -126,6 +137,8 @@ export const editarEstablecimientoValidator = vine.compile(
         direccion: camposEstablecimiento.direccion,
         municipio: camposEstablecimiento.municipio,
         departamento: camposEstablecimiento.departamento,
+        codigo_postal: camposEstablecimiento.codigo_postal,
+        cajas: camposEstablecimiento.cajas,
         activo: vine.boolean().optional(),
         por_defecto: camposEstablecimiento.por_defecto,
     }),
@@ -165,6 +178,17 @@ export const agregarFraseValidator = vine.compile(
 */
 
 export const consultaEmpresaValidator = vine.compile(vine.object({ empresa_id: empresaOpcional() }))
+
+/** `POST /fel/credenciales/:ambiente/probar`: `proveedor` opcional (por defecto el guardado). */
+export const probarCredencialesFelValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        proveedor: vine
+            .enum(['infile', 'falso'] as const)
+            .optional()
+            .meta({ description: 'Certificador cuyas credenciales se prueban; por defecto el guardado' }),
+    }),
+)
 
 export const configurarFelValidator = vine.compile(
     vine.object({

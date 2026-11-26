@@ -8,9 +8,12 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { frasesVigentes } from '#fiscal/frases'
+import { establecimientoPara } from '#fiscal/establecimientos'
+import { UNIDAD_MEDIDA } from '#fiscal/fel/xml_gt'
 import { valorParametro } from '#fiscal/parametros'
 import { datosFiscalesEmpresas } from '#fiscal/instalador_localizacion'
 import type {
+    AmbienteFel,
     DteCertificado,
     DteParaEnviar,
     LineaDte,
@@ -332,11 +335,19 @@ export interface ReceptorFiscal {
     direccion_fiscal?: string | null
 }
 
-/** Receptor de la factura: el dato fiscal del cliente o el corregido al sustituir. */
+/**
+ * Receptor de la factura: el dato fiscal del cliente o el corregido al sustituir.
+ *
+ * `nit_cui_invalido` (NIT guardado con advertencia, `contratos/fel-establecimientos.md` R1): en el
+ * ambiente `pruebas` el NIT viaja tal como está y el certificador decide (sus NIT de prueba no
+ * cuadran con el módulo 11); en `produccion` (o sin ambiente) sale como CF (§12 de
+ * `localizacion-fiscal.md`).
+ */
 export async function receptorDe(
     cliente: QueryClientContract,
     clienteId: number,
     corregido?: ReceptorFiscal | null,
+    opciones: { ambiente?: AmbienteFel | null } = {},
 ): Promise<ReceptorDte> {
     const c = (await cliente
         .from('core.clientes')
@@ -359,7 +370,8 @@ export async function receptorDe(
         tipo_documento_fiscal: ReceptorDte['tipo']
         nit_cui_invalido: boolean
     }
-    const tipo = corregido?.tipo_documento_fiscal ?? (c.nit_cui_invalido ? 'cf' : c.tipo_documento_fiscal)
+    const degradar = c.nit_cui_invalido && opciones.ambiente !== 'pruebas'
+    const tipo = corregido?.tipo_documento_fiscal ?? (degradar ? 'cf' : c.tipo_documento_fiscal)
     const id =
         tipo === 'cf' ? 'CF' : (corregido?.nit_cui ?? c.nit_cui ?? '').replace(/[\s-]/g, '').toUpperCase()
     return {
@@ -447,22 +459,14 @@ export interface DatosNuevoDte {
 }
 
 export async function insertarDte(trx: TransactionClientContract, datos: DatosNuevoDte): Promise<DteFila> {
-    const establecimiento = (await trx
-        .from('fiscal.establecimientos')
-        .where('empresa_id', datos.empresa_id)
-        .where('activo', true)
-        .orderBy([
-            { column: 'por_defecto', order: 'desc' },
-            { column: 'id', order: 'asc' },
-        ])
-        .select('id')
-        .first()) as { id: number } | null
+    // nota: el del origen; factura: el de la caja que la cobró; si no, el por defecto (P1)
+    const establecimientoId = await establecimientoPara(trx, datos)
     const [fila] = (await trx
         .insertQuery()
         .table('fiscal.dte')
         .insert({
             empresa_id: datos.empresa_id,
-            establecimiento_id: establecimiento?.id ?? null,
+            establecimiento_id: establecimientoId,
             documento_tipo: datos.documento_tipo,
             documento_id: datos.documento_id,
             tipo_dte: datos.tipo_dte,
@@ -514,7 +518,7 @@ function lineaDte(numero: number, l: LineaDocumento): LineaDte {
         bien_o_servicio: l.tipo === 'producto' ? 'B' : 'S',
         descripcion: l.concepto,
         cantidad: dec(l.cantidad).toString(),
-        unidad: 'UNI',
+        unidad: UNIDAD_MEDIDA,
         precio_unitario: aTexto(dec(l.precio_unitario)),
         precio: aTexto(precio),
         descuento: aTexto(descuento),
@@ -708,7 +712,7 @@ export async function dteParaEnviar(cliente: QueryClientContract, dte: DteFila):
         ? ((await cliente
               .from('fiscal.establecimientos')
               .where('id', dte.establecimiento_id)
-              .select('codigo', 'nombre', 'direccion', 'municipio', 'departamento')
+              .select('codigo', 'nombre', 'direccion', 'municipio', 'departamento', 'codigo_postal')
               .first()) as Record<string, string | number | null> | null)
         : null
     const fiscales = await datosFiscalesEmpresas([dte.empresa_id], cliente).then((r) => r.get(dte.empresa_id))
@@ -744,7 +748,8 @@ export async function dteParaEnviar(cliente: QueryClientContract, dte: DteFila):
             direccion: String(establecimiento?.direccion ?? empresa.direccion_fiscal ?? 'Ciudad'),
             municipio: String(establecimiento?.municipio ?? empresa.municipio ?? 'Guatemala'),
             departamento: String(establecimiento?.departamento ?? empresa.departamento ?? 'Guatemala'),
-            codigo_postal: '01001',
+            // sin código postal en el establecimiento: 01001 (el panel avisa que falta)
+            codigo_postal: String(establecimiento?.codigo_postal ?? '01001'),
             correo: empresa.correo ?? null,
             afiliacion_iva: dte.tipo_dte === 'FPEQ' || dte.tipo_dte === 'FCAP' ? 'PEQ' : 'GEN',
         },
@@ -764,7 +769,8 @@ export function dteCertificado(dte: DteFila): DteCertificado {
         autorizacion: dte.autorizacion ?? '',
         serie: dte.serie,
         numero: dte.numero,
-        fecha_emision: DateTime.fromJSDate(dte.certificado_en ?? dte.fecha_emision)
+        // la FechaHoraEmision que llevó el DTE (no la de certificación): la anulación debe coincidir
+        fecha_emision: DateTime.fromJSDate(dte.fecha_emision)
             .setZone(ZONA_NEGOCIO)
             .toISO({ suppressMilliseconds: true })!,
         emisor_nit: '',
