@@ -9,6 +9,9 @@ import type { Schema } from '@argosisp/contracts'
  * - Pasaporte: 3 a 20 letras o dígitos. CF: consumidor final, sin número.
  *
  * NIT y CUI son de Guatemala: un receptor extranjero se identifica con pasaporte.
+ *
+ * NIT tolerante (`contratos/fel-establecimientos.md` R1): letras, dígitos y guiones; el módulo 11 es
+ * una advertencia (`avisoDocumentoFiscal`), no un error. Lo decide el certificador.
  */
 
 export type TipoDocumentoFiscal = NonNullable<Schema<'Cliente'>['tipo_documento_fiscal']>
@@ -23,6 +26,30 @@ export const TIPOS_DOCUMENTO_FISCAL: Record<TipoDocumentoFiscal, string> = {
 /** Quita espacios y guiones y pasa a mayúsculas, como la API al guardar. */
 export function limpiarDocumento(valor: string): string {
     return valor.replace(/[\s-]/g, '').toUpperCase()
+}
+
+/** Forma de un NIT ya limpio, como `FORMA_NIT` de la API. */
+export const FORMA_NIT = /^[0-9A-Z]{2,20}$/
+
+/** Espejo de `revisarNit` de la API: `null` si no tiene forma de NIT (la API responde 422). */
+export function revisarNit(valor: string): { nit: string, valido: boolean } | null {
+    const nit = limpiarDocumento(valor)
+    if (!FORMA_NIT.test(nit)) {
+        return null
+    }
+    return { nit, valido: nitValido(nit) }
+}
+
+/** Advertencia del NIT que no cuadra con el módulo 11 (no bloquea Guardar). */
+export const AVISO_NIT_SIN_VERIFICADOR = 'El dígito verificador no cuadra: sirve para pruebas; la SAT lo rechazará en producción.'
+
+/** Texto de advertencia del documento (NIT con forma pero sin módulo 11), o `null`. */
+export function avisoDocumentoFiscal(tipo: TipoDocumentoFiscal, valor: string): string | null {
+    if (tipo !== 'nit') {
+        return null
+    }
+    const revisado = revisarNit(valor)
+    return revisado && !revisado.valido ? AVISO_NIT_SIN_VERIFICADOR : null
 }
 
 /** Dígito verificador (0-9 o K) del cuerpo de un NIT. */
@@ -85,8 +112,8 @@ export function errorDocumentoFiscal(tipo: TipoDocumentoFiscal, valor: string, p
     if (limpio === '' || limpio === 'CF') {
         return { campo: 'nit_cui', mensaje: `Falta el número del documento (${TIPOS_DOCUMENTO_FISCAL[tipo]})` }
     }
-    if (tipo === 'nit' && !nitValido(limpio)) {
-        return { campo: 'nit_cui', mensaje: 'El NIT no es válido (dígito verificador)' }
+    if (tipo === 'nit' && !revisarNit(limpio)) {
+        return { campo: 'nit_cui', mensaje: 'El NIT lleva de 2 a 20 letras o dígitos (se admiten guiones)' }
     }
     if (tipo === 'cui' && !cuiValido(limpio)) {
         return { campo: 'nit_cui', mensaje: 'El CUI debe tener 13 dígitos con departamento 01-22 y municipio' }

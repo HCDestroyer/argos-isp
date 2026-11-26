@@ -33,6 +33,8 @@ export const empresas: Schema<'EmpresaGrupo'>[] = [
         logo_tipo: null,
         activa: true,
         principal: true,
+        // como la API: derivado del módulo 11 (este NIT de ejemplo no cuadra)
+        nit_valido: false,
         version: 3,
         created_at: creado,
         updated_at: creado,
@@ -61,6 +63,7 @@ export const empresas: Schema<'EmpresaGrupo'>[] = [
         logo_tipo: null,
         activa: true,
         principal: false,
+        nit_valido: false,
         version: 1,
         created_at: creado,
         updated_at: creado,

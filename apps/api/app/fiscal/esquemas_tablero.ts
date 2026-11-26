@@ -191,6 +191,12 @@ const DatosFel = objeto({
     contingencia_activa: booleano,
     dte_pendientes: lista(objeto({ estado: texto, cantidad: entero })),
     alerta: { ...nulable(texto), description: '«FEL es obligatoria para su régimen» si está desactivada' },
+    alerta_configuracion: {
+        ...nulable(texto),
+        description:
+            '«FEL activa sin credenciales»: modo distinto de desactivada sin proveedor, credenciales del proveedor ' +
+            'y ambiente guardados o establecimiento activo (lista = false de GET /fel/configuracion)',
+    },
 })
 
 const DatosComprasSinNit = objeto({

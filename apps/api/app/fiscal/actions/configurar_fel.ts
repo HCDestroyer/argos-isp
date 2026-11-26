@@ -4,10 +4,12 @@ import { empresaFiscal } from '#fiscal/comun'
 import {
     configuracionFel,
     proveedorFel,
+    serviciosConNunca,
     type ConfiguracionFel,
     type ModoFel,
 } from '#fiscal/fel/configuracion'
-import { AvisosPorCertificar, CertificarAlIncompatible } from '#fiscal/fel/errores'
+import { AvisosPorCertificar, CertificarAlIncompatible, NitEmisorInvalido } from '#fiscal/fel/errores'
+import { nitValido } from '#core/nit_cui'
 import { camposProveedor, type AmbienteFel } from '#fiscal/fel/proveedor'
 
 /**
@@ -16,6 +18,8 @@ import { camposProveedor, type AmbienteFel } from '#fiscal/fel/proveedor'
  *
  * - `obligatoria` u `opcional` exigen un proveedor registrado; el proveedor `falso` no se admite en
  *   `produccion`.
+ * - `produccion` con modo distinto de `desactivada` exige un NIT de empresa que cuadre con el módulo
+ *   11: 422 `nit_emisor_invalido` (`contratos/fel-establecimientos.md` R1; en pruebas solo aviso).
  * - `obligatoria` no admite servicios de la empresa con `certificar_al = nunca` (plantilla o
  *   excepción): 422 `certificar_al_incompatible` con los servicios.
  * - `audit.cambios` (entidad `fel_configuracion`) y `fiscal.config_cambiada` con `fel_modo` y
@@ -66,6 +70,16 @@ export default class ConfigurarFel extends DomainAction<EntradaConfigurarFel, Co
                 },
             ])
         }
+        if (input.modo !== 'desactivada' && input.ambiente === 'produccion') {
+            const empresa = (await t.trx
+                .from('core.empresas')
+                .where('id', empresaId)
+                .select('nit')
+                .first()) as {
+                nit: string | null
+            } | null
+            if (!empresa?.nit || !nitValido(empresa.nit)) throw new NitEmisorInvalido(empresa?.nit ?? null)
+        }
         // H8: con avisos de cobro vivos sin DTE certificado, desactivar dejaría su IVA en 2.1.11
         if (input.modo === 'desactivada' && antes.modo !== 'desactivada') {
             const { rows } = (await t.trx.rawQuery(
@@ -81,23 +95,10 @@ export default class ConfigurarFel extends DomainAction<EntradaConfigurarFel, Co
             if (avisos > 0) throw new AvisosPorCertificar(avisos)
         }
         if (input.modo === 'obligatoria') {
-            const conNunca = (await t.trx
-                .from('core.servicios as s')
-                .leftJoin('billing.plantillas_facturacion as p', 'p.id', 's.plantilla_facturacion_id')
-                .leftJoin('core.servicios_excepciones as x', (j) =>
-                    j.on('x.servicio_id', 's.id').andOnVal('x.campo', 'certificar_al'),
-                )
-                .where('s.empresa_id', empresaId)
-                .whereNot('s.estado', 'retirado')
-                .whereRaw(`coalesce(x.valor #>> '{}', p.certificar_al) = 'nunca'`)
-                .orderBy('s.id')
-                .limit(20)
-                .select('s.id')) as Array<{ id: number }>
+            const conNunca = await serviciosConNunca(t.trx, { empresaId })
             if (conNunca.length > 0) {
                 throw new CertificarAlIncompatible(
-                    `Con FEL obligatoria ningún servicio puede tener certificar_al = nunca (servicios ${conNunca
-                        .map((s) => s.id)
-                        .join(', ')}): cámbialo a emitir o pagar en su plantilla o excepción`,
+                    `Con FEL obligatoria ningún servicio puede tener certificar_al = nunca (servicios ${conNunca.join(', ')}): cámbialo a pagar en su plantilla o excepción`,
                 )
             }
         }
