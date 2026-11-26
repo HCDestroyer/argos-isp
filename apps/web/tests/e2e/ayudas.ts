@@ -275,3 +275,16 @@ export async function elegirClienteCobro(page: Page, buscar: string, nombre: Reg
     }
     return page.locator('[data-prueba="cobrar"]')
 }
+
+/**
+ * Escribe una fecha (`YYYY-MM-DD`, la de la API) en un `CampoFecha`, que se ve y se escribe en
+ * dd/mm/aaaa. `campo` es el `<input>` (por su etiqueta o su `data-prueba`) o un elemento que lo
+ * contiene.
+ */
+export async function llenarFecha(campo: Locator, fecha: string): Promise<void> {
+    const [anio, mes, dia] = fecha.split('-')
+    const esInput = await campo.evaluate(elemento => elemento.tagName === 'INPUT')
+    const input = esInput ? campo : campo.locator('input').first()
+    await input.fill(`${dia}/${mes}/${anio}`)
+    await expect(input).toHaveValue(`${dia}/${mes}/${anio}`)
+}

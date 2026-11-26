@@ -103,7 +103,7 @@ async function abrir(evento: { data: z.output<typeof esquema> }) {
         icono="i-lucide-clipboard-list"
         descripcion="Se cuenta producto por producto contra el sistema; al cerrar, los faltantes van a mermas (5.6.02) y los sobrantes a 4.2.04. La bodega sigue operando mientras se cuenta."
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('inventario.abrir_conteo')"
                 label="Abrir conteo"

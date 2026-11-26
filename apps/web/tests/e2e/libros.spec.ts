@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, llenarFecha, menu } from './ayudas'
 
 /**
  * Libros legales con folio (A3, fase 6 PR D) en modo fixtures, en escritorio y teléfono. ArgosNet tiene
@@ -44,7 +44,7 @@ test('vista previa, emitir sin bloqueo dice qué hacer; bloquear, emitir, habili
     const empresa = page.locator('[data-prueba="bloqueos-empresa"]').first()
     await empresa.locator('[data-prueba="abrir-bloquear"]').click()
     const bloquear = page.getByRole('dialog', { name: 'Bloquear el libro' })
-    await bloquear.locator('[data-prueba="bloqueo-hasta"]').fill('2026-09-30')
+    await llenarFecha(bloquear.locator('[data-prueba="bloqueo-hasta"]'), '2026-09-30')
     await bloquear.locator('[data-prueba="bloqueo-motivo"]').fill('Cierre de septiembre')
     await bloquear.getByRole('button', { name: 'Bloquear' }).click()
     await expect(empresa.locator('[data-tipo="global"] [data-prueba="bloqueo-vigente"]')).toHaveText('Hasta 30/09/2026')

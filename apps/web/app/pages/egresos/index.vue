@@ -140,7 +140,7 @@ onMounted(() => {
         titulo="Egresos"
         icono="i-lucide-receipt"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('egresos.registrar')"
                 label="Registrar egreso"
@@ -154,16 +154,14 @@ onMounted(() => {
             <ContaIsla llenar>
                 <div class="flex flex-col gap-4 p-3 sm:p-4">
                     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        <UInput
+                        <CampoFecha
                             v-model="desde"
-                            type="date"
                             :max="hasta || undefined"
                             aria-label="Desde"
                             class="w-full"
                         />
-                        <UInput
+                        <CampoFecha
                             v-model="hasta"
-                            type="date"
                             :min="desde || undefined"
                             aria-label="Hasta"
                             class="w-full"

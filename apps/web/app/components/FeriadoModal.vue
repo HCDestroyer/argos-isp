@@ -129,9 +129,8 @@ function confirmarRetiro(evento: FormSubmitEvent<{ motivo: string }>) {
                         name="fecha"
                         required
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha"
-                            type="date"
                             class="w-full"
                             data-prueba="feriado-fecha"
                         />

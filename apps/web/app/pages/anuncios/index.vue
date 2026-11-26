@@ -59,14 +59,13 @@ onMounted(() => void lista.recargar())
         icono="i-lucide-megaphone"
         descripcion="Promociones de la empresa en el inicio del portal y en la página de corte. Solo se ven publicadas, dentro de su vigencia y para los clientes de su audiencia."
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('anuncios.administrar')"
                 class="glow-brand px-5"
                 size="lg"
                 label="Nuevo anuncio"
                 icon="i-lucide-plus"
-                aria-label="Nuevo anuncio"
                 :disabled="sinEmpresa"
                 data-prueba="nuevo-anuncio"
                 @click="formularioAbierto = true"

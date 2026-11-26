@@ -178,6 +178,9 @@ onMounted(() => {
                 size="lg"
                 class="boton-flotante"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('lealtad.canjear')"
                 to="/lealtad/canjes?nuevo=1"

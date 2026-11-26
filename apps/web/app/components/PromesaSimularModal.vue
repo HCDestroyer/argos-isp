@@ -220,9 +220,8 @@ async function crear() {
                             name="vence"
                             help="Vacío: mañana."
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="estado.vence"
-                                type="date"
                                 :min="hoy"
                                 class="w-full"
                             />

@@ -226,6 +226,9 @@ onBeforeUnmount(liberarPdf)
     >
         <template #acciones>
             <ContaSelectorEmpresa />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('libros.habilitar')"
                 to="/libros/habilitaciones"
@@ -357,9 +360,8 @@ onBeforeUnmount(liberarPdf)
                                     />
                                 </UFormField>
                                 <UFormField label="Desde">
-                                    <UInput
+                                    <CampoFecha
                                         v-model="desde"
-                                        type="date"
                                         class="w-full"
                                         data-prueba="libros-desde"
                                     />
@@ -368,9 +370,8 @@ onBeforeUnmount(liberarPdf)
                                     label="Hasta"
                                     :error="errorRango ?? undefined"
                                 >
-                                    <UInput
+                                    <CampoFecha
                                         v-model="hasta"
-                                        type="date"
                                         class="w-full"
                                         data-prueba="libros-hasta"
                                     />

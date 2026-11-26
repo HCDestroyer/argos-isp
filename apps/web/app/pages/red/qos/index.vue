@@ -68,14 +68,12 @@ onMounted(() => void lista.recargar())
         titulo="Prioridad (QoS)"
         icono="i-lucide-list-ordered"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('qos.gestionar')"
                 class="rounded-full"
                 label="Nuevo perfil"
                 icon="i-lucide-copy-plus"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nuevo perfil"
                 :disabled="!lista.filas.value.length"
                 data-prueba="nuevo-perfil-qos"
                 @click="abrirCrear(null)"

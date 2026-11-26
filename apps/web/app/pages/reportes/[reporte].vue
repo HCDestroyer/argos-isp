@@ -471,9 +471,8 @@ onMounted(async () => {
                                 label="Desde"
                                 size="sm"
                             >
-                                <UInput
+                                <CampoFecha
                                     v-model="filtros.desde"
-                                    type="date"
                                     :max="filtros.hasta || undefined"
                                     class="w-full"
                                     data-prueba="filtro-desde"
@@ -483,9 +482,8 @@ onMounted(async () => {
                                 label="Hasta"
                                 size="sm"
                             >
-                                <UInput
+                                <CampoFecha
                                     v-model="filtros.hasta"
-                                    type="date"
                                     :min="filtros.desde || undefined"
                                     class="w-full"
                                     data-prueba="filtro-hasta"
@@ -497,9 +495,8 @@ onMounted(async () => {
                             label="Antigüedad al"
                             size="sm"
                         >
-                            <UInput
+                            <CampoFecha
                                 v-model="filtros.corte"
-                                type="date"
                                 class="w-full"
                             />
                         </UFormField>

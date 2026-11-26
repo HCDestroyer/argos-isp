@@ -107,9 +107,10 @@ export default defineAppConfig({
                 footer: 'justify-end gap-2',
             },
         },
-        // En el teléfono, los avisos emergentes salen encima de la isla de navegación (`PanelIslaMovil`).
+        // En el teléfono, los avisos emergentes salen encima de la isla de navegación (`PanelIslaMovil`)
+        // y de la barra fija de la pantalla, si la hay (`PanelBarraAccion`, `--ax-barra-accion`).
         toaster: {
-            slots: { viewport: 'mb-(--ax-isla-reserva)' },
+            slots: { viewport: 'mb-[calc(var(--ax-isla-reserva)+var(--ax-barra-accion,0px))]' },
         },
         toast: {
             slots: { root: 'rounded-(--ax-radio) ring-(--ax-borde)', icon: 'size-5' },

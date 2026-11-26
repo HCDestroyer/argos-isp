@@ -74,9 +74,8 @@ const columnas: TableColumn<EntradaRegistro>[] = [
                     label="Desde"
                     help="Hasta 31 días atrás; vacío = últimos 7 días."
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="desde"
-                        type="date"
                         class="w-full"
                         aria-label="Desde qué día"
                     />
