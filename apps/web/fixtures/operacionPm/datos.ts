@@ -37,6 +37,8 @@ export interface OperacionPmFixtures {
     correosExternos: Schema<'CorreoExternoReportes'>[]
     /** Envíos programados de reportes (`billing.reportes_envios` con sus destinatarios). */
     envios: Schema<'EnvioReporte'>[]
+    /** Reportes favoritos por usuario (`billing.reportes_favoritos`). */
+    favoritosReportes: Record<number, string[]>
     corridasEnvios: Schema<'CorridaEnvioReporte'>[]
     /** Orden y versión de cada banco del catálogo (el `Banco` de `GET /bancos` no las trae). */
     bancosMeta: Record<number, { orden: number, version: number }>
@@ -145,6 +147,7 @@ export function operacionPmInicial(): OperacionPmFixtures {
                 version: 2, created_at: '2026-10-01T15:00:00.000Z', updated_at: '2026-11-02T15:00:00.000Z',
             },
         ],
+        favoritosReportes: {},
         corridasEnvios: [
             {
                 id: 3, envio_id: 1, programado_para: '2026-11-16T13:00:00.000Z', enviados: 1, omitidos: 1, fallidos: 0, created_at: '2026-11-16T13:00:04.000Z',

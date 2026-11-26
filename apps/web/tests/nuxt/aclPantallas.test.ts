@@ -336,6 +336,12 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'IntentoDecidirModal.vue': { permisos: ['inventario.decidir_intento_recuperacion'], desde: ['pages/inventario/por-recuperar/[id].vue'] },
     'BancoOrigenModal.vue': { permisos: ['bancos_origen.crear', 'bancos_origen.editar'], desde: ['pages/configuracion/bancos-origen.vue'] },
     'CorreoExternoModal.vue': { permisos: ['reportes.aprobar_correo_externo'], desde: ['pages/reportes/envios.vue'] },
+    // Plan de contabilidad P2: cada ventana se monta solo con el permiso de su acción.
+    'AsientoManualSlideover.vue': { permisos: ['libro.registrar_asiento'], desde: ['pages/libro/index.vue'] },
+    // «Por aprobar» lista con el `libro.ver` de la página del libro.
+    'LibroBorradores.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'CarteraGestionModal.vue': { permisos: ['gestiones_cobro.registrar'], desde: ['pages/cartera/index.vue'] },
+    'ReporteEnvioModal.vue': { permisos: ['reportes.programar_envio'], desde: ['pages/reportes/[reporte].vue'] },
     // SmartOLT y GenieACS: la página de integraciones se abre con cualquiera de sus permisos y monta la tarjeta con `equipos.ver`.
     'ConfiguracionEquipos.vue': { permisos: ['equipos.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },
