@@ -108,3 +108,24 @@ Por decidir (cada una con su recomendación en el plan, §8):
 - **Preguntas 7 a 14:** quedan como se recomendaron. El gasto en efectivo sale de la caja chica.
 
 Por decidir ahora (plan §8.2): N1 caja sin factura con dos tipos; N2 quitar el retiro del cajero; N3 plazo y tope de custodia; N4 quién recibe entregas; N5 reponer la caja chica desde la custodia; N6 retención sin constancia; N7 tope de diferencias de fábrica; N8 diferencia al recibir una entrega; N9 fondos fijos de fábrica.
+
+### Respuestas del PM (26 nov 2026, segunda tanda): cajas y conciliación
+
+- **Modelo de cajas aprobado:**
+  - Hay dos tipos de caja: cobros y caja chica.
+  - El efectivo recorre caja de cobros → custodia (quien recibe marca «Recibí») → banco.
+  - La caja chica se repone solo por lo gastado.
+  - La caja sin factura también se divide en dos: cobros sin factura y caja chica sin factura (N1).
+  - El cajero ya no saca gastos de su caja de cobros (N2).
+- **Montos de fábrica**, configurables por empresa:
+  - fondo de cambio: Q 200 por caja de cobros;
+  - caja chica: Q 2,000;
+  - custodia: 1 día hábil y Q 5,000 por persona; si se pasa, solo avisa (N3);
+  - diferencia al conciliar: Q 10 por línea y Q 50 por día (N7).
+- **Sin tope por gasto en la caja chica.** El PM: «El tope de gastos no se puede definir, ya que no es algo que se sepa cuanto se puede gastar». El único límite es el saldo del fondo, y cada gasto lleva su comprobante (N9 ajustada).
+- **Constancias (N6):** si el cliente retiene y aún no entrega la constancia, la factura queda pagada y la constancia «por recibir». Al cerrar el mes se avisa, y la constancia no se usa en la declaración hasta tenerla.
+- **Reglas aprobadas:**
+  - recibir una entrega tiene permiso propio; de fábrica lo tienen admin y contabilidad;
+  - «lo deposito yo» está permitido y cada empresa lo puede apagar (N4);
+  - la caja chica se repone desde la custodia o desde el banco (N5);
+  - el faltante o sobrante al recibir queda a nombre de quien entregó, y Argos no lo descuenta de planilla (N8).
