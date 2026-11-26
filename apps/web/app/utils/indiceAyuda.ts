@@ -609,6 +609,39 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/configuracion/integraciones/smartolt/[id]': {
+        titulo: 'Integraciones',
+        resumen: 'Las otras aplicaciones de la familia que se conectan con ArgosIsp. Cada una tiene su tarjeta con su estado y el botón «Configurar».',
+        pagina: 'integraciones/integraciones',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Relacionado',
+        ],
+    },
+    '/configuracion/integraciones/smartolt/[id]/editar': {
+        titulo: 'Integraciones',
+        resumen: 'Las otras aplicaciones de la familia que se conectan con ArgosIsp. Cada una tiene su tarjeta con su estado y el botón «Configurar».',
+        pagina: 'integraciones/integraciones',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Relacionado',
+        ],
+    },
+    '/configuracion/integraciones/smartolt/nueva': {
+        titulo: 'Integraciones',
+        resumen: 'Las otras aplicaciones de la familia que se conectan con ArgosIsp. Cada una tiene su tarjeta con su estado y el botón «Configurar».',
+        pagina: 'integraciones/integraciones',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Relacionado',
+        ],
+    },
     '/configuracion/inventario': {
         titulo: 'Ajustes del inventario',
         resumen: 'Dos ajustes de la empresa activa: si recibir una orden de traslado exige firma, y la inteligencia artificial que lee las facturas de compra en PDF o imagen.',

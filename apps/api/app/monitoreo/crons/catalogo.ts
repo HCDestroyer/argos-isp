@@ -644,7 +644,7 @@ export const CATALOGO_CRONS: readonly CronCatalogo[] = [
         nombre: 'Equipos pendientes',
         modulo: 'integraciones',
         descripcion:
-            'Reintenta los aprovisionamientos de ONT (SmartOLT) y los cambios de Wi-Fi (GenieACS) en proceso.',
+            'Reintenta los aprovisionamientos (SmartOLT y ACS) y los cambios de Wi-Fi (ACS) en proceso.',
         // `EQUIPOS_PENDIENTES_CADA_MS` (30 s por defecto); job scheduler propio de la cola `equipos`
         horario: () => ({ tipo: 'cada', ms: Number(process.env.EQUIPOS_PENDIENTES_CADA_MS ?? 30_000) }),
         proceso: 'equipos:worker',

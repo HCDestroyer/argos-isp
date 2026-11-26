@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import { botonMasIsla, entrar, ir, menu } from './ayudas'
 
 /**
@@ -191,6 +191,12 @@ test('«Ajustes» es una sola entrada abajo: no despliega nada y abre su página
     await expect(ajustes.getByRole('link')).toHaveCount(1)
     await expect(ajustes.locator('button[aria-expanded]')).toHaveCount(0)
     if (!isMobile) {
+        // Lote 0: «Ajustes» se ve entero, dentro de la isla y de la ventana de 720 de alto.
+        const isla = await lateral.boundingBox()
+        const entrada = await ajustes.getByRole('link').boundingBox()
+        expect(isla && entrada).toBeTruthy()
+        expect(entrada!.y + entrada!.height).toBeLessThanOrEqual(isla!.y + isla!.height)
+        expect(isla!.y + isla!.height).toBeLessThanOrEqual(720 - 15)
         // Con un grupo abierto, el menú de todos los días cabe sin desplazamiento propio (el pie ya no crece).
         await contenedor.locator('[data-prueba="menu-principal"]').getByRole('button', { name: 'Día a día' }).click()
         const cuerpo = contenedor.locator('[data-prueba="menu-principal"]').locator('xpath=..')
@@ -202,3 +208,77 @@ test('«Ajustes» es una sola entrada abajo: no despliega nada y abre su página
     await expect(page.locator('[data-prueba="indice-ajustes"]')).toBeVisible()
     await expect(page.getByRole('dialog')).toHaveCount(0)
 })
+
+/**
+ * Corte del menú lateral (lote 0): la isla de escritorio queda a 16 px del borde superior e
+ * inferior de la ventana, y «Ajustes», en el pie, se ve completo dentro de ella.
+ */
+const TAMANOS_ESCRITORIO = [
+    { ancho: 1280, alto: 720 },
+    { ancho: 1280, alto: 800 },
+    { ancho: 1440, alto: 900 },
+] as const
+
+async function cajaIsla(lateral: Locator): Promise<{ x: number, y: number, width: number, height: number }> {
+    const caja = await lateral.boundingBox()
+    expect(caja).toBeTruthy()
+    return caja!
+}
+
+for (const { ancho, alto } of TAMANOS_ESCRITORIO) {
+    test(`menú lateral ${ancho}×${alto}: la isla queda entre 16 px de margen y «Ajustes» se ve completo`, async ({ page, isMobile }) => {
+        test.skip(isMobile, 'Solo escritorio: en el teléfono el menú es una ventana a pantalla completa')
+        await page.setViewportSize({ width: ancho, height: alto })
+        await entrar(page, 'admin@argos.test')
+        const lateral = page.locator('#dashboard-sidebar-principal')
+        await expect(lateral.locator('[data-prueba="menu-rail"]')).toBeVisible()
+
+        // Compacto (por defecto): el pie tiene «Ajustes» como una sola entrada fija (un enlace).
+        const pie = lateral.getByRole('navigation', { name: 'Ajustes' })
+        await expect(pie).toBeVisible()
+        const ultimo = pie.getByRole('link').last()
+        await expect(ultimo).toContainText('Ajustes')
+
+        const isla = await cajaIsla(lateral)
+        // La isla empieza a 16 px del borde superior y termina a 16 px del inferior (±1 por redondeo).
+        expect(Math.abs(isla.y - 16)).toBeLessThanOrEqual(1)
+        expect(Math.abs(alto - (isla.y + isla.height) - 16)).toBeLessThanOrEqual(1)
+
+        // «Ajustes» entero: dentro de la isla y dentro de la ventana.
+        const entrada = await cajaIsla(ultimo)
+        expect(entrada.y).toBeGreaterThanOrEqual(isla.y)
+        expect(entrada.y + entrada.height).toBeLessThanOrEqual(isla.y + isla.height)
+        expect(entrada.y + entrada.height).toBeLessThanOrEqual(alto)
+
+        // Abrir «Ajustes» no mueve la isla: antes subía 2 px al enfocar el botón recortado. Ahora es un
+        // enlace que abre la página de Ajustes, sin panel ni menú flotante.
+        await ultimo.click()
+        await expect(page).toHaveURL(/\/configuracion$/)
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        const trasAjustes = await cajaIsla(lateral)
+        expect(Math.abs(trasAjustes.y - 16)).toBeLessThanOrEqual(1)
+        expect(Math.abs(alto - (trasAjustes.y + trasAjustes.height) - 16)).toBeLessThanOrEqual(1)
+
+        // Expandido: la isla no se mueve al abrir y cerrar un grupo.
+        await lateral.locator('[data-prueba="alternar-menu"]').click()
+        const principal = lateral.locator('[data-prueba="menu-principal"]')
+        await expect(principal).toBeVisible()
+        const antes = await cajaIsla(lateral)
+        expect(Math.abs(antes.y - 16)).toBeLessThanOrEqual(1)
+        expect(Math.abs(alto - (antes.y + antes.height) - 16)).toBeLessThanOrEqual(1)
+        const grupo = principal.getByRole('button', { name: 'Día a día' })
+        await grupo.click()
+        await expect(grupo).toHaveAttribute('aria-expanded', 'true')
+        const abierto = await cajaIsla(lateral)
+        expect(Math.abs(abierto.y - antes.y)).toBeLessThanOrEqual(1)
+        await grupo.click()
+        await expect(grupo).toHaveAttribute('aria-expanded', 'false')
+        const cerrado = await cajaIsla(lateral)
+        expect(Math.abs(cerrado.y - antes.y)).toBeLessThanOrEqual(1)
+
+        // Expandido: «Ajustes» también se ve entero, abajo de la isla.
+        const ajustesExpandido = await cajaIsla(lateral.locator('[data-prueba="menu-ajustes"]').getByRole('link', { name: 'Ajustes' }))
+        expect(ajustesExpandido.y).toBeGreaterThanOrEqual(cerrado.y)
+        expect(ajustesExpandido.y + ajustesExpandido.height).toBeLessThanOrEqual(cerrado.y + cerrado.height)
+    })
+}

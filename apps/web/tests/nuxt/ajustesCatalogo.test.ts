@@ -67,10 +67,10 @@ describe('Ajustes · catálogo único', () => {
         }
     })
 
-    it('la lista de permisos del índice y del menú es la unión del catálogo (corrige ajustes_cobro, reportes y equipos)', () => {
+    it('la lista de permisos del índice y del menú es la unión del catálogo (corrige ajustes_cobro y reportes; SmartOLT y ACS con sus permisos)', () => {
         const indice = permisoDePagina(join(PAGINAS, 'configuracion/index.vue'))
         expect(indice).toEqual([...PERMISOS_AJUSTES])
-        expect(PERMISOS_AJUSTES).toEqual(expect.arrayContaining(['ajustes_cobro.ver', 'reportes.ver', 'equipos.ver']))
+        expect(PERMISOS_AJUSTES).toEqual(expect.arrayContaining(['ajustes_cobro.ver', 'reportes.ver', 'smartolt.ver', 'acs.ver']))
         expect(obtenerSeccion('configuracion').permiso).toEqual(PERMISOS_AJUSTES)
         // Con solo uno de los que faltaban se entra a Ajustes.
         useUsuarioActual().value = { ...meCajero, permisos: ['reportes.ver'] }

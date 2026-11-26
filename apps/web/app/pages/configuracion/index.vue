@@ -8,7 +8,7 @@
  * El permiso es la unión del catálogo (`PERMISOS_AJUSTES`), escrito literal porque `aclPantallas` y
  * `verificar-permisos` leen el texto; `ajustesCatalogo.test.ts` vigila que sigan iguales.
  */
-definePageMeta({ permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'ajustes_cobro.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'nodos_portal.administrar', 'portal_corte.ver', 'inventario.configurar', 'notificaciones.ver', 'horus.ver', 'iris.ver', 'equipos.ver', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'apariencia.ver', 'reportes.ver', 'sistema.ver_salud', 'sistema.ver_registro', 'sistema.ver_almacenamiento', 'sistema.ver_crons'] })
+definePageMeta({ permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'ajustes_cobro.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'nodos_portal.administrar', 'portal_corte.ver', 'inventario.configurar', 'notificaciones.ver', 'horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'apariencia.ver', 'reportes.ver', 'sistema.ver_salud', 'sistema.ver_registro', 'sistema.ver_almacenamiento', 'sistema.ver_crons'] })
 
 useHead({ title: 'Ajustes · ArgosIsp' })
 </script>

@@ -91,9 +91,9 @@ export const SECCIONES_CONFIGURACION: SeccionConfiguracion[] = [
         resumen: 'Avisos al cliente y sistemas conectados',
         icono: 'i-lucide-bell',
         paginas: [
-            { id: 'notificaciones', etiqueta: 'Canales de aviso', descripcion: 'Correo, Telegram y WhatsApp: servidor, bot e interruptores por aviso', icono: 'i-lucide-bell', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver', palabras: 'correo, SMTP, Telegram, WhatsApp' },
+            { id: 'notificaciones', etiqueta: 'Canales de aviso', descripcion: 'Correo, Telegram y WhatsApp (por Iris): servidor, bot e interruptores por aviso', icono: 'i-lucide-bell', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver', palabras: 'correo, SMTP, Telegram, WhatsApp' },
             { id: 'notificaciones-plantillas', etiqueta: 'Plantillas de avisos', descripcion: 'Texto de cada aviso, recordatorios de pago y registro de envíos', icono: 'i-lucide-message-square-text', ruta: '/notificaciones', permiso: 'notificaciones.ver', palabras: 'textos del correo, recordatorios, envíos' },
-            { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Iris, Horus Flow, SmartOLT y GenieACS: conexión y credenciales', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'equipos.ver'], palabras: 'Iris, Horus, SmartOLT, GenieACS', tambien: /^\/configuracion\/integraciones\// },
+            { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Iris, Horus Flow, SmartOLT (sus instancias y OLT) y el ACS de cada empresa: conexión y credenciales', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver'], palabras: 'Iris, Horus, SmartOLT, OLT, ONU, GenieACS, ACS, Wi-Fi', tambien: /^\/configuracion\/integraciones\// },
             // Decisión 24 del PM: solo el admin. La API de la importación aún no tiene permiso propio.
             { id: 'importar', etiqueta: 'Importar desde Mikrowisp', descripcion: 'Traer clientes, servicios y facturas desde otro sistema', icono: 'i-lucide-upload', ruta: '/configuracion/importar', permiso: null, palabras: 'migrar, traer clientes' },
         ],

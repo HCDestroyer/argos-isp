@@ -233,7 +233,7 @@ describe('iris · pantalla', () => {
         await esperar(() => expect(vista.find('[data-prueba="estado-tarjeta-iris"]').text()).toBe('Sin conectar'))
         expect(vista.find('[data-integracion="horus"]').exists()).toBe(false)
 
-        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['horus.ver', 'iris.ver', 'equipos.ver'].includes(p)) }
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver'].includes(p)) }
         expect(puedeAbrir('/configuracion/integraciones')).toBe(false)
         expect(puede(obtenerSeccion('integraciones').permiso)).toBe(false)
     })

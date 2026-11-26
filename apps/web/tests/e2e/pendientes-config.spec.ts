@@ -192,24 +192,7 @@ test('envíos programados: el detalle con sus corridas, pausar y los correos ext
     await expect(aviso(page, 'auditoria@externa.gt retirado')).toBeVisible()
 })
 
-test('integraciones: SmartOLT se guarda sin mostrar el token y se prueba de verdad', async ({ page }) => {
-    await entrar(page, 'admin@argos.test')
-    await elegirEmpresa(page, 'ArgosNet')
-    await page.goto('/configuracion/integraciones?ver=smartolt')
-    const tarjeta = page.locator('[data-prueba="equipos-smartolt"]')
-    await expect(tarjeta.locator('[data-prueba="estado-smartolt"]')).toContainText('Sin conectar')
-    await tarjeta.getByLabel('Integración encendida en esta empresa').click()
-    await tarjeta.locator('[data-prueba="smartolt-url"]').fill('https://miisp.smartolt.com')
-    await tarjeta.getByRole('button', { name: /Escribir token de la api/i }).click()
-    await tarjeta.locator('[data-prueba="secreto-smartolt_token"]').fill('token-secreto-123')
-    await tarjeta.locator('[data-prueba="guardar-smartolt"]').click()
-    await expect(aviso(page, 'SmartOLT guardado')).toBeVisible()
-    await expect(tarjeta).toContainText('Guardado')
-    await expect(tarjeta.locator('input[value="token-secreto-123"]')).toHaveCount(0)
-    await tarjeta.locator('[data-prueba="probar-smartolt"]').click()
-    await expect(aviso(page, 'Conexión correcta')).toBeVisible()
-    await expect(tarjeta.locator('[data-prueba="estado-smartolt"]')).toContainText('Conectado')
-})
+// SmartOLT y ACS: `integraciones-smartolt.spec.ts` (tableros PendSmartolt* y PendAcs).
 
 test('inventario: decidir el intento anterior habilita «Declarar no recuperado»; técnicos de Iris', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
