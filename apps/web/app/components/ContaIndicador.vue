@@ -92,14 +92,14 @@ const pastilla = computed(() => {
             <ULink
                 v-if="enlace"
                 :to="enlace"
-                class="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-default after:absolute after:inset-0 after:content-['']"
+                class="min-w-0 flex-1 line-clamp-2 text-[0.8125rem] leading-tight font-medium text-default after:absolute after:inset-0 after:content-['']"
                 data-prueba="kpi-enlace"
             >
                 {{ nombre }}
             </ULink>
             <span
                 v-else
-                class="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-default"
+                class="min-w-0 flex-1 line-clamp-2 text-[0.8125rem] leading-tight font-medium text-default"
             >{{ nombre }}</span>
             <UBadge
                 v-if="insignia"

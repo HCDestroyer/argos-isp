@@ -159,7 +159,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Libros legales con folio (fase 6 PR D): leen los folios del libro (`libros.ver`, el de la página).
     'EmitirLibroModal.vue': { permisos: ['libros.emitir', 'libros.ver'], desde: ['pages/libros/index.vue'] },
     'HabilitacionLibroModal.vue': { permisos: ['libros.habilitar', 'libros.ver'], desde: ['pages/libros/habilitaciones.vue'] },
-    'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id]/index.vue', 'pages/clientes/[id]/index.vue'] },
+    // «Nueva factura» (antes CargoUnicoModal): ficha del servicio, del cliente y lista de Facturas.
+    'FacturaNuevaPanel.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id]/index.vue', 'pages/clientes/[id]/index.vue', 'pages/facturas/index.vue'] },
     'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id]/index.vue'] },
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
     'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },

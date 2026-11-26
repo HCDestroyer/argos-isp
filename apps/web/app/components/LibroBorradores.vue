@@ -27,9 +27,8 @@ watch(lista.filas, filas => emit('pendientes', filas.filter(f => f.estado === 'p
 onMounted(() => void lista.recargar())
 
 const columnas: TableColumn<BorradorAsiento>[] = [
-    { id: 'fecha', header: 'Fecha' },
-    { id: 'descripcion', header: 'Descripción' },
-    { id: 'creador', header: 'Lo creó' },
+    { id: 'fecha', header: 'Fecha', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden sm:table-cell' } } },
+    { id: 'descripcion', header: 'Descripción y quién lo creó' },
     { id: 'total', header: 'Total', meta: { class: { th: 'text-right', td: 'text-right' } } },
     { id: 'estado', header: 'Estado' },
 ]
@@ -60,7 +59,7 @@ defineExpose({ recargar: () => lista.recargar() })
         class="flex min-h-0 flex-1 flex-col"
         data-prueba="libro-por-aprobar"
     >
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-(--ax-borde) px-4 py-3">
+        <div class="flex flex-col gap-3 border-b border-(--ax-borde) px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-muted">
                 <UIcon
                     name="i-lucide-user-check"
@@ -78,7 +77,7 @@ defineExpose({ recargar: () => lista.recargar() })
                 ]"
                 icon="i-lucide-filter"
                 aria-label="Estado del borrador"
-                class="w-44"
+                class="w-full sm:w-44"
                 :ui="{ base: 'rounded-full' }"
                 data-prueba="filtro-borradores"
             />
@@ -107,17 +106,16 @@ defineExpose({ recargar: () => lista.recargar() })
                     <span class="text-sm whitespace-nowrap text-muted">{{ fechaDe(row.original) }}</span>
                 </template>
                 <template #descripcion-cell="{ row }">
-                    <span
-                        class="block max-w-[28rem] truncate text-sm"
-                        :class="elegido?.id === row.original.id ? 'font-semibold text-highlighted' : ''"
-                        :data-borrador="row.original.id"
-                    >{{ row.original.descripcion }}</span>
-                </template>
-                <template #creador-cell="{ row }">
-                    <span class="text-sm whitespace-nowrap">{{ row.original.creado_por_nombre ?? 'El sistema' }}<span
-                        v-if="esMio(row.original)"
-                        class="text-muted"
-                    > (tú)</span></span>
+                    <div class="flex max-w-72 min-w-0 flex-col whitespace-normal">
+                        <span
+                            class="line-clamp-2 text-sm"
+                            :class="elegido?.id === row.original.id ? 'font-semibold text-highlighted' : ''"
+                            :data-borrador="row.original.id"
+                        >{{ row.original.descripcion }}</span>
+                        <span class="text-xs text-muted">
+                            <span class="sm:hidden">{{ fechaDe(row.original) }} · </span>{{ row.original.creado_por_nombre ?? 'El sistema' }}<template v-if="esMio(row.original)"> (tú)</template>
+                        </span>
+                    </div>
                 </template>
                 <template #total-cell="{ row }">
                     <span class="font-semibold tabular-nums">{{ formatearQuetzales(row.original.total).replace('Q ', '') }}</span>

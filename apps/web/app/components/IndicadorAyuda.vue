@@ -67,7 +67,7 @@ const BOTON = {
                 direction="bottom"
                 :title="ayuda.titulo"
                 description="Qué es este número y cómo leerlo"
-                :ui="{ content: 'rounded-t-2xl', header: 'px-4 pt-2 pb-0', body: 'px-4 pb-6' }"
+                :ui="{ content: 'rounded-t-2xl', header: 'px-4 pt-2 pb-0', description: 'sr-only', body: 'px-4 pb-6' }"
             >
                 <template #body>
                     <IndicadorAyudaCuerpo

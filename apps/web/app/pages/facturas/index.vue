@@ -20,6 +20,23 @@ useHead({ title: 'Facturas · ArgosIsp' })
 const route = useRoute()
 const router = useRouter()
 const nombres = useNombresClientes()
+const { empresaId: empresaActivaId } = useEmpresaActiva()
+
+/** «Nueva factura» (antes «Cargo único»): panel lateral que primero pide el cliente. */
+const nuevaAbierta = ref(false)
+const puedeNueva = computed(() => puede('facturas.emitir_cargo_unico'))
+
+async function alEmitirNueva(resultado: CargoUnicoEmitido, siguiente: { cobrar: boolean, clienteId: number }) {
+    if (resultado.documento === 'bonificacion' && resultado.bonificacion) {
+        toast.add({ title: 'Bonificación registrada', description: `Sin costo: ${formatearQuetzales(resultado.bonificacion.bruto)} · ${resultado.bonificacion.motivo_nombre}`, icon: 'i-lucide-hand-heart', color: 'success' })
+        await navigateTo(`/bonificaciones/${resultado.bonificacion.id}`)
+        return
+    }
+    if (resultado.factura) {
+        toast.add({ title: 'Factura emitida', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
+        await navigateTo(siguiente.cobrar ? `/cobro?cliente=${siguiente.clienteId}` : `/facturas/${resultado.factura.id}`)
+    }
+}
 
 /** Valor de los `USelect` para "sin filtro" (Reka UI no admite `''`). */
 const TODOS = 'todos'
@@ -126,10 +143,10 @@ function estadoVisible(factura: Factura): EstadoFactura {
     return diasVencidaFactura(factura, hoy) > 0 ? 'vencida' : factura.estado
 }
 
-/** Concepto corto: el periodo, o «Cargo único · …» y la mora con su etiqueta. */
+/** Concepto corto: el periodo, o «Factura manual · …» (la de «Nueva factura») y la mora con su etiqueta. */
 function concepto(factura: Factura): string {
     if (factura.cargo_unico) {
-        return `Cargo único · ${factura.cargo_unico}`
+        return `Factura manual · ${factura.cargo_unico}`
     }
     const tipo = tipoFacturaVisual(factura.tipo)
     return tipo ? `${tipo.etiqueta} · ${etiquetaPeriodo(factura.periodo)}` : etiquetaPeriodo(factura.periodo)
@@ -295,16 +312,34 @@ onMounted(async () => {
                 class="boton-flotante"
             />
             <UButton
+                v-if="puedeNueva"
+                label="Nueva factura"
+                icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand rounded-full px-5"
+                data-prueba="nueva-factura"
+                @click="nuevaAbierta = true"
+            />
+            <UButton
                 v-if="puede('facturas.generar')"
                 label="Generar las del mes"
                 icon="i-lucide-zap"
+                :color="puedeNueva ? 'neutral' : 'primary'"
+                :variant="puedeNueva ? 'outline' : 'solid'"
                 size="lg"
-                class="glow-brand px-5"
+                :class="puedeNueva ? 'boton-flotante' : 'glow-brand px-5'"
                 :loading="generando"
                 data-prueba="generar-del-mes"
                 @click="generarDelMes"
             />
         </template>
+
+        <FacturaNuevaPanel
+            v-if="puedeNueva && puede('facturas.ver')"
+            v-model:open="nuevaAbierta"
+            :empresa-id="empresaActivaId"
+            @hecho="alEmitirNueva"
+        />
 
         <div class="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
             <ProblemaAlerta

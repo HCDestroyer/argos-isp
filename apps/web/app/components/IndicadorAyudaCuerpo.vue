@@ -78,8 +78,19 @@ const PARTES = [
                 color="primary"
                 variant="link"
                 size="sm"
-                class="px-0"
+                class="px-0 max-sm:hidden"
                 data-prueba="ayuda-indicador-accion"
+                @click="emit('cerrar')"
+            />
+            <UButton
+                v-if="accion"
+                :label="accion.etiqueta"
+                :to="accion.to"
+                color="primary"
+                size="lg"
+                block
+                class="rounded-full sm:hidden"
+                data-prueba="ayuda-indicador-accion-telefono"
                 @click="emit('cerrar')"
             />
             <UButton
