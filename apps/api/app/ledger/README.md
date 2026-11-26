@@ -223,7 +223,7 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 | `bancos.trasladar` | `POST /bancos/trasladar` | `1.1.11 / Banco A` (misma empresa) |
 | `bancos.importar_extracto` | `POST /bancos/extractos` | Ninguno (neutral al origen; huella única por cuenta) |
 | `bancos.conciliar` | `POST /bancos/conciliaciones` | Ninguno sobre lo existente; la llegada de un depósito o traslado es un asiento nuevo `Banco / 1.1.11` |
-| `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Ninguno (fila de anulación por fila del grupo) |
+| `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Reverso de lo que la conciliación creó (E11 y B3): la llegada de un depósito o traslado (vuelve a `1.1.11`, fila en `transitos_reatribuciones`) y el asiento de su diferencia |
 | `bancos.reatribuir_llegada` | `POST /bancos/llegadas/reatribuir` | Reverso de la llegada equivocada y llegada nueva del documento correcto (`ledger.transitos_reatribuciones`) |
 | `bancos.registrar_desde_extracto` (`bancos.conciliar`) | `POST /bancos/extractos/lineas/:id/registrar` | Nuevo, origen `banco`: `5.3.07 / Banco` (cargo) o `Banco / contrapartida` (abono) |
 | `bancos.crear_regla`, `bancos.editar_regla`, `bancos.aplicar_reglas` (`bancos.conciliar`) | `GET/POST/PUT /bancos/reglas`, `POST /bancos/extractos/:id/aplicar-reglas` | El de `registrar_desde_extracto` (acción contrapartida) |
@@ -236,6 +236,28 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 - Eventos: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado`, `cartera.castigada`.
 - Diarios: `liquidacion_cobro` → `COB` (o `BAN-n` si va a una cuenta propia), depósito → `CAJ-n`, el resto `BAN-n` o `VAR`. Los asientos de estos orígenes no se revierten directo (`reversos.ts`).
 - Pruebas: `tests/ledger/cobros_liquidar.spec.ts`, `depositos_traslados.spec.ts`, `conciliacion_bancaria.spec.ts`, `cartera.spec.ts`, `rutas_bancos.spec.ts`; cada una termina en `afirmarLibro` (el auditor completo, con los invariantes de la fase 4 que agregó el auditor).
+
+### Diferencias al conciliar (plan de contabilidad B3, §5.8)
+
+La línea del banco casi nunca es igual a lo emparejado (comisión, redondeo, faltante del depósito). `bancos.conciliar` acepta `diferencias[] { motivo_id, monto, nota, cuenta }` y registra la diferencia en el mismo paso, con un asiento **nuevo** de origen `diferencia_conciliacion` (`origen_id` = `billing.diferencias_conciliacion.id`): de menos `cuenta del motivo / Banco`, de más `Banco / cuenta`. Su movimiento del banco entra al grupo de la conciliación. Las tablas viven en `billing` (como los borradores de asiento): no tocan el libro por sí solas.
+
+- **Tope de quien concilia** (`billing.ajustes_conciliacion`, por empresa): por línea y por día, Q 10.00 y Q 50.00 de fábrica (decisión N7). Cuentan solo los motivos con `cuenta_contra_tope` y, en el día, lo que la persona aceptó sola y sigue vigente (deshacer la conciliación lo libera).
+- **Motivos** (`billing.motivos_diferencia`): de fábrica `comision_banco` (5.3.07, hasta Q 10 por línea, cuenta), `comision_cobro` (5.1.02, hasta 4.5 % de lo emparejado, solo con un pago o una liquidación), `redondeo` (5.3.05, hasta Q 0.05), `faltante_deposito` (5.2.06, sin límite, solo con un depósito; queda a cargo de quien lo registró) y `otra` (la cuenta la elige quien concilia; siempre pide aprobación). Los de fábrica son globales; editarlos en una empresa le crea su copia con el mismo `codigo`. Nunca caja, banco, puente ni auxiliares. `clase = 'retencion'` queda reservada para B10 (retenciones de IVA e ISR del cliente, motivos fijos que no se apagan).
+- **Aprobación**: si pasa del tope o el motivo siempre la pide, `bancos.conciliar` responde 422 `diferencia_requiere_aprobacion` (`rule` = `motivo`, `tope_linea`, `tope_dia`) y se pide con `bancos.pedir_aprobacion_diferencia` (con explicación). No hay asiento hasta que **otro** usuario con `bancos.aprobar_diferencia` la apruebe (403 `autoaprobacion`); la línea queda apartada (409 `diferencia_pendiente`) sin bloquear el resto. Rechazar deja la línea libre.
+- **Sugerencias** (`GET /bancos/extractos/:id/sugerencias`, `sugerencias_conciliacion.ts`): `segura`, `para_decidir`, `con_diferencia` (con los motivos que aplican y por qué no los demás), `regla`, `sin_pareja`, `por_identificar`, `esperando_aprobacion`, y lo que le queda del tope a quien pregunta. `bancos.aceptar_sugerencias` concilia las seguras en lote. `bancos.marcar_por_identificar` deja una nota; esas líneas no son anomalía en `extractos_conciliados` (van en su detalle).
+- Los pares que un reverso anula (llegada deshecha, diferencia deshecha) no salen en `movimientos-sin-conciliar`, en las sugerencias ni en las partidas en tránsito del reporte.
+
+| Acción | Permiso | Endpoint |
+| --- | --- | --- |
+| `bancos.configurar_diferencias` | `bancos.configurar_diferencias` | `GET/PUT /bancos/ajustes-conciliacion` (GET con `bancos.ver`) |
+| `bancos.crear_motivo_diferencia`, `bancos.editar_motivo_diferencia` | `bancos.configurar_diferencias` | `GET/POST /bancos/motivos-diferencia`, `PUT /bancos/motivos-diferencia/:id` |
+| `bancos.pedir_aprobacion_diferencia` | `bancos.conciliar` | `POST /bancos/diferencias` |
+| `bancos.aprobar_diferencia`, `bancos.rechazar_diferencia` | `bancos.aprobar_diferencia` | `POST /bancos/diferencias/:id/aprobar`, `/rechazar` |
+| `bancos.aceptar_sugerencias` | `bancos.conciliar` | `POST /bancos/extractos/:id/aceptar-seguras` |
+| `bancos.marcar_por_identificar` | `bancos.conciliar` | `POST /bancos/extractos/lineas/:id/por-identificar` |
+| lecturas | `bancos.ver` | `GET /bancos/diferencias`, `/bancos/diferencias-pendientes` (consolidables), `/bancos/diferencias/:id`, `/bancos/extractos/:id/sugerencias` |
+
+Errores nuevos: 422 `diferencias_descuadradas`, `motivo_no_aplica`, `diferencia_requiere_aprobacion`, `aprobacion_innecesaria`; 409 `diferencia_pendiente`, `diferencia_decidida`; 403 `autoaprobacion`. Eventos: `banco.diferencia_pendiente` (con `aprobadores`), `banco.diferencia_aprobada`, `banco.diferencia_rechazada`, `banco.diferencias_config_cambiada`. Pruebas: `tests/ledger/diferencias_conciliacion.spec.ts`.
 
 ## Compras, proveedores, retenciones, activos y diferidos (fase 5, contrato §3.4, §3.5 y §10.10)
 
@@ -270,6 +292,6 @@ Detalle y desvíos en §19 del contrato. Todo de solo inserción (trigger y `REV
 
 ## Eventos
 
-Emite: `ejercicio.cerrado`, `ejercicio.reabierto`, `libro.checks_verificados { empresa_id, tipo, periodo, anomalias }` y `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+Emite: `ejercicio.cerrado`, `ejercicio.reabierto`, `libro.checks_verificados { empresa_id, tipo, periodo, anomalias }` y `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `banco.diferencia_pendiente`, `banco.diferencia_aprobada`, `banco.diferencia_rechazada` y `banco.diferencias_config_cambiada` (B3, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
 - `GET /bancos/depositos?caja_id=&turno_id=` (permiso `bancos.ver` **o** `cajas.ver`, `autorizarLecturaDeCaja` de `lectura_caja.ts`): con `bancos.ver`, todos; con solo `cajas.ver` (el cajero), `caja_id` o `turno_id` obligatorio y la caja en su alcance (403; sin filtro 422); sin ninguno, 403.
 - `GET /egresos?caja_id=&turno_id=` (permiso `egresos.ver` **o** `cajas.ver`, mismo patrón): con solo `cajas.ver` el cajero lee los egresos de su caja o turno para el esperado provisional de /caja.
