@@ -236,6 +236,47 @@ async function cargar() {
     problema.value = resultado.ok ? null : resultado.problema
 }
 
+/* Favorito y envío programado: lo que dice el catálogo de reportes del usuario (A3). */
+const catalogo = shallowRef<ReporteCatalogo[]>([])
+const entradaCatalogo = computed(() => catalogo.value.find(r => r.codigo === clave.value) ?? null)
+const cambiandoFavorito = ref(false)
+const envioAbierto = ref(false)
+
+async function cargarCatalogo() {
+    const r = await useReportesCatalogo().listar()
+    if (!r.ok) {
+        toast.add({ title: 'No se pudo leer el catálogo de reportes', description: `${r.problema.detail ?? r.problema.title}. Sin él no se puede marcar favorito ni programar el envío.`, icon: 'i-lucide-circle-alert', color: 'error', actions: [{ label: 'Reintentar', onClick: () => void cargarCatalogo() }] })
+        return
+    }
+    catalogo.value = r.data
+}
+
+async function alternarFavorito() {
+    const actual = entradaCatalogo.value
+    if (!actual || cambiandoFavorito.value) {
+        return
+    }
+    cambiandoFavorito.value = true
+    const r = await useReportesCatalogo().favorito(actual.codigo, !actual.favorito)
+    cambiandoFavorito.value = false
+    if (!r.ok) {
+        toast.add({ title: 'No se pudo cambiar el favorito', description: r.problema.detail ?? r.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    catalogo.value = catalogo.value.map(e => (e.codigo === actual.codigo ? { ...e, favorito: r.data.favorito } : e))
+    toast.add({ title: r.data.favorito ? 'Reporte marcado como favorito' : 'Reporte quitado de favoritos', icon: 'i-lucide-star', color: 'success' })
+}
+
+function alProgramarEnvio(envio: EnvioReporte) {
+    toast.add({
+        title: 'Envío programado',
+        description: `${frecuenciaEnvio(envio)} · ${destinatariosEnvio(envio)}`,
+        icon: 'i-lucide-send',
+        color: 'success',
+        actions: [{ label: 'Ver los envíos', to: '/reportes/envios' }],
+    })
+}
+
 async function descargar(formato: FormatoDescarga) {
     if (!clave.value || descargando.value) {
         return
@@ -371,6 +412,7 @@ watch(clave, () => {
 
 onMounted(async () => {
     void cargarCatalogos()
+    void cargarCatalogo()
     void cargar()
     if (filtros.cliente_id && conCliente.value) {
         const resultado = await useClientes().ver(filtros.cliente_id)
@@ -393,14 +435,27 @@ onMounted(async () => {
             #acciones
         >
             <UButton
-                title="Llega con la API de envíos programados"
+                v-if="entradaCatalogo"
+                icon="i-lucide-star"
+                color="neutral"
+                variant="ghost"
+                class="boton-flotante boton-circulo"
+                :class="entradaCatalogo.favorito ? 'text-warning' : ''"
+                :aria-label="entradaCatalogo.favorito ? 'Quitar de favoritos' : 'Marcar como favorito'"
+                :aria-pressed="entradaCatalogo.favorito"
+                :loading="cambiandoFavorito"
+                data-prueba="favorito-reporte"
+                @click="alternarFavorito"
+            />
+            <UButton
+                v-if="entradaCatalogo && puede('reportes.programar_envio')"
                 label="Programar envío"
                 icon="i-lucide-send"
                 color="neutral"
                 variant="ghost"
                 class="boton-flotante boton-pastilla hidden sm:inline-flex"
-                disabled
                 data-prueba="programar-envio"
+                @click="envioAbierto = true"
             />
             <UButton
                 title="Llega con la API de reportes en PDF"
@@ -437,6 +492,16 @@ onMounted(async () => {
                 @click="descargar('xlsx')"
             />
         </template>
+
+        <ReporteEnvioModal
+            v-if="clave && presentacion && entradaCatalogo && puede('reportes.programar_envio')"
+            v-model:open="envioAbierto"
+            :codigo="entradaCatalogo.codigo"
+            :titulo="presentacion.titulo"
+            :filtros="filtrosAplicables()"
+            :compartible="entradaCatalogo.compartible"
+            @hecho="alProgramarEnvio"
+        />
 
         <UEmpty
             v-if="!clave || !presentacion"

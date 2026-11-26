@@ -6,6 +6,7 @@ import { rutasCorreosExternos } from './correosExternos'
 import { rutasEnviosReportes } from './envios'
 import { rutasEquiposIntegracion } from './equipos'
 import { rutasIntentosRecuperacion } from './intentos'
+import { rutasPanelFinanciero } from './panelFinanciero'
 import { rutasRecuperacion } from './recuperacion'
 
 /** Rutas de los «Pendientes del backend» que el panel ya usa (ajustes, catálogos y verificaciones). */
@@ -18,4 +19,5 @@ export const rutasOperacionPm: RutasFixture = {
     ...rutasEquiposIntegracion,
     ...rutasIntentosRecuperacion,
     ...rutasImpresionCaja,
+    ...rutasPanelFinanciero,
 }

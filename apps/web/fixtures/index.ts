@@ -18,6 +18,7 @@ import { rutasCajas } from './cajas/rutas'
 import { rutasVersion } from './version/rutas'
 import { rutasSistema } from './sistema/rutas'
 import { rutasCartera } from './cartera/rutas'
+import { rutasGestionesCobro } from './cartera/gestiones'
 import { rutasCobros } from './cobros/rutas'
 import { rutasArchivoExtracto } from './conciliacion/archivo'
 import { rutasConciliacion } from './conciliacion/rutas'
@@ -44,6 +45,7 @@ import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasWhatsapp } from './notificaciones/whatsapp'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
+import { rutasBorradoresLibro } from './libro/borradores'
 import { rutasLibro } from './libro/rutas'
 import { rutasLibros } from './libros/rutas'
 import { rutasBloqueosLibro, rutasCorridasConBloqueo } from './libro/bloqueos'
@@ -73,6 +75,7 @@ import { rutasRed } from './red/rutas'
 import { rutasRedAcceso } from './redAcceso/rutas'
 import { rutasQos } from './qos/rutas'
 import { rutasSimulador } from './promesas/simulador'
+import { rutasCatalogoReportes } from './reportes/catalogo'
 import { rutasReportes } from './reportes/rutas'
 import { rutasEstrategias } from './routers/estrategias'
 import { rutasConexionRouters } from './routers/conexion'
@@ -532,6 +535,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasConciliacion,
     ...rutasArchivoExtracto,
     ...rutasCartera,
+    ...rutasGestionesCobro,
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,
     ...rutasSorteos,
@@ -580,6 +584,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasChecksCierre,
     ...rutasCorridasConBloqueo,
     ...rutasLibro,
+    ...rutasBorradoresLibro,
     ...rutasEstadosFinancieros,
     ...rutasCajas,
     ...rutasComprobantes,
@@ -600,6 +605,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasCanjesLealtad,
     ...rutasBancos,
     ...rutasDocumentos,
+    ...rutasCatalogoReportes,
     ...rutasReportes,
     ...rutasEgresos,
     ...rutasHorus,

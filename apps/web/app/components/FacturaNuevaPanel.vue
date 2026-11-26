@@ -4,8 +4,13 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 import type Decimal from 'decimal.js'
 
 /**
- * Cargo único manual (`POST /facturas/cargo-unico`, `facturas.emitir_cargo_unico`): instalación,
- * equipo, visita técnica… con conceptos del catálogo de la empresa (cuenta de ingreso e IVA), precio
+ * Nueva factura (antes «Cargo único»; decisión del PM, plan de contabilidad P4; tablero
+ * PlanClienteFiscal): `POST /facturas/cargo-unico` (`facturas.emitir_cargo_unico`), una factura a un
+ * cliente por algo que no es la mensualidad: instalación, equipo, visita técnica… Va en un panel
+ * lateral (formulario largo) y se abre desde la ficha del cliente, Facturas y la ficha del
+ * servicio. Con un servicio la factura cuenta para el corte; sin servicio («Servicio (opcional)»)
+ * no. Desde Facturas no hay cliente todavía: el primer campo lo busca. «Guardar y cobrar ahora»
+ * emite y sigue a Cobrar con ese cliente. Conceptos del catálogo de la empresa (cuenta de ingreso e IVA), precio
  * con IVA y un descuento opcional por línea. Si todo queda descontado (Q 0.00) no hay factura sino
  * una **bonificación** (decisión del PM): pide motivo del catálogo, explicación y el permiso
  * `facturas.cargo_sin_costo`; sin él la API responde 403 y aquí se avisa antes.
@@ -14,14 +19,20 @@ import type Decimal from 'decimal.js'
  * asienta el costo de ventas en la misma factura.
  */
 const props = defineProps<{
-    /** Del servicio (su empresa, cliente y días de gracia) o de un cliente sin servicio. */
-    destino: { servicio: Servicio } | { cliente: Cliente, empresaId: number | null }
+    /**
+     * Del servicio (su empresa, cliente y días de gracia) o de un cliente (con sus servicios, para
+     * elegir uno opcional). Sin `destino` (lista de Facturas) el panel pide primero el cliente y
+     * usa `empresaId` (la empresa activa).
+     */
+    destino?: { servicio: Servicio } | { cliente: Cliente, empresaId: number | null, servicios?: Servicio[] }
+    empresaId?: number | null
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
-    hecho: [resultado: CargoUnicoEmitido]
+    /** `cobrar`: se pidió «Guardar y cobrar ahora»; la pantalla sigue a Cobrar con `clienteId`. */
+    hecho: [resultado: CargoUnicoEmitido, siguiente: { cobrar: boolean, clienteId: number }]
 }>()
 
 const { puede } = usePermisos()
@@ -37,11 +48,63 @@ const motivos = shallowRef<MotivoSinCosto[]>([])
 const cargandoListas = ref(false)
 const problemaListas = ref<Problem | null>(null)
 
-const empresaId = computed(() => ('servicio' in props.destino ? props.destino.servicio.empresa_id : props.destino.empresaId))
-const titulo = computed(() => ('servicio' in props.destino ? props.destino.servicio.user_ppp : props.destino.cliente.nombre))
+/* A quién se factura: el del destino, o el que se elige en el panel (desde Facturas). */
+const clienteBuscado = ref(0)
+const clienteElegido = shallowRef<Cliente | null>(null)
+const serviciosCliente = shallowRef<Servicio[]>([])
+/** 0 = sin servicio. */
+const servicioElegidoId = ref(0)
+const conServicioFijo = computed(() => !!props.destino && 'servicio' in props.destino)
+const cliente = computed<Cliente | null>(() => (props.destino && 'cliente' in props.destino ? props.destino.cliente : clienteElegido.value))
+const serviciosDelCliente = computed(() => (props.destino && 'cliente' in props.destino && props.destino.servicios ? props.destino.servicios : serviciosCliente.value)
+    .filter(s => s.estado !== 'retirado'))
+const servicioElegido = computed(() => serviciosDelCliente.value.find(s => s.id === servicioElegidoId.value) ?? null)
+const empresaId = computed(() => {
+    if (props.destino && 'servicio' in props.destino) {
+        return props.destino.servicio.empresa_id
+    }
+    if (servicioElegido.value) {
+        return servicioElegido.value.empresa_id
+    }
+    return props.destino && 'cliente' in props.destino ? props.destino.empresaId : props.empresaId ?? null
+})
+const quien = computed(() => {
+    if (props.destino && 'servicio' in props.destino) {
+        return [props.destino.servicio.cliente_nombre ?? props.destino.servicio.user_ppp, props.destino.servicio.user_ppp].filter((v, i, a) => v && a.indexOf(v) === i).join(' · ')
+    }
+    return cliente.value ? [cliente.value.nombre, cliente.value.nit_cui ? `NIT ${cliente.value.nit_cui}` : null].filter(Boolean).join(' · ') : 'Elige a quién se factura'
+})
+const clienteIdDestino = computed(() => (props.destino && 'servicio' in props.destino ? props.destino.servicio.cliente_id : cliente.value?.id ?? 0))
+const itemsServicio = computed<SelectItem[]>(() => [
+    { label: 'Sin servicio', value: 0 },
+    ...serviciosDelCliente.value.map(s => ({ label: `${etiquetaServicio(s)} · ${s.plan_nombre ?? ''}`.replace(/ · $/, ''), value: s.id, description: s.user_ppp ?? undefined })),
+])
 const puedeSinCosto = computed(() => puede('facturas.cargo_sin_costo'))
 /** Un cargo sin servicio es de una empresa: con «Todas las empresas» no se sabe cuál (la API pide una). */
-const sinEmpresa = computed(() => !('servicio' in props.destino) && props.destino.empresaId === null)
+const sinEmpresa = computed(() => !conServicioFijo.value && !servicioElegido.value && empresaId.value === null)
+/** Sin cliente elegido (desde Facturas) no se puede emitir. */
+const sinCliente = computed(() => !conServicioFijo.value && !cliente.value)
+const puedeCobrar = computed(() => puede('pagos.registrar'))
+/** Qué botón envió el formulario: «Emitir factura» o «Guardar y cobrar ahora». */
+const siguienteAccion = ref<'emitir' | 'cobrar'>('emitir')
+
+async function elegirCliente(elegido: Cliente) {
+    clienteElegido.value = elegido
+    servicioElegidoId.value = 0
+    serviciosCliente.value = []
+    if (puede('servicios.ver')) {
+        const resultado = await useServicios().listar({ cliente_id: elegido.id, limit: 100 })
+        serviciosCliente.value = resultado.ok ? resultado.data.data : []
+    }
+}
+
+watch(clienteBuscado, (id) => {
+    if (!id) {
+        clienteElegido.value = null
+        serviciosCliente.value = []
+        servicioElegidoId.value = 0
+    }
+})
 
 const itemsConcepto = computed<SelectItem[]>(() => conceptos.value
     .filter(c => empresaId.value === null || c.empresa_id === empresaId.value)
@@ -122,6 +185,11 @@ async function cargarListas() {
 watch(abierto, (valor) => {
     if (valor) {
         Object.assign(estado, entradaCargoUnicoVacia())
+        clienteBuscado.value = 0
+        clienteElegido.value = null
+        serviciosCliente.value = []
+        servicioElegidoId.value = 0
+        siguienteAccion.value = 'emitir'
         problema.value = null
         clave = nuevaClaveIdempotencia()
         void cargarListas()
@@ -143,14 +211,15 @@ function netoLinea(linea: EntradaLineaCargo): Decimal | null {
 async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
     enviando.value = true
     problema.value = null
-    const destino = 'servicio' in props.destino
-        ? { servicio_id: props.destino.servicio.id }
-        : { cliente_id: props.destino.cliente.id, empresa_id: props.destino.empresaId }
+    const servicioId = props.destino && 'servicio' in props.destino ? props.destino.servicio.id : servicioElegido.value?.id ?? null
+    const destino = servicioId !== null
+        ? { servicio_id: servicioId }
+        : { cliente_id: cliente.value?.id ?? 0, empresa_id: empresaId.value }
     const resultado = await useCargoUnico().emitir(cuerpoCargoUnico(destino, esquemaCargoUnico.parse(evento.data)), clave)
     enviando.value = false
     if (resultado.ok) {
         abierto.value = false
-        emit('hecho', resultado.data)
+        emit('hecho', resultado.data, { cobrar: siguienteAccion.value === 'cobrar' && resultado.data.documento !== 'bonificacion', clienteId: clienteIdDestino.value })
         return
     }
     const errores = erroresDeFormulario(resultado.problema).filter(e => e.name && /^(vence_en|motivo_sin_costo_id|motivo_sin_costo_texto|lineas\.\d+\.\w+)$/.test(e.name))
@@ -162,13 +231,23 @@ async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
 </script>
 
 <template>
-    <UModal
+    <USlideover
         v-model:open="abierto"
-        title="Cargo único"
-        :description="`${titulo} · instalación, equipo, visita técnica…`"
         :dismissible="!enviando"
-        :ui="{ content: 'sm:max-w-2xl' }"
+        :ui="{ content: 'sm:max-w-[40rem] sm:m-4 sm:rounded-[1.375rem] sm:h-[calc(100dvh-2rem)]', footer: 'flex-wrap justify-between gap-2' }"
     >
+        <template #title>
+            <ModalTitulo
+                texto="Nueva factura"
+                icono="i-lucide-receipt"
+            />
+        </template>
+        <template #description>
+            <span
+                class="ps-13"
+                data-prueba="factura-nueva-quien"
+            >{{ quien }}</span>
+        </template>
         <template #body>
             <UForm
                 id="form-cargo-unico"
@@ -178,13 +257,38 @@ async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
                 class="flex flex-col gap-4"
                 @submit="enviar"
             >
+                <UFormField
+                    v-if="!destino"
+                    label="Cliente"
+                    required
+                    help="A quién se le factura."
+                >
+                    <ClienteSelector
+                        v-model="clienteBuscado"
+                        :seleccionado="clienteElegido"
+                        data-prueba="factura-nueva-cliente"
+                        @elegido="elegirCliente"
+                    />
+                </UFormField>
+                <UFormField
+                    v-if="!conServicioFijo && cliente && serviciosDelCliente.length"
+                    label="Servicio (opcional)"
+                    help="Sin servicio, la factura no cuenta para el corte."
+                >
+                    <USelect
+                        v-model="servicioElegidoId"
+                        :items="itemsServicio"
+                        class="w-full"
+                        data-prueba="factura-nueva-servicio"
+                    />
+                </UFormField>
                 <UAlert
                     v-if="sinEmpresa"
                     color="warning"
                     variant="subtle"
                     icon="i-lucide-building-2"
                     title="Elija la empresa"
-                    description="Un cargo sin servicio se emite en la empresa activa: elija una en el selector de empresas (no «Todas»)."
+                    description="Una factura sin servicio se emite en la empresa activa: elija una en el selector de empresas (no «Todas»)."
                     data-prueba="cargo-sin-empresa"
                 />
                 <ProblemaAlerta
@@ -360,10 +464,11 @@ async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
                 <UButton
                     label="Agregar línea"
                     icon="i-lucide-plus"
-                    color="neutral"
-                    variant="ghost"
+                    color="primary"
+                    variant="link"
                     size="sm"
-                    class="self-start"
+                    class="self-start px-0"
+                    data-prueba="factura-agregar-linea"
                     @click="agregarLinea"
                 />
 
@@ -439,25 +544,39 @@ async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
             </UForm>
         </template>
         <template #footer>
-            <div class="flex w-full justify-end gap-2">
+            <UButton
+                label="Cancelar"
+                :icon="ICONOS.cancelar"
+                color="neutral"
+                variant="ghost"
+                :disabled="enviando"
+                @click="abierto = false"
+            />
+            <div class="flex flex-wrap justify-end gap-2">
                 <UButton
-                    label="Cancelar"
-                    :icon="ICONOS.cancelar"
+                    v-if="puedeCobrar && !sinCosto"
+                    type="submit"
+                    form="form-cargo-unico"
+                    label="Guardar y cobrar ahora"
+                    :icon="ICONOS.cobrar"
                     color="neutral"
-                    variant="ghost"
-                    :disabled="enviando"
-                    @click="abierto = false"
+                    variant="outline"
+                    :loading="enviando && siguienteAccion === 'cobrar'"
+                    :disabled="enviando || sinEmpresa || sinCliente"
+                    data-prueba="emitir-y-cobrar"
+                    @click="siguienteAccion = 'cobrar'"
                 />
                 <UButton
                     type="submit"
                     form="form-cargo-unico"
-                    :label="sinCosto ? 'Registrar bonificación' : 'Emitir cargo'"
-                    :icon="sinCosto ? 'i-lucide-hand-heart' : 'i-lucide-receipt'"
-                    :loading="enviando"
-                    :disabled="sinEmpresa || (sinCosto && !puedeSinCosto)"
+                    :label="sinCosto ? 'Registrar bonificación' : 'Emitir factura'"
+                    :icon="sinCosto ? 'i-lucide-hand-heart' : 'i-lucide-check'"
+                    :loading="enviando && siguienteAccion === 'emitir'"
+                    :disabled="enviando || sinEmpresa || sinCliente || (sinCosto && !puedeSinCosto)"
                     data-prueba="emitir-cargo"
+                    @click="siguienteAccion = 'emitir'"
                 />
             </div>
         </template>
-    </UModal>
+    </USlideover>
 </template>

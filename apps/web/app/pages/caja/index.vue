@@ -108,6 +108,7 @@ function depositosDe(turnoId: number): Deposito[] {
 const contadores = computed(() => [
     {
         id: 'abiertas',
+        clave: 'cajas-abiertas' as const,
         etiqueta: 'Cajas abiertas',
         valor: String(abiertas.value.length),
         detalle: abiertas.value[0] ? `${abiertas.value[0].nombre}${abiertas.value[0].turno_abierto_por_nombre ? ` · ${abiertas.value[0].turno_abierto_por_nombre}` : ''}${abiertas.value.length > 1 ? ` y ${abiertas.value.length - 1} más` : ''}` : 'Ninguna',
@@ -116,6 +117,7 @@ const contadores = computed(() => [
     },
     {
         id: 'cobrado',
+        clave: 'cobrado-hoy' as const,
         etiqueta: 'Cobrado hoy',
         valor: cobradoHoy.value ? formatearQuetzales(cobradoHoy.value.monto) : '—',
         detalle: cobradoHoy.value ? `${cobradoHoy.value.cantidad} ${cobradoHoy.value.cantidad === 1 ? 'cobro' : 'cobros'}` : (problemaCobrado.value ? 'No se pudo leer' : 'Sin permiso para ver pagos'),
@@ -124,6 +126,7 @@ const contadores = computed(() => [
     },
     {
         id: 'efectivo',
+        clave: 'efectivo-cajas' as const,
         etiqueta: 'Efectivo en cajas',
         valor: efectivoEnCajas.value ? formatearQuetzales(efectivoEnCajas.value.monto) : '—',
         detalle: efectivoEnCajas.value ? `${efectivoEnCajas.value.cajas} ${efectivoEnCajas.value.cajas === 1 ? 'caja abierta' : 'cajas abiertas'} · por depositar` : 'No se pudo leer el resumen',
@@ -132,6 +135,7 @@ const contadores = computed(() => [
     },
     {
         id: 'diferencias',
+        clave: 'diferencias-mes' as const,
         etiqueta: 'Diferencias del mes',
         valor: diferenciasMes.value.cierres ? `${diferenciasMes.value.monto.isNegative() ? '−' : '+'} ${formatearQuetzales(diferenciasMes.value.monto.abs())}` : formatearQuetzales('0.00'),
         detalle: `${diferenciasMes.value.cierres} ${diferenciasMes.value.cierres === 1 ? 'cierre' : 'cierres'}`,
@@ -474,7 +478,13 @@ onMounted(() => {
                             />
                         </span>
                         <span class="flex min-w-0 flex-col">
-                            <span class="truncate text-xs text-muted">{{ c.etiqueta }}</span>
+                            <span class="flex min-w-0 items-center gap-1.5">
+                                <span class="truncate text-xs text-muted">{{ c.etiqueta }}</span>
+                                <IndicadorAyuda
+                                    :clave="c.clave"
+                                    class="relative"
+                                />
+                            </span>
                             <span class="truncate text-lg font-bold tabular-nums text-highlighted">
                                 <USkeleton
                                     v-if="cargando"

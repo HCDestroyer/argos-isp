@@ -29,11 +29,14 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     reintentarCuenta: []
+    /** «Nueva factura» (antes «Cargo único»), a la vista junto a Cobrar. */
+    nuevaFactura: []
 }>()
 
 const { puede, enlace } = usePermisos()
 
 const cobro = computed(() => enlace(`/cobro?cliente=${props.cliente.id}`))
+const puedeFacturar = computed(() => puede('facturas.emitir_cargo_unico') && puede('facturas.ver'))
 
 const resumen = computed(() => resumenCuentaCliente(props.cuenta, props.servicios))
 const estado = computed(() => peorEstadoServicios(props.servicios))
@@ -189,7 +192,7 @@ const textoVencidas = computed(() => (resumen.value ? (resumen.value.vencidas ? 
                         </span>
                     </span>
                     <span class="flex min-w-0 flex-col">
-                        <span class="whitespace-nowrap text-xs text-muted"><span class="sm:hidden">Próximo</span><span class="hidden sm:inline">Próximo vencimiento</span></span>
+                        <span class="whitespace-nowrap text-xs text-muted"><span class="min-[90rem]:hidden">Próximo</span><span class="hidden min-[90rem]:inline">Próximo vencimiento</span></span>
                         <span
                             class="whitespace-nowrap text-base font-bold text-highlighted sm:text-lg"
                             data-prueba="franja-proximo"
@@ -247,8 +250,18 @@ const textoVencidas = computed(() => (resumen.value ? (resumen.value.vencidas ? 
                 :label="etiquetaCobrar"
                 color="success"
                 :size="compacta ? 'md' : 'lg'"
-                class="hidden whitespace-nowrap rounded-full px-5 tabular-nums sm:inline-flex"
+                class="hidden whitespace-nowrap rounded-full px-5 tabular-nums max-[90rem]:px-4 sm:inline-flex"
                 data-prueba="franja-cobrar"
+            />
+            <UButton
+                v-if="puedeFacturar"
+                label="Nueva factura"
+                icon="i-lucide-plus"
+                color="primary"
+                :size="compacta ? 'md' : 'lg'"
+                class="hidden whitespace-nowrap rounded-full px-5 max-[90rem]:px-4 sm:inline-flex"
+                data-prueba="franja-nueva-factura"
+                @click="emit('nuevaFactura')"
             />
             <slot name="acciones" />
         </div>
