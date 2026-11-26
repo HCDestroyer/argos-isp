@@ -20,6 +20,9 @@ test('libro: el asiento de ajuste se registra y «Por aprobar» lo aprueba otra 
     await panel.locator('[data-prueba="asiento-cuenta-0"]').click()
     await page.getByRole('option', { name: /5\.3\.05/ }).click()
     await panel.locator('[data-prueba="asiento-debe-0"] input, input[data-prueba="asiento-debe-0"]').first().fill('10.00')
+    // La lista de la primera cuenta se cierra con animación: sin esperarla, las dos listas abiertas
+    // muestran 1.1.01.01 y el clic no sabe cuál elegir.
+    await expect(page.getByRole('listbox')).toHaveCount(0)
     await panel.locator('[data-prueba="asiento-cuenta-1"]').click()
     await page.getByRole('option', { name: /1\.1\.01\.01/ }).click()
     await panel.locator('[data-prueba="asiento-haber-1"] input, input[data-prueba="asiento-haber-1"]').first().fill('10.00')

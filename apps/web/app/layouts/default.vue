@@ -2,7 +2,7 @@
 import type { CommandPaletteGroup, CommandPaletteItem, NavigationMenuItem } from '@nuxt/ui'
 import type { SeccionPanel } from '~/utils/navegacion'
 
-const { puede } = usePermisos()
+const { puede, puedeSeccion } = usePermisos()
 const comprobantes = useComprobantes()
 const route = useRoute()
 
@@ -55,6 +55,18 @@ function cerrarMovil() {
     abierto.value = false
 }
 
+/**
+ * La cuenta arriba de «Más» (tablero PerfilDrawer): abre el mismo panel que el círculo de la cuenta.
+ * Primero se cierra «Más» (nunca un panel sobre otro) y, ya cerrado, sube el de la cuenta.
+ */
+const cuenta = useMenuCuenta()
+function abrirCuentaDesdeMas() {
+    abierto.value = false
+    setTimeout(() => {
+        cuenta.abierto.value = true
+    }, 250)
+}
+
 /** «Personalizar mis accesos» desde el menú del teléfono: primero se cierra el menú (nunca un panel sobre otro). */
 const personalizando = ref(false)
 function personalizarAccesos() {
@@ -66,9 +78,9 @@ function personalizarAccesos() {
 const gruposVisibles = computed(() => GRUPOS_PANEL
     .map(grupo => ({
         ...grupo,
-        secciones: grupo.secciones.filter(seccion => puede(seccion.permiso)),
+        secciones: grupo.secciones.filter(puedeSeccion),
         subgrupos: (grupo.subgrupos ?? [])
-            .map(subgrupo => ({ ...subgrupo, secciones: subgrupo.secciones.filter(seccion => puede(seccion.permiso)) }))
+            .map(subgrupo => ({ ...subgrupo, secciones: subgrupo.secciones.filter(puedeSeccion) }))
             .filter(subgrupo => subgrupo.secciones.length > 0),
     }))
     .filter(grupo => grupo.secciones.length > 0 || grupo.subgrupos.length > 0))
@@ -147,15 +159,12 @@ function itemGrupoExpandido(grupo: (typeof gruposVisibles.value)[number], etique
 
 /**
  * Menú expandido (IslasA5): Inicio y un acordeón por área; Ajustes va abajo, aparte (pie del menú,
- * `itemsExpandidoAjustes`), igual que en el compacto.
+ * `itemsAjustes`), igual que en el compacto.
  */
 const itemsExpandido = computed<NavigationMenuItem[]>(() => [
     itemInicio.value,
     ...gruposVisibles.value.filter(grupo => grupo.id !== 'configuracion').map(grupo => itemGrupoExpandido(grupo)),
 ])
-const itemsExpandidoAjustes = computed<NavigationMenuItem[]>(() => gruposVisibles.value
-    .filter(grupo => grupo.id === 'configuracion')
-    .map(grupo => itemGrupoExpandido(grupo, grupo.corta ?? grupo.etiqueta)))
 
 /** Estilo común de los dos menús expandidos (áreas y Ajustes). */
 const UI_EXPANDIDO = {
@@ -191,7 +200,26 @@ const itemsRail = computed<NavigationMenuItem[]>(() => [
     { ...itemInicio.value, active: route.path === inicio.value },
     ...gruposVisibles.value.filter(grupo => grupo.id !== 'configuracion').map(itemArea),
 ])
-const itemsRailAjustes = computed<NavigationMenuItem[]>(() => gruposVisibles.value.filter(grupo => grupo.id === 'configuracion').map(itemArea))
+
+/**
+ * «Ajustes» (tablero MenuLateral; respuestas del PM del 26 nov 2026): una sola entrada fija abajo,
+ * en el menú compacto y en el expandido, que abre la página de Ajustes. No despliega nada: sus
+ * grupos viven en esa página (y en Ctrl K). Aparece si el usuario puede abrir algún ajuste.
+ */
+const { hayAjustes } = usePaginasConfiguracion()
+const enAjustes = computed(() => route.path === RUTA_AJUSTES || ubicacionConfiguracion(route.path) !== null)
+const itemsAjustes = computed<NavigationMenuItem[]>(() => (hayAjustes.value
+    ? [{
+            'label': 'Ajustes',
+            'corta': 'Ajustes',
+            'icon': 'i-lucide-settings',
+            'to': RUTA_AJUSTES,
+            'aria-label': 'Ajustes',
+            'active': enAjustes.value,
+            'trailingIcon': 'i-lucide-chevron-right',
+            'onSelect': cerrarMovil,
+        }]
+    : []))
 
 /** Para el slot del rail: el grupo con sus permisos ya filtrados. */
 function grupoDeItem(item: NavigationMenuItem): (typeof gruposVisibles.value)[number] | null {
@@ -246,7 +274,7 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             :ui="{
                 header: 'h-auto flex-row items-center gap-3 px-4 pt-[max(0.875rem,env(safe-area-inset-top))] pb-1.5 lg:flex-col lg:items-stretch lg:px-3 lg:pt-3.5',
                 body: 'gap-1 px-3',
-                footer: 'max-h-[55%] min-h-0 flex-col items-stretch gap-2 overflow-y-auto px-3 pb-3.5',
+                footer: 'flex-col items-stretch gap-2 px-3 pb-3.5',
                 content: 'menu-movil lg:hidden',
             }"
         >
@@ -287,6 +315,35 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                 <!-- En escritorio el buscador va en la barra superior; aquí, en el menú «Más» del teléfono,
                      con «Personalizar mis accesos» (los dos primeros van en la isla de abajo). -->
                 <div class="flex flex-col gap-2 lg:hidden">
+                    <UButton
+                        color="neutral"
+                        variant="ghost"
+                        class="surface-card w-full gap-3 rounded-2xl px-3 py-2.5 text-start hover:bg-(--ax-fila-hover)"
+                        :aria-label="`Tu cuenta: ${cuenta.usuario.value?.nombre ?? ''}`"
+                        aria-haspopup="dialog"
+                        data-prueba="mas-cuenta"
+                        @click="abrirCuentaDesdeMas"
+                    >
+                        <span
+                            class="flex size-[2.625rem] shrink-0 items-center justify-center rounded-full bg-primary/10 text-[0.8125rem] font-bold text-primary"
+                            aria-hidden="true"
+                        >{{ cuenta.iniciales.value }}</span>
+                        <span class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate text-[0.90625rem] font-bold text-highlighted">{{ cuenta.usuario.value?.nombre }}</span>
+                            <span class="flex min-w-0 items-center gap-1.5 text-[0.78125rem] font-normal text-muted">
+                                <UIcon
+                                    v-if="cuenta.empresaActiva.value"
+                                    name="i-lucide-building"
+                                    class="size-3.5 shrink-0"
+                                />
+                                <span class="truncate">{{ [cuenta.empresaActiva.value, cuenta.rol.value].filter(Boolean).join(' · ') }}</span>
+                            </span>
+                        </span>
+                        <UIcon
+                            name="i-lucide-chevron-right"
+                            class="size-[1.0625rem] shrink-0 text-muted"
+                        />
+                    </UButton>
                     <UDashboardSearchButton
                         :collapsed="collapsed"
                         label="Buscar una sección…"
@@ -373,23 +430,19 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                         >{{ item.label }}</span>
                     </template>
                 </UNavigationMenu>
-                <!-- En el teléfono la barra superior no tiene espacio para «Ayuda»: va aquí. -->
-                <AyudaBoton
-                    class="sm:hidden"
-                    con-etiqueta
-                />
             </template>
 
             <template #footer="{ collapsed }">
                 <UNavigationMenu
-                    v-if="collapsed && itemsRailAjustes.length"
+                    v-if="collapsed && itemsAjustes.length"
                     collapsed
-                    :items="itemsRailAjustes"
+                    :items="itemsAjustes"
                     orientation="vertical"
-                    :popover="{ content: { side: 'right', align: 'end', sideOffset: 10 } }"
+                    tooltip
                     aria-label="Ajustes"
                     class="w-full"
-                    :ui="{ link: 'px-0 py-0 justify-center before:hidden', content: 'min-w-0 rounded-xl bg-(--ax-tarjeta) ring ring-(--ax-borde) shadow-(--ax-sombra-flotante)' }"
+                    data-prueba="menu-ajustes"
+                    :ui="{ link: 'px-0 py-0 justify-center before:hidden', linkTrailingIcon: 'hidden' }"
                 >
                     <template #item="{ item, active }">
                         <span
@@ -403,25 +456,15 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                             <span class="text-[0.625rem] leading-tight font-semibold">{{ item.corta ?? item.label }}</span>
                         </span>
                     </template>
-                    <template #item-content="{ item, close }">
-                        <MenuArea
-                            v-if="grupoDeItem(item)"
-                            :grupo="grupoDeItem(item)!"
-                            :contadores="contadores"
-                            :estado-seccion="estadoSeccion"
-                            @elegir="close?.(); cerrarMovil()"
-                        />
-                    </template>
                 </UNavigationMenu>
                 <UNavigationMenu
-                    v-else-if="!collapsed && itemsExpandidoAjustes.length"
-                    :key="`ajustes-${grupoActual}-${subgrupoActual}`"
-                    :items="itemsExpandidoAjustes"
+                    v-else-if="!collapsed && itemsAjustes.length"
+                    :items="itemsAjustes"
                     orientation="vertical"
                     aria-label="Ajustes"
                     data-prueba="menu-ajustes"
                     class="w-full"
-                    :ui="UI_EXPANDIDO"
+                    :ui="{ ...UI_EXPANDIDO, linkTrailingIcon: 'size-4 text-muted lg:hidden' }"
                 />
             </template>
         </UDashboardSidebar>
@@ -443,6 +486,9 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             :inicio="inicio"
         />
         <AccesosRapidosEditor v-model:open="personalizando" />
+        <!-- La cuenta en el teléfono (desde el círculo y desde «Más») y la ayuda que abre su panel. -->
+        <CuentaDrawer />
+        <AyudaPanel v-model:open="cuenta.ayudaAbierta.value" />
 
         <AvisoTopeSesion />
         <SesionBloqueo />

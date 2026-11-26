@@ -4,11 +4,11 @@ pantallas:
     - /configuracion/inventario
 ---
 
-# Configuración del inventario
+# Ajustes del inventario
 
 Dos ajustes de la empresa activa: si recibir una orden de traslado exige firma, y la inteligencia artificial que lee las facturas de compra en PDF o imagen.
 
-Menú: **Configuración → Red y portal → Inventario**.
+Menú: **Ajustes → Red y equipos → Inventario**.
 
 ## Quién la usa
 

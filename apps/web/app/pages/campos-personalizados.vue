@@ -105,11 +105,10 @@ function textoTipo(campo: CampoPersonalizado): string {
 </script>
 
 <template>
-    <PanelPagina
+    <ConfiguracionMarco
         id="campos-personalizados"
-        titulo="Campos personalizados"
-        icono="i-lucide-text-cursor-input"
         descripcion="Datos extra que se piden en la ficha de cada cliente, en este orden. Un campo no se borra: al desactivarlo deja de pedirse y los valores ya guardados se conservan."
+        sin-tarjeta
     >
         <template #accion-principal>
             <UButton
@@ -243,5 +242,5 @@ function textoTipo(campo: CampoPersonalizado): string {
             :ejecutar="cambiarActivo"
             @hecho="alCambiar"
         />
-    </PanelPagina>
+    </ConfiguracionMarco>
 </template>

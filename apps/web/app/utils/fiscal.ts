@@ -135,7 +135,7 @@ const TITULOS_FISCALES: Record<string, string> = {
     frase_inactiva: 'La frase no está activa en esa fecha',
     alcance_global_requerido: 'Hace falta alcance global',
     empresa_requerida: 'Elige una empresa',
-    campo_solo_lectura: 'Se cambia en Configuración → Fiscal',
+    campo_solo_lectura: 'Se cambia en Ajustes → Régimen e impuestos',
 }
 
 /** Clave de parámetro del primer error (`errors[0].field`), para nombrarlo en el mensaje. */
@@ -157,7 +157,7 @@ export function problemaFiscalLegible(problema: Problem): Problem {
     let detalle = problema.detail
     if (codigo === 'parametro_sin_confirmar') {
         const clave = claveDe(problema)
-        detalle = `${clave ? `«${clave}» no tiene valor vigente` : 'Un parámetro no tiene valor vigente'}: el valor no está verificado y el sistema no lo inventa. Pide al contador que lo confirme en Configuración → Fiscal → Parámetros.`
+        detalle = `${clave ? `«${clave}» no tiene valor vigente` : 'Un parámetro no tiene valor vigente'}: el valor no está verificado y el sistema no lo inventa. Pide al contador que lo confirme en Ajustes → Régimen e impuestos → Parámetros.`
     }
     else if (codigo === 'vigencia_en_periodo_bloqueado') {
         detalle = `${problema.detail ?? ''} Lo ya declarado no cambia: elige una fecha posterior al cierre.`.trim()

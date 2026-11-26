@@ -134,8 +134,6 @@ const idFormulario = useId()
 <template>
     <ConfiguracionMarco
         id="apariencia"
-        titulo="Apariencia"
-        descripcion="Cómo se ve Argos para todos: panel y portal del cliente"
         sin-tarjeta
     >
         <template #accion-principal>

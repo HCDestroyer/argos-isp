@@ -13,7 +13,7 @@ Las cuentas bancarias propias de la empresa: donde entran los depósitos, transf
 - **Ver:** `cuentas_bancarias.ver` (`admin`, `cajero`, `contabilidad`, `lectura`).
 - **Crear y editar:** `cuentas_bancarias.editar` (`admin`, `contabilidad`).
 
-Se llega desde **Configuración → Facturación y cobro → Cuentas bancarias**.
+Se llega desde **Ajustes → Facturación y cobro → Cuentas bancarias**.
 
 ## Qué ves
 

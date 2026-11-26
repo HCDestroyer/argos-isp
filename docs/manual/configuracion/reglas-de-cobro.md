@@ -13,7 +13,7 @@ Reglas de cada empresa para los asientos manuales y la pausa sin cobro, y el for
 - **Ver:** `ajustes_cobro.ver`. **Guardar:** `ajustes_cobro.editar`.
 - **Impresión por caja:** ver con `cajas.ver`, cambiar con `cajas.configurar_impresion`.
 
-Se llega desde **Configuración → Facturación y cobro → Reglas de cobro y libro**. Cada empresa tiene sus reglas: con «Todas las empresas» la pantalla pide elegir una en las pastillas de arriba.
+Se llega desde **Ajustes → Facturación y cobro → Reglas de cobro y libro**. Cada empresa tiene sus reglas: con «Todas las empresas» la pantalla pide elegir una en las pastillas de arriba.
 
 ## Qué ves
 

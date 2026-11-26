@@ -46,8 +46,6 @@ const QUE_TRAE = [
 <template>
     <ConfiguracionMarco
         id="configuracion-importar"
-        titulo="Importar desde Mikrowisp"
-        descripcion="Trae clientes, servicios, planes, facturas y pagos de tu sistema anterior, con revisión antes de guardar"
         sin-tarjeta
     >
         <template #acciones>

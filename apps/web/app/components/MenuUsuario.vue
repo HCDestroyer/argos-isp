@@ -5,11 +5,25 @@ import type { DropdownMenuItem } from '@nuxt/ui'
  * Menú del usuario en el encabezado (diseño final, IslasA5/A6): un círculo flotante con las
  * iniciales. El nombre, el rol y la empresa activa van dentro del menú, junto con la empresa (con
  * más de una), el tema, «Mi cuenta», «Ayuda y atajos», «Qué cambió» y, aparte y en rojo, «Cerrar
- * sesión».
+ * sesión». En el teléfono (bajo 1024 px) el círculo abre el panel de la cuenta desde abajo
+ * (`CuentaDrawer`, tablero PerfilDrawer); los dos salen de la misma lista (`useMenuCuenta`).
  */
-const { usuario, logout } = useAuth()
-const colorMode = useColorMode()
+const { usuario } = useAuth()
 const toast = useToast()
+const {
+    iniciales,
+    rol,
+    empresaActiva,
+    conSelector,
+    opcionesEmpresa,
+    eleccion,
+    tema,
+    abierto: cuentaAbierta,
+    queCambioAbierto,
+    atajosAbierto,
+    elegirEmpresa,
+    cerrarSesion,
+} = useMenuCuenta()
 
 /*
  * Versión instalada (`GET /version`): se ve en el menú y abre "Qué cambió". La primera vez que el
@@ -17,7 +31,6 @@ const toast = useToast()
  * (la última vista se recuerda por usuario en `localStorage`; sin almacenamiento, no pasa nada).
  */
 const { version, cargar: cargarVersion } = useVersion()
-const queCambioAbierto = ref(false)
 
 async function revisarVersion() {
     const resultado = await cargarVersion()
@@ -44,23 +57,21 @@ watch(() => usuario.value?.id, (id) => {
     }
 }, { immediate: true })
 
-const iniciales = computed(() => (usuario.value?.nombre ?? '?')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(parte => parte.charAt(0).toUpperCase())
-    .join(''))
-
-const { eleccion, empresas, alcanceGlobal, conSelector, elegir, nombre: nombreEmpresa } = useEmpresaActiva()
-const atajosAbierto = ref(false)
-
-const empresaActiva = computed(() => (eleccion.value === 'todas' ? 'Todas las empresas' : eleccion.value ? nombreEmpresa(eleccion.value) : null))
-
-/** Rol principal, legible («Admin», «Cajero»…). */
-const rol = computed(() => {
-    const primero = usuario.value?.roles[0]
-    return primero ? primero.charAt(0).toUpperCase() + primero.slice(1).replace(/_/g, ' ') : 'Usuario'
+/*
+ * Desde 1024 px, el menú desplegable; debajo, el círculo abre el panel de la cuenta que sube desde
+ * abajo (`CuentaDrawer`, tablero PerfilDrawer). Los dos salen de `useMenuCuenta`.
+ */
+const escritorio = ref(true)
+let consulta: MediaQueryList | null = null
+function medir() {
+    escritorio.value = consulta?.matches ?? true
+}
+onMounted(() => {
+    consulta = window.matchMedia('(min-width: 1024px)')
+    medir()
+    consulta.addEventListener('change', medir)
 })
+onBeforeUnmount(() => consulta?.removeEventListener('change', medir))
 
 const items = computed<DropdownMenuItem[][]>(() => [
     [{
@@ -73,53 +84,29 @@ const items = computed<DropdownMenuItem[][]>(() => [
     ...(conSelector.value
         ? [[
                 { type: 'label' as const, label: empresaActiva.value ? `Empresa: ${empresaActiva.value}` : 'Empresa', icon: 'i-lucide-building-2' },
-                ...(alcanceGlobal.value
-                    ? [{ label: 'Todas las empresas', icon: 'i-lucide-layers', type: 'checkbox' as const, checked: eleccion.value === 'todas', onSelect: () => elegir('todas') }]
-                    : []),
-                ...empresas.value.map(empresa => ({
-                    label: empresa.nombre_comercial,
-                    description: empresa.nit ? `NIT ${empresa.nit}` : undefined,
+                ...opcionesEmpresa.value.map(opcion => ({
+                    label: opcion.etiqueta,
+                    description: opcion.nit ?? undefined,
+                    icon: opcion.valor === 'todas' ? 'i-lucide-layers' : undefined,
                     type: 'checkbox' as const,
-                    checked: eleccion.value === empresa.id,
-                    onSelect: () => elegir(empresa.id),
+                    checked: eleccion.value === opcion.valor,
+                    onSelect: () => elegirEmpresa(opcion.valor),
                 })),
             ]]
         : []),
     [{
         label: 'Tema',
         icon: 'i-lucide-sun-moon',
-        children: [
-            {
-                label: 'Claro',
-                icon: 'i-lucide-sun',
-                type: 'checkbox',
-                checked: colorMode.preference === 'light',
-                onSelect(evento: Event) {
-                    evento.preventDefault()
-                    colorMode.preference = 'light'
-                },
+        children: TEMAS_CUENTA.map(opcion => ({
+            label: opcion.etiqueta,
+            icon: opcion.icono,
+            type: 'checkbox' as const,
+            checked: tema.value === opcion.valor,
+            onSelect(evento: Event) {
+                evento.preventDefault()
+                tema.value = opcion.valor
             },
-            {
-                label: 'Oscuro',
-                icon: 'i-lucide-moon',
-                type: 'checkbox',
-                checked: colorMode.preference === 'dark',
-                onSelect(evento: Event) {
-                    evento.preventDefault()
-                    colorMode.preference = 'dark'
-                },
-            },
-            {
-                label: 'Sistema',
-                icon: 'i-lucide-monitor',
-                type: 'checkbox',
-                checked: colorMode.preference === 'system',
-                onSelect(evento: Event) {
-                    evento.preventDefault()
-                    colorMode.preference = 'system'
-                },
-            },
-        ],
+        })),
     }, {
         label: 'Mi cuenta',
         icon: 'i-lucide-circle-user',
@@ -143,7 +130,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
         icon: 'i-lucide-log-out',
         color: 'error',
         onSelect() {
-            void logout()
+            cerrarSesion()
         },
     }],
 ])
@@ -151,6 +138,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
 
 <template>
     <UDropdownMenu
+        v-if="escritorio"
         :items="items"
         :content="{ align: 'end', collisionPadding: 12 }"
         :ui="{ content: 'w-64' }"
@@ -173,6 +161,25 @@ const items = computed<DropdownMenuItem[][]>(() => [
             >{{ empresaActiva }}</span>
         </UButton>
     </UDropdownMenu>
+    <UButton
+        v-else
+        color="neutral"
+        variant="ghost"
+        class="boton-flotante boton-circulo boton-cuenta"
+        :aria-label="`Tu cuenta: ${usuario?.nombre ?? ''}`"
+        aria-haspopup="dialog"
+        :aria-expanded="cuentaAbierta"
+        :title="usuario?.nombre"
+        data-prueba="menu-usuario"
+        @click="cuentaAbierta = true"
+    >
+        <span aria-hidden="true">{{ iniciales }}</span>
+        <span
+            v-if="conSelector && empresaActiva"
+            class="sr-only"
+            data-prueba="empresa-activa"
+        >{{ empresaActiva }}</span>
+    </UButton>
     <QueCambioModal v-model:open="queCambioAbierto" />
     <AtajosTecladoModal v-model:open="atajosAbierto" />
 </template>
