@@ -8,7 +8,7 @@ import { bd } from '~~/fixtures/bd'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { usuariosPorToken } from '~~/fixtures/comun'
 import { tableroEmpresa } from '~~/fixtures/tablero/rutas'
-import { CORREO_LIMITADO_FIXTURE, TOKEN_RECUPERACION_FIXTURE, UNIDAD_CON_INTENTOS } from '~~/fixtures/operacionPm/datos'
+import { CORREO_LIMITADO_FIXTURE, TOKEN_RECUPERACION_FIXTURE, UNIDAD_CON_INTENTOS, acsVacio } from '~~/fixtures/operacionPm/datos'
 import PaginaRedPortal from '~/pages/configuracion/portal-corte.vue'
 import PaginaReglasCobro from '~/pages/configuracion/reglas-cobro.vue'
 import PaginaBancosOrigen from '~/pages/configuracion/bancos-origen.vue'
@@ -427,22 +427,40 @@ describe('reportes · envíos programados', () => {
     })
 })
 
-describe('configuración · SmartOLT y GenieACS', () => {
-    it('guardar nunca devuelve el secreto; cambiar la URL borra la prueba; probar deja el resultado', async () => {
+describe('configuración · SmartOLT (instancias) y ACS por separado', () => {
+    it('crear nunca devuelve el token; probar trae las OLT y liga sola la del mismo nombre; cambiar el token borra la prueba', async () => {
         useEmpresaActiva().elegir(1)
-        const equipos = useEquiposIntegracion()
-        const guardada = await equipos.guardar(0, { activo: true, smartolt_url: 'https://miisp.smartolt.com', smartolt_token: 'secreto-123', genieacs_url: 'https://acs-falla.miisp.gt' })
-        expect(guardada.ok && guardada.data.smartolt).toMatchObject({ url: 'https://miisp.smartolt.com', token: '***', prueba_ok: null })
-        expect(JSON.stringify(guardada.ok && guardada.data)).not.toContain('secreto-123')
-        const prueba = await equipos.probar()
-        expect(prueba.ok && prueba.data.smartolt).toMatchObject({ ok: true })
-        expect(prueba.ok && prueba.data.genieacs).toMatchObject({ ok: false })
-        expect(prueba.ok && prueba.data.capacidades).toEqual({ ftth: true, wireless: true, tr069: false })
-        const leida = await equipos.ver()
-        expect(leida.ok && estadoEquipos(leida.data, 'genieacs').etiqueta).toBe('No responde')
-        const cambio = await equipos.guardar(leida.ok ? leida.data.version : 0, { smartolt_url: 'https://otro.smartolt.com' })
-        expect(cambio.ok && cambio.data.smartolt.prueba_ok).toBeNull()
-        expect(cambio.ok && cambio.data.smartolt.token).toBe('***')
+        const so = useSmartOlt()
+        const creada = await so.crear({ nombre: 'Zona norte', url: 'https://zonanorte.smartolt.com', token: 'token-secreto-123', activo: true })
+        expect(creada.ok && creada.data).toMatchObject({ url: 'https://zonanorte.smartolt.com', token: '***', prueba_ok: null, operativa: false })
+        expect(JSON.stringify(creada.ok && creada.data)).not.toContain('token-secreto-123')
+        const repetida = await so.crear({ nombre: 'Otra', url: 'https://zonanorte.smartolt.com', token: 'token-secreto-456' })
+        expect(!repetida.ok && codigoProblema(repetida.problema)).toBe('subdominio_duplicado')
+        const id = creada.ok ? creada.data.id : 0
+        const prueba = await so.probar(id)
+        expect(prueba.ok && prueba.data.ok).toBe(true)
+        expect(prueba.ok && prueba.data.instancia.olts.map(o => o.nombre)).toEqual(['OLT Centro', 'OLT-NORTE-02'])
+        expect(prueba.ok && prueba.data.instancia.olts[0]?.olt?.nombre).toBe('OLT Centro')
+        expect(prueba.ok && prueba.data.vinculadas_por_nombre).toHaveLength(1)
+        const version = prueba.ok ? prueba.data.instancia.version : 0
+        const cambio = await so.editar(id, version, { token: 'token-nuevo-789' })
+        expect(cambio.ok && cambio.data.prueba_ok).toBeNull()
+        expect(cambio.ok && cambio.data.token).toBe('***')
+        const vieja = await so.editar(id, version, { nota: 'x' })
+        expect(!vieja.ok && vieja.problema.status).toBe(409)
+    })
+
+    it('el ACS va aparte: encender sin URL 422, la clave nunca vuelve y probar no toca SmartOLT', async () => {
+        useEmpresaActiva().elegir(1)
+        const acs = useAcs()
+        const sinUrl = await acs.guardar(0, { activo: true })
+        expect(!sinUrl.ok && sinUrl.problema.status).toBe(422)
+        const guardado = await acs.guardar(0, { activo: true, url: 'https://acs.miisp.gt:7557', usuario: 'argos', clave: 'clave-acs-123' })
+        expect(guardado.ok && guardado.data).toMatchObject({ clave: '***', operativo: false, version: 1 })
+        const prueba = await acs.probar()
+        expect(prueba.ok && prueba.data.config).toMatchObject({ operativo: true, prueba_latencia_ms: 180 })
+        expect(estadoAcs(prueba.ok ? prueba.data.config : acsVacio(1)).etiqueta).toBe('Probado')
+        expect(bd.operacionPm.smartolt).toHaveLength(0)
     })
 })
 
