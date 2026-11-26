@@ -23,7 +23,7 @@ import {
 import { pendienteDe } from '#billing/facturas'
 import { cajaPrincipalId, verPago, type PagoVista } from '#billing/pagos'
 import { cajaDelCajero } from '#ledger/cajas'
-import { emitirRecibo, sacarDeLaSat, sqlNoFiscalVigente } from '#billing/recibos'
+import { emitirRecibo, exigirSinPagoMixto, sacarDeLaSat, sqlNoFiscalVigente } from '#billing/recibos'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
@@ -679,6 +679,18 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         await insertarConstanciasRecibidas(t, pagoId, parte.empresaId, input.cliente_id, constancias)
 
         const { aplicaciones, restante } = await aplicarAFacturas(t.trx, pagoId, parte.monto, parte.facturas)
+        // B11: pago mixto prohibido (una factura no se reparte entre cajas con y sin factura)
+        const cajaDelPago =
+            caja?.cajaId === undefined
+                ? null
+                : ((await t.trx.from('ledger.cajas').where('id', caja.cajaId).select('fiscal').first()) as {
+                      fiscal: boolean
+                  } | null)
+        await exigirSinPagoMixto(t.trx, {
+            pago_id: pagoId,
+            caja_fiscal: cajaDelPago?.fiscal ?? true,
+            facturas: aplicaciones.map((a) => a.factura_id),
+        })
 
         // un solo asiento: el débito por el total y el crédito en el auxiliar CxC de cada dueño
         // pasarela: el banco recibe el neto y la comisión es gasto (Bancos + Comisiones / CxC)

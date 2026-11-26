@@ -1982,12 +1982,33 @@ export class EscenarioGenerativo {
             clienteId = await this.clienteConDeuda([this.e.B])
             if (clienteId === null) return `${facturado}sin deuda en la empresa B`
         }
-        const deuda = await this.pendienteDe(clienteId, [this.e.B])
+        // pago mixto prohibido (PM, 26 nov): la caja sin factura solo cobra facturas sin cobros en caja fiscal,
+        // sin DTE y sin notas de crédito; el resto de la deuda se deja para los pagos con factura
+        const abiertas = await pendientes([this.e.B], clienteId)
+        const { rows: mixtas } = (await db.rawQuery(
+            `SELECT f.id FROM billing.facturas f
+              WHERE f.id = ANY(?::bigint[])
+                AND (EXISTS (SELECT 1 FROM billing.pagos_aplicaciones pa JOIN billing.pagos p ON p.id = pa.pago_id
+                               LEFT JOIN ledger.cajas c ON c.id = p.caja_id
+                              WHERE pa.factura_id = f.id AND p.estado <> 'anulado' AND coalesce(c.fiscal, true))
+                     OR EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura' AND d.documento_id = f.id
+                                  AND d.estado <> 'rechazado')
+                     OR EXISTS (SELECT 1 FROM billing.notas_credito n WHERE n.factura_id = f.id)
+                     OR EXISTS (SELECT 1 FROM billing.notas_credito_aplicaciones na WHERE na.factura_id = f.id))`,
+            [abiertas.map((f) => f.id)],
+        )) as { rows: Array<{ id: number }> }
+        const prohibidas = new Set(mixtas.map((f) => Number(f.id)))
+        const cobrables = abiertas.filter((f) => !prohibidas.has(Number(f.id)))
+        const deuda = cobrables.reduce((a, f) => a + centavosDe(f.total) - centavosDe(f.pagado), 0n)
+        if (deuda <= 0n) {
+            return `${facturado}el cliente ${clienteId} solo debe facturas con cobros en caja fiscal (pago mixto prohibido)`
+        }
         const monto = this.azar.moneda(0.5) ? deuda : this.parcial(deuda)
         const r = await this.pagar({
             cliente_id: clienteId,
             metodo: 'caja',
             monto: texto(monto),
+            facturas: cobrables.map((f) => f.id),
             caja_id: this.cajaSinFactura!,
             empresa_id: this.e.B,
         })

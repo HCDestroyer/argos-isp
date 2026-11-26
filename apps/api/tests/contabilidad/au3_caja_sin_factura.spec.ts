@@ -192,8 +192,13 @@ test.group('Auditor contable · AU3 · caja sin factura (B11)', (group) => {
         assert.containSubset(await reciboDePago(p2.id), { numero: 2, anulado: true })
         await libroBien(assert, e)
 
-        // se vuelve a cobrar, ahora en una caja fiscal: se certifica entera y el recibo no se repite
-        await cobrar(e, s.clienteId, '100.00', e.cajas.get(e.B)!)
+        // pago mixto prohibido (PM, 26 nov): con el cobro p1 (sin factura) vigente, una caja fiscal no toca la factura
+        await assert.rejects(() => cobrar(e, s.clienteId, '100.00', e.cajas.get(e.B)!), /sin factura/)
+        await libroBien(assert, e)
+        // anulado también p1, se vuelve a cobrar entera en una caja fiscal: se certifica y el recibo no se repite
+        await new AnularPago().execute({ pago_id: p1.id, motivo: 'billete falso' }, e.ctx)
+        await libroBien(assert, e)
+        await cobrar(e, s.clienteId, '112.00', e.cajas.get(e.B)!)
         await cola(e)
         const [dte] = await dtesDe('factura', f.id)
         assert.equal(dte?.estado, 'certificado')
@@ -207,7 +212,7 @@ test.group('Auditor contable · AU3 · caja sin factura (B11)', (group) => {
         await libroBien(assert, e)
     })
 
-    test('pago repartido: si algo se cobró en una caja fiscal, la factura se certifica entera y la caja sin factura igual entrega su recibo', async ({
+    test('pago mixto prohibido: una caja sin factura no completa lo que cobró una caja fiscal (422 pago_mixto_fiscal) y el libro no cambia', async ({
         assert,
     }) => {
         const e = await empresasFel('obligatoria')
@@ -216,11 +221,18 @@ test.group('Auditor contable · AU3 · caja sin factura (B11)', (group) => {
         const f = s.facturas[0]!
         await cobrar(e, s.clienteId, '50.00', e.cajas.get(e.B)!)
         await libroBien(assert, e)
-        const p = await cobrar(e, s.clienteId, '100.00', caja.id)
-        assert.containSubset(await reciboDePago(p.id), { numero: 1, facturas_no_fiscales: [] })
+        const error = (await cobrar(e, s.clienteId, '100.00', caja.id).then(
+            () => null,
+            (x) => x,
+        )) as { status?: number; code?: string } | null
+        assert.equal(error?.status, 422)
+        assert.equal(error?.code, 'E_PAGO_MIXTO_FISCAL')
         assert.isNull(await facturaNoFiscal(db.connection(), f.id))
         assert.equal(await saldo(e.B, INTERNOS), '0.00')
+        assert.equal(await totalRecibos(e.B), 0, 'lo rechazado no gasta número de recibo')
         await libroBien(assert, e)
+        // la caja fiscal sí la termina y se certifica entera
+        await cobrar(e, s.clienteId, '100.00', e.cajas.get(e.B)!)
         await cola(e)
         assert.equal(await estadoDte(f.id), 'certificado')
         await libroBien(assert, e)

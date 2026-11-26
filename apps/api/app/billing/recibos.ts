@@ -2,7 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
@@ -24,9 +24,11 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
  * - **Factura fuera de la SAT** (`billing.facturas_no_fiscales`): un aviso de cobro (sin DTE, IVA en
  *   `2.1.11`) que queda pagado **solo** con pagos de cajas sin factura no se certifica: su asiento
  *   `recibo_interno` pasa su ingreso y su IVA por certificar a `4.3.01 Ingresos por recibos internos`,
- *   sin IVA débito. Si algo de la factura se cobró en una caja fiscal, o tiene notas de crédito, se
- *   certifica como siempre (regla provisional del pago repartido, a confirmar con el PM). Un cargo no
- *   facturable nace ya fuera de la SAT (su línea va a `4.3.01` sin IVA).
+ *   sin IVA débito. **Pago mixto prohibido** (decisión del PM, 26 nov 2026: «No debe pasar»): una misma
+ *   factura no se cobra una parte en una caja con factura y otra en una caja sin factura, ni una caja
+ *   sin factura toca una factura ya certificada o con notas de crédito; `exigirSinPagoMixto` responde
+ *   422 `pago_mixto_fiscal`. Un cargo no facturable nace ya fuera de la SAT (su línea va a `4.3.01` sin
+ *   IVA) y se puede cobrar en cualquier caja.
  * - Anular el pago revierte la reclasificación (`facturas_no_fiscales_anulaciones`): la factura vuelve
  *   a ser un aviso que se certifica al cubrirse en una caja fiscal.
  *
@@ -97,6 +99,69 @@ export async function emitirRecibo(
         })
         .returning('id')) as Array<{ id: number }>
     return { id: Number(fila!.id), numero }
+}
+
+const SQL_CARGO_NO_FACTURABLE = `EXISTS (SELECT 1 FROM billing.facturas_no_fiscales nf WHERE nf.factura_id = f.id
+        AND nf.motivo = 'cargo_no_facturable'
+        AND NOT EXISTS (SELECT 1 FROM billing.facturas_no_fiscales_anulaciones nx WHERE nx.no_fiscal_id = nf.id))`
+
+/**
+ * Pago mixto prohibido (B11, decisión del PM): una factura se cobra entera en cajas con factura o entera
+ * en cajas sin factura, nunca repartida. Se llama con el pago ya insertado y sus facturas aplicadas.
+ * - Caja sin factura sobre una factura con cobros en caja fiscal (o sin caja), ya certificada o con
+ *   notas de crédito: 422 `pago_mixto_fiscal`.
+ * - Caja fiscal sobre una factura que ya tiene cobros en una caja sin factura: 422 `pago_mixto_fiscal`.
+ * Los cargos no facturables no cuentan: nacen fuera de la SAT y se cobran en cualquier caja.
+ */
+export async function exigirSinPagoMixto(
+    cliente: QueryClientContract,
+    datos: { pago_id: number; caja_fiscal: boolean; facturas: number[] },
+): Promise<void> {
+    if (datos.facturas.length === 0) return
+    const otrosCobros = (fiscal: boolean) => `EXISTS (
+        SELECT 1 FROM billing.pagos_aplicaciones pa JOIN billing.pagos p ON p.id = pa.pago_id
+          LEFT JOIN ledger.cajas c ON c.id = p.caja_id
+         WHERE pa.factura_id = f.id AND p.id <> ? AND p.estado <> 'anulado' AND coalesce(c.fiscal, true) = ${fiscal})`
+    if (!datos.caja_fiscal) {
+        const { rows } = (await cliente.rawQuery(
+            `SELECT f.id, ${otrosCobros(true)} AS con_caja_fiscal,
+                    (EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura' AND d.documento_id = f.id
+                               AND d.estado <> 'rechazado')) AS certificada,
+                    (EXISTS (SELECT 1 FROM billing.notas_credito n WHERE n.factura_id = f.id)
+                     OR EXISTS (SELECT 1 FROM billing.notas_credito_aplicaciones na WHERE na.factura_id = f.id)) AS con_notas
+               FROM billing.facturas f
+              WHERE f.id = ANY (?::bigint[]) AND NOT ${SQL_CARGO_NO_FACTURABLE}
+              ORDER BY f.id`,
+            [datos.pago_id, datos.facturas],
+        )) as {
+            rows: Array<{ id: number; con_caja_fiscal: boolean; certificada: boolean; con_notas: boolean }>
+        }
+        const mala = rows.find((r) => r.con_caja_fiscal || r.certificada || r.con_notas)
+        if (mala) {
+            const porque = mala.con_caja_fiscal
+                ? 'ya se cobró una parte en una caja con factura'
+                : mala.certificada
+                  ? 'ya se certificó ante la SAT'
+                  : 'tiene notas de crédito'
+            throw new ReglaNegocio(
+                `La factura ${mala.id} ${porque}. Una misma factura no se puede cobrar una parte en una caja con factura y otra en una caja sin factura: la SAT no debe quedar con una factura a medias. Cóbrala completa en una caja con factura, o completa en una caja sin factura desde el principio.`,
+                'pago_mixto_fiscal',
+            )
+        }
+        return
+    }
+    const { rows } = (await cliente.rawQuery(
+        `SELECT f.id FROM billing.facturas f
+          WHERE f.id = ANY (?::bigint[]) AND NOT ${SQL_CARGO_NO_FACTURABLE} AND ${otrosCobros(false)}
+          ORDER BY f.id`,
+        [datos.facturas, datos.pago_id],
+    )) as { rows: Array<{ id: number }> }
+    if (rows[0]) {
+        throw new ReglaNegocio(
+            `La factura ${rows[0].id} ya tiene cobros en una caja sin factura. Una misma factura no se puede cobrar una parte en una caja con factura y otra en una caja sin factura: la SAT no debe quedar con una factura a medias. Termina de cobrarla en la misma caja sin factura, o anula esos cobros y cóbrala completa en una caja con factura.`,
+            'pago_mixto_fiscal',
+        )
+    }
 }
 
 /** Marca un cargo no facturable (nace fuera de la SAT; su línea ya va a la cuenta interna). */

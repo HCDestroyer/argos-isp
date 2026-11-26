@@ -128,12 +128,28 @@ test.group('B11 · caja sin factura', (group) => {
         assert.equal(await saldo(e.B, INTERNOS), '0.00')
         assert.equal(await saldo(e.B, IVA_POR_CERTIFICAR), '-12.00')
         await libroCuadra(assert, e.B)
-        // cubierta ahora en una caja fiscal: se certifica como siempre
+        // el pago mixto está prohibido: con p1 (sin factura) vigente, una caja fiscal no puede tocar la factura
+        await assert.rejects(
+            () =>
+                new RegistrarPago().execute(
+                    {
+                        cliente_id: s.clienteId,
+                        metodo: 'caja',
+                        monto: '100.00',
+                        caja_id: e.cajas.get(e.B)!,
+                        empresa_id: e.B,
+                    },
+                    e.ctx,
+                ),
+            /sin factura/,
+        )
+        // sin ningún cobro sin factura, cubierta en una caja fiscal: se certifica como siempre
+        await new AnularPago().execute({ pago_id: p1.id, motivo: 'billete falso' }, e.ctx)
         await new RegistrarPago().execute(
             {
                 cliente_id: s.clienteId,
                 metodo: 'caja',
-                monto: '100.00',
+                monto: '112.00',
                 caja_id: e.cajas.get(e.B)!,
                 empresa_id: e.B,
             },
@@ -147,32 +163,69 @@ test.group('B11 · caja sin factura', (group) => {
         await libroCuadra(assert, e.B)
     })
 
-    test('pago repartido: si algo se cobró en una caja fiscal, la factura se certifica entera', async ({
+    test('pago mixto prohibido: caja sin factura sobre una factura con cobros en caja fiscal (422 pago_mixto_fiscal)', async ({
         assert,
     }) => {
         const e = await empresasFel('obligatoria')
         const caja = await cajaSinFactura(e)
         const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
         const f = s.facturas[0]!
-        await new RegistrarPago().execute(
-            {
-                cliente_id: s.clienteId,
-                metodo: 'caja',
-                monto: '50.00',
-                caja_id: e.cajas.get(e.B)!,
-                empresa_id: e.B,
-            },
-            e.ctx,
-        )
-        const p = await new RegistrarPago().execute(
-            { cliente_id: s.clienteId, metodo: 'caja', monto: '100.00', caja_id: caja.id, empresa_id: e.B },
-            e.ctx,
-        )
-        assert.containSubset(await reciboDePago(p.id), { facturas_no_fiscales: [] })
+        const cobrar = (monto: string, cajaId: number) =>
+            new RegistrarPago().execute(
+                { cliente_id: s.clienteId, metodo: 'caja', monto, caja_id: cajaId, empresa_id: e.B },
+                e.ctx,
+            )
+        const mixto = async (promesa: Promise<unknown>) => {
+            const error = (await promesa.then(
+                () => null,
+                (x) => x,
+            )) as { status?: number; code?: string; message?: string } | null
+            assert.isNotNull(error, 'debió rechazarse')
+            assert.equal(error!.status, 422)
+            assert.equal(error!.code, 'E_PAGO_MIXTO_FISCAL')
+            assert.match(
+                error!.message ?? '',
+                /una parte en una caja con factura y otra en una caja sin factura/,
+            )
+        }
+        const fiscal = e.cajas.get(e.B)!
+        await cobrar('50.00', fiscal)
+        // la caja sin factura no completa lo que empezó una caja fiscal
+        await mixto(cobrar('100.00', caja.id))
         assert.isNull(await facturaNoFiscal(db.connection(), f.id))
+        // y la fiscal sí puede terminarla
+        await cobrar('100.00', fiscal)
         await cola(e)
         const [dte] = await dtesDe('factura', f.id)
         assert.equal(dte?.estado, 'certificado')
+        await libroCuadra(assert, e.B)
+    })
+
+    test('pago mixto prohibido, al revés: caja fiscal sobre una factura con cobros en caja sin factura (422 pago_mixto_fiscal)', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const caja = await cajaSinFactura(e)
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        const cobrar = (monto: string, cajaId: number) =>
+            new RegistrarPago().execute(
+                { cliente_id: s.clienteId, metodo: 'caja', monto, caja_id: cajaId, empresa_id: e.B },
+                e.ctx,
+            )
+        await cobrar('50.00', caja.id)
+        const error = (await cobrar('100.00', e.cajas.get(e.B)!).then(
+            () => null,
+            (x) => x,
+        )) as { status?: number; code?: string } | null
+        assert.isNotNull(error)
+        assert.equal(error!.status, 422)
+        assert.equal(error!.code, 'E_PAGO_MIXTO_FISCAL')
+        // lo rechazado no dejó rastro y la caja sin factura sí la termina fuera de la SAT
+        const p = await cobrar('100.00', caja.id)
+        assert.containSubset(await reciboDePago(p.id), { facturas_no_fiscales: [f.id] })
+        await cola(e)
+        assert.lengthOf(await dtesDe('factura', f.id), 0)
         await libroCuadra(assert, e.B)
     })
 
