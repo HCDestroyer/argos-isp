@@ -1,6 +1,11 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { obtenerImplementacionPlan, type PlanEfectivo } from '#network/actions/obtener_implementacion_plan'
+import {
+    componerPlanEfectivo,
+    obtenerImplementacionPlan,
+    type PlanEfectivo,
+} from '#network/actions/obtener_implementacion_plan'
+import { verPlan } from '#network/consultas/planes'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { configuracionDeServicio } from '#billing/configuracion'
 import type { ConfiguracionFacturacion } from '#billing/excepciones'
@@ -29,9 +34,13 @@ export async function obtenerConfiguracionEfectiva(
     cliente: QueryClientContract = db.connection(),
 ): Promise<ConfiguracionEfectiva> {
     const servicio = await verServicio(servicioId, cliente)
-    const plan = await obtenerImplementacionPlan(servicio.plan_id, servicio.router_id, cliente, {
-        aunqueNoDisponible: true,
-    })
+    // un servicio de cable no tiene router: el plan se lee sin implementación
+    const plan =
+        servicio.router_id === null
+            ? componerPlanEfectivo(await verPlan(servicio.plan_id, cliente), null, null)
+            : await obtenerImplementacionPlan(servicio.plan_id, servicio.router_id, cliente, {
+                  aunqueNoDisponible: true,
+              })
     const plantilla = servicio.plantilla_facturacion_id
         ? ((await cliente
               .from('billing.plantillas_facturacion')

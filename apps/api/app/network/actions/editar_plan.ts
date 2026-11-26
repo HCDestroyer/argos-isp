@@ -1,8 +1,9 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Conflicto } from '#shared/errores'
+import { Conflicto, ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import {
     columnasPlan,
+    exigirTipoPlanValido,
     exigirVelocidadValida,
     type DatosPlan,
     type PlanConAdvertencias,
@@ -13,6 +14,7 @@ import { columnasPlanRouter, verPlan, type PlanRouterVista, type PlanVista } fro
 import { CAMPOS_VELOCIDAD } from '#network/velocidad'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import type { CampoCatalogoCambiado } from '#shared/eventos'
+import { capacidadesDe } from '#core/tipos_servicio'
 
 export interface EntradaEditarPlan extends DatosPlan {
     id: number
@@ -42,6 +44,13 @@ export function camposVelocidadCambiados(
  * `tipo` se edita como cualquier campo (diff en `audit.cambios`); no cambia la velocidad, así que no
  * emite evento. La respuesta trae `warnings[]` (`advertenciasPlan`).
  *
+ * Tipo de servicio (`contratos/tipos-servicio.md`): `tipo_servicio`, `componentes`, `precio_cable` y
+ * `precio_iptv` se validan juntos con el plan resultante (422 por campo). Si cambia el tipo y el plan
+ * ya tiene servicios, cada uno pasa al tipo nuevo en esta transacción (con su diff en `audit.cambios`)
+ * y emite `servicio.config_cambiada` con `tipo_servicio` en `campos[]`; el plan emite
+ * `catalogo.cambiado` con `tipo_servicio` y/o `componentes`. Pasar a un tipo con router un plan cuyos
+ * servicios no tienen router, o a `cable` uno con servicios, responde 422 sin efectos.
+ *
  * Renombrarlo, desactivarlo o reactivarlo emite `catalogo.cambiado` (`catalogo: 'plan'`, `campos`
  * con `nombre` y/o `activo`, `empresa_id: null`; contrato Iris 0.5.0, pedido A15); cambiar su
  * `precio` agrega `precio` (contrato Iris 0.8.0);
@@ -64,7 +73,51 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
         }
         // se valida antes del UPDATE: los CHECK de la base responderían 500 en vez de 422
         const propuesto = { ...antes, ...columnasPlan(datos) } as PlanVista
-        if (camposVelocidadCambiados(antes as never, propuesto as never).length > 0) {
+        const cambiaTipoPlan =
+            datos.tipo_servicio !== undefined && datos.tipo_servicio !== antes.tipo_servicio
+        const tipoPlan = exigirTipoPlanValido(
+            {
+                ...propuesto,
+                // al cambiar de tipo sin decir los componentes, se recalculan (el mixto sí los exige)
+                componentes: datos.componentes ?? (cambiaTipoPlan ? undefined : antes.componentes),
+            },
+            { exigirLimitadas: false },
+        )
+        propuesto.tipo_servicio = tipoPlan.tipo_servicio
+        propuesto.componentes = tipoPlan.componentes
+        const cambiaTipo = tipoPlan.tipo_servicio !== antes.tipo_servicio
+        const cambiaComponentes = tipoPlan.componentes.join(',') !== antes.componentes.join(',')
+        const serviciosDelPlan = cambiaTipo
+            ? ((await t.trx
+                  .from('core.servicios')
+                  .where('plan_id', id)
+                  .orderBy('id')
+                  .select('id', 'empresa_id', 'router_id', 'version')) as Array<{
+                  id: number
+                  empresa_id: number
+                  router_id: number | null
+                  version: number
+              }>)
+            : []
+        if (serviciosDelPlan.length > 0) {
+            const capacidades = capacidadesDe(tipoPlan.tipo_servicio, tipoPlan.componentes)
+            if (!capacidades.requiereRouter) {
+                throw new ReglaNegocio(
+                    'Pasar a cable un plan con servicios llega en el lote T2 del plan v3',
+                    'alta_cable_pendiente',
+                )
+            }
+            if (serviciosDelPlan.some((s) => s.router_id === null)) {
+                throw new ReglaNegocio(
+                    `Hay servicios del plan sin router: no pueden pasar a ${tipoPlan.tipo_servicio}`,
+                    'tipo_sin_router',
+                )
+            }
+        }
+        if (
+            capacidadesDe(tipoPlan.tipo_servicio, tipoPlan.componentes).requiereVelocidad &&
+            camposVelocidadCambiados(antes as never, propuesto as never).length > 0
+        ) {
             exigirVelocidadValida(velocidadDePlan(propuesto, null))
             const implementaciones = (await t.trx
                 .from('network.planes_routers')
@@ -77,11 +130,36 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
                 )
             }
         }
-        await actualizarConVersion(t.trx, 'network.planes', id, version, columnasPlan(datos))
+        await actualizarConVersion(t.trx, 'network.planes', id, version, {
+            ...columnasPlan(datos),
+            tipo_servicio: tipoPlan.tipo_servicio,
+            componentes: tipoPlan.componentes,
+        })
         const despues = await verPlan(id, t.trx)
         const campos = camposVelocidadCambiados(antes as never, despues as never)
 
         await t.registrarCambios({ tipo: 'plan', id }, antes, despues)
+        // cada servicio del plan sigue al tipo nuevo, con su diff y su evento (nunca un UPDATE masivo mudo)
+        for (const servicio of serviciosDelPlan) {
+            await t.trx
+                .from('core.servicios')
+                .where('id', servicio.id)
+                .update({
+                    tipo_servicio: despues.tipo_servicio,
+                    version: Number(servicio.version) + 1,
+                    updated_at: new Date(),
+                })
+            await t.registrarCambios(
+                { tipo: 'servicio', id: servicio.id },
+                { tipo_servicio: antes.tipo_servicio },
+                { tipo_servicio: despues.tipo_servicio },
+            )
+            await t.emit('servicio.config_cambiada', {
+                servicio_id: servicio.id,
+                empresa_id: servicio.empresa_id,
+                campos: ['tipo_servicio'],
+            })
+        }
         if (campos.length > 0) {
             await t.emit('plan.velocidad_cambiada', { plan_id: id, router_id: null, campos })
         }
@@ -93,6 +171,8 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
         // contrato Iris 0.10.0 (A40): Iris guarda `modo` y `routers` del plan en su instantánea
         if (despues.modo !== antes.modo) camposCatalogo.push('modo')
         if (despues.global !== antes.global) camposCatalogo.push('routers')
+        if (cambiaTipo) camposCatalogo.push('tipo_servicio')
+        if (cambiaComponentes) camposCatalogo.push('componentes')
         if (camposCatalogo.length > 0) {
             // los planes no son de una empresa: `empresa_id` siempre null (contrato Iris 0.5.0)
             await t.emit('catalogo.cambiado', {

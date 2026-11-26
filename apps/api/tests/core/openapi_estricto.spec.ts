@@ -47,6 +47,10 @@ const OPCIONALES: Record<string, string[]> = {
         'codigo',
         'nombre',
         'precision_m',
+        // `tipo_servicio`, `componentes` y `puntos` (26 nov, plan v3 T1): igual, hasta las fixtures
+        'tipo_servicio',
+        'componentes',
+        'puntos',
     ],
     // `coincide_en` solo con el filtro `telefono` (Iris 0.6.0 §7.6)
     Cliente: ['referencia', 'coincide_en'],
@@ -56,8 +60,26 @@ const OPCIONALES: Record<string, string[]> = {
     AccionAuditoria: ['iris_actor', 'iris_conversacion', 'via_token_id'],
     // `modo` y `routers` (21 nov, Iris 0.10.0 A40): la API siempre los envía; hasta las fixtures
     // `incluye_ip_publica` (21 nov, decisión del PM 30): igual, hasta las fixtures
-    Plan: ['warnings', 'modo', 'routers', 'incluye_ip_publica'],
-    PlanEfectivo: ['modo', 'routers', 'incluye_ip_publica'],
+    // `tipo_servicio`, `componentes`, `precio_cable` y `precio_iptv` (26 nov, plan v3 T1): igual, hasta las fixtures
+    Plan: [
+        'warnings',
+        'modo',
+        'routers',
+        'incluye_ip_publica',
+        'tipo_servicio',
+        'componentes',
+        'precio_cable',
+        'precio_iptv',
+    ],
+    PlanEfectivo: [
+        'modo',
+        'routers',
+        'incluye_ip_publica',
+        'tipo_servicio',
+        'componentes',
+        'precio_cable',
+        'precio_iptv',
+    ],
     // `ip_publica` (21 nov, decisión del PM 30): igual, hasta las fixtures
     AdicionalServicio: ['ip_publica'],
     // `csrf` solo con la sesión del panel por cookie

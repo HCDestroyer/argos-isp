@@ -63220,6 +63220,21 @@
             }
           },
           {
+            "name": "tipo_servicio",
+            "in": "query",
+            "required": false,
+            "description": "Solo planes de ese tipo de servicio: internet, cable, iptv o mixto",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "internet",
+                "cable",
+                "iptv",
+                "mixto"
+              ]
+            }
+          },
+          {
             "name": "modo",
             "in": "query",
             "required": false,
@@ -63342,13 +63357,58 @@
                   },
                   "bajada_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 1,
+                    "minimum": 0,
                     "maximum": 100000000
                   },
                   "subida_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 1,
+                    "minimum": 0,
                     "maximum": 100000000
+                  },
+                  "tipo_servicio": {
+                    "type": "string",
+                    "enum": [
+                      "internet",
+                      "cable",
+                      "iptv",
+                      "mixto"
+                    ],
+                    "description": "internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (servicio de datos con su router y plan; nunca se limita) o mixto. Un plan con servicios no cambia de tipo"
+                  },
+                  "componentes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "internet",
+                        "cable",
+                        "iptv"
+                      ]
+                    },
+                    "maxItems": 3,
+                    "description": "Solo en mixto: dos o tres de internet, cable e iptv. En los tipos simples se deja vacío (es el propio tipo)"
+                  },
+                  "precio_cable": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Solo mixto: línea de cable de la factura. precio_cable + precio_iptv < precio habiendo internet",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "precio_iptv": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Solo mixto: línea de IPTV de la factura (sin internet, es el resto del precio)",
+                    "examples": [
+                      "150.00"
+                    ]
                   },
                   "reuso": {
                     "type": "integer",
@@ -63439,11 +63499,7 @@
                 },
                 "required": [
                   "nombre",
-                  "precio",
-                  "bajada_kbps",
-                  "subida_kbps",
-                  "bajada_limitada_kbps",
-                  "subida_limitada_kbps"
+                  "precio"
                 ],
                 "additionalProperties": false
               }
@@ -63618,12 +63674,18 @@
                     ]
                   },
                   "bajada_kbps": {
-                    "type": "integer",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
                     "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_kbps": {
-                    "type": "integer",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
                     "minimum": 1,
                     "maximum": 100000000
                   },
@@ -63636,6 +63698,51 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 100000000
+                  },
+                  "tipo_servicio": {
+                    "type": "string",
+                    "enum": [
+                      "internet",
+                      "cable",
+                      "iptv",
+                      "mixto"
+                    ],
+                    "description": "internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (servicio de datos con su router y plan; nunca se limita) o mixto. Un plan con servicios no cambia de tipo"
+                  },
+                  "componentes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "internet",
+                        "cable",
+                        "iptv"
+                      ]
+                    },
+                    "maxItems": 3,
+                    "description": "Solo en mixto: dos o tres de internet, cable e iptv. En los tipos simples se deja vacío (es el propio tipo)"
+                  },
+                  "precio_cable": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Solo mixto: línea de cable de la factura. precio_cable + precio_iptv < precio habiendo internet",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "precio_iptv": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Solo mixto: línea de IPTV de la factura (sin internet, es el resto del precio)",
+                    "examples": [
+                      "150.00"
+                    ]
                   },
                   "reuso": {
                     "type": "integer",
@@ -89516,6 +89623,21 @@
                 "dedicado"
               ]
             }
+          },
+          {
+            "name": "tipo_servicio",
+            "in": "query",
+            "required": false,
+            "description": "Tipo de servicio: internet, cable, iptv o mixto",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "internet",
+                "cable",
+                "iptv",
+                "mixto"
+              ]
+            }
           }
         ],
         "responses": {
@@ -89632,6 +89754,25 @@
                   "plan_id": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "tipo_servicio": {
+                    "type": "string",
+                    "enum": [
+                      "internet",
+                      "cable",
+                      "iptv",
+                      "mixto"
+                    ],
+                    "description": "Opcional: es el tipo de su plan (internet, cable, iptv o mixto). Si llega distinto: 422 tipo_servicio_distinto. Cambiar de tipo solo se admite con un plan del tipo nuevo en la misma edición"
+                  },
+                  "puntos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 999,
+                    "description": "Televisores o decodificadores del servicio (informativo)"
                   },
                   "tipo_conexion": {
                     "type": "string",
@@ -90110,6 +90251,25 @@
                   "plan_id": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "tipo_servicio": {
+                    "type": "string",
+                    "enum": [
+                      "internet",
+                      "cable",
+                      "iptv",
+                      "mixto"
+                    ],
+                    "description": "Opcional: es el tipo de su plan (internet, cable, iptv o mixto). Si llega distinto: 422 tipo_servicio_distinto. Cambiar de tipo solo se admite con un plan del tipo nuevo en la misma edición"
+                  },
+                  "puntos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 999,
+                    "description": "Televisores o decodificadores del servicio (informativo)"
                   },
                   "plantilla_facturacion_id": {
                     "type": [
@@ -132709,6 +132869,50 @@
             ],
             "description": "residencial (por defecto), empresarial o dedicado"
           },
+          "tipo_servicio": {
+            "type": "string",
+            "enum": [
+              "internet",
+              "cable",
+              "iptv",
+              "mixto"
+            ],
+            "description": "Tipo de servicio (plan v3, `contratos/tipos-servicio.md`): internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (datos con su router; nunca se limita) o mixto"
+          },
+          "componentes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "internet",
+                "cable",
+                "iptv"
+              ]
+            },
+            "description": "El mismo tipo en los simples; dos o tres de internet, cable e iptv en mixto"
+          },
+          "precio_cable": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo mixto: línea de cable de la factura; null en los demás"
+          },
+          "precio_iptv": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo mixto: línea de IPTV de la factura (sin internet, el resto del precio); null en los demás"
+          },
           "modo": {
             "type": "string",
             "enum": [
@@ -132958,6 +133162,50 @@
               "dedicado"
             ],
             "description": "Tipo del plan (residencial, empresarial, dedicado)"
+          },
+          "tipo_servicio": {
+            "type": "string",
+            "enum": [
+              "internet",
+              "cable",
+              "iptv",
+              "mixto"
+            ],
+            "description": "Tipo de servicio del plan: internet, cable, iptv o mixto"
+          },
+          "componentes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "internet",
+                "cable",
+                "iptv"
+              ]
+            },
+            "description": "El mismo tipo en los simples; dos o tres en mixto"
+          },
+          "precio_cable": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo mixto: línea de cable de la factura"
+          },
+          "precio_iptv": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo mixto: línea de IPTV de la factura"
           },
           "modo": {
             "type": "string",
@@ -147788,11 +148036,41 @@
           },
           "router_id": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "description": "Router del servicio; null solo en un servicio de cable (sin router)"
           },
           "plan_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "tipo_servicio": {
+            "type": "string",
+            "enum": [
+              "internet",
+              "cable",
+              "iptv",
+              "mixto"
+            ],
+            "description": "Tipo de servicio: internet, cable, iptv o mixto. Siempre es el de su plan; cambia al pasar a un plan de otro tipo"
+          },
+          "componentes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "internet",
+                "cable",
+                "iptv"
+              ]
+            },
+            "description": "Componentes del plan del servicio (el propio tipo en los simples); no se duplican en el servicio"
+          },
+          "puntos": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Televisores o decodificadores del servicio (informativo)"
           },
           "plantilla_facturacion_id": {
             "type": [

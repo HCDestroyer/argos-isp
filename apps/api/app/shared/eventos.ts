@@ -9,6 +9,8 @@
  * ("150.00"), fechas como ISO 8601 (UTC para instantes, YYYY-MM-DD para fechas).
  */
 
+import type { ComponenteServicio, TipoServicio } from '#core/tipos_servicio'
+
 /**
  * Estados del servicio (`core.servicios.estado`). `pendiente_instalacion` (vendido desde Iris, aún sin
  * instalar; `contratos/instalacion.md`) solo sale con `servicios.activar_instalacion` o `servicios.retirar`.
@@ -300,7 +302,16 @@ interface PayloadAdicional {
  * Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers; `precio`
  * solo en planes (contrato Iris 0.8.0: Iris relee `GET /servicios?plan_id=`).
  */
-export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas' | 'precio' | 'modo' | 'routers'
+export type CampoCatalogoCambiado =
+    | 'nombre'
+    | 'activo'
+    | 'coordenadas'
+    | 'precio'
+    | 'modo'
+    | 'routers'
+    /** solo planes (plan v3, `contratos/tipos-servicio.md`): cambió el tipo de servicio o sus componentes */
+    | 'tipo_servicio'
+    | 'componentes'
 
 /** Campos de `cuenta_bancaria.cambiada` (contrato Iris 0.8.0 §7.8); `empresa_id` no se edita. */
 export const CAMPOS_CUENTA_BANCARIA_CAMBIADA = [
@@ -320,8 +331,12 @@ export interface CatalogoEventos {
         servicio_id: number
         empresa_id: number
         cliente_id: number
-        router_id: number
+        /** null solo en un servicio de `cable` (plan v3, `contratos/tipos-servicio.md`) */
+        router_id: number | null
         plan_id: number
+        /** siempre presentes desde el lote T1 (`internet` y `['internet']` en lo que no los trae) */
+        tipo_servicio: TipoServicio
+        componentes: ComponenteServicio[]
     }
     'servicio.estado_cambiado': {
         servicio_id: number
@@ -388,6 +403,11 @@ export interface CatalogoEventos {
              * en la red: `coa` lo ignora y RouterOS no tiene nada que corregir
              */
             | 'precio'
+            /**
+             * cambió el tipo de servicio (plan v3, T1): al pasar a un plan de otro tipo o al cambiar el
+             * tipo del plan del servicio. Nunca valores: se relee el servicio. Va con `plan` si cambió el plan
+             */
+            | 'tipo_servicio'
         >
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers' | 'promocion_velocidad'

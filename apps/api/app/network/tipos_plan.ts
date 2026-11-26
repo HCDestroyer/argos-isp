@@ -20,13 +20,14 @@ export interface Advertencia {
 
 export function advertenciasPlan(plan: {
     tipo: TipoPlan
-    bajada_kbps: number
-    subida_kbps: number
+    /** null solo en un plan de cable (`contratos/tipos-servicio.md`) */
+    bajada_kbps: number | null
+    subida_kbps: number | null
     reuso: number
 }): Advertencia[] {
     if (plan.tipo !== 'dedicado') return []
     const advertencias: Advertencia[] = []
-    if (Number(plan.bajada_kbps) !== Number(plan.subida_kbps)) {
+    if (plan.bajada_kbps !== null && Number(plan.bajada_kbps) !== Number(plan.subida_kbps)) {
         advertencias.push({
             codigo: 'plan_dedicado_asimetrico',
             mensaje: `Plan dedicado asimétrico: ${plan.bajada_kbps} kbps de bajada y ${plan.subida_kbps} de subida`,

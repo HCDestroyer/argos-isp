@@ -121,6 +121,8 @@ export function paraAuditoriaServicio<T extends { excepciones?: Record<string, u
     // calculados del plan y del costo_override (contrato Iris 0.8.0): el diff ya trae plan_id y costo_override
     delete plano.precio_mensual
     delete plano.moneda
+    // calculado del plan (`contratos/tipos-servicio.md` §2): el diff ya trae tipo_servicio y plan_id
+    delete plano.componentes
     for (const [campo, valor] of Object.entries(excepciones ?? {})) {
         plano[`excepcion_${campo}`] = valor
     }

@@ -21516,6 +21516,17 @@ export interface components {
              */
             tipo: "residencial" | "empresarial" | "dedicado";
             /**
+             * @description Tipo de servicio (plan v3, `contratos/tipos-servicio.md`): internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (datos con su router; nunca se limita) o mixto
+             * @enum {string}
+             */
+            tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+            /** @description El mismo tipo en los simples; dos o tres de internet, cable e iptv en mixto */
+            componentes?: ("internet" | "cable" | "iptv")[];
+            /** @description Solo mixto: línea de cable de la factura; null en los demás */
+            precio_cable?: components["schemas"]["Dinero"] | null;
+            /** @description Solo mixto: línea de IPTV de la factura (sin internet, el resto del precio); null en los demás */
+            precio_iptv?: components["schemas"]["Dinero"] | null;
+            /**
              * @description Contrato Iris 0.10.0 (A40): residencial, o empresarial para los tipos empresarial y dedicado
              * @enum {string}
              */
@@ -21590,6 +21601,17 @@ export interface components {
              * @enum {string}
              */
             tipo: "residencial" | "empresarial" | "dedicado";
+            /**
+             * @description Tipo de servicio del plan: internet, cable, iptv o mixto
+             * @enum {string}
+             */
+            tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+            /** @description El mismo tipo en los simples; dos o tres en mixto */
+            componentes?: ("internet" | "cable" | "iptv")[];
+            /** @description Solo mixto: línea de cable de la factura */
+            precio_cable?: components["schemas"]["Dinero"] | null;
+            /** @description Solo mixto: línea de IPTV de la factura */
+            precio_iptv?: components["schemas"]["Dinero"] | null;
             /**
              * @description Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado
              * @enum {string}
@@ -25081,8 +25103,18 @@ export interface components {
             cliente_id: number;
             /** @description Empresa (NIT) que factura el servicio */
             empresa_id: number;
+            /** @description Router del servicio; null solo en un servicio de cable (sin router) */
             router_id: number;
             plan_id: number;
+            /**
+             * @description Tipo de servicio: internet, cable, iptv o mixto. Siempre es el de su plan; cambia al pasar a un plan de otro tipo
+             * @enum {string}
+             */
+            tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+            /** @description Componentes del plan del servicio (el propio tipo en los simples); no se duplican en el servicio */
+            componentes?: ("internet" | "cable" | "iptv")[];
+            /** @description Televisores o decodificadores del servicio (informativo) */
+            puntos?: number | null;
             plantilla_facturacion_id: number | null;
             estado: components["schemas"]["EstadoServicio"];
             /** @description Bandera: hay una promesa de pago activa */
@@ -61491,6 +61523,8 @@ export interface operations {
                 activo?: boolean;
                 router_id?: number;
                 tipo?: "residencial" | "empresarial" | "dedicado";
+                /** @description Solo planes de ese tipo de servicio: internet, cable, iptv o mixto */
+                tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
                 /** @description Contrato Iris 0.10.0 (A40): solo los planes aplicables a ese modo, activos y (con router_id) asignados a todos los routers o a ese router. empresarial incluye dedicado */
                 modo?: "residencial" | "empresarial";
             };
@@ -61557,10 +61591,27 @@ export interface operations {
                      * @example 150.00
                      */
                     precio: string;
-                    bajada_kbps: number;
-                    subida_kbps: number;
-                    bajada_limitada_kbps: number;
-                    subida_limitada_kbps: number;
+                    bajada_kbps?: number;
+                    subida_kbps?: number;
+                    bajada_limitada_kbps?: number;
+                    subida_limitada_kbps?: number;
+                    /**
+                     * @description internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (servicio de datos con su router y plan; nunca se limita) o mixto. Un plan con servicios no cambia de tipo
+                     * @enum {string}
+                     */
+                    tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+                    /** @description Solo en mixto: dos o tres de internet, cable e iptv. En los tipos simples se deja vacío (es el propio tipo) */
+                    componentes?: ("internet" | "cable" | "iptv")[];
+                    /**
+                     * @description Solo mixto: línea de cable de la factura. precio_cable + precio_iptv < precio habiendo internet
+                     * @example 150.00
+                     */
+                    precio_cable?: string | null;
+                    /**
+                     * @description Solo mixto: línea de IPTV de la factura (sin internet, es el resto del precio)
+                     * @example 150.00
+                     */
+                    precio_iptv?: string | null;
                     /** @description N de 1:N (1 = dedicado) */
                     reuso?: number;
                     /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
@@ -61699,10 +61750,27 @@ export interface operations {
                      * @example 150.00
                      */
                     precio?: string;
-                    bajada_kbps?: number;
-                    subida_kbps?: number;
+                    bajada_kbps?: number | null;
+                    subida_kbps?: number | null;
                     bajada_limitada_kbps?: number;
                     subida_limitada_kbps?: number;
+                    /**
+                     * @description internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (servicio de datos con su router y plan; nunca se limita) o mixto. Un plan con servicios no cambia de tipo
+                     * @enum {string}
+                     */
+                    tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+                    /** @description Solo en mixto: dos o tres de internet, cable e iptv. En los tipos simples se deja vacío (es el propio tipo) */
+                    componentes?: ("internet" | "cable" | "iptv")[];
+                    /**
+                     * @description Solo mixto: línea de cable de la factura. precio_cable + precio_iptv < precio habiendo internet
+                     * @example 150.00
+                     */
+                    precio_cable?: string | null;
+                    /**
+                     * @description Solo mixto: línea de IPTV de la factura (sin internet, es el resto del precio)
+                     * @example 150.00
+                     */
+                    precio_iptv?: string | null;
                     /** @description N de 1:N (1 = dedicado) */
                     reuso?: number;
                     /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
@@ -74962,6 +75030,8 @@ export interface operations {
                 excluir_retirados?: boolean;
                 /** @description Tipo del plan del servicio: residencial, empresarial o dedicado */
                 tipo?: "residencial" | "empresarial" | "dedicado";
+                /** @description Tipo de servicio: internet, cable, iptv o mixto */
+                tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
             };
             header?: never;
             path?: never;
@@ -75028,6 +75098,13 @@ export interface operations {
                     empresa_id?: number;
                     router_id: number;
                     plan_id: number;
+                    /**
+                     * @description Opcional: es el tipo de su plan (internet, cable, iptv o mixto). Si llega distinto: 422 tipo_servicio_distinto. Cambiar de tipo solo se admite con un plan del tipo nuevo en la misma edición
+                     * @enum {string}
+                     */
+                    tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+                    /** @description Televisores o decodificadores del servicio (informativo) */
+                    puntos?: number | null;
                     /**
                      * @description Opcional: el servicio toma el tipo de su router (Router.tipo_conexion). Si llega distinto: 422 tipo_conexion_del_router
                      * @enum {string}
@@ -75214,6 +75291,13 @@ export interface operations {
                     version: number;
                     router_id?: number;
                     plan_id?: number;
+                    /**
+                     * @description Opcional: es el tipo de su plan (internet, cable, iptv o mixto). Si llega distinto: 422 tipo_servicio_distinto. Cambiar de tipo solo se admite con un plan del tipo nuevo en la misma edición
+                     * @enum {string}
+                     */
+                    tipo_servicio?: "internet" | "cable" | "iptv" | "mixto";
+                    /** @description Televisores o decodificadores del servicio (informativo) */
+                    puntos?: number | null;
                     plantilla_facturacion_id?: number | null;
                     /**
                      * @description Solo el tipo del router (pasar a él) o el actual. Al cambiar router_id el servicio adopta el del destino (dhcp_fija exige mac; a pppoe se generan credenciales). Otro: 422 tipo_conexion_del_router

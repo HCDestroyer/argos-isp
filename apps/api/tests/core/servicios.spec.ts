@@ -102,6 +102,9 @@ test.group('Servicios · alta', () => {
                     cliente_id: clienteId,
                     router_id: routerId,
                     plan_id: planId,
+                    // plan v3, T1: el tipo y sus componentes siempre van
+                    tipo_servicio: 'internet',
+                    componentes: ['internet'],
                 },
             },
             {

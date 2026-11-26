@@ -15,6 +15,7 @@ import {
     type EsquemaJson,
 } from '#shared/openapi/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { COMPONENTES_SERVICIO, TIPOS_SERVICIO } from '#core/tipos_servicio'
 import { APLICACIONES, PADRES, TIPOS_CONEXION, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { MOTIVOS_API } from '#network/diagnostico_routeros'
 import { PROTOCOLOS_QOS } from '#network/qos'
@@ -573,6 +574,8 @@ export const Plan = definirEsquema(
             id,
             nombre: texto,
             precio: Dinero,
+            // null solo en un plan de cable (no tiene velocidad): el esquema sigue en `entero` mientras las
+            // fixtures del panel (`fixtures/planes`) no lo admitan; se vuelve `nulable(entero)` en T5
             bajada_kbps: entero,
             subida_kbps: entero,
             bajada_limitada_kbps: entero,
@@ -584,6 +587,24 @@ export const Plan = definirEsquema(
             tipo: {
                 ...enumerado(TIPOS_PLAN),
                 description: 'residencial (por defecto), empresarial o dedicado',
+            },
+            tipo_servicio: {
+                ...enumerado(TIPOS_SERVICIO),
+                description:
+                    'Tipo de servicio (plan v3, `contratos/tipos-servicio.md`): internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv (datos con su router; nunca se limita) o mixto',
+            },
+            componentes: {
+                ...lista(enumerado(COMPONENTES_SERVICIO)),
+                description: 'El mismo tipo en los simples; dos o tres de internet, cable e iptv en mixto',
+            },
+            precio_cable: {
+                ...nulable(Dinero),
+                description: 'Solo mixto: línea de cable de la factura; null en los demás',
+            },
+            precio_iptv: {
+                ...nulable(Dinero),
+                description:
+                    'Solo mixto: línea de IPTV de la factura (sin internet, el resto del precio); null en los demás',
             },
             modo: {
                 ...enumerado(['residencial', 'empresarial']),
@@ -608,7 +629,16 @@ export const Plan = definirEsquema(
         },
         // `warnings` es opcional de verdad: solo en las respuestas de crear y editar. `modo` y `routers`
         // (Iris 0.10.0): la API siempre los envía; opcionales hasta que las fixtures los traigan
-        ['warnings', 'modo', 'routers', 'incluye_ip_publica'],
+        [
+            'warnings',
+            'modo',
+            'routers',
+            'incluye_ip_publica',
+            'tipo_servicio',
+            'componentes',
+            'precio_cable',
+            'precio_iptv',
+        ],
     ),
 )
 
@@ -655,6 +685,8 @@ export const PlanEfectivo = definirEsquema(
             id,
             nombre: texto,
             precio: Dinero,
+            // null solo en un plan de cable (no tiene velocidad): el esquema sigue en `entero` mientras las
+            // fixtures del panel (`fixtures/planes`) no lo admitan; se vuelve `nulable(entero)` en T5
             bajada_kbps: entero,
             subida_kbps: entero,
             bajada_limitada_kbps: entero,
@@ -692,6 +724,16 @@ export const PlanEfectivo = definirEsquema(
                 ...enumerado(TIPOS_PLAN),
                 description: 'Tipo del plan (residencial, empresarial, dedicado)',
             },
+            tipo_servicio: {
+                ...enumerado(TIPOS_SERVICIO),
+                description: 'Tipo de servicio del plan: internet, cable, iptv o mixto',
+            },
+            componentes: {
+                ...lista(enumerado(COMPONENTES_SERVICIO)),
+                description: 'El mismo tipo en los simples; dos o tres en mixto',
+            },
+            precio_cable: { ...nulable(Dinero), description: 'Solo mixto: línea de cable de la factura' },
+            precio_iptv: { ...nulable(Dinero), description: 'Solo mixto: línea de IPTV de la factura' },
             modo: {
                 ...enumerado(['residencial', 'empresarial']),
                 description:
@@ -703,7 +745,15 @@ export const PlanEfectivo = definirEsquema(
                 description: 'Trae una IP pública de una red `publica` del router (decisión del PM 30)',
             },
         },
-        ['modo', 'routers', 'incluye_ip_publica'],
+        [
+            'modo',
+            'routers',
+            'incluye_ip_publica',
+            'tipo_servicio',
+            'componentes',
+            'precio_cable',
+            'precio_iptv',
+        ],
     ),
 )
 
