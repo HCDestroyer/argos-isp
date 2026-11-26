@@ -33,6 +33,9 @@ let contadorV6 = 0
  */
 export function bloqueV6Unico(): string {
     contadorV6 += 1
+    // Con resto 0 el bloque saldría como `…:000::/40`, que no es la forma canónica que devuelve la API
+    // (`…::/40`), y las pruebas que arman prefijos esperados a partir del bloque fallarían.
+    if (contadorV6 % 256 === 0) contadorV6 += 1
     const segundo = 0xdb8 + Math.floor(contadorV6 / 256)
     if (segundo > 0xffff) throw new Error('bloqueV6Unico: se agotaron los bloques /40 de prueba')
     return `2001:${segundo.toString(16)}:${(contadorV6 % 256).toString(16)}00::/40`
