@@ -22,6 +22,12 @@ export const CUENTAS_GT = {
     GASTOS_PAGADOS_ANTICIPADO: '1.1.13',
     /** gt-2026.4 (inventario, `contratos/inventario.md` §3): valor del kardex de la empresa */
     INVENTARIOS: '1.1.14',
+    /**
+     * gt-2026.6 (B1 del plan de contabilidad, §5.7): efectivo que ya salió de una caja de cobros y
+     * aún no llega al banco, a nombre de quien dijo «Recibí» (el auxiliar es por persona, en
+     * `ledger.entregas` y `ledger.depositos`). Código por confirmar con el contador.
+     */
+    EFECTIVO_EN_CUSTODIA: '1.1.15',
     PROPIEDAD_PLANTA_EQUIPO: '1.2.01',
     DEPRECIACION_ACUMULADA: '1.2.02',
     PROVEEDORES: '2.1.03',
@@ -212,7 +218,14 @@ export function categoriaFlujoGt(codigo: string): CategoriaFlujo | undefined {
     const empieza = (prefijo: string) => codigo === prefijo || codigo.startsWith(`${prefijo}.`)
     if (['1', '1.1', '1.2', '2', '2.1', '3', '4', '5'].includes(codigo)) return undefined
     // cajas, bancos y fondos en tránsito (depósitos de caja aún no acreditados)
-    if (empieza('1.1.01') || empieza('1.1.02') || empieza(C.FONDOS_EN_TRANSITO)) return 'efectivo'
+    if (
+        empieza('1.1.01') ||
+        empieza('1.1.02') ||
+        empieza(C.FONDOS_EN_TRANSITO) ||
+        empieza(C.EFECTIVO_EN_CUSTODIA)
+    ) {
+        return 'efectivo'
+    }
     if (empieza(C.PROPIEDAD_PLANTA_EQUIPO)) return 'inversion'
     if (empieza(C.DEPRECIACION_ACUMULADA)) return 'operacion'
     if (empieza('3.1') || empieza('3.2')) return 'financiamiento'
@@ -264,4 +277,21 @@ export const CUENTAS_INVENTARIO_GT: readonly DefinicionCuentaPaquete[] = [
 export const CUENTAS_PAQUETE_GT_2026_4: readonly DefinicionCuentaPaquete[] = [
     ...CUENTAS_PAQUETE_GT_2026_2,
     ...CUENTAS_INVENTARIO_GT,
+]
+
+/**
+ * gt-2026.6 (B1 del plan de contabilidad, §5.7, decisión del PM del 26 nov 2026): `1.1.15 Efectivo
+ * en custodia`, el lugar entre la caja de cobros y el banco. Instalarla sobre 2026.5 solo agrega
+ * esa cuenta.
+ */
+export const CUENTAS_CUSTODIA_GT: readonly DefinicionCuentaPaquete[] = [
+    hoja(C.EFECTIVO_EN_CUSTODIA, 'Efectivo en custodia', 'activo', '1.1'),
+].map((cuenta) => {
+    const flujo = categoriaFlujoGt(cuenta.codigo)
+    return flujo ? { ...cuenta, categoria_flujo: flujo } : cuenta
+})
+
+export const CUENTAS_PAQUETE_GT_2026_6: readonly DefinicionCuentaPaquete[] = [
+    ...CUENTAS_PAQUETE_GT_2026_4,
+    ...CUENTAS_CUSTODIA_GT,
 ]

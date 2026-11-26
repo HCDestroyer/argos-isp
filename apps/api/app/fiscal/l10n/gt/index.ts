@@ -3,6 +3,7 @@ import {
     CUENTAS_PAQUETE_GT,
     CUENTAS_PAQUETE_GT_2026_2,
     CUENTAS_PAQUETE_GT_2026_4,
+    CUENTAS_PAQUETE_GT_2026_6,
 } from '#fiscal/l10n/gt/cuentas'
 import {
     PARAMETROS_GT,
@@ -177,4 +178,16 @@ export const PAQUETE_GT_2026_5: PaqueteLocalizacion = {
     version: '2026.5.0',
     publicada_en: '2026-11-21',
     parametros: PARAMETROS_GT_2026_5,
+}
+
+/**
+ * `gt-2026.6` (B1 del plan de contabilidad, §5.7): igual que 2026.5 más `1.1.15 Efectivo en
+ * custodia` (caja de cobros → custodia → banco). Instalarla sobre 2026.5 solo agrega esa cuenta.
+ */
+export const PAQUETE_GT_2026_6: PaqueteLocalizacion = {
+    ...PAQUETE_GT_2026_5,
+    codigo: 'gt-2026.6',
+    version: '2026.6.0',
+    publicada_en: '2026-11-26',
+    cuentas: CUENTAS_PAQUETE_GT_2026_6,
 }

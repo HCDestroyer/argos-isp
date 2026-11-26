@@ -4,9 +4,16 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { verTurno, type TurnoVista } from '#ledger/cajas'
+import { fondoParaAbrir } from '#ledger/custodia'
 
 /**
- * `cajas.abrir` (`POST /cajas/:id/abrir`): abre un turno con su fondo inicial. Un solo turno
+ * `cajas.abrir` (`POST /cajas/:id/abrir`): abre un turno con su fondo inicial.
+ *
+ * B1 (§5.7, decisión del PM): el fondo ya no se escribe a mano. Sin `fondo_inicial`, el turno abre
+ * con `fondo_esperado` = lo que quedó al cerrar el turno anterior (`fondo_siguiente`, o todo lo
+ * contado si se cerró sin entrega) o, en el primer turno, el fondo fijo de la caja. Un
+ * `fondo_inicial` distinto todavía se acepta (clientes de antes de B1) y queda a la vista junto al
+ * esperado en el turno. Un solo turno
  * abierto por caja (409 `turno_abierto`). Queda `abierto_por` = el cajero: sus cobros en
  * efectivo sin `caja_id` van a esta caja mientras el turno siga abierto.
  *
@@ -16,7 +23,7 @@ import { verTurno, type TurnoVista } from '#ledger/cajas'
 
 export interface EntradaAbrirCaja {
     caja_id: number
-    fondo_inicial: string
+    fondo_inicial?: string | null
 }
 
 export default class AbrirCaja extends DomainAction<EntradaAbrirCaja, TurnoVista> {
@@ -24,17 +31,11 @@ export default class AbrirCaja extends DomainAction<EntradaAbrirCaja, TurnoVista
 
     protected async handle(input: EntradaAbrirCaja, t: Transaccion): Promise<TurnoVista> {
         t.fijarEntidad('caja', input.caja_id)
-        const fondo = dec(input.fondo_inicial)
-        if (fondo.isNegative() || !tieneCentavosExactos(fondo)) {
-            throw new ValidacionFallida([
-                { field: 'fondo_inicial', message: 'Monto inválido (≥ 0, 2 decimales)', rule: 'monto' },
-            ])
-        }
         const caja = await t.trx
             .from('ledger.cajas')
             .where('id', input.caja_id)
             .forUpdate()
-            .select('id', 'activa', 'empresa_id')
+            .select('id', 'activa', 'empresa_id', 'fondo_fijo')
             .first()
         if (!caja) throw new NoEncontrado(`La caja ${input.caja_id} no existe`)
         // la caja es de una empresa: solo la abre quien tiene acceso a ella
@@ -56,12 +57,27 @@ export default class AbrirCaja extends DomainAction<EntradaAbrirCaja, TurnoVista
             )
         }
 
+        const esperado = await fondoParaAbrir(t.trx, {
+            id: Number(caja.id),
+            empresa_id: Number(caja.empresa_id),
+            fondo_fijo: caja.fondo_fijo,
+        })
+        const sinFondo =
+            input.fondo_inicial === undefined || input.fondo_inicial === null || input.fondo_inicial === ''
+        const fondo = sinFondo ? esperado : dec(input.fondo_inicial!)
+        if (fondo.isNegative() || !tieneCentavosExactos(fondo)) {
+            throw new ValidacionFallida([
+                { field: 'fondo_inicial', message: 'Monto inválido (≥ 0, 2 decimales)', rule: 'monto' },
+            ])
+        }
+
         const [fila] = (await t.trx
             .insertQuery()
             .table('ledger.cajas_turnos')
             .insert({
                 caja_id: caja.id,
                 fondo_inicial: aTexto(fondo),
+                fondo_esperado: aTexto(esperado),
                 abierto_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>

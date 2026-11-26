@@ -2,7 +2,9 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
-import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
+import { D, aTexto, dec, tieneCentavosExactos, type Dec } from '#ledger/dinero'
+import { fondoFijoDe } from '#ledger/custodia'
+import EntregarCaja from '#ledger/actions/entregar_caja'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { verTurno, type TurnoVista } from '#ledger/cajas'
 import {
@@ -29,8 +31,13 @@ import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_a
  * - Rediseño (`a4.md`, 21 nov): `denominaciones` (Q200 … 1¢, cantidades enteras; sin `contado`, el
  *   contado es su suma; con los dos, deben coincidir: 422 `denominaciones`), `fondo_siguiente` (lo que
  *   queda para abrir el próximo turno, ≤ contado) y `entregado_a` (quién recibe el resto; obligatorio si
- *   el resto es > 0). La entrega no es asiento: el dinero sigue en la cuenta de la caja hasta que se
- *   deposita. El esperado sale de `#ledger/resumen_turno` (la misma regla del resumen del turno).
+ *   el resto es > 0). El esperado sale de `#ledger/resumen_turno` (la misma regla del resumen del turno).
+ * - B1 del plan de contabilidad (§5.7, corrige E1): con `entregado_a`, el resto se **entrega** a esa
+ *   persona (`cajas.entregar` anidada, documento `ledger.entregas`). Sin `fondo_siguiente`, queda el
+ *   fondo fijo de la caja (o todo, si se contó menos). La entrega tiene asiento cuando quien recibe
+ *   dice «Recibí» (`1.1.15 Efectivo en custodia / Caja`); con «lo deposito yo» (`entregado_a` = quien
+ *   cierra) se recibe en el acto. Sin `entregado_a` ni `fondo_siguiente`, todo queda en la caja
+ *   (como antes) y el turno siguiente abre con lo contado.
  */
 
 export interface EntradaCerrarCaja {
@@ -51,13 +58,14 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
         const caja = (await t.trx
             .from('ledger.cajas')
             .where('id', input.caja_id)
-            .select('id', 'empresa_id', 'nombre', 'cuenta_id', 'cajero_id')
+            .select('id', 'empresa_id', 'nombre', 'cuenta_id', 'cajero_id', 'fondo_fijo')
             .first()) as {
             id: number
             empresa_id: number
             nombre: string
             cuenta_id: number
             cajero_id: number | null
+            fondo_fijo: string | null
         } | null
         if (!caja) throw new NoEncontrado(`La caja ${input.caja_id} no existe`)
         // el cierre es por empresa: el asiento de la diferencia va al libro de la caja
@@ -94,7 +102,8 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
             ])
         }
 
-        const entrega = await this.entrega(input, contado, t)
+        const fondoFijo = await fondoFijoDe(t.trx, { empresa_id: empresaId, fondo_fijo: caja.fondo_fijo })
+        const entrega = await this.entrega(input, contado, fondoFijo, t)
         await t.trx
             .from('ledger.cajas_turnos')
             .where('id', turno.id)
@@ -134,6 +143,14 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
                     origen_id: turno.id,
                     movimientos,
                 },
+                t.ctx,
+                { trx: t.trx },
+            )
+        }
+
+        if (entrega?.a && contado.minus(entrega.fondo).gt(0)) {
+            await new EntregarCaja().execute(
+                { turno_id: Number(turno.id), entregado_a: entrega.a, origen: 'cierre' },
                 t.ctx,
                 { trx: t.trx },
             )
@@ -203,20 +220,16 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
     }
 
     /** Fondo para el turno siguiente y a quién se entrega el resto (null si no se indicó). */
-    private async entrega(input: EntradaCerrarCaja, contado: ReturnType<typeof dec>, t: Transaccion) {
+    private async entrega(input: EntradaCerrarCaja, contado: Dec, fondoFijo: Dec, t: Transaccion) {
         if (input.fondo_siguiente === undefined || input.fondo_siguiente === null) {
-            if (input.entregado_a) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'fondo_siguiente',
-                        message: 'Indica el fondo que queda para el turno siguiente',
-                        rule: 'required',
-                    },
-                ])
-            }
-            return null
+            // sin entrega, todo queda en la caja (como antes de B1)
+            if (!input.entregado_a) return null
         }
-        const fondo = dec(input.fondo_siguiente)
+        // B1: sin fondo escrito, queda el fondo fijo (o todo lo contado si no alcanza)
+        const fondo =
+            input.fondo_siguiente === undefined || input.fondo_siguiente === null
+                ? D.min(fondoFijo, contado)
+                : dec(input.fondo_siguiente)
         if (fondo.isNegative() || !tieneCentavosExactos(fondo) || fondo.gt(contado)) {
             throw new ValidacionFallida([
                 {

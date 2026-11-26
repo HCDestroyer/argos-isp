@@ -10,6 +10,7 @@ import { LocalizacionNoInstalada } from '#fiscal/errores'
 import { carteraVencida } from '#billing/reportes/reportes'
 import { cuentasPorPagar } from '#ledger/pagos_proveedores'
 import { resumenFondosEnTransito } from '#ledger/transitos'
+import { resumenCustodia } from '#ledger/custodia'
 import { resumenCobrosPorLiquidar } from '#ledger/cobros_liquidar'
 import { verificarCadena } from '#ledger/sellos'
 import { ivaPorCertificarDe } from '#billing/fel_facturas'
@@ -125,6 +126,47 @@ export const CHECKS: readonly DefinicionCheck[] = [
         titulo: 'Balance de comprobación del año cuadrado antes y después del cierre',
     },
 ]
+
+/**
+ * B1 del plan de contabilidad (§5.7): revisiones del cierre para el efectivo (ninguna entrega sin
+ * «Recibí», 1.1.15 cuadrada con sus documentos y la custodia en plazo). Calculadas y probadas, pero
+ * **todavía fuera de `CHECKS`**: la suite del auditor (`tests/contabilidad/verificar_libro.ts`,
+ * invariante 18) solo admite las claves de §10.5 y no se edita desde B1. Se suman a `CHECKS` cuando
+ * AU2 agregue las claves (`.claude/integration/a3.md`).
+ */
+export const CHECKS_CUSTODIA: readonly DefinicionCheck[] = [
+    {
+        clave: 'entregas_recibidas',
+        tipo: 'mensual',
+        titulo: 'Ninguna entrega de caja del periodo sin «Recibí»',
+    },
+    {
+        clave: 'custodia_cuadra',
+        tipo: 'mensual',
+        titulo: '1.1.15 = entregas recibidas − depósitos desde la custodia',
+    },
+    {
+        clave: 'custodia_en_plazo',
+        tipo: 'mensual',
+        titulo: 'Efectivo en custodia fuera de plazo o sobre el tope (aviso)',
+        aviso: true,
+    },
+]
+
+/** Las revisiones de B1 de un periodo (sin escribir). */
+export async function calcularChecksCustodia(
+    c: QueryClientContract,
+    empresaId: number,
+    periodo: string,
+): Promise<CheckCalculado[]> {
+    const fin = finDePeriodo('mensual', periodo)
+    const salida: CheckCalculado[] = []
+    for (const def of CHECKS_CUSTODIA) {
+        const calculado = await CALCULOS[def.clave]!(c, empresaId, periodo, fin)
+        if (calculado) salida.push(calculado)
+    }
+    return salida
+}
 
 export function checksDelTipo(tipo: TipoCheck): readonly DefinicionCheck[] {
     return CHECKS.filter((c) => c.tipo === tipo)
@@ -304,6 +346,51 @@ const CALCULOS: Record<string, Calculo> = {
             obtenido,
             resultado: igual(esperado, obtenido),
             detalle: null,
+        }
+    },
+
+    async entregas_recibidas(c, empresaId, _inicio, fin) {
+        const filas = (await c.rawQuery(
+            `SELECT e.id FROM ledger.entregas e
+              WHERE e.empresa_id = ? AND (e.created_at AT TIME ZONE 'America/Guatemala')::date <= ?::date
+                AND NOT EXISTS (SELECT 1 FROM ledger.entregas_recepciones r WHERE r.entrega_id = e.id)
+              ORDER BY e.id`,
+            [empresaId, fin],
+        )) as { rows: Array<{ id: string | number }> }
+        const entregas = filas.rows.map((f) => Number(f.id))
+        return {
+            clave: 'entregas_recibidas',
+            esperado: '0',
+            obtenido: String(entregas.length),
+            resultado: entregas.length === 0 ? 'ok' : 'anomalia',
+            detalle: entregas.length > 0 ? { entregas: entregas.slice(0, 20) } : null,
+        }
+    },
+
+    async custodia_cuadra(c, empresaId) {
+        const resumen = await resumenCustodia(empresaId, null, c)
+        const esperado = resumen.total
+        const obtenido = aTexto(await saldoCuenta(c, empresaId, CUENTAS_GT.EFECTIVO_EN_CUSTODIA))
+        return {
+            clave: 'custodia_cuadra',
+            esperado,
+            obtenido,
+            resultado: igual(esperado, obtenido),
+            detalle: null,
+        }
+    },
+
+    async custodia_en_plazo(c, empresaId) {
+        const resumen = await resumenCustodia(empresaId, null, c)
+        const fuera = resumen.personas.filter((p) => p.fuera_de_plazo).map((p) => p.usuario_id)
+        const tope = resumen.personas.filter((p) => p.sobre_tope).map((p) => p.usuario_id)
+        return {
+            clave: 'custodia_en_plazo',
+            esperado: '0',
+            obtenido: String(new Set([...fuera, ...tope]).size),
+            // aviso: nunca bloquea (decisión N3 del PM)
+            resultado: 'ok',
+            detalle: fuera.length + tope.length > 0 ? { fuera_de_plazo: fuera, sobre_tope: tope } : null,
         }
     },
 

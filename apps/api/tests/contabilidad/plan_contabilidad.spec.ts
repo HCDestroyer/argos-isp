@@ -55,51 +55,8 @@ async function turnoConEntrega(e: EmpresasGt, cobro: string) {
     return { cajaId, caja, libroAntes, turno, clienteId: s.clienteId }
 }
 
-test.group('Auditor contable · AU1 · E1 · la entrega al cerrar la caja no tiene asiento', (group) => {
+test.group('Auditor contable · AU1 · AU2 · E1 · la entrega al cerrar la caja (corregida por B1)', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
-
-    test('hoy (E1): al cerrar con entrega el efectivo sigue en la caja del libro y no hay asiento de la entrega', async ({
-        assert,
-    }) => {
-        const e = await prepararEmpresasGt()
-        const { cajaId, caja, libroAntes, turno } = await turnoConEntrega(e, '150.00')
-        assert.equal(turno.entregado_monto, '150.00')
-        assert.equal(turno.entregado_a, e.usuarioId)
-        assert.equal(turno.fondo_siguiente, '100.00')
-        // el cierre cuadró (diferencia 0): no deja ningún asiento
-        const asientos = await db
-            .from('ledger.asientos')
-            .where({ origen_tipo: 'cierre_caja', origen_id: turno.id })
-        assert.lengthOf(asientos, 0)
-        // el efectivo entregado sigue sumando en la cuenta de la caja
-        assert.equal(await saldoCuenta(e.B, caja), libroAntes)
-        assert.equal(libroAntes, '150.00')
-        assert.exists(cajaId)
-    })
-
-    test('hoy (E1): lo entregado ayer no se puede depositar: sin turno abierto, o con turno nuevo supera su efectivo', async ({
-        assert,
-    }) => {
-        const e = await prepararEmpresasGt()
-        const { cajaId } = await turnoConEntrega(e, '150.00')
-        const banco = e.banco.get(e.B)!
-        const sinTurno = await errorDe(
-            new DepositarCaja().execute(
-                { caja_id: cajaId, monto: '150.00', boleta: 'E1-A', cuenta_bancaria_id: banco.id },
-                e.ctx,
-            ),
-        )
-        assert.equal(sinTurno.codigo, 'sin_turno_abierto')
-        // el turno nuevo abre con el fondo que quedó (Q100): no alcanza para los Q150 entregados
-        await new AbrirCaja().execute({ caja_id: cajaId, fondo_inicial: '100.00' }, e.ctx)
-        const excede = await errorDe(
-            new DepositarCaja().execute(
-                { caja_id: cajaId, monto: '150.00', boleta: 'E1-B', cuenta_bancaria_id: banco.id },
-                e.ctx,
-            ),
-        )
-        assert.equal(excede.codigo, 'deposito_excede_efectivo')
-    })
 
     test('hoy (E1): el fondo de apertura es libre: nada lo compara con el fondo que quedó al cerrar', async ({
         assert,
@@ -118,7 +75,7 @@ test.group('Auditor contable · AU1 · E1 · la entrega al cerrar la caja no tie
         const { caja, libroAntes, turno } = await turnoConEntrega(e, '150.00')
         const despues = Number(await saldoCuenta(e.B, caja))
         assert.equal(despues, Number(libroAntes) - Number(turno.entregado_monto))
-    }).fails('E1 abierto hasta B1: la entrega no genera asiento y el efectivo sigue en la cuenta de la caja')
+    })
 
     test('esperado (E1): lo entregado al cerrar se puede depositar al día siguiente aunque el fondo nuevo sea menor', async ({
         assert,
@@ -132,9 +89,7 @@ test.group('Auditor contable · AU1 · E1 · la entrega al cerrar la caja no tie
             e.ctx,
         )
         assert.equal(deposito.monto, '150.00')
-    }).fails(
-        'E1 abierto hasta B1: el depósito solo sale del efectivo del turno abierto (deposito_excede_efectivo)',
-    )
+    })
 
     test('esperado (E1): lo entregado al cerrar se puede depositar aunque la caja no tenga turno abierto', async ({
         assert,
@@ -147,7 +102,7 @@ test.group('Auditor contable · AU1 · E1 · la entrega al cerrar la caja no tie
             e.ctx,
         )
         assert.equal(deposito.monto, '150.00')
-    }).fails('E1 abierto hasta B1: el depósito exige un turno abierto (sin_turno_abierto)')
+    })
 })
 
 /** Caja con un cobro de Q150 y un depósito mal digitado de Q100 (debía ser Q80). */

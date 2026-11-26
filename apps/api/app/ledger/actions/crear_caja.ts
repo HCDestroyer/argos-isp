@@ -1,5 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Conflicto, ValidacionFallida } from '#shared/errores'
+import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
+import type { TipoCaja } from '#ledger/custodia'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -13,12 +15,17 @@ import { listarCajas, type CajaVista } from '#ledger/cajas'
  * - Crea su subcuenta de `1.1.01 Cajas` en el libro (`1.1.01.NN`, el siguiente número libre),
  *   marcada como de esa empresa: un asiento de otra empresa no puede usarla.
  * - Nombre único por empresa (409 `caja_duplicada`). `cajero_id` opcional (cajero asignado).
+ * - B1 del plan de contabilidad (§5.7): `tipo` = `cobros` (de fábrica; la caja chica, `gastos`, llega
+ *   en B9: 422 `tipo_no_disponible`) y `fondo_fijo` opcional (sin él, el fondo de cambio de la
+ *   empresa, `GET /cajas/ajustes`).
  */
 
 export interface EntradaCrearCaja {
     nombre: string
     cajero_id?: number | null
     empresa_id?: number | null
+    tipo?: TipoCaja
+    fondo_fijo?: string | null
 }
 
 /** Mismo lock que las subcuentas de bancos (`crear_cuenta_bancaria`): numeración sin carreras. */
@@ -33,6 +40,24 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
             throw new ValidacionFallida([
                 { field: 'nombre', message: 'El nombre es obligatorio', rule: 'required' },
             ])
+        }
+        const tipo = input.tipo ?? 'cobros'
+        if (tipo !== 'cobros') {
+            throw new ReglaNegocio(
+                'La caja chica (tipo gastos) todavía no está disponible: llega con B9',
+                'tipo_no_disponible',
+                [{ field: 'tipo', message: 'Solo cajas de cobros por ahora', rule: 'enum' }],
+            )
+        }
+        let fondoFijo: string | null = null
+        if (input.fondo_fijo !== undefined && input.fondo_fijo !== null && input.fondo_fijo !== '') {
+            const monto = dec(input.fondo_fijo)
+            if (monto.isNegative() || !tieneCentavosExactos(monto)) {
+                throw new ValidacionFallida([
+                    { field: 'fondo_fijo', message: 'Monto inválido (≥ 0, 2 decimales)', rule: 'monto' },
+                ])
+            }
+            fondoFijo = aTexto(monto)
         }
         let empresaId: number
         if (input.empresa_id) {
@@ -108,6 +133,8 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
                 nombre,
                 cajero_id: input.cajero_id ?? null,
                 cuenta_id: cuenta!.id,
+                tipo,
+                fondo_fijo: fondoFijo,
             })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('caja', fila!.id)
@@ -116,6 +143,8 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
             nombre,
             cajero_id: input.cajero_id ?? null,
             cuenta_id: cuenta!.id,
+            tipo,
+            fondo_fijo: fondoFijo,
         })
         const cajas = await listarCajas(undefined, [empresaId], t.trx)
         return cajas.find((c) => c.id === fila!.id)!

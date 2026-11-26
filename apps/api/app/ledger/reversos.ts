@@ -39,6 +39,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'cobros.liquidar',
         documento: 'la liquidación con un asiento de ajuste que la explique (las liquidaciones no se anulan)',
     },
+    // B1 (§5.7): la recepción de una entrega es de solo inserción; su diferencia es de quien entregó
+    entrega_caja: {
+        accion: 'cajas.recibir_entrega',
+        documento: 'la entrega con un asiento de ajuste (una entrega recibida no se anula)',
+    },
     deposito: { accion: 'cajas.depositar', documento: 'el depósito con un asiento de ajuste (no se anula)' },
     traslado: { accion: 'bancos.trasladar', documento: 'el traslado con otro traslado en sentido contrario' },
     banco: {

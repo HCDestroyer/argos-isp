@@ -20,9 +20,15 @@ export type TipoTransito = 'deposito' | 'traslado'
 export interface DepositoVista {
     id: number
     empresa_id: number
-    caja_id: number
-    caja_nombre: string
-    turno_id: number
+    /** caja de la que salió (null en un depósito desde la custodia sin caja) */
+    caja_id: number | null
+    caja_nombre: string | null
+    /** turno del que salió el efectivo (null si salió de la custodia, B1) */
+    turno_id: number | null
+    /** B1: `turno` (efectivo de un turno abierto) o `custodia` (de quien dijo «Recibí») */
+    origen: 'turno' | 'custodia'
+    custodio_id: number | null
+    custodio_nombre: string | null
     cuenta_id: number
     cuenta_codigo: string
     cuenta_nombre: string
@@ -63,7 +69,7 @@ function acreditado(cliente: QueryClientContract, tipo: TipoTransito, alias: str
 function consultaDepositos(cliente: QueryClientContract) {
     return cliente
         .from('ledger.depositos as d')
-        .join('ledger.cajas as cj', 'cj.id', 'd.caja_id')
+        .leftJoin('ledger.cajas as cj', 'cj.id', 'd.caja_id')
         .join('ledger.cuentas as c', 'c.id', 'd.cuenta_id')
         .select(
             'd.id',
@@ -71,6 +77,11 @@ function consultaDepositos(cliente: QueryClientContract) {
             'd.caja_id',
             'cj.nombre as caja_nombre',
             'd.turno_id',
+            'd.origen',
+            'd.custodio_id',
+            cliente.raw(
+                '(SELECT u.nombre FROM core.usuarios u WHERE u.id = d.custodio_id) AS custodio_nombre',
+            ),
             'd.cuenta_id',
             'c.codigo as cuenta_codigo',
             'c.nombre as cuenta_nombre',
