@@ -54,7 +54,7 @@ import {
     LoteCertificacion,
     SolicitudCertificacion,
 } from '#fiscal/esquemas'
-import { configuracionFel, vistaCredenciales } from '#fiscal/fel/configuracion'
+import { configuracionFel, estadoFel, vistaCredenciales } from '#fiscal/fel/configuracion'
 import { intentosDeDte, listarDte, pdfDeDte, verDte, xmlDeDte } from '#fiscal/fel/dte'
 import { catalogoProveedores } from '#fiscal/fel/proveedor'
 import ConfigurarFel from '#fiscal/actions/configurar_fel'
@@ -359,7 +359,11 @@ const fiscal: Ruta[] = [
 */
 
 async function vistaConfiguracion(empresaId: number) {
-    return { ...(await configuracionFel(empresaId)), credenciales: await vistaCredenciales(empresaId) }
+    return {
+        ...(await configuracionFel(empresaId)),
+        ...(await estadoFel(empresaId)),
+        credenciales: await vistaCredenciales(empresaId),
+    }
 }
 
 async function dteConAcceso(ctx: HttpContext, id: number) {
@@ -398,7 +402,7 @@ function fel(): Ruta[] {
             permiso: 'fel.ver',
             query: v.consultaEmpresaValidator,
             descripcion:
-                'Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.',
+                'Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia, si está lista para certificar (lista y faltantes del proveedor y ambiente guardados) y las credenciales guardadas de cada proveedor y ambiente (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.',
             respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
             handler: async (ctx, { query }) =>
                 vistaConfiguracion(await empresaConsulta(ctx, query.empresa_id)),
@@ -414,7 +418,7 @@ function fel(): Ruta[] {
             versionada: true,
             idempotente: true,
             descripcion:
-                '409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).',
+                '409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. 422 nit_emisor_invalido: produccion (modo distinto de desactivada) con el NIT de la empresa ausente o sin dígito verificador válido (en pruebas solo aviso: nit_valido de la empresa). Emite fiscal.config_cambiada (fel_modo, proveedor).',
             respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
             handler: async (ctx, { cuerpo }) => {
                 const config = await new ConfigurarFel().execute(cuerpo, ctx.contextoAccion())
@@ -457,13 +461,17 @@ function fel(): Ruta[] {
             etiqueta: 'fel',
             permiso: 'fel.configurar',
             parametros: AMBIENTE,
-            query: v.consultaEmpresaValidator,
+            query: v.probarCredencialesFelValidator,
             descripcion:
-                'No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.',
+                'No certifica nada. Prueba las credenciales del proveedor indicado (por defecto el guardado): así se prueba lo recién guardado aunque el certificador aún no se haya guardado. Guarda probada_en y el resultado en esa fila (empresa, proveedor, ambiente). 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.',
             respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: CredencialesFel },
             handler: (ctx, { query, params }) =>
                 new ProbarCredencialesFel().execute(
-                    { empresa_id: query.empresa_id, ambiente: params.ambiente as 'pruebas' | 'produccion' },
+                    {
+                        empresa_id: query.empresa_id,
+                        proveedor: query.proveedor,
+                        ambiente: params.ambiente as 'pruebas' | 'produccion',
+                    },
                     ctx.contextoAccion(),
                 ),
         }),
@@ -582,7 +590,7 @@ function fel(): Ruta[] {
             permiso: 'fel.certificar',
             idempotente: true,
             descripcion:
-                'Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.',
+                'Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT (una NCRE o NDEB conserva el receptor de su documento de origen). Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso, fel_desactivada (con la FEL desactivada no entra nada nuevo a la cola).',
             respuesta: { status: 200, descripcion: 'DTE en cola', esquema: Dte },
             handler: async (ctx, { params }) => {
                 const id = Number(params.id)
@@ -599,7 +607,7 @@ function fel(): Ruta[] {
             permiso: 'fel.certificar',
             idempotente: true,
             descripcion:
-                'Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.',
+                'Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 409 fel_desactivada (la FEL de la empresa está desactivada); 422 fel_no_configurada (falta certificador o credenciales), receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada. El panel ofrece el botón según fel_accion de la factura (primero se cobra y después se certifica).',
             respuesta: { status: 200, descripcion: 'Solicitud', esquema: SolicitudCertificacion },
             handler: async (ctx, { params }) => {
                 const id = Number(params.id)
@@ -617,7 +625,7 @@ function fel(): Ruta[] {
             cuerpo: v.loteFelValidator,
             idempotente: true,
             descripcion:
-                'facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.',
+                'facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type (fel_desactivada si la empresa tiene la FEL desactivada; el lote de otras empresas sigue).',
             respuesta: { status: 200, descripcion: 'Lote', esquema: LoteCertificacion },
             handler: (ctx, { cuerpo }) => new CertificarLote().execute(cuerpo, ctx.contextoAccion()),
         }),

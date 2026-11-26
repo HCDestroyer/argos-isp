@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, Prohibido, ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion, verificarVersion } from '#shared/version'
 import type { ContextoAccion } from '#shared/contexto'
-import { nitValido } from '#core/nit_cui'
+import { FORMA_NIT, limpiarDocumento } from '#core/nit_cui'
 
 export interface EntradaVerificarNit {
     cliente_id: number
@@ -21,7 +21,7 @@ export interface NitVerificado {
 /** 422 `nit_no_verificable`: el cliente no tiene un NIT válido que verificar. */
 export class NitNoVerificable extends ReglaNegocio {
     constructor() {
-        super('El cliente no tiene un NIT válido (tipo nit con dígito verificador)', 'nit_no_verificable')
+        super('El cliente no tiene un NIT que verificar (tipo nit con forma de NIT)', 'nit_no_verificable')
     }
 }
 
@@ -66,7 +66,13 @@ export default class VerificarNitCliente extends DomainAction<EntradaVerificarNi
         } | null
         if (!antes) throw new NoEncontrado(`El cliente ${input.cliente_id} no existe`)
         verificarVersion('core.clientes', input.cliente_id, Number(antes.version), input.version)
-        if (antes.tipo_documento_fiscal !== 'nit' || !antes.nit_cui || !nitValido(antes.nit_cui)) {
+        // forma de NIT (`revisarNit`), no el módulo 11: lo confirma la persona o el certificador
+        // (`contratos/fel-establecimientos.md` R1)
+        if (
+            antes.tipo_documento_fiscal !== 'nit' ||
+            !antes.nit_cui ||
+            !FORMA_NIT.test(limpiarDocumento(antes.nit_cui))
+        ) {
             throw new NitNoVerificable()
         }
         await actualizarConVersion(t.trx, 'core.clientes', input.cliente_id, input.version, {
