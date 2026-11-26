@@ -139,16 +139,25 @@ function itemsLigar(olt: OltSmartOlt) {
     return lista
 }
 
+/* Mientras se liga o se recarga, los selectores quedan deshabilitados: las opciones «Ya ligada a…» salen de la recarga. */
+const ligando = ref(false)
+
 async function ligar(olt: OltSmartOlt, oltArgosId: number | null) {
-    const r = await useSmartOlt().vincular(olt.id, oltArgosId)
-    if (!r.ok) {
-        toast.add({ title: r.problema.title, description: r.problema.detail, icon: 'i-lucide-circle-alert', color: 'error' })
-        return
+    ligando.value = true
+    try {
+        const r = await useSmartOlt().vincular(olt.id, oltArgosId)
+        if (!r.ok) {
+            toast.add({ title: r.problema.title, description: r.problema.detail, icon: 'i-lucide-circle-alert', color: 'error' })
+            return
+        }
+        ligadasPorNombre.value = ligadasPorNombre.value.filter(x => x !== olt.id)
+        // primero se recarga y después se avisa: quien ve el aviso ya encuentra las opciones al día
+        await Promise.all([cargar(), cargarOltsArgos()])
+        toast.add({ title: oltArgosId ? `${olt.nombre ?? olt.smartolt_olt_id} ligada a ${r.data.olt?.nombre}` : 'Vínculo quitado', icon: 'i-lucide-link', color: 'success' })
     }
-    ligadasPorNombre.value = ligadasPorNombre.value.filter(x => x !== olt.id)
-    toast.add({ title: oltArgosId ? `${olt.nombre ?? olt.smartolt_olt_id} ligada a ${r.data.olt?.nombre}` : 'Vínculo quitado', icon: 'i-lucide-link', color: 'success' })
-    await cargar()
-    await cargarOltsArgos()
+    finally {
+        ligando.value = false
+    }
 }
 
 function menuOlt(olt: OltSmartOlt): DropdownMenuItem[] {
@@ -564,6 +573,7 @@ onMounted(async () => {
                                     icon="i-lucide-server"
                                     :color="olt.olt ? 'neutral' : 'warning'"
                                     :highlight="!olt.olt"
+                                    :disabled="ligando"
                                     class="w-full min-w-40 max-w-72"
                                     :data-prueba="`ligar-${olt.smartolt_olt_id}`"
                                     @update:model-value="v => ligar(olt, typeof v === 'number' ? v : null)"
