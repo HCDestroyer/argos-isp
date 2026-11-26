@@ -249,6 +249,7 @@ export class EscenarioGenerativo {
     private lineasDoc = new Map<number, { tipo: string; id: number }>()
     private saldosExtracto = new Map<number, bigint>()
     private readonly fase5: boolean
+    private readonly alVerificar: ((empresas: number[]) => Promise<Violacion[]>) | null
     private proveedoresCompra = new Map<number, { general: number; pequeno: number }>()
 
     constructor(
@@ -258,8 +259,11 @@ export class EscenarioGenerativo {
             fase4?: boolean
             fase5?: boolean
             incluirHallazgosAbiertos?: boolean
+            /** revisión extra que corre después de cada paso, junto con los invariantes del verificador */
+            alVerificar?: (empresas: number[]) => Promise<Violacion[]>
         } = {},
     ) {
+        this.alVerificar = opciones.alVerificar ?? null
         this.azar = new Azar(semilla)
         this.fase5 = opciones.fase5 ?? false
         this.fase4 = (opciones.fase4 ?? false) || this.fase5
@@ -381,6 +385,7 @@ export class EscenarioGenerativo {
         const nueva = await fotoLibro(this.empresas, this.marcas.acciones, this.marcas.outbox)
         violaciones.push(...compararFotoLibro(this.foto, nueva))
         this.foto = nueva
+        if (this.alVerificar) violaciones.push(...(await this.alVerificar(this.empresas)))
         if (this.fel) violaciones.push(...(await this.verificarFel(accion)))
         return violaciones
     }
