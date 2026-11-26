@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { abrirCuenta, entrar, ir, opcionCuenta } from './ayudas'
 
 /**
  * Integración con Horus (contrato 1.2.0), en modo fixtures, a 1280 y 390 px:
@@ -82,8 +82,8 @@ test('Horus: autologin sin vinculación pide el login normal, vincula y aparece 
     await page.getByRole('button', { name: 'Entrar y vincular' }).click()
     await expect(page).toHaveURL(/\/clientes\/1$/)
 
-    await page.locator('[data-prueba="menu-usuario"]').click()
-    await page.getByRole('menuitem', { name: 'Mi cuenta' }).click()
+    await abrirCuenta(page)
+    await opcionCuenta(page, /^Mi cuenta/).click()
     await expect(page).toHaveURL(/\/perfil$/)
     const tabla = page.locator('[data-prueba="tabla-vinculaciones"]')
     await expect(tabla).toContainText('Ana López (Horus)')

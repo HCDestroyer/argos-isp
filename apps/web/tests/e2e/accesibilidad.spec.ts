@@ -153,6 +153,23 @@ for (const tema of ['light', 'dark'] as const) {
             }
         })
 
+        test('Ajustes y el panel de la cuenta abiertos sin violaciones de axe', async ({ page }) => {
+            await entrar(page, 'admin@argos.test')
+            await page.goto('/configuracion')
+            await page.locator('[data-prueba="indice-ajustes"]').waitFor({ timeout: 15_000 })
+            await revisar(page, 'ajustes con su buscador')
+            await page.locator('input[data-prueba="buscar-ajuste"]').first().fill('correo')
+            await revisar(page, 'ajustes con resultados')
+            // En el teléfono el círculo abre el panel de la cuenta desde abajo (el menú desplegable de la
+            // computadora es el de siempre y no cambia con este plan).
+            if ((page.viewportSize()?.width ?? 1280) < 1024) {
+                await page.locator('[data-prueba="menu-usuario"]').click()
+                await page.locator('[data-prueba="cerrar-cuenta"]').waitFor()
+                await page.waitForTimeout(500)
+                await revisar(page, 'panel de la cuenta abierto')
+            }
+        })
+
         test('el foco se ve: contorno de 2 px en el color primario', async ({ page }) => {
             await page.goto('/login')
             await page.getByLabel('Correo').focus()

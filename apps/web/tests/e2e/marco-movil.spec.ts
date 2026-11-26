@@ -121,3 +121,56 @@ test('campo de fecha en dd/mm/aaaa: barras solas, y el calendario escribe la fec
     await dia.click()
     await expect(fecha).toHaveValue('15/07/2026')
 })
+
+test.describe('cuenta en el teléfono: panel desde abajo (tablero PerfilDrawer)', () => {
+    test.skip(({ isMobile }) => !isMobile, 'En la computadora la cuenta es el menú desplegable del círculo')
+
+    test('desde el círculo: empresa, tema y Esc lo cierra', async ({ page }) => {
+        await entrar(page, 'admin@argos.test')
+        await page.locator('[data-prueba="menu-usuario"]').click()
+        const panel = page.getByRole('dialog', { name: 'Tu cuenta' })
+        await expect(panel).toBeVisible()
+        // Arriba la empresa activa con su NIT; el tema a la vista; filas de 48 px o más.
+        await expect(panel.locator('[data-prueba="cuenta-empresas"]')).toContainText('NIT 1234567-8')
+        for (const fila of ['cuenta-mi-cuenta', 'cuenta-que-cambio', 'cuenta-cerrar-sesion']) {
+            expect((await panel.locator(`[data-prueba="${fila}"]`).boundingBox())!.height).toBeGreaterThanOrEqual(48)
+        }
+        // El panel termina en el borde de abajo, a la altura del pulgar.
+        const caja = (await panel.boundingBox())!
+        expect(Math.abs(caja.y + caja.height - page.viewportSize()!.height)).toBeLessThanOrEqual(1)
+
+        await panel.locator('[data-tema="dark"]').click()
+        await expect(page.locator('html')).toHaveClass(/dark/)
+        await panel.locator('[data-tema="light"]').click()
+        await expect(page.locator('html')).not.toHaveClass(/dark/)
+
+        await panel.locator('[data-prueba="cuenta-empresas"]').getByRole('radio', { name: /Fibra del Sur/ }).click()
+        await expect(panel).toBeHidden()
+        await expect(page.getByRole('listitem').getByText('Empresa activa: Fibra del Sur')).toBeVisible()
+        await expect(page.locator('[data-prueba="empresa-activa"]').first()).toContainText('Fibra del Sur')
+
+        await page.locator('[data-prueba="menu-usuario"]').click()
+        await expect(panel).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(panel).toBeHidden()
+    })
+
+    test('desde la fila de la cuenta arriba de «Más»: primero se cierra «Más»', async ({ page }) => {
+        await entrar(page, 'admin@argos.test')
+        await page.locator('[data-prueba="isla-mas"]').click()
+        const fila = page.getByRole('dialog').locator('[data-prueba="mas-cuenta"]')
+        await expect(fila).toContainText('Ana Administradora')
+        // «Ayuda» ya no va suelta en «Más»: vive en el panel de la cuenta.
+        await expect(page.getByRole('dialog').getByRole('button', { name: 'Ayuda de esta pantalla' })).toHaveCount(0)
+        await fila.click()
+        const panel = page.getByRole('dialog', { name: 'Tu cuenta' })
+        await expect(panel).toBeVisible()
+        // Nunca dos paneles a la vez.
+        await expect(page.getByRole('dialog')).toHaveCount(1)
+        await expect(panel.locator('[data-prueba="cuenta-ayuda"]')).toBeVisible()
+        await panel.locator('[data-prueba="cuenta-ayuda"]').click()
+        await expect(panel).toBeHidden()
+        await expect(page.locator('[data-prueba="ayuda-resumen"]')).toBeVisible()
+        await expect(page.getByRole('dialog')).toHaveCount(1)
+    })
+})

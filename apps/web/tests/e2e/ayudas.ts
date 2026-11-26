@@ -79,10 +79,47 @@ async function esperarQuieto(elemento: Locator): Promise<void> {
     }, { intervals: [100] }).toBe(true)
 }
 
-/** Elige la empresa activa desde el menú del usuario (barra superior). */
-export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
+/** Si la cuenta se abre como panel desde abajo (teléfono, bajo 1024 px) o como menú (computadora). */
+function cuentaEnPanel(page: Page): boolean {
+    return (page.viewportSize()?.width ?? 1280) < 1024
+}
+
+/** Abre la cuenta desde el círculo: el menú en la computadora, el panel desde abajo en el teléfono. */
+export async function abrirCuenta(page: Page): Promise<void> {
     await page.locator('[data-prueba="menu-usuario"]').click()
-    await page.getByRole('menuitemcheckbox', { name: nombre }).click()
+    if (cuentaEnPanel(page)) {
+        await expect(page.locator('[data-prueba="cerrar-cuenta"]')).toBeVisible()
+    }
+}
+
+/** Una acción de la cuenta («Mi cuenta», «Qué cambió»…): opción del menú o fila del panel. */
+export function opcionCuenta(page: Page, nombre: string | RegExp): Locator {
+    return cuentaEnPanel(page)
+        ? page.getByRole('dialog', { name: 'Tu cuenta' }).getByRole('button', { name: nombre })
+        : page.getByRole('menuitem', { name: nombre })
+}
+
+/** Las empresas para elegir en la cuenta: casillas del menú o la lista del panel. */
+export function opcionesEmpresaCuenta(page: Page, nombre: string | RegExp): Locator {
+    return cuentaEnPanel(page)
+        ? page.locator('[data-prueba="cuenta-empresas"]').getByRole('radio', { name: nombre })
+        : page.getByRole('menuitemcheckbox', { name: nombre })
+}
+
+/** Elige la empresa activa desde la cuenta (menú en la computadora, panel desde abajo en el teléfono). */
+export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
+    await abrirCuenta(page)
+    const opcion = opcionesEmpresaCuenta(page, nombre)
+    if (cuentaEnPanel(page) && (await opcion.getAttribute('aria-checked')) === 'true') {
+        // Ya es la activa: en el panel no hay nada que elegir, se cierra.
+        await page.locator('[data-prueba="cerrar-cuenta"]').click()
+    }
+    else {
+        await opcion.click()
+    }
+    if (cuentaEnPanel(page)) {
+        await expect(page.locator('[data-prueba="cerrar-cuenta"]')).toHaveCount(0)
+    }
     await expect(empresaActiva(page)).toContainText(nombre)
 }
 

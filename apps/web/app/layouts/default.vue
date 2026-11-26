@@ -55,6 +55,18 @@ function cerrarMovil() {
     abierto.value = false
 }
 
+/**
+ * La cuenta arriba de «Más» (tablero PerfilDrawer): abre el mismo panel que el círculo de la cuenta.
+ * Primero se cierra «Más» (nunca un panel sobre otro) y, ya cerrado, sube el de la cuenta.
+ */
+const cuenta = useMenuCuenta()
+function abrirCuentaDesdeMas() {
+    abierto.value = false
+    setTimeout(() => {
+        cuenta.abierto.value = true
+    }, 250)
+}
+
 /** «Personalizar mis accesos» desde el menú del teléfono: primero se cierra el menú (nunca un panel sobre otro). */
 const personalizando = ref(false)
 function personalizarAccesos() {
@@ -303,6 +315,35 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                 <!-- En escritorio el buscador va en la barra superior; aquí, en el menú «Más» del teléfono,
                      con «Personalizar mis accesos» (los dos primeros van en la isla de abajo). -->
                 <div class="flex flex-col gap-2 lg:hidden">
+                    <UButton
+                        color="neutral"
+                        variant="ghost"
+                        class="surface-card w-full gap-3 rounded-2xl px-3 py-2.5 text-start hover:bg-(--ax-fila-hover)"
+                        :aria-label="`Tu cuenta: ${cuenta.usuario.value?.nombre ?? ''}`"
+                        aria-haspopup="dialog"
+                        data-prueba="mas-cuenta"
+                        @click="abrirCuentaDesdeMas"
+                    >
+                        <span
+                            class="flex size-[2.625rem] shrink-0 items-center justify-center rounded-full bg-primary/10 text-[0.8125rem] font-bold text-primary"
+                            aria-hidden="true"
+                        >{{ cuenta.iniciales.value }}</span>
+                        <span class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate text-[0.90625rem] font-bold text-highlighted">{{ cuenta.usuario.value?.nombre }}</span>
+                            <span class="flex min-w-0 items-center gap-1.5 text-[0.78125rem] font-normal text-muted">
+                                <UIcon
+                                    v-if="cuenta.empresaActiva.value"
+                                    name="i-lucide-building"
+                                    class="size-3.5 shrink-0"
+                                />
+                                <span class="truncate">{{ [cuenta.empresaActiva.value, cuenta.rol.value].filter(Boolean).join(' · ') }}</span>
+                            </span>
+                        </span>
+                        <UIcon
+                            name="i-lucide-chevron-right"
+                            class="size-[1.0625rem] shrink-0 text-muted"
+                        />
+                    </UButton>
                     <UDashboardSearchButton
                         :collapsed="collapsed"
                         label="Buscar una sección…"
@@ -389,11 +430,6 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                         >{{ item.label }}</span>
                     </template>
                 </UNavigationMenu>
-                <!-- En el teléfono la barra superior no tiene espacio para «Ayuda»: va aquí. -->
-                <AyudaBoton
-                    class="sm:hidden"
-                    con-etiqueta
-                />
             </template>
 
             <template #footer="{ collapsed }">
@@ -450,6 +486,9 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             :inicio="inicio"
         />
         <AccesosRapidosEditor v-model:open="personalizando" />
+        <!-- La cuenta en el teléfono (desde el círculo y desde «Más») y la ayuda que abre su panel. -->
+        <CuentaDrawer />
+        <AyudaPanel v-model:open="cuenta.ayudaAbierta.value" />
 
         <AvisoTopeSesion />
         <SesionBloqueo />
