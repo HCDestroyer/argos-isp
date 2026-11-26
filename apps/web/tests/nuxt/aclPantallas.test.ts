@@ -336,8 +336,14 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'IntentoDecidirModal.vue': { permisos: ['inventario.decidir_intento_recuperacion'], desde: ['pages/inventario/por-recuperar/[id].vue'] },
     'BancoOrigenModal.vue': { permisos: ['bancos_origen.crear', 'bancos_origen.editar'], desde: ['pages/configuracion/bancos-origen.vue'] },
     'CorreoExternoModal.vue': { permisos: ['reportes.aprobar_correo_externo'], desde: ['pages/reportes/envios.vue'] },
-    // SmartOLT y GenieACS: la página de integraciones se abre con cualquiera de sus permisos y monta la tarjeta con `equipos.ver`.
-    'ConfiguracionEquipos.vue': { permisos: ['equipos.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
+    // SmartOLT y ACS por separado: la página de integraciones se abre con cualquiera de sus permisos y monta la
+    // lista de SmartOLT con `smartolt.ver` y el ACS con `acs.ver` (según `?ver=`, que solo lista lo permitido).
+    'ConfiguracionSmartOlt.vue': { permisos: ['smartolt.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
+    'ConfiguracionAcs.vue': { permisos: ['acs.ver'], desde: ['pages/configuracion/integraciones/index.vue'] },
+    // El formulario de una instancia lo montan sus dos páginas (`smartolt.crear_instancia` y `smartolt.editar_instancia`).
+    'SmartOltFormulario.vue': { permisos: ['smartolt.crear_instancia', 'smartolt.editar_instancia'], desde: ['pages/configuracion/integraciones/smartolt/nueva.vue', 'pages/configuracion/integraciones/smartolt/[id]/editar.vue'], exentos: { 'pages/configuracion/integraciones/smartolt/nueva.vue': ['smartolt.editar_instancia'], 'pages/configuracion/integraciones/smartolt/[id]/editar.vue': ['smartolt.crear_instancia'] } },
+    // Ficha del servicio › Equipo: la pestaña solo con `servicios.ver_equipo`.
+    'ServicioEquipoGestion.vue': { permisos: ['servicios.ver_equipo'], desde: ['pages/servicios/[id]/index.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'ServicioCambiarEquipo.vue': { permisos: ['servicios.cambiar_equipo'], desde: ['pages/servicios/[id]/index.vue'] },
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },

@@ -160,22 +160,22 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 
 | Evento | Emite | Payload |
 | --- | --- | --- |
-| `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id |
+| `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id; tipo_servicio (`internet` \| `cable` \| `iptv` \| `mixto`), componentes[]; router_id puede ser null (solo cable) |
 | `servicio.eliminado` / `router.eliminado` | núcleo | servicio: servicio_id, empresa_id, cliente_id, router_id, user_ppp (o null; nunca la contraseña); router: router_id, empresa_id (con túnel sale antes `router.conexion_eliminada`). Solo sin historial (`contratos/eliminar.md`); con historial se retira |
 | `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo (`instalacion` al activar un `pendiente_instalacion`) |
-| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa, servidor_pppoe, credenciales: cambió user_ppp o pass_ppp, sin valores; precio: cambió el precio efectivo por plan, `costo_override` o plan temporal; coa hace Disconnect y routeros reescribe el /ppp secret), empresa_anterior_id (solo con `empresa`); motivo (opcional: `plan_temporal` con plan_temporal_id, o `union_routers` al unir routers duplicados, que no desconecta); origen_tipo/origen_id (opcional: la orden de Iris que lo pidió) |
+| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa, servidor_pppoe, credenciales: cambió user_ppp o pass_ppp, sin valores; precio: cambió el precio efectivo por plan, `costo_override` o plan temporal; coa hace Disconnect y routeros reescribe el /ppp secret), empresa_anterior_id (solo con `empresa`); motivo (opcional: `plan_temporal` con plan_temporal_id, o `union_routers` al unir routers duplicados, que no desconecta); origen_tipo/origen_id (opcional: la orden de Iris que lo pidió); campos incluye `tipo_servicio` |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
 | `servicio.adicional_agregado` / `servicio.adicional_cambiado` / `servicio.adicional_quitado` | núcleo | servicio_id, cliente_id, empresa_id, adicional_id, asignacion_id, modalidad; agregado: origen, primer_periodo, bloqueo; cambiado: campos[], modalidad_anterior; quitado: origen, motivo. Nunca la credencial (`contratos/adicionales.md`) |
 | `adicional.bloqueado` / `adicional.desbloqueado` | núcleo | servicio_id, cliente_id, empresa_id, asignacion_id, adicional_id, identificador, modalidad, estado_servicio, motivo (`contratos/adicionales.md`) |
 | `sesion.iniciada` / `sesion.terminada` | aaa (o network: sondeo de PPPoE sin RADIUS) | servicio_id, nas_ip (null en sesiones por sondeo), acct_session_id, ipv4, prefijos_v6, origen (`accounting` \| `sondeo`); `sesion.terminada` además motivo (causa de fin) |
 | `servicio.caidas_repetidas` | aaa (sesiones) | servicio_id, empresa_id, cliente_id, router_id, sesion_id, sesiones, desde, hasta, umbral, ventana_minutos, causas (una vez por servicio y ventana; `contratos/eventos.md`) |
-| `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence; solo en facturas `iris_orden` además origen_tipo, origen_id, numero, estado, saldo, moneda (A36) |
-| `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas); origen (`iris`, solo en el pago de un comprobante de Iris); si toca facturas `iris_orden` además factura_id, origen_tipo, origen_id, fecha, facturas_iris[] (A36) |
+| `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence; solo en facturas `iris_orden` además origen_tipo, origen_id, numero, estado, saldo, moneda (A36); suscripcion_id (o null; en facturas de suscripción servicio_id va null) |
+| `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas); origen (`iris`, solo en el pago de un comprobante de Iris); si toca facturas `iris_orden` además factura_id, origen_tipo, origen_id, fecha, facturas_iris[] (A36); suscripcion_id (o null; en facturas de suscripción servicio_id va null) |
 | `pago.disputa_abierta` | billing | pago_id, empresa_id, cobro_id, cliente_id (pagador), monto, proveedor, motivo (contracargo de la pasarela; una vez por pago) |
 | `pago.diferencia_cerrada` | billing | pago_id, empresa_id, cliente_id (pagador), facturas[], monto (saldo pequeño cerrado como gasto 5.3.05) |
 | `bonificacion.registrada` | billing | bonificacion_id, empresa_id, cliente_id, servicio_id, periodo, origen, bruto |
-| `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
-| `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
+| `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo; suscripcion_id (o null; en facturas de suscripción servicio_id va null) |
+| `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo; suscripcion_id (o null; en facturas de suscripción servicio_id va null) |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` / `promesa.cancelada` | billing | promesa_id, empresa_id, cliente_id, servicio_id, tipo (`promesa` \| `reconexion_temporal`), canal, comprobante_id, vence, monto, origen; cancelada además estado (`cancelada` \| `rechazada`), motivo, detalle |
 | `cuenta_bancaria.cambiada` | billing | cuenta_bancaria_id, empresa_id, campos[] (banco_id, numero, alias, titular, tipo, moneda, activa; solo nombres), activa (después del cambio), creada. A Iris solo con contrato ≥ 0.8.0 |
 | `caja.cerrada` | ledger | caja_id, empresa_id, cajero_id, esperado, contado, diferencia |
@@ -199,7 +199,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
 | `qos.config_cambiada` | network (QoS) | perfil_id, empresa_id, clase_id, router_id, campos[], routers[] (`contratos/qos.md`) |
 | `servicio.datos_cambiados` | núcleo | servicio_id, empresa_id, empresas[], cliente_id, campos[] (direccion, coordenadas, referencia, contacto_nombre, contacto_telefono; solo nombres). No lleva cambios de red; campos[] también nombre y precision_m; origen_tipo/origen_id (opcional) |
-| `catalogo.cambiado` | núcleo | catalogo (`zona` \| `plan` \| `router`), id, empresa_id (o null = compartido; en plan siempre null), campos[] (nombre, activo, coordenadas, precio en plan); en plan, campos[] también modo y routers |
+| `catalogo.cambiado` | núcleo | catalogo (`zona` \| `plan` \| `router`), id, empresa_id (o null = compartido; en plan siempre null), campos[] (nombre, activo, coordenadas, precio en plan); en plan, campos[] también modo y routers; en plan, campos[] también `tipo_servicio` y `componentes` |
 | `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
 | `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
 | `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |
@@ -255,6 +255,19 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `horus.estado_seguridad_cambiado` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, estado, estado_anterior, hallazgos_abiertos |
 | `horus.router_estado_cambiado` | integraciones (Horus) | webhook_id, router (id, nombre, estado, estado_anterior, motivo) |
 | `horus.servicio_infra_cambiado` | integraciones (Horus) | webhook_id, servicio_infra (id, nombre, estado, estado_anterior, motivo) |
+| `catv.estado_cambiado` | network (CATV por SmartOLT) | servicio_id, empresa_id, cliente_id, de, a (`habilitado` \| `deshabilitado` \| `no_soportado` \| null), orden_id (`contratos/tipos-servicio.md`) |
+| `catv.fallido` | network (CATV por SmartOLT) | servicio_id, empresa_id, orden_id, accion (`cortar` \| `reconectar`), error |
+| `servicio.corte_manual_solicitado` / `servicio.corte_manual_cancelado` | network (respaldo del corte de cable) | solicitud_id, servicio_id, empresa_id, cliente_id, componente (`cable`), accion (`corte` \| `reconexion`), causa (`sin_onu` \| `instancia_no_operativa` \| `smartolt_fallo` \| `catv_no_soportado`). A Iris solo con contrato ≥ 0.15.0 y la marca `corte_manual` |
+| `servicio.adicional_pausado` / `servicio.adicional_reanudado` | núcleo | servicio_id, cliente_id, empresa_id, adicional_id, asignacion_id, pausa_id; pausado: desde, hasta (o null), motivo; reanudado: motivo (`manual` \| `fin_pausa`). Nunca la credencial |
+| `suscripcion.creada` | billing | suscripcion_id, empresa_id, cliente_id, servicio_id (o null), producto_id (`contratos/suscripciones.md`) |
+| `suscripcion.cambiada` | billing | suscripcion_id, empresa_id, cliente_id, servicio_id (o null), campos[] (solo nombres; `servicio` al ligar, desligar o cambiar de servicio, `cliente` tras un cambio de titular) |
+| `suscripcion.estado_cambiada` | billing | suscripcion_id, empresa_id, cliente_id, servicio_id (o null), de, a (`activa` \| `pausada` \| `suspendida` \| `cancelada`), motivo (`mora`, `pago`, `manual`, `servicio_retirado`, `pausa`, `reanudacion`, `cancelacion`) |
+| `metodo_pago.guardado` / `metodo_pago.revocado` | billing | metodo_pago_id, empresa_id, cliente_id, proveedor, marca, ultimos4. Nunca el token (`contratos/debito-automatico.md`) |
+| `debito.activado` / `debito.desactivado` | billing | debito_id, empresa_id, cliente_id, alcance (`cliente` \| `servicio` \| `suscripcion`), servicio_id (o null), suscripcion_id (o null); desactivado: motivo (`cliente` \| `operador` \| `rechazos` \| `metodo_revocado` \| `contracargo` \| `tarjeta_vencida`) |
+| `debito.fallido` | billing | debito_id, factura_id, empresa_id, cliente_id, intento_n, codigo_rechazo (`fondos` \| `tarjeta_vencida` \| `tarjeta_invalida` \| `rechazo_banco` \| `autenticacion` \| `otro`), reintenta, proximo_intento_en (o null), rechazos_seguidos |
+| `pasarela.config_cambiada` | billing | pasarela_cuenta_id, empresa_id, proveedor, campos[] (solo nombres; nunca credenciales ni valores) |
+| `recordatorios.plantilla_cambiada` | notify | plantilla_id, empresa_id, campos[], pasos (bool) (`contratos/recordatorios.md`) |
+| `recordatorios.asignacion_cambiada` | notify | empresa_id, servicio_id o suscripcion_id (el otro null), plantilla_id (o null = por defecto), personalizada (bool) |
 
 El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 

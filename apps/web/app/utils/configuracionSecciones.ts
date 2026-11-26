@@ -91,7 +91,7 @@ export const SECCIONES_CONFIGURACION: SeccionConfiguracion[] = [
         resumen: 'Iris, Horus, pasarela',
         icono: 'i-lucide-link',
         paginas: [
-            { id: 'integraciones', etiqueta: 'Integraciones', icono: 'i-lucide-link', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'equipos.ver'], pestana: false, tambien: /^\/configuracion\/integraciones\// },
+            { id: 'integraciones', etiqueta: 'Integraciones', icono: 'i-lucide-link', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver', 'smartolt.ver', 'acs.ver'], pestana: false, tambien: /^\/configuracion\/integraciones\// },
         ],
     },
     {

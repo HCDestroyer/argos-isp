@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>SmartOLT · formulario de instancia</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+
+.pan{display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:20px}
+.ph2{padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.pf{padding:12px 18px;border-top:1px solid #F1F5F9;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.kv2{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:8px 0;border-top:1px solid #F1F5F9}
+.kv2:first-child{border-top:0}
+.kv2>span:first-child{color:#64748B;flex:0 0 auto}
+.kv2>*:last-child{text-align:right;min-width:0}
+.cd{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;min-width:0}
+.cdh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin-bottom:8px}
+.cdh .lnk{margin-left:auto;text-transform:none;letter-spacing:0}
+.btn.r{background:#fff;color:#B91C1C;border-color:#FECACA}
+.btn.rr{background:#B91C1C;color:#fff}
+.btn.sm{padding:6px 12px;font-size:12.5px}
+.velo{position:absolute;inset:0;background:rgba(15,23,42,.45);z-index:8}
+.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:22px;padding:22px;z-index:9;flex-direction:column;gap:12px;max-height:88%;overflow:auto}
+.dest{border:2px solid #4F46E5;border-radius:14px;padding:10px 14px;background:#fff;box-shadow:0 0 0 4px rgba(79,70,229,.12);font-size:22px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:13.5px;font-weight:600;color:#475569;cursor:pointer;text-decoration:none}
+.sn:hover{background:#F8FAFC}.sn.on{background:#EEF2FF;color:#3730A3}
+.sn small{display:block;font-weight:500;font-size:11.5px;color:#94A3B8}
+.cod{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;background:#0F172A;color:#CBD5E1;border-radius:14px;padding:14px;overflow:auto;white-space:pre}
+.cod em{color:#67E8F9;font-style:normal}.cod u{color:#FCD34D;text-decoration:none}
+.tk80{width:302px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 12px 30px rgba(15,23,42,.14);padding:16px 14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;color:#0F172A}
+.tk80 hr{border:0;border-top:1px dashed #94A3B8;margin:7px 0}
+.tk80 .fl{display:flex;justify-content:space-between;gap:8px}
+.rd2{width:18px;height:18px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;box-sizing:border-box}
+.rd2.on{border:5.5px solid #4F46E5}
+.ck2{width:20px;height:20px;border-radius:6px;border:2px solid #CBD5E1;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;color:#fff;box-sizing:border-box}
+.ck2.on{background:#4F46E5;border-color:#4F46E5}
+.dfa{background:#FEE2E2;color:#991B1B;border-radius:6px;padding:1px 6px;text-decoration:line-through}
+.dfb{background:#DCFCE7;color:#166534;border-radius:6px;padding:1px 6px}
+.rap{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid #E2E8F0;background:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.mbar{flex:0 0 auto;display:flex;gap:8px;padding:10px 12px 14px;background:#fff;border-top:1px solid #E6E8F0}
+.mbar .btn{flex:1;justify-content:center;padding:13px 10px;font-size:14px}
+
+.tema{position:absolute;inset:0}
+.tema.movil{background:#fff}.tema.movil.osc{background:#0B0F1A}
+.osc .mbar,.osc nav[style*="border-top:1px solid #E6E8F0"]{background:#121A2B!important;border-color:#1E2638!important}
+.osc{background:radial-gradient(1200px 500px at 20% -10%,#1B1F45 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#0B2A33 0%,transparent 55%),#0B0F1A;color:#E2E8F0}
+.osc .isla,.osc .f,.osc .card,.osc .cd,.osc .tk80{background:#121A2B!important;border-color:#1E2638!important;box-shadow:0 10px 30px rgba(0,0,0,.35)!important}
+.osc [style*="background:#fff"]{background:#121A2B!important}
+.osc [style*="background:#F8FAFC"],.osc [style*="background:#FAFBFE"],.osc [style*="background:#FCFCFE"],.osc [style*="background:#F1F5F9"],.osc .lh,.osc .kpi,.osc .segb,.osc .gr{background:#0F1524!important}
+.osc [style*="#F1F5F9"],.osc [style*="#E6E8F0"],.osc [style*="#E2E8F0"],.osc [style*="#EEF0F5"],.osc [style*="#CBD5E1"]{border-color:#1E2638!important}
+.osc [style*="color:#0F172A"],.osc [style*="color:#334155"]{color:#E2E8F0!important}
+.osc .h1,.osc b{color:#F1F5F9}
+.osc .m2,.osc .sub,.osc .migas,.osc .ay,.osc .th,.osc .sec,.osc .cdh,.osc .lb,.osc .kv2>span:first-child,.osc .kv>span:first-child{color:#94A3B8!important}
+.osc .migas b{color:#E2E8F0}
+.osc a,.osc .lnk{color:#A5B4FC}
+.osc .rail{color:#94A3B8}.osc .rail.on{background:rgba(129,140,248,.16);color:#C7D2FE}
+.osc .ci,.osc .ib{color:#CBD5E1}.osc .ib:hover{background:#1E2638}
+.osc .pt{border-color:#121A2B}
+.osc .btn.p{background:#818CF8;color:#0B0F1A;box-shadow:none}
+.osc .btn.o{background:transparent!important;color:#CBD5E1;border-color:#2A3550!important}
+.osc .btn.g{color:#CBD5E1}
+.osc .btn.v{background:#22C55E;color:#052E16}
+.osc .btn.r{background:transparent!important;color:#FCA5A5;border-color:#7F1D1D!important}
+.osc .btn.rr{background:#F87171;color:#1F0A0A}
+.osc .ts{color:#94A3B8}.osc .ts.on{background:#1E2638!important;color:#C7D2FE;box-shadow:none}
+.osc .ts .c{background:#1E2638;color:#CBD5E1}.osc .ts .c.rj{background:rgba(248,113,113,.18);color:#FCA5A5}
+.osc .in,.osc .busca,.osc .selp,.osc .fc,.osc .op,.osc .rap,.osc .pillf,.osc .opb{background:#0F1524!important;border-color:#2A3550!important;color:#E2E8F0}
+.osc .in.ph,.osc .busca{color:#64748B}
+.osc .in.auto{background:#121A2B!important}
+.osc .fc.on{background:#818CF8!important;color:#0B0F1A;border-color:#818CF8!important}
+.osc .op.on,.osc .opb.on{background:rgba(129,140,248,.14)!important;border-color:#818CF8!important}
+.osc .lr{border-color:#1A2235}.osc .lr:hover{background:#161E31}.osc .lr.on{background:#18213A;box-shadow:inset 3px 0 0 #818CF8}
+.osc .kv2,.osc .kv,.osc .tl{border-color:#1A2235}
+.osc .b.ok{background:rgba(34,197,94,.16);color:#86EFAC}.osc .b.wa{background:rgba(245,158,11,.16);color:#FCD34D}
+.osc .b.er{background:rgba(248,113,113,.16);color:#FCA5A5}.osc .b.in,.osc .b.nf{background:rgba(129,140,248,.18);color:#C7D2FE}
+.osc .b.ne{background:#1E2638;color:#CBD5E1}.osc .b.cy{background:rgba(34,211,238,.14);color:#67E8F9}
+.osc .ico.ok{background:rgba(34,197,94,.16);color:#86EFAC}.osc .ico.wa{background:rgba(245,158,11,.16);color:#FCD34D}
+.osc .ico.er{background:rgba(248,113,113,.16);color:#FCA5A5}.osc .ico.ne{background:#1E2638;color:#CBD5E1}
+.osc .ico.nf{background:rgba(129,140,248,.18);color:#C7D2FE}.osc .ico.cy{background:rgba(34,211,238,.14);color:#67E8F9}
+.osc .av2.wa{background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.35);color:#FCD34D}
+.osc .av2.er{background:rgba(248,113,113,.10);border-color:rgba(248,113,113,.35);color:#FCA5A5}
+.osc .av2.nf{background:rgba(129,140,248,.10);border-color:rgba(129,140,248,.35);color:#C7D2FE}
+.osc .av2.ok{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);color:#86EFAC}
+.osc .av2 b{color:inherit}
+.osc .copy,.osc .cmdp{background:#1E2638;color:#E2E8F0}
+.osc .tg i{background:#334155}.osc .tg.on i{background:#22C55E}
+.osc .ck2,.osc .rd2{border-color:#475569}.osc .ck2.on{background:#818CF8;border-color:#818CF8}.osc .rd2.on{border-color:#818CF8}
+.osc .dest{background:#0F1524;border-color:#818CF8;color:#F1F5F9;box-shadow:0 0 0 4px rgba(129,140,248,.18)}
+.osc .velo{background:rgba(2,6,23,.65)}
+.osc .bar{background:#1E2638}
+.osc .nuevo{background:rgba(34,211,238,.14);color:#67E8F9}
+.osc .mi{color:#CBD5E1}.osc .mi:hover{background:#1E2638}
+.osc .sn{color:#CBD5E1}.osc .sn.on{background:rgba(129,140,248,.16);color:#C7D2FE}
+.osc .dot.vv{box-shadow:0 0 0 4px rgba(34,197,94,.18)!important}
+.ti{width:18px;height:18px;display:inline-block;flex:0 0 auto;background:currentColor;-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat}.ti-check{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m5%2012%205%205L20%207%22/%3E%3C/svg%3E")}.ti-alerta{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203%202%2020h20z%22/%3E%3Cpath%20d%3D%22M12%2010v4M12%2017h.01%22/%3E%3C/svg%3E")}.ti-reloj{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%229%22/%3E%3Cpath%20d%3D%22M12%207v5l3%202%22/%3E%3C/svg%3E")}</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<div class="tema {{tema}}"><nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail on" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Configuración › Integraciones › SmartOLT › <b>Agregar instancia</b></div>
+<section class="isla" style="flex:1;min-height:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <header style="display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid #F1F5F9;flex:0 0 auto">
+  <button class="ib f" style="width:38px;height:38px;border-radius:999px" aria-label="Atrás"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+  <div><b style="font-size:18px"><span style="display:{{f.nueva.b}}">Agregar instancia de SmartOLT</span><span style="display:{{f.editar.b}}">Editar «Zona norte»</span></b><div class="m2">Una cuenta de SmartOLT (un subdominio) con su propio token</div></div>
+  <span style="flex:1"></span><button class="ib f" title="Tema claro u oscuro" aria-label="Tema" style="width:40px;height:40px;border-radius:999px" onClick="{{tTema}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></button><button class="ib f" title="Ayuda: instancias de SmartOLT" aria-label="Ayuda: instancias de SmartOLT" style="width:40px;height:40px;border-radius:999px;cursor:help;flex:0 0 auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button>
+ </header>
+ <div style="flex:1;min-height:0;display:flex">
+  <div class="sc" style="flex:1;padding:4px 26px 20px"><div class="av2 er" style="display:{{e.sub.v}};align-items:flex-start;margin:12px 0 4px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div style="flex:1"><b>No se guardó.</b> El subdominio «zonanorte» ya lo usa la instancia «Principal».</div></div><div class="av2 er" style="display:{{e.ver.v}};align-items:flex-start;margin:12px 0 4px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div style="flex:1"><b>Otra persona cambió esta instancia mientras la editabas.</b> Recarga para ver sus cambios y vuelve a aplicar los tuyos.</div><button class="btn o sm" style="flex:0 0 auto"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-4L3 10M3 4v6h6M4 13a8 8 0 0 0 14 4l3-3M21 20v-6h-6"/></svg>Recargar</button></div><div class="av2 wa" style="display:{{f.editar.v}};align-items:flex-start;margin:12px 0 4px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div>Si cambias el <b>subdominio</b> o el <b>token</b>, se borra la última prueba y la instancia queda «Sin probar» hasta que pruebes la conexión.</div></div><div style="display:grid;grid-template-columns:210px 1fr;gap:22px;padding:16px 0;border-top:1px solid #F1F5F9"><div><b style="font-size:14px">1 · La cuenta</b><div class="m2" style="margin-top:3px;line-height:1.45">Los datos de tu cuenta de SmartOLT. El token se guarda cifrado y nunca se vuelve a mostrar.</div></div><div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+ <div class="g2"><div><div class="lb">Nombre en Argos<span class="req">*</span></div><div class="in">Zona norte</div><div class="ay">Para reconocerla en las listas. No puede repetirse en la empresa.</div></div>
+  <div><div class="lb">Subdominio<span class="req">*</span></div><div class="in" id="sub" style="{{subSt}}"><span style="display:{{f.nueva.b}}"><span style="color:{{subCol}}">{{subTxt}}</span></span><span style="display:{{f.editar.b}}">zonanorte</span><span class="m2" style="margin-left:auto">.smartolt.com</span></div>
+   <div class="ay" style="display:{{e.sub.v}};color:#B91C1C;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>Ya existe una instancia con ese subdominio: «Principal». Una cuenta se usa una sola vez.</div>
+   <div class="ay" style="display:{{f.nueva.b}}">Solo la parte antes de «.smartolt.com».</div></div></div>
+ <div><div class="lb">Token (clave de API)<span class="req">*</span></div>
+  <div class="in" style="display:{{f.nueva.v}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/></svg><span style="color:#94A3B8">Pega aquí el token de SmartOLT</span></div>
+  <div class="in auto" style="display:{{f.editar.v}};background:#F8FAFC"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/></svg><span class="mono">***</span><button class="lnk" style="margin-left:auto">Cambiar</button></div>
+  <div class="ay" style="display:{{f.editar.b}}">Para conservarlo, déjalo así. Si lo cambias o cambias el subdominio, hay que probar la conexión otra vez.</div></div></div></div><div style="display:grid;grid-template-columns:210px 1fr;gap:22px;padding:16px 0;border-top:1px solid #F1F5F9"><div><b style="font-size:14px">2 · Quién la usa</b><div class="m2" style="margin-top:3px;line-height:1.45">Una cuenta puede ser de una sola empresa o de todas.</div></div><div style="display:flex;flex-direction:column;gap:12px;min-width:0"><div class="segb" style="align-self:flex-start"><button class="ts {{q.una.cls}}" onClick="{{q.una.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"/></svg>Una empresa</button><button class="ts {{q.comp.cls}}" onClick="{{q.comp.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Compartida</button></div>
+ <div style="display:{{q.una.b}}"><div class="lb">Empresa<span class="req">*</span></div><div class="in sel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"/></svg><b>Conecta Norte, S.A.</b> <span class="m2" style="margin-left:6px">empresa activa</span></div></div>
+ <div style="display:{{q.comp.b}}" class="av2 nf" ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><div>Todas las empresas de la instalación podrán usar esta cuenta. Úsala cuando una misma OLT atiende a varias empresas. <b>Solo la crea y la cambia quien tiene acceso a todas las empresas.</b></div></div>
+ <div style="display:{{e.comp.b}}" class="av2 er"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>No tienes acceso a todas las empresas.</b> Pide a un administrador global que la cree como compartida, o elige «Una empresa».</div></div></div></div><div style="display:grid;grid-template-columns:210px 1fr;gap:22px;padding:16px 0;border-top:1px solid #F1F5F9"><div><b style="font-size:14px">3 · Nota</b><div class="m2" style="margin-top:3px;line-height:1.45">Opcional. Para ti y tu equipo, el cliente no la ve.</div></div><div style="display:flex;flex-direction:column;gap:12px;min-width:0"><div class="in" style="min-height:64px;align-items:flex-start;color:#94A3B8">Ej.: cuenta de las OLT de la zona norte. La renueva Luis en enero.</div></div></div><div style="display:grid;grid-template-columns:210px 1fr;gap:22px;padding:16px 0;border-top:1px solid #F1F5F9"><div><b style="font-size:14px">4 · Al guardar</b><div class="m2" style="margin-top:3px;line-height:1.45">Puedes dejarla apagada y encenderla cuando estés listo.</div></div><div style="display:flex;flex-direction:column;gap:12px;min-width:0"><div style="display:flex;align-items:center;gap:12px"><span class="tg on" style="cursor:pointer"><i></i></span><div><b style="font-size:13px">Encenderla al guardar</b><div class="m2">Argos la usa solo cuando está encendida y la prueba salió bien</div></div></div></div></div></div>
+  <aside style="width:350px;flex:0 0 auto;border-left:1px solid #F1F5F9;background:#FAFBFE;padding:18px 20px;display:flex;flex-direction:column;gap:12px;overflow:auto">
+ <div class="sec" style="margin:0">¿Dónde saco el token?</div>
+ <div class="card" style="padding:14px;font-size:13px;line-height:1.55;color:#334155"><b>1.</b> Entra a tu cuenta de SmartOLT.<br><b>2.</b> Ve a <b>General › API key</b>.<br><b>3.</b> Copia la clave y pégala aquí.</div>
+ <div class="av2 wa" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div>Si la clave está <b>limitada a una zona</b>, Argos solo verá las OLT de esa zona.</div></div>
+ <div class="av2 nf" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><div>Después de guardar, pulsa <b>Probar conexión</b>: se comprueba el token y se traen las OLT de la cuenta.</div></div>
+</aside>
+ </div>
+ <footer style="display:flex;align-items:center;gap:10px;padding:14px 22px;border-top:1px solid #F1F5F9;background:#FCFCFE;flex:0 0 auto"><span class="m2">Los cambios quedan en la bitácora; el token siempre como «***».</span><span style="flex:1"></span><button class="btn g">Cancelar</button><button class="btn p" style="padding:11px 24px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Guardar</button></footer>
+</section>
+</main><div class="nota" style="right:44px;bottom:96px;width:330px"><b>Estados del formulario (para revisar el diseño)</b><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button class="fc {{e.no.cls}}" style="padding:5px 10px;font-size:12px;background:transparent;color:#E2E8F0;border-color:#334155" onClick="{{e.no.ir}}">Sin errores</button><button class="fc {{e.sub.cls}}" style="padding:5px 10px;font-size:12px;background:transparent;color:#E2E8F0;border-color:#334155" onClick="{{e.sub.ir}}">409 Subdominio repetido</button><button class="fc {{e.comp.cls}}" style="padding:5px 10px;font-size:12px;background:transparent;color:#E2E8F0;border-color:#334155" onClick="{{e.comp.ir}}">403 Sin acceso global</button><button class="fc {{e.ver.cls}}" style="padding:5px 10px;font-size:12px;background:transparent;color:#E2E8F0;border-color:#334155" onClick="{{e.ver.ir}}">409 Otro la cambió</button></div></div><div class="nota" style="right:44px;bottom:236px;width:330px"><b>Modo</b><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button class="fc {{f.nueva.cls}}" style="padding:5px 10px;font-size:12px;background:transparent;color:#E2E8F0;border-color:#334155" onClick="{{f.nueva.ir}}">Agregar</button><button class="fc {{f.editar.cls}}" style="padding:5px 10px;font-size:12px;background:transparent;color:#E2E8F0;border-color:#334155" onClick="{{f.editar.ir}}">Editar</button></div></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const st = this.state || {};
+const G = {"f": {"ids": ["nueva", "editar"], "def": "nueva"}, "q": {"ids": ["una", "comp"], "def": "una"}, "e": {"ids": ["no", "sub", "comp", "ver"], "def": "no"}, "m": {"ids": ["no"], "def": "no"}};
+const L = {};
+const out = {};
+const cur = (g) => (st[g] === undefined ? G[g].def : st[g]);
+Object.keys(G).forEach((g) => {
+const c = cur(g); const o = {};
+G[g].ids.forEach((id) => { o[id] = { cls: id === c ? 'on' : '', v: id === c ? 'flex' : 'none', b: id === c ? 'block' : 'none', ir: () => this.setState({ [g]: id }) }; });
+out[g] = o; out[g + 'On'] = c !== G[g].def ? 'block' : 'none';
+});
+Object.keys(L).forEach((n) => {
+let rows = L[n].rows;
+if (L[n].por) { const c = cur(L[n].por); rows = rows.filter((r) => c === L[n].todos || String(r.g || '').split(' ').includes(c)); }
+const k = 's_' + n; const s = st[k] === undefined ? L[n].def : st[k];
+out[n] = rows.map((r) => ({ ...r, cls: r.id === s ? 'on' : '', ver: () => this.setState({ [k]: r.id }) }));
+out[n + 'Sel'] = L[n].rows.find((r) => r.id === s) || L[n].rows[0];
+out[n + 'N'] = rows.length;
+out[n + 'Vacio'] = rows.length ? 'none' : 'block';
+});
+out.tema = st.tema === 'osc' ? 'osc' : '';
+out.tTema = () => this.setState({ tema: st.tema === 'osc' ? 'claro' : 'osc' });
+out.subTxt = st.e === 'sub' ? 'zonanorte' : 'miempresa'; out.subCol = st.e === 'sub' ? '#0F172A' : '#94A3B8'; out.subSt = st.e === 'sub' ? 'border:2px solid #DC2626;box-shadow:0 0 0 4px rgba(220,38,38,.12)' : (st.e === 'sub' ? '' : 'border:2px solid #4F46E5;box-shadow:0 0 0 4px rgba(79,70,229,.12)');
+return out;
+}
+}
+</script>
+</body>
+</html>
