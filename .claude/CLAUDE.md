@@ -216,7 +216,9 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
 | `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |
 | `cobros.liquidados` | ledger | liquidacion_id, empresa_id, proveedor, bruto, comision, neto, pagos[] |
-| `caja.depositada` | ledger | deposito_id, empresa_id, caja_id, cuenta_bancaria_id, cuenta_id, monto |
+| `caja.depositada` | ledger | deposito_id, empresa_id, caja_id (null si salió de la custodia), cuenta_bancaria_id, cuenta_id, monto; origen (`turno` \| `custodia`), custodio_id (o null) |
+| `caja.entregada` / `caja.entrega_recibida` / `caja.entrega_rechazada` | ledger (cajas y custodia) | entrega_id, empresa_id, caja_id, entregado_por, monto; entregada: turno_id, recibe_id, autoentrega; recibida: recibido_por, contado, diferencia (a cargo de quien entregó), custodia, sobre_tope; rechazada: rechazado_por, motivo |
+| `cajas.ajustes_cambiados` | ledger (cajas) | empresa_id, campos[] (`fondo_cobros`, `custodia_plazo_dias`, `custodia_tope`, `autoentrega`; solo nombres) |
 | `banco.extracto_importado` / `banco.conciliado` | ledger | extracto_id o conciliacion_id, empresa_id, cuenta_bancaria_id, cuenta_id, lineas, monto; conciliado: linea_id |
 | `cartera.castigada` | ledger | castigo_id, empresa_id, cliente_id, facturas[], monto |
 | `compra.registrada` / `compra.anulada` | ledger | compra_id, empresa_id, proveedor_id, total, iva, periodo_iva |
