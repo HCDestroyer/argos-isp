@@ -1121,6 +1121,29 @@ export interface CatalogoEventos {
         empresa_id: number | null
         campos: string[]
     }
+    /**
+     * notify (R1, `contratos/recordatorios.md`): se creó, editó, retiró, se fijó por defecto (o dejó de
+     * serlo) una plantilla de recordatorio, o se personalizaron o quitaron los recordatorios de un
+     * servicio. `campos` son nombres, nunca valores; `pasos` = cambiaron los pasos.
+     */
+    'recordatorios.plantilla_cambiada': {
+        plantilla_id: number
+        empresa_id: number
+        campos: string[]
+        pasos: boolean
+    }
+    /**
+     * notify (R1): cambió la plantilla de recordatorio de un servicio o de una suscripción (uno de los
+     * dos, el otro null). `plantilla_id` null = vuelve a la por defecto de la empresa; `personalizada`
+     * = la que rige es la personalizada del servicio.
+     */
+    'recordatorios.asignacion_cambiada': {
+        empresa_id: number
+        servicio_id: number | null
+        suscripcion_id: number | null
+        plantilla_id: number | null
+        personalizada: boolean
+    }
 
     /**
      * portal (A5, `contratos/control-velocidad.md` §10.6–10.7): la URL de corte de una empresa
@@ -2044,6 +2067,8 @@ export const EVENTOS = [
     'instalacion.fallida',
     'equipo.wifi_resuelto',
     'notificaciones.config_cambiada',
+    'recordatorios.plantilla_cambiada',
+    'recordatorios.asignacion_cambiada',
     'portal.config_cambiada',
     'portal.codigo_corte_emitido',
     'fiscal.localizacion_instalada',

@@ -120,6 +120,8 @@ const NOMBRES_ENTIDAD: Record<string, string> = {
     'network.servidores_pppoe': 'El servidor PPPoE',
     'notify.plantillas': 'La plantilla de notificación',
     'notify.recordatorios': 'El recordatorio',
+    'notify.plantillas_recordatorio': 'La plantilla de recordatorio',
+    plantilla_recordatorio: 'La plantilla de recordatorio',
     'notify.configuracion_canales': 'La configuración de notificaciones',
     'integraciones.horus_conector': 'La configuración de Horus',
     regla_conciliacion: 'La regla de conciliación',

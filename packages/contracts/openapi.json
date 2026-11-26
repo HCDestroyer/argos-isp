@@ -67197,6 +67197,952 @@
         "x-implementado": true
       }
     },
+    "/api/v1/plantillas-recordatorio": {
+      "get": {
+        "operationId": "plantillasRecordatorioListar",
+        "summary": "Listar plantillas de recordatorio de la empresa activa (sin las personalizadas)",
+        "description": "Plantilla con nombre de una empresa y sus pasos (hasta 8). Rige para un servicio así: la personalizada del servicio, si tiene; si no, la asignada al servicio o a la suscripción; si no, la por defecto de la empresa. Cada empresa nace con «Estándar» (los tres recordatorios de siempre). La por defecto primero; las retiradas solo con `incluir_retiradas`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incluir_retiradas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantillas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlantillaRecordatorio"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "plantillasRecordatorioCrear",
+        "summary": "Crear una plantilla de recordatorio con sus pasos",
+        "description": "Plantilla con nombre de una empresa y sus pasos (hasta 8). Rige para un servicio así: la personalizada del servicio, si tiene; si no, la asignada al servicio o a la suscripción; si no, la por defecto de la empresa. Cada empresa nace con «Estándar» (los tres recordatorios de siempre). 409 `plantilla_duplicada` (nombre en la empresa); 422 si los pasos no son válidos (más de 8, `orden` repetido, días fuera de rango). `por_defecto: true` desplaza a la anterior.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Sin ella, la empresa activa"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "por_defecto": {
+                    "type": "boolean"
+                  },
+                  "pasos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "orden": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8,
+                          "description": "Posición del paso (1 a 8, sin repetir); va en el origen del envío"
+                        },
+                        "disparador": {
+                          "type": "string",
+                          "enum": [
+                            "vencimiento",
+                            "corte_proximo",
+                            "promesa_por_vencer"
+                          ],
+                          "description": "`vencimiento`: días respecto a `vence_en`; `corte_proximo`: días antes del corte previsto; `promesa_por_vencer`: días antes de que venza la promesa"
+                        },
+                        "dias": {
+                          "type": "integer",
+                          "minimum": -60,
+                          "maximum": 60,
+                          "description": "Negativo antes, 0 el día, positivo después (solo `vencimiento` admite después)"
+                        },
+                        "hora": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                          "description": "HH:MM, hora de Guatemala (por defecto 09:00)"
+                        },
+                        "aviso": {
+                          "type": "string",
+                          "enum": [
+                            "factura_por_vencer",
+                            "factura_vencida",
+                            "corte_proximo",
+                            "promesa_por_vencer"
+                          ],
+                          "description": "Código que se pide a Iris; por defecto según disparador y días"
+                        },
+                        "evento_plantilla": {
+                          "type": "string",
+                          "enum": [
+                            "recordatorio.1",
+                            "recordatorio.2",
+                            "recordatorio.3",
+                            "recordatorio.corte_proximo",
+                            "recordatorio.promesa_por_vencer"
+                          ],
+                          "description": "Texto local de respaldo en `notify.plantillas`; por defecto según disparador y días"
+                        },
+                        "canales": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "whatsapp",
+                              "correo",
+                              "telegram"
+                            ]
+                          },
+                          "maxItems": 3,
+                          "description": "Canales permitidos; vacío = el que elija Iris (o los locales sin Iris)"
+                        },
+                        "activo": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "orden",
+                        "disparador",
+                        "dias"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "pasos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Plantilla creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-recordatorio/{id}": {
+      "get": {
+        "operationId": "plantillasRecordatorioVer",
+        "summary": "Ver una plantilla de recordatorio con sus pasos",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantilla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "plantillasRecordatorioEditar",
+        "summary": "Editar nombre, descripción y pasos de una plantilla de recordatorio",
+        "description": "`pasos` es el conjunto completo (los que no vengan se borran). No reenvía lo ya enviado. 409 por `version`, `plantilla_duplicada` o `plantilla_personalizada` (se edita desde el servicio).",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "pasos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "orden": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8,
+                          "description": "Posición del paso (1 a 8, sin repetir); va en el origen del envío"
+                        },
+                        "disparador": {
+                          "type": "string",
+                          "enum": [
+                            "vencimiento",
+                            "corte_proximo",
+                            "promesa_por_vencer"
+                          ],
+                          "description": "`vencimiento`: días respecto a `vence_en`; `corte_proximo`: días antes del corte previsto; `promesa_por_vencer`: días antes de que venza la promesa"
+                        },
+                        "dias": {
+                          "type": "integer",
+                          "minimum": -60,
+                          "maximum": 60,
+                          "description": "Negativo antes, 0 el día, positivo después (solo `vencimiento` admite después)"
+                        },
+                        "hora": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                          "description": "HH:MM, hora de Guatemala (por defecto 09:00)"
+                        },
+                        "aviso": {
+                          "type": "string",
+                          "enum": [
+                            "factura_por_vencer",
+                            "factura_vencida",
+                            "corte_proximo",
+                            "promesa_por_vencer"
+                          ],
+                          "description": "Código que se pide a Iris; por defecto según disparador y días"
+                        },
+                        "evento_plantilla": {
+                          "type": "string",
+                          "enum": [
+                            "recordatorio.1",
+                            "recordatorio.2",
+                            "recordatorio.3",
+                            "recordatorio.corte_proximo",
+                            "recordatorio.promesa_por_vencer"
+                          ],
+                          "description": "Texto local de respaldo en `notify.plantillas`; por defecto según disparador y días"
+                        },
+                        "canales": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "whatsapp",
+                              "correo",
+                              "telegram"
+                            ]
+                          },
+                          "maxItems": 3,
+                          "description": "Canales permitidos; vacío = el que elija Iris (o los locales sin Iris)"
+                        },
+                        "activo": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "orden",
+                        "disparador",
+                        "dias"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-recordatorio/{id}/asignar-masivo": {
+      "post": {
+        "operationId": "plantillasRecordatorioAsignarMasivo",
+        "summary": "Asignar la plantilla a varios servicios (uno por uno, todo o nada)",
+        "description": "Cada servicio que cambia deja su fila de auditoría y su `recordatorios.asignacion_cambiada`. Si uno no puede recibirla (otra empresa, no existe) no se asigna a ninguno.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "servicio_ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionRecordatorioMasiva"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.asignar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.asignar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-recordatorio/{id}/fijar-por-defecto": {
+      "post": {
+        "operationId": "plantillasRecordatorioFijarPorDefecto",
+        "summary": "Hacer de esta la plantilla de recordatorio por defecto de su empresa",
+        "description": "La anterior deja de serlo en la misma transacción. 409 `plantilla_retirada`, `plantilla_personalizada` o por `version`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla por defecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-recordatorio/{id}/retirar": {
+      "post": {
+        "operationId": "plantillasRecordatorioRetirar",
+        "summary": "Retirar una plantilla de recordatorio (con motivo)",
+        "description": "Quien ya la tiene la conserva; no se asigna más (409 `plantilla_retirada` al asignar). 409 `plantilla_por_defecto` (fija otra antes), `plantilla_retirada`, `plantilla_personalizada` o por `version`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla retirada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.retirar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.retirar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/a-cargo": {
       "get": {
         "operationId": "portalACargo",
@@ -83063,6 +84009,12 @@
                         "proveedores.ver",
                         "qos.gestionar",
                         "qos.ver",
+                        "recordatorios.asignar",
+                        "recordatorios.crear",
+                        "recordatorios.editar",
+                        "recordatorios.personalizar",
+                        "recordatorios.retirar",
+                        "recordatorios.ver",
                         "red.ver",
                         "red_acceso.adoptar",
                         "red_acceso.descubrir",
@@ -83534,6 +84486,12 @@
                         "proveedores.ver",
                         "qos.gestionar",
                         "qos.ver",
+                        "recordatorios.asignar",
+                        "recordatorios.crear",
+                        "recordatorios.editar",
+                        "recordatorios.personalizar",
+                        "recordatorios.retirar",
+                        "recordatorios.ver",
                         "red.ver",
                         "red_acceso.adoptar",
                         "red_acceso.descubrir",
@@ -96537,6 +97495,530 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/recordatorios": {
+      "get": {
+        "operationId": "serviciosRecordatoriosVer",
+        "summary": "Recordatorios que rigen para un servicio: plantilla efectiva y de dónde sale",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recordatorios del servicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordatoriosDestino"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/recordatorios/asignar": {
+      "post": {
+        "operationId": "serviciosRecordatoriosAsignar",
+        "summary": "Asignar una plantilla de recordatorio a un servicio (null = la por defecto)",
+        "description": "422 `plantilla_de_otra_empresa` o `plantilla_personalizada`; 409 `plantilla_retirada`. La personalizada del servicio, si tiene, sigue mandando.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plantilla_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "null = vuelve a la por defecto de la empresa"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Asignación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.asignar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.asignar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/recordatorios/personalizados": {
+      "put": {
+        "operationId": "serviciosRecordatoriosPersonalizar",
+        "summary": "Poner o reemplazar los recordatorios personalizados de un servicio",
+        "description": "Sus pasos sustituyen completos a los de la plantilla para este servicio. `version` 0 la crea; con valor, la de la personalizada (409 si cambió). 422 si los pasos no son válidos.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "0 si el servicio aún no tiene personalizados; si no, la `version` de su personalizada"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "pasos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "orden": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8,
+                          "description": "Posición del paso (1 a 8, sin repetir); va en el origen del envío"
+                        },
+                        "disparador": {
+                          "type": "string",
+                          "enum": [
+                            "vencimiento",
+                            "corte_proximo",
+                            "promesa_por_vencer"
+                          ],
+                          "description": "`vencimiento`: días respecto a `vence_en`; `corte_proximo`: días antes del corte previsto; `promesa_por_vencer`: días antes de que venza la promesa"
+                        },
+                        "dias": {
+                          "type": "integer",
+                          "minimum": -60,
+                          "maximum": 60,
+                          "description": "Negativo antes, 0 el día, positivo después (solo `vencimiento` admite después)"
+                        },
+                        "hora": {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                          "description": "HH:MM, hora de Guatemala (por defecto 09:00)"
+                        },
+                        "aviso": {
+                          "type": "string",
+                          "enum": [
+                            "factura_por_vencer",
+                            "factura_vencida",
+                            "corte_proximo",
+                            "promesa_por_vencer"
+                          ],
+                          "description": "Código que se pide a Iris; por defecto según disparador y días"
+                        },
+                        "evento_plantilla": {
+                          "type": "string",
+                          "enum": [
+                            "recordatorio.1",
+                            "recordatorio.2",
+                            "recordatorio.3",
+                            "recordatorio.corte_proximo",
+                            "recordatorio.promesa_por_vencer"
+                          ],
+                          "description": "Texto local de respaldo en `notify.plantillas`; por defecto según disparador y días"
+                        },
+                        "canales": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "whatsapp",
+                              "correo",
+                              "telegram"
+                            ]
+                          },
+                          "maxItems": 3,
+                          "description": "Canales permitidos; vacío = el que elija Iris (o los locales sin Iris)"
+                        },
+                        "activo": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "orden",
+                        "disparador",
+                        "dias"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "version",
+                  "pasos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla personalizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.personalizar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.personalizar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/recordatorios/quitar-personalizados": {
+      "post": {
+        "operationId": "serviciosRecordatoriosQuitarPersonalizados",
+        "summary": "Quitar los recordatorios personalizados de un servicio (vuelve a su plantilla)",
+        "description": "404 si no tiene personalizados; 409 por `version` (la de la personalizada).",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recordatorios del servicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordatoriosDestino"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.personalizar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.personalizar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/reservar-ip": {
       "post": {
         "operationId": "serviciosReservarIp",
@@ -98771,6 +100253,205 @@
         "x-implementado": true
       }
     },
+    "/api/v1/suscripciones/{id}/recordatorios": {
+      "get": {
+        "operationId": "suscripcionesRecordatoriosVer",
+        "summary": "Recordatorios que rigen para una suscripción: plantilla efectiva y de dónde sale",
+        "description": "Las suscripciones no tienen personalizados. 404 mientras no exista la suscripción (I1).",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recordatorios de la suscripción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordatoriosDestino"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/suscripciones/{id}/recordatorios/asignar": {
+      "post": {
+        "operationId": "suscripcionesRecordatoriosAsignar",
+        "summary": "Asignar una plantilla de recordatorio a una suscripción (null = la por defecto)",
+        "description": "422 `plantilla_de_otra_empresa` o `plantilla_personalizada`; 409 `plantilla_retirada`; 404 si la suscripción no existe.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plantilla_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "null = vuelve a la por defecto de la empresa"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Asignación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionRecordatorio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso recordatorios.asignar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "recordatorios.asignar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/telegram/webhook": {
       "post": {
         "operationId": "telegramWebhook",
@@ -99908,6 +101589,12 @@
                             "proveedores.ver",
                             "qos.gestionar",
                             "qos.ver",
+                            "recordatorios.asignar",
+                            "recordatorios.crear",
+                            "recordatorios.editar",
+                            "recordatorios.personalizar",
+                            "recordatorios.retirar",
+                            "recordatorios.ver",
                             "red.ver",
                             "red_acceso.adoptar",
                             "red_acceso.descubrir",
@@ -104053,6 +105740,67 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "AsignacionRecordatorio": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "servicio_id",
+          "suscripcion_id",
+          "plantilla_id",
+          "cambio"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "suscripcion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plantilla_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = la por defecto de la empresa"
+          },
+          "cambio": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AsignacionRecordatorioMasiva": {
+        "type": "object",
+        "required": [
+          "plantilla_id",
+          "asignados",
+          "sin_cambios"
+        ],
+        "properties": {
+          "plantilla_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asignados": {
+            "type": "integer"
+          },
+          "sin_cambios": {
+            "type": "integer"
           }
         }
       },
@@ -129044,6 +130792,12 @@
           "proveedores.ver",
           "qos.gestionar",
           "qos.ver",
+          "recordatorios.asignar",
+          "recordatorios.crear",
+          "recordatorios.editar",
+          "recordatorios.personalizar",
+          "recordatorios.retirar",
+          "recordatorios.ver",
           "red.ver",
           "red_acceso.adoptar",
           "red_acceso.descubrir",
@@ -129407,6 +131161,12 @@
           "Ver proveedores",
           "Crear perfiles de QoS, crear, editar, activar y desactivar sus clases y elegir el perfil de un router",
           "Ver los perfiles y clases de QoS (prioridad por protocolo en el árbol)",
+          "Asignar una plantilla de recordatorio a servicios o suscripciones (también en lote)",
+          "Crear plantillas de recordatorio de pago (con nombre, por empresa)",
+          "Editar una plantilla de recordatorio (nombre, pasos) o fijarla como la por defecto de su empresa",
+          "Poner o quitar recordatorios personalizados a un servicio (excepción del cliente)",
+          "Retirar una plantilla de recordatorio (no se asigna más; quien la tiene la conserva)",
+          "Ver las plantillas de recordatorio de pago y cuál rige para un servicio o suscripción",
           "Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)",
           "Importar a Argos VLAN y servidores PPPoE que ya existen en el router (sin tocarlo)",
           "Leer del router sus VLAN, servidores PPPoE, perfiles y pools (no escribe)",
@@ -131879,6 +133639,78 @@
           }
         }
       },
+      "PasoRecordatorio": {
+        "type": "object",
+        "required": [
+          "orden",
+          "disparador",
+          "dias",
+          "hora",
+          "aviso",
+          "evento_plantilla",
+          "canales",
+          "activo"
+        ],
+        "properties": {
+          "orden": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "disparador": {
+            "type": "string",
+            "enum": [
+              "vencimiento",
+              "corte_proximo",
+              "promesa_por_vencer"
+            ]
+          },
+          "dias": {
+            "type": "integer",
+            "minimum": -60,
+            "maximum": 60,
+            "description": "Negativo antes, positivo después"
+          },
+          "hora": {
+            "type": "string",
+            "description": "HH:MM, hora de Guatemala"
+          },
+          "aviso": {
+            "type": "string",
+            "enum": [
+              "factura_por_vencer",
+              "factura_vencida",
+              "corte_proximo",
+              "promesa_por_vencer"
+            ]
+          },
+          "evento_plantilla": {
+            "type": "string",
+            "enum": [
+              "recordatorio.1",
+              "recordatorio.2",
+              "recordatorio.3",
+              "recordatorio.corte_proximo",
+              "recordatorio.promesa_por_vencer"
+            ]
+          },
+          "canales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "correo",
+                "telegram",
+                "whatsapp"
+              ]
+            },
+            "description": "Vacío = el que elija Iris"
+          },
+          "activo": {
+            "type": "boolean"
+          }
+        }
+      },
       "PausaServicio": {
         "type": "object",
         "required": [
@@ -133615,6 +135447,93 @@
           },
           "activa": {
             "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PlantillaRecordatorio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "descripcion",
+          "por_defecto",
+          "servicio_id",
+          "retirada_en",
+          "retirada_por",
+          "motivo_retiro",
+          "pasos",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "por_defecto": {
+            "type": "boolean"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Con valor: la personalizada de ese servicio"
+          },
+          "retirada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "retirada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo_retiro": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pasos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasoRecordatorio"
+            }
           },
           "version": {
             "type": "integer",
@@ -138941,6 +140860,93 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "RecordatoriosDestino": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "servicio_id",
+          "suscripcion_id",
+          "origen",
+          "plantilla",
+          "asignada",
+          "personalizada"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "suscripcion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "personalizada",
+              "asignada_servicio",
+              "asignada_suscripcion",
+              "por_defecto"
+            ],
+            "description": "De dónde sale la plantilla que rige"
+          },
+          "plantilla": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlantillaRecordatorio"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "La que rige"
+          },
+          "asignada": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "plantilla_id",
+                  "nombre",
+                  "retirada"
+                ],
+                "properties": {
+                  "plantilla_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "retirada": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "La asignada (aunque la personalizada la tape); null = la por defecto"
+          },
+          "personalizada": {
+            "type": "boolean"
           }
         }
       },
@@ -146698,6 +148704,12 @@
               "proveedores.ver",
               "qos.gestionar",
               "qos.ver",
+              "recordatorios.asignar",
+              "recordatorios.crear",
+              "recordatorios.editar",
+              "recordatorios.personalizar",
+              "recordatorios.retirar",
+              "recordatorios.ver",
               "red.ver",
               "red_acceso.adoptar",
               "red_acceso.descubrir",
@@ -146888,6 +148900,9 @@
               "promociones_velocidad.quitar",
               "promociones_velocidad.ver",
               "prospectos.registrar",
+              "recordatorios.asignar",
+              "recordatorios.personalizar",
+              "recordatorios.ver",
               "red.ver",
               "red_acceso.ver",
               "redes.ver",
@@ -147212,6 +149227,7 @@
               "promociones_velocidad.ver",
               "proveedores.ver",
               "qos.ver",
+              "recordatorios.ver",
               "red.ver",
               "red_acceso.ver",
               "redes.ver",

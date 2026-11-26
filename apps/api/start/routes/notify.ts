@@ -37,6 +37,7 @@ import {
 } from '#notify/configuracion_panel'
 import ConfigurarNotificaciones from '#notify/actions/configurar_notificaciones'
 import ProbarCanalNotificacion from '#notify/actions/probar_canal_notificacion'
+import recordatorios from '#start/routes/recordatorios'
 
 const DESCRIPCION_CONFIGURACION =
     'Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos ' +
@@ -358,6 +359,7 @@ const notify: Ruta[] = [
             return { ok: true }
         },
     }),
+    ...recordatorios,
 ]
 
 export default notify
