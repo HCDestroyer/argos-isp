@@ -44,6 +44,16 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'cajas.recibir_entrega',
         documento: 'la entrega con un asiento de ajuste (una entrega recibida no se anula)',
     },
+    // B9 (§5.7): la reposición sella sus gastos y el conteo es la diferencia del encargado; los dos
+    // son de solo inserción
+    reposicion_caja: {
+        accion: 'caja_chica.reponer',
+        documento: 'la reposición con un asiento de ajuste (una reposición no se anula: sella sus gastos)',
+    },
+    conteo_caja: {
+        accion: 'caja_chica.contar',
+        documento: 'el conteo con otro conteo o un asiento de ajuste (un conteo no se anula)',
+    },
     deposito: { accion: 'cajas.depositar', documento: 'el depósito con un asiento de ajuste (no se anula)' },
     traslado: { accion: 'bancos.trasladar', documento: 'el traslado con otro traslado en sentido contrario' },
     banco: {

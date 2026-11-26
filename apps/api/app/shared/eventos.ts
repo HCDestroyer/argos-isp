@@ -1440,7 +1440,61 @@ export interface CatalogoEventos {
     /** Ajustes de cajas y custodia de la empresa (fondo de cambio, plazo, tope, «lo deposito yo»). */
     'cajas.ajustes_cambiados': {
         empresa_id: number
-        campos: Array<'fondo_cobros' | 'custodia_plazo_dias' | 'custodia_tope' | 'autoentrega'>
+        campos: Array<
+            'fondo_cobros' | 'custodia_plazo_dias' | 'custodia_tope' | 'autoentrega' | 'fondo_caja_chica'
+        >
+    }
+    /**
+     * B9 (caja chica, §5.7): un gasto pagado con el efectivo de la caja chica, con su comprobante.
+     * `bajo_minimo`: el efectivo quedó bajo el 30 % del fondo (avisa para reponer).
+     */
+    'caja_chica.gasto_registrado': {
+        egreso_id: number
+        empresa_id: number
+        caja_id: number
+        categoria: string
+        monto: Dinero
+        /** trae factura a nombre de la empresa: pasa a Compras */
+        con_factura: boolean
+        /** efectivo de la caja chica después del gasto */
+        efectivo: Dinero
+        bajo_minimo: boolean
+    }
+    /** B9: la caja chica se repuso por lo gastado desde la custodia o el banco (sella sus gastos). */
+    'caja_chica.repuesta': {
+        reposicion_id: number
+        empresa_id: number
+        caja_id: number
+        origen: 'custodia' | 'banco'
+        /** persona de cuya custodia salió (null desde el banco) */
+        custodio_id: number | null
+        /** cuenta del libro de la que salió (1.1.15 o el banco) */
+        cuenta_id: number
+        monto: Dinero
+        /** fondo fijo con el que queda */
+        fondo: Dinero
+        gastos: number
+        gastos_monto: Dinero
+        conteos: number
+    }
+    /** B9: conteo sorpresa de una caja chica; la diferencia queda a cargo de su encargado. */
+    'caja.contada': {
+        conteo_id: number
+        empresa_id: number
+        caja_id: number
+        responsable_id: number | null
+        esperado: Dinero
+        contado: Dinero
+        /** contado − esperado */
+        diferencia: Dinero
+    }
+    /** B9: el archivo del comprobante de un egreso (una vez por egreso). */
+    'egreso.comprobante_adjuntado': {
+        egreso_id: number
+        empresa_id: number
+        caja_id: number | null
+        tipo_archivo: string
+        tamano: number
     }
     /** Decisión del PM 20: la caja cambió su formato de impresión (`pos_80` o `carta`). */
     'caja.impresion_cambiada': {
@@ -2148,6 +2202,10 @@ export const EVENTOS = [
     'caja.entrega_recibida',
     'caja.entrega_rechazada',
     'cajas.ajustes_cambiados',
+    'caja_chica.gasto_registrado',
+    'caja_chica.repuesta',
+    'caja.contada',
+    'egreso.comprobante_adjuntado',
     'banco_origen.cambiado',
     'cartera.castigada',
     'compra.registrada',

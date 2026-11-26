@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import type { TipoCaja } from '#ledger/custodia'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -15,9 +15,11 @@ import { listarCajas, type CajaVista } from '#ledger/cajas'
  * - Crea su subcuenta de `1.1.01 Cajas` en el libro (`1.1.01.NN`, el siguiente número libre),
  *   marcada como de esa empresa: un asiento de otra empresa no puede usarla.
  * - Nombre único por empresa (409 `caja_duplicada`). `cajero_id` opcional (cajero asignado).
- * - B1 del plan de contabilidad (§5.7): `tipo` = `cobros` (de fábrica; la caja chica, `gastos`, llega
- *   en B9: 422 `tipo_no_disponible`) y `fondo_fijo` opcional (sin él, el fondo de cambio de la
- *   empresa, `GET /cajas/ajustes`).
+ * - B1 del plan de contabilidad (§5.7): `tipo` = `cobros` (de fábrica) o `gastos` (caja chica, B9) y
+ *   `fondo_fijo` opcional (sin él, el de la empresa en `GET /cajas/ajustes`: `fondo_cobros` o
+ *   `fondo_caja_chica`).
+ * - B9: una caja chica no tiene turnos ni cobra; su `cajero_id` es su encargado. Nace vacía: la
+ *   primera reposición (`POST /cajas/:id/reponer`) le pone su fondo fijo desde la custodia o el banco.
  */
 
 export interface EntradaCrearCaja {
@@ -42,13 +44,6 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
             ])
         }
         const tipo = input.tipo ?? 'cobros'
-        if (tipo !== 'cobros') {
-            throw new ReglaNegocio(
-                'La caja chica (tipo gastos) todavía no está disponible: llega con B9',
-                'tipo_no_disponible',
-                [{ field: 'tipo', message: 'Solo cajas de cobros por ahora', rule: 'enum' }],
-            )
-        }
         let fondoFijo: string | null = null
         if (input.fondo_fijo !== undefined && input.fondo_fijo !== null && input.fondo_fijo !== '') {
             const monto = dec(input.fondo_fijo)

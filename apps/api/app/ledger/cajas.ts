@@ -29,11 +29,14 @@ export interface CajaVista {
     /** decisión del PM 20: formato del recibo (`pos_80` de fábrica) y de la factura (`carta`) */
     formato_recibo: FormatoImpresion
     formato_factura: FormatoImpresion
-    /** B1 (§5.7): `cobros` (turno, cierre y entrega) o `gastos` (caja chica, B9) */
+    /**
+     * B1 (§5.7): `cobros` (turno, cierre y entrega) o `gastos` (caja chica, B9: fondo fijo, sin turnos;
+     * su `cajero_id` es su encargado)
+     */
     tipo: 'cobros' | 'gastos'
     /** fondo fijo propio; null = el fondo de cambio de la empresa */
     fondo_fijo: string | null
-    /** fondo con el que abre: el propio o el de la empresa */
+    /** fondo con el que abre (cobros) o su fondo fijo (caja chica): el propio o el de la empresa */
     fondo_fijo_efectivo: string
     version: number
     created_at: Date
@@ -127,7 +130,9 @@ export async function listarCajas(
             'c.tipo',
             'c.fondo_fijo',
             db.raw(
-                `coalesce(c.fondo_fijo, (SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_cobros})::text AS fondo_fijo_efectivo`,
+                `coalesce(c.fondo_fijo, CASE WHEN c.tipo = 'gastos'
+                    THEN coalesce((SELECT a.fondo_caja_chica FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_caja_chica})
+                    ELSE coalesce((SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_cobros}) END)::text AS fondo_fijo_efectivo`,
             ),
             'c.version',
             'c.created_at',

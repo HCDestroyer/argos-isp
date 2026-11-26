@@ -53,6 +53,10 @@ export interface EgresoVista {
     anulado_por: number | null
     motivo_anulacion: string | null
     asiento_reverso_id: number | null
+    /** B9: tiene el archivo de su comprobante */
+    con_comprobante: boolean
+    /** B9: gasto de caja chica ya repuesto (sellado) */
+    reposicion_id: number | null
     version: number
     created_at: Date
     updated_at: Date
@@ -107,6 +111,12 @@ function consultaEgresos(cliente: QueryClientContract) {
                 'an.anulado_por',
                 'an.motivo as motivo_anulacion',
                 'an.asiento_id as asiento_reverso_id',
+                cliente.raw(
+                    'EXISTS (SELECT 1 FROM ledger.egresos_comprobantes x WHERE x.egreso_id = e.id) AS con_comprobante',
+                ),
+                cliente.raw(
+                    `(SELECT rd.reposicion_id FROM ledger.reposiciones_documentos rd WHERE rd.documento_tipo = 'egreso' AND rd.documento_id = e.id) AS reposicion_id`,
+                ),
                 'e.version',
                 'e.created_at',
                 'e.updated_at',

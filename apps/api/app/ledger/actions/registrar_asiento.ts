@@ -81,6 +81,10 @@ export const ORIGENES_ASIENTO = [
     // B1 del plan de contabilidad (§5.7): «Recibí» de una entrega de caja (1.1.15 / Caja);
     // origen_id = `ledger.entregas.id`
     'entrega_caja',
+    // B9 (caja chica, §5.7): reposición (Caja chica / 1.1.15 o Banco; origen_id = `ledger.reposiciones.id`)
+    // y conteo con diferencia (Faltantes / Caja chica o Caja chica / Sobrantes; origen_id = `ledger.conteos_caja.id`)
+    'reposicion_caja',
+    'conteo_caja',
 ] as const
 
 /**

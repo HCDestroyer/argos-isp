@@ -143,7 +143,7 @@ export const CHECKS_CUSTODIA: readonly DefinicionCheck[] = [
     {
         clave: 'custodia_cuadra',
         tipo: 'mensual',
-        titulo: '1.1.15 = entregas recibidas − depósitos desde la custodia',
+        titulo: '1.1.15 = entregas recibidas − depósitos desde la custodia − reposiciones de caja chica desde ella',
     },
     {
         clave: 'custodia_en_plazo',

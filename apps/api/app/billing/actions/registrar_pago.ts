@@ -447,13 +447,13 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         const cajas = new Map<number, { cajaId: number; cuentaId: number; turnoId: number | null }>()
         if (input.metodo !== 'caja') return cajas
         const usuario = usuarioDelActor(t.ctx.actor)
-        type CajaPedida = { id: number; empresa_id: number; cuenta_id: number; activa: boolean }
+        type CajaPedida = { id: number; empresa_id: number; cuenta_id: number; activa: boolean; tipo: string }
         let pedida: CajaPedida | null = null
         if (input.caja_id) {
             pedida = (await t.trx
                 .from('ledger.cajas')
                 .where('id', input.caja_id)
-                .select('id', 'empresa_id', 'cuenta_id', 'activa')
+                .select('id', 'empresa_id', 'cuenta_id', 'activa', 'tipo')
                 .first()) as CajaPedida | null
             if (!pedida || !pedida.activa) {
                 throw new ValidacionFallida([
@@ -461,6 +461,16 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                         field: 'caja_id',
                         message: `La caja ${input.caja_id} no existe o está inactiva`,
                         rule: 'caja',
+                    },
+                ])
+            }
+            // B9: en la caja chica no se cobra (solo gastos con fondo fijo)
+            if (pedida.tipo === 'gastos') {
+                throw new ValidacionFallida([
+                    {
+                        field: 'caja_id',
+                        message: `La caja ${input.caja_id} es una caja chica: no recibe cobros`,
+                        rule: 'caja_chica_no_cobra',
                     },
                 ])
             }

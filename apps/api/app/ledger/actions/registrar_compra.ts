@@ -4,6 +4,7 @@ import { ValidacionFallida } from '#shared/errores'
 import { aTexto } from '#ledger/dinero'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { resolverOrigenEgreso, type MetodoEgreso } from '#ledger/egresos'
+import { exigirSalidaDeCaja } from '#ledger/caja_chica'
 import { movimientosCompra, verCompra, type CompraVista, type CondicionCompra } from '#ledger/compras'
 import {
     documentoCompra,
@@ -120,6 +121,10 @@ export default class RegistrarCompra extends DomainAction<EntradaRegistrarCompra
                 },
             ])
         }
+
+        // B9 (§5.7): de una caja chica, hasta su efectivo (el comprobante se adjunta al egreso antes de
+        // reponer); N2: de una caja de cobros no, si la empresa ya tiene caja chica
+        if (origen?.caja_id) await exigirSalidaDeCaja(t.trx, origen.caja_id, compra.neto, 'compra')
 
         const registradoPor = usuarioDelActor(t.ctx.actor)
         const compraId = await insertarCompra(

@@ -16,6 +16,10 @@ import {
     AjustesCajas,
     CustodiaEfectivo,
     EntregaCaja,
+    EstadoCajaChica,
+    GastoCajaChica,
+    ReposicionCaja,
+    ConteoCaja,
     CategoriaEgreso,
     CierrePeriodo,
     Cuenta,
@@ -52,9 +56,23 @@ import EntregarCaja from '#ledger/actions/entregar_caja'
 import RecibirEntrega from '#ledger/actions/recibir_entrega'
 import RechazarEntrega from '#ledger/actions/rechazar_entrega'
 import ConfigurarCajas from '#ledger/actions/configurar_cajas'
+import RegistrarGastoCajaChica from '#ledger/actions/registrar_gasto_caja_chica'
+import ReponerCajaChica from '#ledger/actions/reponer_caja_chica'
+import ContarCaja from '#ledger/actions/contar_caja'
+import AdjuntarComprobanteEgreso from '#ledger/actions/adjuntar_comprobante_egreso'
+import { estadoCajaChica, listarConteos, listarReposiciones } from '#ledger/caja_chica'
+import { exigirComprobanteDeEgreso } from '#ledger/comprobantes_egreso'
+import {
+    TAMANO_MAXIMO_COMPROBANTE,
+    extensionComprobante,
+    leerArchivoComprobante,
+    type TipoComprobante,
+} from '#billing/comprobantes_archivos'
+import { ArchivoComprobante } from '#billing/esquemas'
+import { readFile } from 'node:fs/promises'
 import { ajustesCajas, listarEntregas, resumenCustodia } from '#ledger/custodia'
 import { alcanceDePermiso } from '#core/acl'
-import { NoAutenticado, NoEncontrado } from '#shared/errores'
+import { NoAutenticado, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { EmpresaRequerida } from '#shared/empresa_activa'
 import db from '@adonisjs/lucid/services/db'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -67,6 +85,9 @@ import cierres from '#start/routes/cierres'
 import ejercicios from '#start/routes/ejercicios'
 import apertura from '#start/routes/apertura'
 import libros from '#start/routes/libros'
+
+const DESCRIPCION_ARCHIVO =
+    'Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido'
 
 const cajas: Ruta[] = [
     definirRuta({
@@ -188,7 +209,138 @@ const cajas: Ruta[] = [
         },
     }),
     ...custodiaRutas(),
+    ...cajaChicaRutas(),
 ]
+
+/** Archivo `archivo` de un multipart (uno, hasta 5 MB); null si no vino (la acción responde 422). */
+async function archivoSubido(
+    ctx: HttpContext,
+): Promise<{ contenido: Uint8Array; nombre: string | null } | null> {
+    const archivos = ctx.request.files('archivo')
+    if (archivos.length > 1) {
+        throw new ValidacionFallida([{ field: 'archivo', message: 'Adjunta un solo archivo', rule: 'uno' }])
+    }
+    const archivo = archivos[0]
+    if (!archivo?.tmpPath) return null
+    if (archivo.size > TAMANO_MAXIMO_COMPROBANTE) {
+        throw new ValidacionFallida([{ field: 'archivo', message: 'El máximo es 5 MB', rule: 'tamano' }])
+    }
+    return { contenido: await readFile(archivo.tmpPath), nombre: archivo.clientName }
+}
+
+/** B9 del plan de contabilidad (§5.7): caja chica (gasto, reposición y conteo). */
+function cajaChicaRutas(): Ruta[] {
+    return [
+        definirRuta({
+            metodo: 'get',
+            ruta: '/cajas/:id/caja-chica',
+            operacion: 'cajasCajaChica',
+            resumen: 'Estado de una caja chica: efectivo + comprobantes sin reponer = fondo fijo',
+            etiqueta: 'cajas',
+            permiso: 'cajas.ver',
+            descripcion:
+                'Fondo fijo, efectivo (saldo de su cuenta en el libro), gastos sin reponer (y cuántos sin archivo), diferencias de conteo, si cuadra, lo que se repone (por_reponer) y el % del fondo (bajo 30 el panel avisa). 422 no_es_caja_chica con una caja de cobros. Alcance por caja.',
+            respuesta: { status: 200, descripcion: 'Caja chica', esquema: EstadoCajaChica },
+            handler: async (ctx, { params }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await existeCaja(id))
+                return estadoCajaChica(id)
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/cajas/:id/gastos',
+            operacion: 'cajasRegistrarGasto',
+            resumen: 'Registrar un gasto de la caja chica con su comprobante (Gasto / Caja chica)',
+            etiqueta: 'cajas',
+            permiso: 'caja_chica.registrar_gasto',
+            cuerpo: v.gastoCajaChicaValidator,
+            multipart: { archivos: { archivo: DESCRIPCION_ARCHIVO } },
+            idempotente: true,
+            descripcion:
+                'Comprobante obligatorio (`archivo`; 422 archivo required, tipo o tamano). Sin tope por gasto: hasta el efectivo de la caja (422 efectivo_insuficiente). Quien no tiene egresos.registrar_sin_limite solo registra en la caja chica de la que es encargado (403 caja_ajena). Con `con_factura`, `pasar_a_compras` = true: sigue POST /compras/desde-egreso/:egreso_id para el IVA. 422 no_es_caja_chica. Emite caja_chica.gasto_registrado.',
+            respuesta: { status: 201, descripcion: 'Gasto registrado', esquema: GastoCajaChica },
+            handler: async (ctx, { cuerpo, params }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await existeCaja(id))
+                return new RegistrarGastoCajaChica().execute(
+                    { ...cuerpo, caja_id: id, archivo: await archivoSubido(ctx) },
+                    ctx.contextoAccion(),
+                )
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/cajas/:id/reponer',
+            operacion: 'cajasReponer',
+            resumen: 'Reponer la caja chica por lo gastado, desde tu custodia o desde el banco',
+            etiqueta: 'cajas',
+            permiso: 'caja_chica.reponer',
+            cuerpo: v.reponerCajaChicaValidator,
+            idempotente: true,
+            descripcion:
+                'Monto = fondo fijo − efectivo (lo gastado y los faltantes de conteo); nunca desde una caja de cobros. Sella los gastos y conteos pendientes (ya no se anulan). 422 gastos_sin_comprobante (con los egresos), nada_que_reponer, monto_distinto, custodia_insuficiente, cuenta_de_otra_empresa. Asiento reposicion_caja (Caja chica / 1.1.15 o Banco). Emite caja_chica.repuesta.',
+            respuesta: { status: 201, descripcion: 'Reposición registrada', esquema: ReposicionCaja },
+            handler: async (ctx, { cuerpo, params }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await existeCaja(id))
+                return new ReponerCajaChica().execute({ ...cuerpo, caja_id: id }, ctx.contextoAccion())
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/cajas/:id/contar',
+            operacion: 'cajasContar',
+            resumen: 'Conteo sorpresa de la caja chica',
+            etiqueta: 'cajas',
+            permiso: 'caja_chica.contar',
+            cuerpo: v.contarCajaValidator,
+            idempotente: true,
+            descripcion:
+                'Esperado = efectivo en el libro. Con diferencia, motivo obligatorio (422) y asiento conteo_caja a cargo del encargado (Faltantes de caja / Caja chica o Caja chica / Sobrantes de caja); la siguiente reposición la repone. Emite caja.contada.',
+            respuesta: { status: 201, descripcion: 'Conteo registrado', esquema: ConteoCaja },
+            handler: async (ctx, { cuerpo, params }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await existeCaja(id))
+                return new ContarCaja().execute({ ...cuerpo, caja_id: id }, ctx.contextoAccion())
+            },
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/cajas/:id/reposiciones',
+            operacion: 'cajasReposiciones',
+            resumen: 'Reposiciones de una caja chica (la más reciente primero)',
+            etiqueta: 'cajas',
+            permiso: 'cajas.ver',
+            query: v.listarTurnosValidator,
+            respuesta: {
+                status: 200,
+                descripcion: 'Página de reposiciones',
+                esquema: pagina(ReposicionCaja),
+            },
+            handler: async (ctx, { params, query }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await existeCaja(id))
+                return listarReposiciones(id, query)
+            },
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/cajas/:id/conteos',
+            operacion: 'cajasConteos',
+            resumen: 'Conteos de una caja chica (el más reciente primero)',
+            etiqueta: 'cajas',
+            permiso: 'cajas.ver',
+            query: v.listarTurnosValidator,
+            respuesta: { status: 200, descripcion: 'Página de conteos', esquema: pagina(ConteoCaja) },
+            handler: async (ctx, { params, query }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await existeCaja(id))
+                return listarConteos(id, query)
+            },
+        }),
+    ]
+}
 
 /** Empresa de una lectura por empresa: `empresa_id` o la activa (422 empresa_requerida). */
 function empresaDeLectura(ctx: HttpContext, empresaId: number | undefined): number {
@@ -591,6 +743,54 @@ const egresos: Ruta[] = [
                 exigirAcceso(ctx, caja ?? { caja: [cajaId] })
             }
             return new RegistrarEgreso().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/egresos/:id/comprobante',
+        operacion: 'egresosAdjuntarComprobante',
+        resumen: 'Adjuntar el comprobante (foto o PDF) de un egreso que no lo tiene',
+        etiqueta: 'egresos',
+        permiso: 'egresos.adjuntar_comprobante',
+        cuerpo: v.sinCampos,
+        multipart: { archivos: { archivo: DESCRIPCION_ARCHIVO } },
+        idempotente: true,
+        descripcion:
+            'B9: una vez por egreso (409 comprobante_existente). Lo necesitan las compras al contado pagadas con la caja chica antes de reponerla. 422 archivo (required, tipo o tamano). Emite egreso.comprobante_adjuntado.',
+        respuesta: { status: 200, descripcion: 'Egreso con su comprobante', esquema: Egreso },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeEgreso(id))
+            return new AdjuntarComprobanteEgreso().execute(
+                { egreso_id: id, archivo: await archivoSubido(ctx) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/egresos/:id/comprobante',
+        operacion: 'egresosComprobante',
+        resumen: 'Archivo del comprobante de un egreso',
+        etiqueta: 'egresos',
+        permiso: 'egresos.ver',
+        descripcion:
+            'Responde el archivo con su Content-Type e `inline`. 404 si el egreso no tiene comprobante.',
+        respuesta: { status: 200, descripcion: 'Archivo', esquema: ArchivoComprobante },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeEgreso(id))
+            const archivo = await exigirComprobanteDeEgreso(id)
+            const contenido = await leerArchivoComprobante(archivo.archivo)
+            const tipo = archivo.tipo as TipoComprobante
+            ctx.response.header('Content-Type', tipo)
+            ctx.response.header(
+                'Content-Disposition',
+                `inline; filename="egreso-${id}.${extensionComprobante(tipo)}"`,
+            )
+            ctx.response.header('Cache-Control', 'private, no-store')
+            ctx.response.header('X-Content-Type-Options', 'nosniff')
+            ctx.response.send(contenido)
         },
     }),
     definirRuta({
