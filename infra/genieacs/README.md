@@ -132,15 +132,16 @@ primera vez crea o cambia su administrador).
 
 ## 8. Conectar Argos
 
-En Argos, con la empresa correcta elegida: **Configuración › Integraciones › Equipos**:
+En Argos, con la empresa correcta elegida: **Configuración › Integraciones › ACS (GenieACS)** (un ACS por
+empresa, aparte de SmartOLT):
 
 - URL de GenieACS: `https://acs.tuisp.com.gt:7557`
 - Usuario y clave: los del paso 5 (la clave en claro).
 - Certificado raíz: solo si usaste un certificado de una autoridad propia.
 - «Probar conexión» debe salir en verde. Desde ese momento Iris ve la capacidad `tr069` de esa empresa.
 
-Por API: `PUT /api/v1/integraciones/equipos` con `genieacs_url`, `genieacs_usuario`, `genieacs_clave`
-(y `genieacs_ca` si aplica), y después `POST /api/v1/integraciones/equipos/probar`.
+Por API: `PUT /api/v1/integraciones/acs` con `version`, `activo`, `url`, `usuario`, `clave` (y `ca` si
+aplica), y después `POST /api/v1/integraciones/acs/probar` (`contratos/equipos-olt-acs.md`).
 
 ## 9. Apuntar los equipos a este ACS desde SmartOLT
 
