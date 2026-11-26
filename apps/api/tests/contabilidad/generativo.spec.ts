@@ -5,7 +5,9 @@ import { EscenarioGenerativo } from '#tests/contabilidad/escenario_generativo'
 /**
  * Auditor contable · escenarios generativos. Cada semilla arma dos empresas nuevas y corre 50
  * pasos aleatorios (reproducibles) mezclando facturación, cobros, anulaciones, notas de crédito,
- * promesas, cobro repartido, egresos, cierres de caja, históricos y cierre/reapertura de mes. Con
+ * promesas, cobro repartido, egresos, cierres de caja, históricos y cierre/reapertura de mes.
+ * Con `cajas` (B9 y B11) la empresa C usa caja chica (gastos, reposiciones desde el banco o la custodia,
+ * conteos) y la B una caja de cobros sin factura (recibos, facturas fuera de la SAT, cargos no facturables). Con
  * FEL (fase 3) se suman la cola de certificación con errores y caídas del certificador falso,
  * certificación a mano, rechazos y reintentos, contingencia, anulación de DTE, NCRE por línea, NDEB
  * de mora, sustitución y pagos anulados antes y después de certificar.
@@ -29,6 +31,10 @@ const SEMILLAS_FASE4 = process.env.AUDITOR_SEMILLA
 const SEMILLAS_FASE5 = process.env.AUDITOR_SEMILLA
     ? [Number(process.env.AUDITOR_SEMILLA)]
     : [20261017, 777, 4242, 1123, 5813]
+/** Con las cajas de B9 y B11 (caja chica, caja sin factura, cargos no facturables) encima de la fase 5. */
+const SEMILLAS_CAJAS = process.env.AUDITOR_SEMILLA
+    ? [Number(process.env.AUDITOR_SEMILLA)]
+    : [20261017, 777, 4242, 2718]
 const PASOS = 50
 /** Con FEL hacen falta más pasos para llegar a certificar, anular y acreditar lo certificado. */
 const PASOS_FEL = 120
@@ -39,14 +45,23 @@ const INCLUIR_HALLAZGOS = process.env.AUDITOR_HALLAZGOS === '1'
 test.group('Auditor contable · escenarios generativos', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    for (const [semilla, fel, fase4, fase5] of [
-        ...SEMILLAS.map((x) => [x, false, false, false] as const),
-        ...SEMILLAS_FEL.map((x) => [x, true, false, false] as const),
-        ...SEMILLAS_FASE4.map((x) => [x, true, true, false] as const),
-        ...SEMILLAS_FASE5.map((x) => [x, true, true, true] as const),
+    for (const [semilla, fel, fase4, fase5, cajas] of [
+        ...SEMILLAS.map((x) => [x, false, false, false, false] as const),
+        ...SEMILLAS_FEL.map((x) => [x, true, false, false, false] as const),
+        ...SEMILLAS_FASE4.map((x) => [x, true, true, false, false] as const),
+        ...SEMILLAS_FASE5.map((x) => [x, true, true, true, false] as const),
+        ...SEMILLAS_CAJAS.map((x) => [x, true, true, true, true] as const),
     ]) {
-        const modo = fase5 ? ' con FEL y fases 4 y 5' : fase4 ? ' con FEL y fase 4' : fel ? ' con FEL' : ''
-        const corto = fase5 ? ' f5' : fase4 ? ' f4' : fel ? ' fel' : ''
+        const modo = cajas
+            ? ' con FEL, fases 4 y 5 y cajas (B9 y B11)'
+            : fase5
+              ? ' con FEL y fases 4 y 5'
+              : fase4
+                ? ' con FEL y fase 4'
+                : fel
+                  ? ' con FEL'
+                  : ''
+        const corto = cajas ? ' cajas' : fase5 ? ' f5' : fase4 ? ' f4' : fel ? ' fel' : ''
         test(`semilla ${semilla}${modo}: ${fase5 ? PASOS_FASE5 : fel ? PASOS_FEL : PASOS} pasos sin romper ningún invariante`, async ({
             assert,
         }) => {
@@ -54,6 +69,7 @@ test.group('Auditor contable · escenarios generativos', (group) => {
             const escenario = new EscenarioGenerativo(semilla, {
                 fase4,
                 fase5,
+                cajas,
                 fel,
                 incluirHallazgosAbiertos: INCLUIR_HALLAZGOS,
             })
