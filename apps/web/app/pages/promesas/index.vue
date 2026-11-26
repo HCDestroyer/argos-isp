@@ -463,6 +463,9 @@ onMounted(async () => {
                 size="lg"
                 class="boton-flotante"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('promesas.crear')"
                 label="Nueva promesa"

@@ -118,9 +118,8 @@ function terminar(r: Resultado<UnidadInventario>) {
                         name="vence_en"
                         required
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="envio.vence_en"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>

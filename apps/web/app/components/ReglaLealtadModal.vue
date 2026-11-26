@@ -318,9 +318,8 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                         name="vigente_desde"
                         help="Vacío: hoy."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.vigente_desde"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>
@@ -329,9 +328,8 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                         name="vigente_hasta"
                         help="Vacío: sin fin."
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.vigente_hasta"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>

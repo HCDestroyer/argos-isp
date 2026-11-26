@@ -1075,11 +1075,49 @@
         margin-bottom: var(--ax-isla-reserva);
     }
 
+    /*
+     * Con una barra fija (acción principal o «Descartar / Guardar»), el contenido reserva su alto
+     * real (`--ax-barra-accion`, lo publica `PanelBarraAccion`) más el aire entre las islas: se
+     * puede desplazar hasta el último campo y nada queda debajo de la barra.
+     */
     .panel-cuerpo:has(.panel-barra-accion) {
-        padding-bottom: 5rem;
+        padding-bottom: calc(var(--ax-barra-accion, 4rem) + 1.5rem);
+    }
+
+    /*
+     * Encabezado cuya única acción es la principal (que va fija abajo): su contenedor no ocupa
+     * lugar ni deja un hueco bajo el título.
+     */
+    .panel-acciones:not(:has(> :not(.panel-barra-accion))) {
+        display: contents;
+    }
+
+    /* La acción primaria (el último botón) ocupa el ancho que sobra, como «Cobrar Q 300.00» del tablero. */
+    .panel-barra-accion-estirar > :last-child {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+    /* Notas del pie de un formulario («Versión 3 · …»): arriba de los botones, en dos renglones como mucho. */
+    .panel-barra-accion-estirar > :is(span, p) {
+        flex-basis: 100%;
+        order: -1;
+        padding-inline: 0.5rem;
+        font-size: 0.75rem;
+        line-height: 1rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .panel-barra-accion-estirar > :is(span, p):last-child {
+        -webkit-line-clamp: unset;
+        order: 0;
     }
 
     .panel-barra-accion {
+        flex-wrap: wrap;
         position: fixed;
         inset-inline: 0.75rem;
         bottom: calc(var(--ax-isla-reserva) + 0.5rem);
@@ -1098,6 +1136,17 @@
         box-shadow:
             0 0 0 1px var(--ax-borde),
             0 14px 32px -12px rgb(0 0 0 / 0.6);
+    }
+
+    /*
+     * Dentro de una ventana o panel lateral (un formulario en `USlideover`) no hay isla debajo: la
+     * barra se pega al final del panel, dentro de él.
+     */
+    [role="dialog"] .panel-barra-accion {
+        position: sticky;
+        inset-inline: auto;
+        bottom: 0;
+        border-radius: 0;
     }
 
     .menu-movil {

@@ -111,14 +111,12 @@ onMounted(() => void lista.recargar())
         titulo="Adicionales"
         icono="i-lucide-package-plus"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('adicionales.crear')"
                 class="rounded-full"
                 label="Nuevo adicional"
                 icon="i-lucide-plus"
-                :ui="{ label: 'hidden sm:inline' }"
-                aria-label="Nuevo adicional"
                 data-prueba="nuevo-adicional"
                 @click="abrir(null)"
             />

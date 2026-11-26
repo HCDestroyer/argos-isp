@@ -165,6 +165,9 @@ function nombreEstadoPlantilla(plantilla: PlantillaFacturacion): { etiqueta: str
                 data-prueba="asignar-sin-plantilla"
                 @click="abrirAsignar(porDefecto)"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('plantillas.crear')"
                 label="Nueva plantilla"

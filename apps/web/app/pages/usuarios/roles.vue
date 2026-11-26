@@ -198,6 +198,9 @@ function alGuardar(guardado: Rol) {
                 data-prueba="duplicar-rol"
                 @click="abrirNuevo(rol)"
             />
+        </template>
+
+        <template #accion-principal>
             <UButton
                 v-if="puede('roles.crear')"
                 label="Nuevo rol"

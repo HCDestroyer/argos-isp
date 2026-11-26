@@ -102,14 +102,13 @@ const itemsVista = [
         titulo="Fondos en tránsito"
         icono="i-lucide-truck"
     >
-        <template #acciones>
+        <template #accion-principal>
             <UButton
                 v-if="puede('bancos.trasladar')"
                 label="Trasladar"
                 icon="i-lucide-arrow-right-left"
                 size="lg"
                 class="glow-brand rounded-full px-5"
-                :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Trasladar entre bancos"
                 data-prueba="abrir-traslado"
                 @click="trasladando = true"

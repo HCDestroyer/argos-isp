@@ -133,9 +133,8 @@ async function enviar(evento: FormSubmitEvent<CuerpoVersionImpuesto>) {
                     required
                     help="Lo anterior a esta fecha no cambia. No puede caer en un mes cerrado."
                 >
-                    <UInput
+                    <CampoFecha
                         v-model="estado.vigente_desde"
-                        type="date"
                         class="w-full"
                     />
                 </UFormField>

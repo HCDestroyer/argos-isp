@@ -613,10 +613,15 @@ onMounted(async () => {
                             class="w-full"
                             @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'string' ? valor : '')"
                         />
+                        <CampoFecha
+                            v-else-if="campo.tipo === 'fecha'"
+                            :model-value="textoDe(estado.campos_personalizados[campo.clave])"
+                            class="w-full"
+                            @update:model-value="valor => fijarCampo(campo.clave, valor)"
+                        />
                         <UInput
                             v-else
                             :model-value="textoDe(estado.campos_personalizados[campo.clave])"
-                            :type="campo.tipo === 'fecha' ? 'date' : 'text'"
                             :maxlength="campo.tipo === 'texto' ? 500 : undefined"
                             class="w-full"
                             @update:model-value="valor => fijarCampo(campo.clave, String(valor ?? ''))"

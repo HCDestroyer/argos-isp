@@ -135,9 +135,8 @@ const descuadres = computed(() => (reporte.value?.cuadre ?? []).filter(c => !new
                         class="w-full sm:w-64"
                         :ui="{ base: 'rounded-full' }"
                     />
-                    <UInput
+                    <CampoFecha
                         v-model="fecha"
-                        type="date"
                         aria-label="Fecha"
                         class="w-full sm:w-44"
                         data-prueba="valorizado-fecha"

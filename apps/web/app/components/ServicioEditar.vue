@@ -593,9 +593,8 @@ const accionProblema = computed(() => {
                         name="fecha_instalacion"
                         label="Fecha de instalación"
                     >
-                        <UInput
+                        <CampoFecha
                             v-model="estado.fecha_instalacion"
-                            type="date"
                             class="w-full"
                         />
                     </UFormField>
