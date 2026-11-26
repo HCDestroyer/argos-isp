@@ -28,7 +28,7 @@ test('mes con vencidas en rojo y el día corrido; un feriado recalcula el vencim
     await page.keyboard.press('Escape')
     await expect(page.locator('[data-prueba="obligacion-detalle"]')).toHaveCount(0)
 
-    // Feriado del 20/10 en Configuración → Fiscal → Feriados (global, avisa el recálculo).
+    // Feriado del 20/10 en Ajustes → Régimen e impuestos → Feriados (global, avisa el recálculo).
     await page.getByRole('link', { name: 'Feriados' }).click()
     await expect(page).toHaveURL(/\/configuracion\/fiscal\?pestana=feriados/)
     await expect(page.locator('[data-prueba="feriados-confirmar-contador"]')).toContainText('Confirmar con contador')

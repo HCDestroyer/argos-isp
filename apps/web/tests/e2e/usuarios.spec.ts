@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, menu } from './ayudas'
+import { abrirAjustes, entrar } from './ayudas'
 
 /**
  * Usuarios, roles y tokens de API (tarea 9): alta de un usuario con un rol acotado a una caja,
@@ -17,8 +17,9 @@ async function elegir(page: Page, contenedor: Locator, prueba: string, opcion: s
 
 test('alta de usuario con rol por caja, rol propio y token de una sola vez', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    // El menú lleva a la sección; se entra por URL para no depender de la primera compilación de `nuxt dev`.
-    await expect((await menu(page)).getByRole('link', { name: 'Usuarios', exact: true })).toBeVisible()
+    // Ajustes lleva a la sección; se entra por URL para no depender de la primera compilación de `nuxt dev`.
+    await abrirAjustes(page)
+    await expect(page.locator('[data-prueba="indice-ajustes"]').getByRole('link', { name: 'Usuarios', exact: true })).toBeVisible()
     await page.goto('/usuarios')
 
     // Usuario nuevo con el rol cajero acotado a una caja.

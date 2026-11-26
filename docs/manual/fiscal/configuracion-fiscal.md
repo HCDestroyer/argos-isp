@@ -4,11 +4,11 @@ pantallas:
     - /configuracion/fiscal
 ---
 
-# Configuración fiscal
+# Régimen e impuestos
 
 La localización fiscal de cada empresa: país, régimen del ISR, establecimientos, frases de los DTE, parámetros con vigencia, el aviso de pequeño contribuyente e impuestos. También los feriados, que valen para todas las empresas.
 
-Está en **Configuración → Empresa y fiscal → Fiscal**. Lo que cambies aquí rige desde la fecha que indiques y nunca reescribe lo ya emitido.
+Está en **Ajustes → Empresa y fiscal → Régimen e impuestos**. Lo que cambies aquí rige desde la fecha que indiques y nunca reescribe lo ya emitido.
 
 ::: tip Una empresa a la vez
 Todo, menos los feriados, es por empresa (NIT). Con «Todas» en el selector de empresa verás «Elige una empresa».
@@ -75,7 +75,7 @@ Los valores fiscales con vigencia (tasas, montos, plazos). Busca por nombre, eli
 
 ## Aviso de pequeño contribuyente
 
-El aviso del panel financiero cuando las ventas del año se acercan al límite anual del pequeño contribuyente. Antes estaba en Configuración → Reportes. Se ve solo con `panel_financiero.ver`.
+El aviso del panel financiero cuando las ventas del año se acercan al límite anual del pequeño contribuyente. Antes estaba en Ajustes → Apariencia y reportes → Ajustes de reportes. Se ve solo con `panel_financiero.ver`.
 
 - **Avisar al acercarse al límite anual:** encendido de fábrica; se guarda al tocar el interruptor (`panel_financiero.configurar`). **Apagado, no se avisan el 80 % ni el 95 %. El 100 % (límite superado) se avisa siempre**, porque obliga a cambiar de régimen.
 - **Umbrales del aviso:** los porcentajes del límite anual en que avisa (de fábrica, 80 % y 95 %), de 1 a 5 valores mayores que 0 y hasta 100. Dice si son el valor de fábrica del país o si los cambió la empresa, y desde cuándo rigen. Son el parámetro fiscal `pc_alertas` de la empresa: el mismo que usa el resumen fiscal y que verás en **Parámetros**.

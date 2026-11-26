@@ -4,7 +4,7 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 import * as z from 'zod'
 
 /**
- * Configuración → FEL (A3, fase 3; contrato §8, §11.1 y §17), por empresa: proveedor, ambiente y
+ * Ajustes → Factura electrónica (FEL) (A3, fase 3; contrato §8, §11.1 y §17), por empresa: proveedor, ambiente y
  * modo (con `version`), credenciales de solo escritura por ambiente con su prueba, contingencia
  * con motivo y el momento de certificar de cada plantilla. Todo lo que se muestra sale de
  * `GET /fel/configuracion`; los secretos nunca vuelven de la API.
@@ -238,8 +238,6 @@ onMounted(() => {
 <template>
     <ConfiguracionMarco
         id="configuracion-fel"
-        titulo="Empresa y fiscal"
-        descripcion="Los datos legales con los que se factura y se declara"
         empresas
     >
         <UAlert

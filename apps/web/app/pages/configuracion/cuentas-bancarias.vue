@@ -114,8 +114,6 @@ onMounted(() => {
 <template>
     <ConfiguracionMarco
         id="cuentas-bancarias"
-        titulo="Facturación y cobro"
-        descripcion="Cuentas donde pagan los clientes, bancos de origen, plantillas y conceptos"
         empresas
     >
         <template #cabecera>

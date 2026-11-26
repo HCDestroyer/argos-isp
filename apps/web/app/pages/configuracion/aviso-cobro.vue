@@ -142,9 +142,6 @@ function acciones(plantilla: PlantillaDocumentoResumen): DropdownMenuItem[][] {
 <template>
     <ConfiguracionMarco
         id="aviso-cobro"
-        titulo="Plantillas de documentos"
-        descripcion="Aviso, recibo y nota en carta o POS 80 mm"
-        volver="/configuracion/plantillas-conceptos"
     >
         <template #accion-principal>
             <UButton

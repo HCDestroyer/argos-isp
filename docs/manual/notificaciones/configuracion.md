@@ -4,7 +4,7 @@ pantallas:
     - /configuracion/notificaciones
 ---
 
-# Configuración de notificaciones
+# Canales de aviso
 
 Aquí conectas los canales por los que ArgosIsp avisa a tus clientes y a tu equipo: el servidor de correo, el bot de Telegram y WhatsApp (por Iris). También decides qué tipos de aviso se mandan. Lo que configures aquí rige desde que guardas, sin reiniciar nada.
 
@@ -18,7 +18,7 @@ Los textos de cada aviso no se cambian aquí, sino en [Plantillas de avisos](./p
 
 Sin `notificaciones.configurar` ves todo, pero los campos están bloqueados y no aparece «Guardar». Sin `notificaciones.probar` no aparecen los botones «Enviar prueba».
 
-Menú: **Configuración → Notificaciones e integraciones → Notificaciones**.
+Menú: **Ajustes → Comunicación e integraciones → Canales de aviso**.
 
 ## Qué ves
 
@@ -130,7 +130,7 @@ Para que el bot responda a los clientes (vincular su cuenta, `/estado`, `/desvin
 | La prueba dice `Authentication failed`                    | Usuario o contraseña del correo incorrectos                                  | Reemplaza la contraseña, guarda y prueba otra vez          |
 | La prueba de Telegram dice `chat not found` o `Forbidden` | El bot no está en ese grupo o el cliente nunca le escribió                   | Agrega el bot al grupo del equipo                          |
 | Los campos están bloqueados                               | No tienes `notificaciones.configurar`, o la empresa está heredando la global | Pide el permiso o apaga «Usar la configuración global»     |
-| Los avisos por WhatsApp salen «Omitido»                   | Falta el conector con Iris activo o su contrato es anterior a 0.6.0          | Revisa el conector en Configuración → Integraciones → Iris |
+| Los avisos por WhatsApp salen «Omitido»                   | Falta el conector con Iris activo o su contrato es anterior a 0.6.0          | Revisa el conector en Ajustes → Comunicación e integraciones → Integraciones → Iris |
 
 ## Relacionado
 

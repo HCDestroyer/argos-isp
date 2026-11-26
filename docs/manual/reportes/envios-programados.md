@@ -38,7 +38,7 @@ Los envíos se programan desde cada reporte con **Programar envío**.
 | Mensaje | Qué hacer |
 | --- | --- |
 | «Omitido: el correo se retiró de la lista» | Quita ese correo del envío o pide al admin que lo vuelva a aprobar. |
-| «Falló: el servidor de correo no respondió» | Revisa la configuración de correo en Configuración → Notificaciones. |
+| «Falló: el servidor de correo no respondió» | Revisa la configuración de correo en Ajustes → Comunicación e integraciones → Canales de aviso. |
 | Conflicto de versión al pausar | Otra persona cambió el envío: toca **Recargar**. |
 
 ## Relacionado

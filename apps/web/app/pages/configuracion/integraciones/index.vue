@@ -2,7 +2,7 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Configuración → Integraciones (tablero OperConfigIntegraciones): a la izquierda, los sistemas
+ * Ajustes → Integraciones (tablero OperConfigIntegraciones): a la izquierda, los sistemas
  * con los que Argos habla y su estado; a la derecha, el elegido (`?ver=`). Iris y Horus se
  * configuran en su pantalla; pasarela y FEL muestran su estado y llevan a su configuración;
  * SmartOLT (sus instancias, `ConfiguracionSmartOlt`, tablero PendSmartoltLista) y el ACS
@@ -89,8 +89,6 @@ onMounted(() => {
 <template>
     <ConfiguracionMarco
         id="integraciones"
-        titulo="Integraciones"
-        descripcion="Los sistemas con los que Argos habla, con su estado y lo que se les permite"
         sin-tarjeta
     >
         <div class="grid min-w-0 gap-3.5 lg:min-h-0 lg:flex-1 xl:grid-cols-[22rem_minmax(0,1fr)]">

@@ -39,7 +39,7 @@ test('aviso, tabla con m y m*, sin aplicar; el crecimiento recalcula la proyecci
     await page.getByRole('button', { name: 'Usar tendencia' }).click()
     await expect(argos.locator('[data-prueba="proyeccion-crecimiento"]')).toContainText('la tendencia de los meses leídos')
 
-    // El cambio de régimen está en Configuración → Fiscal.
+    // El cambio de régimen está en Ajustes → Régimen e impuestos.
     await argos.locator('[data-prueba="comparador-sin-aplicar"]').getByRole('link', { name: 'Ir a la configuración fiscal' }).click()
     await expect(page).toHaveURL(/\/configuracion\/fiscal/)
 })

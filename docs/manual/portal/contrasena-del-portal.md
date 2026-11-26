@@ -13,7 +13,7 @@ Aquí defines la **contraseña por defecto** de la empresa: la que usan para ent
 - **Ver si está configurada:** permiso `empresa.ver`.
 - **Configurarla o cambiarla:** permiso `portal.configurar_contrasena_defecto` (solo `admin`). Sin él la pantalla muestra el estado y dice «Solo lectura».
 
-Está en **Configuración → Red y portal → Contraseña del portal**.
+Está en **Ajustes → Clientes y portal → Contraseña del portal**.
 
 ## Es de cada empresa
 
