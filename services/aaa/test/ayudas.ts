@@ -95,11 +95,20 @@ export class ApiFalsa {
     respuestaLote: { status: number; cuerpo?: unknown } | null = null
     /** true: acepta la conexión y nunca responde (API colgada → timeout de `FuenteApi`). */
     colgada = false
+    /** Mientras sea una promesa, las respuestas esperan a que se resuelva (control exacto del orden). */
+    retener: Promise<void> | null = null
+    /** Peticiones que ya llegaron al servidor (también las retenidas). */
+    recibidas = 0
     private servidor: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
         if (this.colgada) return
         const partes: Buffer[] = []
         req.on('data', (c: Buffer) => partes.push(c))
-        req.on('end', () => this.responder(req, res, Buffer.concat(partes).toString('utf8')))
+        req.on('end', () => {
+            const cuerpo = Buffer.concat(partes).toString('utf8')
+            this.recibidas++
+            if (this.retener) void this.retener.then(() => this.responder(req, res, cuerpo))
+            else this.responder(req, res, cuerpo)
+        })
     })
     url = ''
 
