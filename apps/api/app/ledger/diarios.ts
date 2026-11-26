@@ -151,6 +151,8 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     cierre_anual: 'CIE',
     // inventario fase A: movimientos propios del kardex (consumo, ajuste, baja, saldo inicial)
     inventario: 'VAR',
+    // B3: diferencia al conciliar (toca el banco: cae en su BAN-n)
+    diferencia_conciliacion: 'VAR',
 }
 
 export interface DiarioAsiento {

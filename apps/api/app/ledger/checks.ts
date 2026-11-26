@@ -321,12 +321,20 @@ const CALCULOS: Record<string, Calculo> = {
     },
 
     async extractos_conciliados(c, empresaId, periodo, fin) {
-        const n = await contar(
-            c,
-            `SELECT count(*)::int AS n FROM ledger.extractos_lineas l
+        // B3: una línea «por identificar» (con su nota) no es anomalía; se informa en el detalle
+        const sinConciliar = `FROM ledger.extractos_lineas l
               WHERE l.empresa_id = ? AND l.fecha BETWEEN ?::date AND ?::date
                 AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones k WHERE k.linea_id = l.id
-                    AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = k.id))`,
+                    AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = k.id))`
+        const porIdentificar = `EXISTS (SELECT 1 FROM billing.lineas_por_identificar pi WHERE pi.linea_id = l.id)`
+        const n = await contar(c, `SELECT count(*)::int AS n ${sinConciliar} AND NOT ${porIdentificar}`, [
+            empresaId,
+            periodo,
+            fin,
+        ])
+        const identificar = await contar(
+            c,
+            `SELECT count(*)::int AS n ${sinConciliar} AND ${porIdentificar}`,
             [empresaId, periodo, fin],
         )
         return {
@@ -334,7 +342,7 @@ const CALCULOS: Record<string, Calculo> = {
             esperado: '0',
             obtenido: String(n),
             resultado: n === 0 ? 'ok' : 'anomalia',
-            detalle: null,
+            detalle: identificar > 0 ? { por_identificar: identificar } : null,
         }
     },
 
