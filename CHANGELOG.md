@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.28.0](https://github.com/HCDestroyer/argos-isp/compare/v1.27.0...v1.28.0) (2026-11-27)
+
+
+### Funcionalidades
+
+* **billing:** B4 · perfil fiscal del cliente (Normal, Retenedor de IVA, Exento y «me retiene ISR») ([#343](https://github.com/HCDestroyer/argos-isp/issues/343)) ([11d8e74](https://github.com/HCDestroyer/argos-isp/commit/11d8e74b072a7ed770d73fbb8cd9e4da96faafb1))
+* **billing:** D0 · cuentas de pasarela por empresa y proveedor ([#336](https://github.com/HCDestroyer/argos-isp/issues/336)) ([ddf68b0](https://github.com/HCDestroyer/argos-isp/commit/ddf68b05abb8e88edf9b6bc697904b61711a0d1f))
+* **core:** T1 · tipo de servicio (internet, cable, IPTV, mixto) ([#335](https://github.com/HCDestroyer/argos-isp/issues/335)) ([83c2e96](https://github.com/HCDestroyer/argos-isp/commit/83c2e96a411153b016eeef9c697468f0b2ea58a5))
+* **ledger:** B9 caja chica y B11 caja sin factura con recibo, cuentas internas y visibilidad por usuario ([#350](https://github.com/HCDestroyer/argos-isp/issues/350)) ([bd0d361](https://github.com/HCDestroyer/argos-isp/commit/bd0d3619862fbd14bb327d2408c300ed0feb3988))
+* **notify:** R1 · plantillas de recordatorio por empresa y asignación ([#337](https://github.com/HCDestroyer/argos-isp/issues/337)) ([e60ed25](https://github.com/HCDestroyer/argos-isp/commit/e60ed25b2f6ad9142a8331caa9bcd283fa2783ff))
+
+
+### Correcciones
+
+* **aaa:** recargar.sh espera a que radiusd escuche; prueba de config inválida con diagnóstico ([#351](https://github.com/HCDestroyer/argos-isp/issues/351)) ([2fe22c8](https://github.com/HCDestroyer/argos-isp/commit/2fe22c8a79c37b83dc11f454c1cb056a93f9f791))
+
 ## [1.27.0](https://github.com/HCDestroyer/argos-isp/compare/v1.26.0...v1.27.0) (2026-11-26)
 
 
