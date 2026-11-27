@@ -246,6 +246,12 @@ export const PERMISOS = {
     // Cobros y bancos (localización fiscal §10.3 y §10.9, fase 4; los endpoints son de A3)
     'cobros.configurar':
         'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
+    // Cuentas de pasarela por empresa y proveedor (A3, D0; contratos/debito-automatico.md §2)
+    'pasarelas.ver':
+        'Ver las cuentas de pasarela de pago y los proveedores disponibles (nunca las credenciales)',
+    'pasarelas.configurar':
+        'Crear, editar, activar y desactivar cuentas de pasarela por empresa y proveedor (credenciales cifradas)',
+    'pasarelas.probar': 'Probar las credenciales de una cuenta de pasarela con el proveedor',
     'cobros.liquidar': 'Registrar la liquidación de un proveedor de cobro (banco neto y comisión)',
     'cajas.depositar':
         'Depositar en el banco el efectivo de tu custodia o de un turno de caja (queda en fondos en tránsito)',
@@ -894,6 +900,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'reportes.editar_envio',
             'bitacora.ver',
             'cobros.configurar',
+            'pasarelas.ver',
             'cobros.liquidar',
             'cajas.depositar',
             // B1 (decisión N4 del PM): recibir entregas de fábrica lo tienen admin y contabilidad

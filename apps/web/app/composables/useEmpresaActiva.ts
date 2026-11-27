@@ -100,6 +100,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/panel-financiero',
     '/api/v1/panel-financiero/alertas',
     '/api/v1/pasarela/cobros',
+    '/api/v1/pasarelas/cuentas',
     '/api/v1/productos',
     '/api/v1/promesas',
     '/api/v1/promociones-velocidad',

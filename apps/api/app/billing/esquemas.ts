@@ -1484,6 +1484,11 @@ export const CobroPasarela = definirEsquema(
                     'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
             },
             proveedor: texto,
+            pasarela_cuenta_id: {
+                ...nulable(id),
+                description:
+                    'Cuenta de pasarela con la que se creó (null: variables de entorno, antes de D0)',
+            },
             id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
             cliente_id: id,
             cliente_nombre: texto,
@@ -1506,7 +1511,7 @@ export const CobroPasarela = definirEsquema(
             conciliado_en: nulable(instante),
             ...auditable,
         },
-        ['url_retorno', 'empresa_id'],
+        ['url_retorno', 'empresa_id', 'pasarela_cuenta_id'],
     ),
 )
 
@@ -1554,6 +1559,10 @@ export const ConciliacionPasarela = definirEsquema(
         {
             id,
             proveedor: texto,
+            pasarela_cuenta_id: {
+                ...nulable(id),
+                description: 'Cuenta de pasarela conciliada (null: entorno)',
+            },
             fecha,
             revisados: entero,
             conciliados: entero,
@@ -1562,8 +1571,75 @@ export const ConciliacionPasarela = definirEsquema(
             ejecutado_por: nulable(id),
             created_at: instante,
         },
-        ['ejecutado_por', 'created_at'],
+        ['ejecutado_por', 'created_at', 'pasarela_cuenta_id'],
     ),
+)
+
+export const CuentaPasarela = definirEsquema(
+    'CuentaPasarela',
+    objeto({
+        id,
+        empresa_id: id,
+        proveedor: { ...texto, description: 'Adaptador: recurrente, falsa…' },
+        alias: texto,
+        proveedor_cobro_id: { ...nulable(id), description: 'Proveedor de cobro (cuenta puente 1.1.10.NN)' },
+        modo: enumerado(['pruebas', 'produccion']),
+        usos: lista(enumerado(['pago_en_linea', 'debito'])),
+        predeterminada_para: {
+            ...lista(enumerado(['pago_en_linea', 'debito'])),
+            description: 'Usos para los que es la cuenta predeterminada de la empresa',
+        },
+        activa: booleano,
+        prueba_ok: {
+            ...booleano,
+            description: 'La última prueba con el proveedor salió bien (se exige para activar)',
+        },
+        probada_en: nulable(instante),
+        prueba_detalle: nulable(texto),
+        credenciales_configuradas: {
+            ...lista(texto),
+            description: 'Nombres de las credenciales guardadas; nunca sus valores',
+        },
+        tiene_webhook_secreto: booleano,
+        opciones: jsonLibre,
+        clave_publica: { ...texto, description: 'Va en la URL del webhook; no es un secreto' },
+        webhook_ruta: {
+            ...texto,
+            description: 'Ruta del webhook de esta cuenta, para registrarla en el proveedor',
+        },
+        webhook_url: { ...nulable(texto), description: 'URL completa si PASARELA_URL_PUBLICA está definida' },
+        sembrada_desde_entorno: booleano,
+        ...auditable,
+    }),
+)
+
+export const ResultadoProbarCuentaPasarela = definirEsquema(
+    'ResultadoProbarCuentaPasarela',
+    objeto({
+        ok: { ...booleano, description: 'false: las credenciales no sirvieron (no es un error HTTP)' },
+        detalle: texto,
+        cuenta: CuentaPasarela,
+    }),
+)
+
+export const ProveedorPasarela = definirEsquema(
+    'ProveedorPasarela',
+    objeto({
+        nombre: texto,
+        titulo: texto,
+        laboratorio: { ...booleano, description: 'Solo laboratorio: no se configura en producción' },
+        capacidades: objeto({
+            pago_en_linea: booleano,
+            tokenizacion: enumerado(['checkout_alojado', 'ninguna']),
+            cargo_con_token: booleano,
+            revocar_metodo: booleano,
+            webhooks: objeto({ tokenizacion: booleano, cargo: booleano }),
+            minimo: Dinero,
+        }),
+        credenciales: lista(objeto({ clave: texto, etiqueta: texto, requerida: booleano })),
+        requiere_webhook_secreto: booleano,
+        opciones: lista(objeto({ clave: texto, etiqueta: texto, tipo: enumerado(['texto', 'numero']) })),
+    }),
 )
 
 export const ReglaSimulada = definirEsquema(

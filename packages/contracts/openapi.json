@@ -67983,7 +67983,7 @@
       "post": {
         "operationId": "pasarelaConciliar",
         "summary": "Conciliar los cobros en línea de un día contra el proveedor",
-        "description": "Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.",
+        "description": "Lo mismo que el cron diario (06:30 Guatemala, día anterior), que recorre todas las cuentas de pasarela activas; aquí una cuenta (cuenta_id, obligatoria si hay varias activas: 422 cuenta_requerida). Solo reporta diferencias: no registra ni anula pagos.",
         "tags": [
           "pagos"
         ],
@@ -68020,6 +68020,14 @@
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
                     "description": "Día (Guatemala) a conciliar; por defecto ayer"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta de pasarela a conciliar. Obligatoria si hay varias cuentas activas (422 cuenta_requerida); el cron las recorre todas"
                   }
                 },
                 "required": [],
@@ -68306,7 +68314,7 @@
       "post": {
         "operationId": "pasarelaWebhook",
         "summary": "Webhook del proveedor de pago (firmado con HMAC)",
-        "description": "Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.",
+        "description": "Ruta anterior a las cuentas de pasarela: vale para la cuenta sembrada del entorno (o el entorno, sin cuentas). Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.",
         "tags": [
           "pagos"
         ],
@@ -68342,6 +68350,1005 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/webhook/{proveedor}/{clave_publica}": {
+      "post": {
+        "operationId": "pasarelaWebhookCuenta",
+        "summary": "Webhook de una cuenta de pasarela (firmado con el secreto de esa cuenta)",
+        "description": "La URL lleva la clave_publica de la cuenta: se verifica con el secreto de ESA cuenta (el de otra da 401). Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "proveedor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clave_publica",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook procesado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookPasarela"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarelas/cuentas": {
+      "get": {
+        "operationId": "pasarelasCuentas",
+        "summary": "Cuentas de pasarela por empresa y proveedor",
+        "description": "Nunca devuelve credenciales ni el secreto del webhook: solo los nombres de las credenciales guardadas y `tiene_webhook_secreto`.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuentas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CuentaPasarela"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "pasarelasCrearCuenta",
+        "summary": "Crear la cuenta de pasarela de una empresa para un proveedor",
+        "description": "Una por (empresa, proveedor): 409 cuenta_pasarela_duplicada. Nace inactiva y sin probar. Las credenciales y el secreto del webhook se guardan cifrados y no vuelven. 422 debito_no_soportado si el adaptador no permite cargos con token. Emite pasarela.config_cambiada (solo nombres de campos).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "proveedor": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 40,
+                    "description": "Nombre del adaptador (`GET /pasarelas/proveedores`): recurrente, falsa…"
+                  },
+                  "alias": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "proveedor_cobro_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Proveedor de cobro (cuenta puente 1.1.10.NN) de la misma empresa"
+                  },
+                  "modo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "pruebas",
+                          "produccion"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "usos": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pago_en_linea",
+                        "debito"
+                      ]
+                    },
+                    "minItems": 1,
+                    "description": "pago_en_linea (por defecto) y debito (solo si el adaptador lo permite; 422 debito_no_soportado)"
+                  },
+                  "credenciales": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "description": "Claves que declara el adaptador (`GET /pasarelas/proveedores`), p. ej. secret_key. Se guardan cifradas y nunca vuelven en una respuesta"
+                  },
+                  "webhook_secreto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Secreto con el que el proveedor firma sus webhooks (cifrado; nunca vuelve)"
+                  },
+                  "opciones": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "description": "Opciones no secretas que declara el adaptador (api_url, expira_horas…)"
+                  }
+                },
+                "required": [
+                  "proveedor",
+                  "alias"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cuenta creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarelas/cuentas/{id}": {
+      "get": {
+        "operationId": "pasarelasVerCuenta",
+        "summary": "Ver una cuenta de pasarela",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "pasarelasEditarCuenta",
+        "summary": "Editar una cuenta de pasarela",
+        "description": "Con version (409 si cambió). Las credenciales enviadas reemplazan a las guardadas; las omitidas se conservan. Cambiar credenciales, secreto, modo u opciones deja prueba_ok = false.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "alias": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "proveedor_cobro_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "modo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "pruebas",
+                          "produccion"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "usos": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pago_en_linea",
+                        "debito"
+                      ]
+                    },
+                    "minItems": 1
+                  },
+                  "predeterminada_para": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pago_en_linea",
+                        "debito"
+                      ]
+                    },
+                    "description": "Usos para los que esta cuenta (activa) es la predeterminada de la empresa"
+                  },
+                  "credenciales": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "description": "Claves que declara el adaptador (`GET /pasarelas/proveedores`), p. ej. secret_key. Se guardan cifradas y nunca vuelven en una respuesta"
+                  },
+                  "webhook_secreto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Secreto con el que el proveedor firma sus webhooks (cifrado; nunca vuelve)"
+                  },
+                  "opciones": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array"
+                        },
+                        {
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "description": "Opciones no secretas que declara el adaptador (api_url, expira_horas…)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarelas/cuentas/{id}/activar": {
+      "post": {
+        "operationId": "pasarelasActivarCuenta",
+        "summary": "Activar una cuenta de pasarela (exige una prueba buena)",
+        "description": "422 cuenta_sin_prueba si la última prueba no salió bien. Si la empresa no tenía cuenta predeterminada para un uso, esta pasa a serlo.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarelas/cuentas/{id}/desactivar": {
+      "post": {
+        "operationId": "pasarelasDesactivarCuenta",
+        "summary": "Desactivar una cuenta de pasarela",
+        "description": "Deja de crear cobros; sus webhooks siguen valiendo para los cobros ya hechos. Si era la única de la empresa, la empresa queda sin pago en línea (no vuelve al entorno).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarelas/cuentas/{id}/probar": {
+      "post": {
+        "operationId": "pasarelasProbarCuenta",
+        "summary": "Probar las credenciales de una cuenta con el proveedor",
+        "description": "Una llave mala no es un error HTTP: responde 200 con ok = false, deja prueba_ok = false y no activa. Una prueba buena tampoco activa (usa /activar).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoProbarCuentaPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.probar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarelas/proveedores": {
+      "get": {
+        "operationId": "pasarelasProveedores",
+        "summary": "Adaptadores de pasarela disponibles, con sus capacidades y lo que piden",
+        "description": "Por cada adaptador: capacidades (el resto del sistema mira esto, nunca el nombre), las credenciales que pide (se guardan cifradas) y sus opciones. La pasarela falsa es solo de laboratorio.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Adaptadores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProveedorPasarela"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pasarelas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pasarelas.ver",
         "x-implementado": true
       }
     },
@@ -88533,6 +89540,9 @@
                         "pagos.ver",
                         "panel_financiero.configurar",
                         "panel_financiero.ver",
+                        "pasarelas.configurar",
+                        "pasarelas.probar",
+                        "pasarelas.ver",
                         "planes.crear",
                         "planes.editar",
                         "planes.sincronizar",
@@ -89026,6 +90036,9 @@
                         "pagos.ver",
                         "panel_financiero.configurar",
                         "panel_financiero.ver",
+                        "pasarelas.configurar",
+                        "pasarelas.probar",
+                        "pasarelas.ver",
                         "planes.crear",
                         "planes.editar",
                         "planes.sincronizar",
@@ -105495,6 +106508,9 @@
                             "pagos.ver",
                             "panel_financiero.configurar",
                             "panel_financiero.ver",
+                            "pasarelas.configurar",
+                            "pasarelas.probar",
+                            "pasarelas.ver",
                             "planes.crear",
                             "planes.editar",
                             "planes.sincronizar",
@@ -116894,6 +117910,14 @@
           "proveedor": {
             "type": "string"
           },
+          "pasarela_cuenta_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cuenta de pasarela con la que se creó (null: variables de entorno, antes de D0)"
+          },
           "id_proveedor": {
             "type": [
               "string",
@@ -118064,6 +119088,14 @@
           },
           "proveedor": {
             "type": "string"
+          },
+          "pasarela_cuenta_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cuenta de pasarela conciliada (null: entorno)"
           },
           "fecha": {
             "type": "string",
@@ -121938,6 +122970,151 @@
               "GTQ",
               "USD"
             ]
+          }
+        }
+      },
+      "CuentaPasarela": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "proveedor",
+          "alias",
+          "proveedor_cobro_id",
+          "modo",
+          "usos",
+          "predeterminada_para",
+          "activa",
+          "prueba_ok",
+          "probada_en",
+          "prueba_detalle",
+          "credenciales_configuradas",
+          "tiene_webhook_secreto",
+          "opciones",
+          "clave_publica",
+          "webhook_ruta",
+          "webhook_url",
+          "sembrada_desde_entorno",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": "string",
+            "description": "Adaptador: recurrente, falsa…"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "proveedor_cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Proveedor de cobro (cuenta puente 1.1.10.NN)"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "pruebas",
+              "produccion"
+            ]
+          },
+          "usos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pago_en_linea",
+                "debito"
+              ]
+            }
+          },
+          "predeterminada_para": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pago_en_linea",
+                "debito"
+              ]
+            },
+            "description": "Usos para los que es la cuenta predeterminada de la empresa"
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "prueba_ok": {
+            "type": "boolean",
+            "description": "La última prueba con el proveedor salió bien (se exige para activar)"
+          },
+          "probada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "prueba_detalle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credenciales_configuradas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Nombres de las credenciales guardadas; nunca sus valores"
+          },
+          "tiene_webhook_secreto": {
+            "type": "boolean"
+          },
+          "opciones": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "clave_publica": {
+            "type": "string",
+            "description": "Va en la URL del webhook; no es un secreto"
+          },
+          "webhook_ruta": {
+            "type": "string",
+            "description": "Ruta del webhook de esta cuenta, para registrarla en el proveedor"
+          },
+          "webhook_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL completa si PASARELA_URL_PUBLICA está definida"
+          },
+          "sembrada_desde_entorno": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -136920,6 +138097,9 @@
           "pagos.ver",
           "panel_financiero.configurar",
           "panel_financiero.ver",
+          "pasarelas.configurar",
+          "pasarelas.probar",
+          "pasarelas.ver",
           "planes.crear",
           "planes.editar",
           "planes.sincronizar",
@@ -137305,6 +138485,9 @@
           "Ver pagos",
           "Cambiar los ajustes del panel financiero de la empresa (días de suspensión para contar una baja y aviso de pequeño contribuyente)",
           "Ver el panel financiero: ingreso mensual recurrente, bajas, ingreso promedio, efectivo (con libro.ver) y alertas",
+          "Crear, editar, activar y desactivar cuentas de pasarela por empresa y proveedor (credenciales cifradas)",
+          "Probar las credenciales de una cuenta de pasarela con el proveedor",
+          "Ver las cuentas de pasarela de pago y los proveedores disponibles (nunca las credenciales)",
           "Crear planes",
           "Editar planes e implementaciones por router",
           "Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers",
@@ -146484,6 +147667,128 @@
           }
         }
       },
+      "ProveedorPasarela": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "titulo",
+          "laboratorio",
+          "capacidades",
+          "credenciales",
+          "requiere_webhook_secreto",
+          "opciones"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "laboratorio": {
+            "type": "boolean",
+            "description": "Solo laboratorio: no se configura en producción"
+          },
+          "capacidades": {
+            "type": "object",
+            "required": [
+              "pago_en_linea",
+              "tokenizacion",
+              "cargo_con_token",
+              "revocar_metodo",
+              "webhooks",
+              "minimo"
+            ],
+            "properties": {
+              "pago_en_linea": {
+                "type": "boolean"
+              },
+              "tokenizacion": {
+                "type": "string",
+                "enum": [
+                  "checkout_alojado",
+                  "ninguna"
+                ]
+              },
+              "cargo_con_token": {
+                "type": "boolean"
+              },
+              "revocar_metodo": {
+                "type": "boolean"
+              },
+              "webhooks": {
+                "type": "object",
+                "required": [
+                  "tokenizacion",
+                  "cargo"
+                ],
+                "properties": {
+                  "tokenizacion": {
+                    "type": "boolean"
+                  },
+                  "cargo": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "minimo": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            }
+          },
+          "credenciales": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "etiqueta",
+                "requerida"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "etiqueta": {
+                  "type": "string"
+                },
+                "requerida": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "requiere_webhook_secreto": {
+            "type": "boolean"
+          },
+          "opciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "etiqueta",
+                "tipo"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "etiqueta": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "texto",
+                    "numero"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "ProvisionCartera": {
         "type": "object",
         "required": [
@@ -153380,6 +154685,26 @@
           }
         }
       },
+      "ResultadoProbarCuentaPasarela": {
+        "type": "object",
+        "required": [
+          "ok",
+          "detalle",
+          "cuenta"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "false: las credenciales no sirvieron (no es un error HTTP)"
+          },
+          "detalle": {
+            "type": "string"
+          },
+          "cuenta": {
+            "$ref": "#/components/schemas/CuentaPasarela"
+          }
+        }
+      },
       "ResultadoPruebaCanal": {
         "type": "object",
         "required": [
@@ -155319,6 +156644,9 @@
               "pagos.ver",
               "panel_financiero.configurar",
               "panel_financiero.ver",
+              "pasarelas.configurar",
+              "pasarelas.probar",
+              "pasarelas.ver",
               "planes.crear",
               "planes.editar",
               "planes.sincronizar",
@@ -155811,6 +157139,7 @@
               "pagos.ver",
               "panel_financiero.configurar",
               "panel_financiero.ver",
+              "pasarelas.ver",
               "planes.ver",
               "plantillas.asignar_sin_plantilla",
               "plantillas.crear",
@@ -155883,6 +157212,7 @@
               "notificaciones.ver",
               "pagos.ver",
               "panel_financiero.ver",
+              "pasarelas.ver",
               "planes.ver",
               "plantillas.ver",
               "portal_corte.ver",

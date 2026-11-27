@@ -714,6 +714,78 @@ export const listarCobrosPasarelaValidator = vine.compile(
 export const conciliarPasarelaValidator = vine.compile(
     vine.object({
         fecha: fechaIso().optional().meta({ description: 'Día (Guatemala) a conciliar; por defecto ayer' }),
+        cuenta_id: idEntidad().nullable().optional().meta({
+            description:
+                'Cuenta de pasarela a conciliar. Obligatoria si hay varias cuentas activas (422 cuenta_requerida); el cron las recorre todas',
+        }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Cuentas de pasarela por empresa y proveedor (D0)
+|--------------------------------------------------------------------------
+*/
+
+const usosPasarela = () => vine.array(vine.enum(['pago_en_linea', 'debito'] as const)).minLength(1)
+
+const camposConfiguracionPasarela = {
+    credenciales: vine.record(vine.string().trim().minLength(1).maxLength(500)).nullable().optional().meta({
+        description:
+            'Claves que declara el adaptador (`GET /pasarelas/proveedores`), p. ej. secret_key. Se guardan cifradas y nunca vuelven en una respuesta',
+    }),
+    webhook_secreto: vine.string().trim().minLength(1).maxLength(500).nullable().optional().meta({
+        description: 'Secreto con el que el proveedor firma sus webhooks (cifrado; nunca vuelve)',
+    }),
+    opciones: vine
+        .record(vine.any())
+        .nullable()
+        .optional()
+        .meta({ description: 'Opciones no secretas que declara el adaptador (api_url, expira_horas…)' }),
+}
+
+export const listarCuentasPasarelaValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const crearCuentaPasarelaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        proveedor: vine.string().trim().minLength(2).maxLength(40).meta({
+            description: 'Nombre del adaptador (`GET /pasarelas/proveedores`): recurrente, falsa…',
+        }),
+        alias: vine.string().trim().minLength(2).maxLength(80),
+        proveedor_cobro_id: idEntidad().nullable().optional().meta({
+            description: 'Proveedor de cobro (cuenta puente 1.1.10.NN) de la misma empresa',
+        }),
+        modo: vine
+            .enum(['pruebas', 'produccion'] as const)
+            .nullable()
+            .optional(),
+        usos: usosPasarela().nullable().optional().meta({
+            description:
+                'pago_en_linea (por defecto) y debito (solo si el adaptador lo permite; 422 debito_no_soportado)',
+        }),
+        ...camposConfiguracionPasarela,
+    }),
+)
+
+export const editarCuentaPasarelaValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        alias: vine.string().trim().minLength(2).maxLength(80).nullable().optional(),
+        proveedor_cobro_id: idEntidad().nullable().optional(),
+        modo: vine
+            .enum(['pruebas', 'produccion'] as const)
+            .nullable()
+            .optional(),
+        usos: usosPasarela().nullable().optional(),
+        predeterminada_para: vine
+            .array(vine.enum(['pago_en_linea', 'debito'] as const))
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Usos para los que esta cuenta (activa) es la predeterminada de la empresa',
+            }),
+        ...camposConfiguracionPasarela,
     }),
 )
 

@@ -5,19 +5,16 @@ import { usuarioDelActor } from '#shared/contexto'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { pendienteDe } from '#billing/facturas'
-import {
-    pasarela,
-    proveedorConfigurado,
-    PasarelaNoConfigurada,
-    resolverUrlRetorno,
-} from '#billing/pasarelas/pasarela'
+import { resolverUrlRetorno } from '#billing/pasarelas/pasarela'
+import { resolverFuente } from '#billing/pasarelas/cuentas'
 import { verCobroPasarela, type CobroPasarelaVista } from '#billing/pasarelas/cobros'
 
 /**
  * `pasarela.crear_cobro` (`POST /pasarela/cobros`; el portal de A5 la llama directo desde "Pagar
  * en línea" con canal `portal` y actor sistema).
  *
- * Crea el cobro en el proveedor configurado y devuelve `url_pago`, adonde se manda al cliente.
+ * Crea el cobro con la cuenta de pasarela de la empresa del cobro (`billing.pasarela_cuentas`; sin
+ * cuentas en la base, con las variables de entorno) y devuelve `url_pago`, adonde se manda al cliente.
  * No mueve dinero: el pago se registra cuando llega el webhook firmado (`pasarela.procesar_webhook`).
  *
  * - `monto` por defecto: lo pendiente de las `facturas` pedidas (de cualquier cliente, como en
@@ -41,10 +38,6 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
     readonly nombre = 'pasarela.crear_cobro'
 
     protected async handle(input: EntradaCrearCobroPasarela, t: Transaccion): Promise<CobroPasarelaVista> {
-        const proveedor = proveedorConfigurado()
-        if (!proveedor) throw new PasarelaNoConfigurada()
-        const adaptador = await pasarela(proveedor)
-
         const cliente = (await t.trx
             .from('core.clientes')
             .where('id', input.cliente_id)
@@ -118,6 +111,8 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
             empresas[0] ?? empresaServicio ?? t.ctx.empresaId ?? (await resolverEmpresaActiva(t.ctx, t.trx))
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
+        // la cuenta de pasarela de la empresa (D0); sin cuentas en la base, el entorno
+        const { cuenta, proveedor, adaptador } = await resolverFuente(t.trx, empresaId, 'pago_en_linea')
         const pendiente = filas.reduce((suma, f) => suma.plus(pendienteDe(f)), CERO)
 
         const monto = input.monto ? dec(input.monto) : pendiente
@@ -140,6 +135,7 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
             .insert({
                 empresa_id: empresaId,
                 proveedor,
+                pasarela_cuenta_id: cuenta?.id ?? null,
                 cliente_id: cliente.id,
                 servicio_id: input.servicio_id ?? null,
                 monto: aTexto(monto),
