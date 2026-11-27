@@ -331,7 +331,9 @@ test.group('B1 · cajas de cobros, custodia y entrega con «Recibí»', (group) 
         assert.equal(venceCustodia('2026-11-27', 1, new Set(['2026-11-30'])), '2026-12-01')
     })
 
-    test('crear caja: tipo cobros con fondo fijo propio; la caja chica llega en B9', async ({ assert }) => {
+    test('crear caja: tipo cobros con fondo fijo propio; la caja chica (B9) toma el fondo de caja chica', async ({
+        assert,
+    }) => {
         const e = await prepararEmpresasGt()
         const caja = await new CrearCaja().execute(
             { nombre: unico('Caja'), empresa_id: e.B, fondo_fijo: '350.00' },
@@ -340,10 +342,11 @@ test.group('B1 · cajas de cobros, custodia y entrega con «Recibí»', (group) 
         assert.containSubset(caja, { tipo: 'cobros', fondo_fijo: '350.00', fondo_fijo_efectivo: '350.00' })
         const turno = await new AbrirCaja().execute({ caja_id: caja.id }, e.ctx)
         assert.deepEqual([turno.fondo_inicial, turno.fondo_esperado], ['350.00', '350.00'])
-        const chica = await errorDe(
-            new CrearCaja().execute({ nombre: unico('Chica'), empresa_id: e.B, tipo: 'gastos' }, e.ctx),
+        const chica = await new CrearCaja().execute(
+            { nombre: unico('Chica'), empresa_id: e.B, tipo: 'gastos' },
+            e.ctx,
         )
-        assert.equal(chica.codigo, 'tipo_no_disponible')
+        assert.containSubset(chica, { tipo: 'gastos', fondo_fijo: null, fondo_fijo_efectivo: '2000.00' })
     })
 })
 

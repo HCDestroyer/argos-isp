@@ -5,6 +5,7 @@ import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import CertificarDte from '#fiscal/actions/certificar_dte'
 import AnularDte from '#fiscal/actions/anular_dte'
 import { ERROR_AVISO_SIN_CUBRIR } from '#fiscal/fel/dte'
+import { sqlNoFiscalVigente } from '#billing/recibos'
 
 /**
  * Cola `fel` (contrato §8.3): lo que el worker `fiscal:worker` procesa cada minuto, "todo lo
@@ -30,6 +31,8 @@ export async function avisosPorCertificar(limite = 500, facturas?: number[]): Pr
         .if(facturas !== undefined, (q) => q.whereIn('f.id', facturas!))
         // castigo de cartera (§10.9): cubierta por el castigo, no por un cobro; no genera DTE
         .whereNotExists((q) => q.from('ledger.castigos_facturas as cf').whereRaw('cf.factura_id = f.id'))
+        // B11: cargo no facturable o cobrada solo en cajas sin factura: tiene recibo, no DTE
+        .whereRaw(`NOT ${sqlNoFiscalVigente('f')}`)
         .whereNotExists((q) =>
             q
                 .from('fiscal.dte as d')

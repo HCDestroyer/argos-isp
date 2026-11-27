@@ -11046,7 +11046,7 @@
                       "cobros",
                       "gastos"
                     ],
-                    "description": "cobros (de fábrica) o gastos (caja chica: llega en B9, hoy 422 tipo_no_disponible)"
+                    "description": "cobros (de fábrica) o gastos (caja chica, B9: fondo fijo, sin turnos ni cobros)"
                   },
                   "fondo_fijo": {
                     "type": [
@@ -11054,10 +11054,23 @@
                       "null"
                     ],
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Fondo fijo propio; sin él, el fondo de cambio de la empresa (GET /cajas/ajustes)",
+                    "description": "Fondo fijo propio; sin él, el de la empresa (GET /cajas/ajustes): fondo_cobros o fondo_caja_chica",
                     "examples": [
                       "150.00"
                     ]
+                  },
+                  "fiscal": {
+                    "description": "B11: false = caja sin factura (recibo no fiscal, cuentas internas; aviso con FEL obligatoria)",
+                    "type": "boolean"
+                  },
+                  "usuarios": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "B11: quiénes ven y usan la caja (vacío = todos los que la alcanzan por el ACL)"
                   }
                 },
                 "required": [
@@ -11121,6 +11134,152 @@
           }
         },
         "x-permiso": "cajas.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}": {
+      "put": {
+        "operationId": "cajasEditar",
+        "summary": "Editar una caja: sin factura, quiénes la ven y usan, cajero o encargado",
+        "description": "B11. `fiscal = false` = caja sin factura (de cobros o caja chica): sus cobros emiten un recibo no fiscal con numeración propia por empresa y no van a la SAT (la factura cubierta solo con cobros sin factura pasa a 4.3.01); sus gastos van a 5.7.01. Se permite con FEL obligatoria y la respuesta trae `aviso_sin_factura`. `usuarios`: quiénes ven y usan la caja ([] = todos los del ACL; con contabilidad.ver_cuentas_internas se ve igual). Solo cambia lo que se envía; `version` (409). Emite caja.cambiada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "La de GET /cajas"
+                  },
+                  "fiscal": {
+                    "description": "false = caja sin factura",
+                    "type": "boolean"
+                  },
+                  "usuarios": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Quiénes ven y usan la caja; [] = todos los del ACL"
+                  },
+                  "cajero_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cajero (en una caja chica, su encargado)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caja",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Caja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.editar",
         "x-implementado": true
       }
     },
@@ -11249,6 +11408,79 @@
           }
         },
         "x-permiso": "cajas.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}/caja-chica": {
+      "get": {
+        "operationId": "cajasCajaChica",
+        "summary": "Estado de una caja chica: efectivo + comprobantes sin reponer = fondo fijo",
+        "description": "Fondo fijo, efectivo (saldo de su cuenta en el libro), gastos sin reponer (y cuántos sin archivo), diferencias de conteo, si cuadra, lo que se repone (por_reponer) y el % del fondo (bajo 30 el panel avisa). 422 no_es_caja_chica con una caja de cobros. Alcance por caja.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caja chica",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoCajaChica"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
         "x-implementado": true
       }
     },
@@ -11449,6 +11681,263 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cajas/{id}/contar": {
+      "post": {
+        "operationId": "cajasContar",
+        "summary": "Conteo sorpresa de la caja chica",
+        "description": "Esperado = efectivo en el libro. Con diferencia, motivo obligatorio (422) y asiento conteo_caja a cargo del encargado (Faltantes de caja / Caja chica o Caja chica / Sobrantes de caja); la siguiente reposición la repone. Emite caja.contada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contado": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Obligatorio si no cuadra (mínimo 3 letras)"
+                  }
+                },
+                "required": [
+                  "contado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conteo registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso caja_chica.contar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "caja_chica.contar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}/conteos": {
+      "get": {
+        "operationId": "cajasConteos",
+        "summary": "Conteos de una caja chica (el más reciente primero)",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de conteos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConteoCaja"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cajas/{id}/depositar": {
       "post": {
         "operationId": "cajasDepositar",
@@ -11632,6 +12121,185 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cajas/{id}/gastos": {
+      "post": {
+        "operationId": "cajasRegistrarGasto",
+        "summary": "Registrar un gasto de la caja chica con su comprobante (Gasto / Caja chica)",
+        "description": "Comprobante obligatorio (`archivo`; 422 archivo required, tipo o tamano). Sin tope por gasto: hasta el efectivo de la caja (422 efectivo_insuficiente). Quien no tiene egresos.registrar_sin_limite solo registra en la caja chica de la que es encargado (403 caja_ajena). Con `con_factura`, `pasar_a_compras` = true: sigue POST /compras/desde-egreso/:egreso_id para el IVA. 422 no_es_caja_chica. Emite caja_chica.gasto_registrado.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categoria": {
+                    "type": "string",
+                    "enum": [
+                      "energia",
+                      "transito",
+                      "nomina",
+                      "vehiculos",
+                      "alquileres",
+                      "otros"
+                    ],
+                    "description": "Tipo de gasto (GET /egresos/categorias)"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500,
+                    "description": "En qué se gastó"
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "proveedor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 150
+                  },
+                  "comprobante": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Número o serie del ticket, recibo o factura (opcional)"
+                  },
+                  "con_factura": {
+                    "description": "Trae factura a nombre de la empresa: la respuesta pide seguir con POST /compras/desde-egreso/:egreso_id (IVA)",
+                    "type": "boolean"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido"
+                  }
+                },
+                "required": [
+                  "categoria",
+                  "monto",
+                  "descripcion",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Gasto registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GastoCajaChica"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso caja_chica.registrar_gasto; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "caja_chica.registrar_gasto",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cajas/{id}/impresion": {
       "put": {
         "operationId": "cajasConfigurarImpresion",
@@ -11770,6 +12438,296 @@
           }
         },
         "x-permiso": "cajas.configurar_impresion",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}/reponer": {
+      "post": {
+        "operationId": "cajasReponer",
+        "summary": "Reponer la caja chica por lo gastado, desde tu custodia o desde el banco",
+        "description": "Monto = fondo fijo − efectivo (lo gastado y los faltantes de conteo); nunca desde una caja de cobros. Sella los gastos y conteos pendientes (ya no se anulan). 422 gastos_sin_comprobante (con los egresos), nada_que_reponer, monto_distinto, custodia_insuficiente, cuenta_de_otra_empresa. Asiento reposicion_caja (Caja chica / 1.1.15 o Banco). Emite caja_chica.repuesta.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "desde": {
+                    "type": "string",
+                    "enum": [
+                      "custodia",
+                      "banco"
+                    ],
+                    "description": "custodia (la tuya, 1.1.15) o banco (banco_id, cuenta_bancaria_id o el principal)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco del libro (GET /bancos-libro)"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "referencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120,
+                    "description": "Cheque o retiro"
+                  },
+                  "monto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Confirmación: lo que muestra GET /cajas/:id/caja-chica en por_reponer (422 monto_distinto)",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  }
+                },
+                "required": [
+                  "desde"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reposición registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReposicionCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso caja_chica.reponer; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "caja_chica.reponer",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}/reposiciones": {
+      "get": {
+        "operationId": "cajasReposiciones",
+        "summary": "Reposiciones de una caja chica (la más reciente primero)",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de reposiciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReposicionCaja"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
         "x-implementado": true
       }
     },
@@ -12040,6 +12998,14 @@
                   "autoentrega": {
                     "description": "«Lo deposito yo» permitido",
                     "type": "boolean"
+                  },
+                  "fondo_caja_chica": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "B9: fondo fijo de cada caja chica (sin tope por gasto)",
+                    "examples": [
+                      "150.00"
+                    ]
                   }
                 },
                 "required": [
@@ -16199,6 +17165,354 @@
           }
         },
         "x-permiso": "clientes.ver_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/perfil-fiscal": {
+      "get": {
+        "operationId": "clientesPerfilFiscal",
+        "summary": "Perfil fiscal del cliente: tipo de impuesto y «me retiene ISR»",
+        "description": "Lote B4 del plan de contabilidad. Un cliente que nunca se configuró es normal, sin ISR, con version 0. exencion dice si la exención se aplica hoy en las facturas (apagada: exencion_sin_frase).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil fiscal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilFiscalCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "clientesAsignarPerfilFiscal",
+        "summary": "Asignar el tipo de impuesto del cliente y «me retiene ISR»",
+        "description": "Define cómo salen sus facturas y qué retención se espera al cobrarle; no toca las facturas ya emitidas (cada una guarda su instantánea). exento exige resolucion_exencion y se guarda, pero la factura sale con IVA hasta tener la frase de exención. 409 por version, 422 por resolución. audit.cambios (cliente_perfil_fiscal) y cliente.actualizado con campos tipo_impuesto y retiene_isr.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo_impuesto": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "agente_retenedor_iva",
+                      "exento"
+                    ],
+                    "description": "normal, agente_retenedor_iva o exento (exento se guarda, pero la factura sale con IVA hasta tener la frase de exención)"
+                  },
+                  "retiene_isr": {
+                    "description": "Casilla «me retiene ISR»",
+                    "type": "boolean"
+                  },
+                  "resolucion_exencion": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "numero": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60
+                      },
+                      "fecha": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "numero",
+                      "fecha"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Resolución de la SAT: obligatoria con exento; solo va con exento"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se guardó); si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "tipo_impuesto",
+                  "retiene_isr",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil fiscal guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilFiscalCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.asignar_perfil_fiscal; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.asignar_perfil_fiscal",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/perfil-fiscal/retenciones": {
+      "get": {
+        "operationId": "clientesSimularRetenciones",
+        "summary": "Qué se espera retener de una factura de este total al cliente (antes de emitirla)",
+        "description": "Lote B4: la cuenta de «Nueva factura» y de Cobrar (te retendrá, recibirás) con el perfil fiscal de hoy y el régimen de la empresa. Sin empresa_id usa la activa; 422 empresa_requerida si no hay. Mismas reglas que la instantánea que guarda la factura al emitirse.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "total",
+            "in": "query",
+            "required": true,
+            "description": "Monto con hasta 2 decimales, como string",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+              "examples": [
+                "150.00"
+              ]
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa que factura; sin ella, la activa (X-Empresa-Id)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retenciones esperadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilFiscalFactura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
         "x-implementado": true
       }
     },
@@ -22145,6 +23459,10 @@
                     "description": "Lleva IVA (por defecto sí)",
                     "type": "boolean"
                   },
+                  "facturable": {
+                    "description": "B11: false = cargo no facturable (sin DTE ni IVA, a la cuenta interna); por defecto sí",
+                    "type": "boolean"
+                  },
                   "activo": {
                     "type": "boolean"
                   },
@@ -22337,6 +23655,9 @@
                     "maxLength": 20
                   },
                   "gravable": {
+                    "type": "boolean"
+                  },
+                  "facturable": {
                     "type": "boolean"
                   },
                   "activo": {
@@ -27553,6 +28874,204 @@
         "x-implementado": true
       }
     },
+    "/api/v1/egresos/{id}/comprobante": {
+      "get": {
+        "operationId": "egresosComprobante",
+        "summary": "Archivo del comprobante de un egreso",
+        "description": "Responde el archivo con su Content-Type e `inline`. 404 si el egreso no tiene comprobante.",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Foto (image/jpeg, image/png, image/webp) o PDF. La respuesta real lleva el Content-Type del archivo (el generador de OpenAPI declara application/json)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "egresosAdjuntarComprobante",
+        "summary": "Adjuntar el comprobante (foto o PDF) de un egreso que no lo tiene",
+        "description": "B9: una vez por egreso (409 comprobante_existente). Lo necesitan las compras al contado pagadas con la caja chica antes de reponerla. 422 archivo (required, tipo o tamano). Emite egreso.comprobante_adjuntado.",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido"
+                  }
+                },
+                "required": [
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Egreso con su comprobante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Egreso"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.adjuntar_comprobante; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.adjuntar_comprobante",
+        "x-implementado": true
+      }
+    },
     "/api/v1/egresos/categorias": {
       "get": {
         "operationId": "egresosCategorias",
@@ -29955,6 +31474,17 @@
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
                     "description": "Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)"
+                  },
+                  "facturable": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "B11: por defecto lo de sus conceptos; false = cargo no facturable (sin DTE ni IVA, a la cuenta interna 4.3.01; recibo al cobrarlo). Cambiar lo del concepto exige facturas.cargo_no_facturable"
                   },
                   "lineas": {
                     "type": "array",
@@ -57702,6 +59232,9 @@
                 "egreso",
                 "cierre_caja",
                 "entrega_caja",
+                "reposicion_caja",
+                "conteo_caja",
+                "recibo_interno",
                 "ajuste",
                 "reclasificacion",
                 "liquidacion_cobro",
@@ -65567,6 +67100,79 @@
           }
         },
         "x-permiso": "pagos.cerrar_diferencia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pagos/{id}/recibo": {
+      "get": {
+        "operationId": "pagosRecibo",
+        "summary": "Recibo no fiscal del pago (caja sin factura o cargo no facturable)",
+        "description": "B11: lo que se entrega al cobrar en una caja sin factura o al cubrir un cargo no facturable. No es factura (sin DTE, serie ni número de la SAT); numeración propia por empresa. 404 si el pago no tiene recibo.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recibo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recibo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
         "x-implementado": true
       }
     },
@@ -82562,6 +84168,243 @@
         "x-implementado": true
       }
     },
+    "/api/v1/recibos": {
+      "get": {
+        "operationId": "recibosListar",
+        "summary": "Cobros en cajas sin factura (recibos no fiscales)",
+        "description": "B11: el reporte «Cobros en cajas sin factura» (con los cargos no facturables): número, caja, cliente, monto, si el pago se anuló y las facturas que quedaron fuera de la SAT. Filtros desde/hasta (fecha de Guatemala), caja_id, cliente_id, motivo; por empresa activa o `empresas=todas`.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "motivo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja_sin_factura",
+                "cargo_no_facturable"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de recibos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Recibo"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso contabilidad.ver_cuentas_internas",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "contabilidad.ver_cuentas_internas",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/recibos/{id}": {
+      "get": {
+        "operationId": "recibosVer",
+        "summary": "Ver un recibo no fiscal",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recibo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recibo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/red/caidas-repetidas": {
       "get": {
         "operationId": "redCaidasRepetidas",
@@ -87494,12 +89337,16 @@
                         "bodegas.crear",
                         "bodegas.desactivar",
                         "bodegas.editar",
+                        "caja_chica.contar",
+                        "caja_chica.registrar_gasto",
+                        "caja_chica.reponer",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.configurar",
                         "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
+                        "cajas.editar",
                         "cajas.entregar",
                         "cajas.rechazar_entrega",
                         "cajas.recibir_entrega",
@@ -87513,6 +89360,7 @@
                         "cartera.provisionar",
                         "cierres.revisar_check",
                         "cierres.verificar",
+                        "clientes.asignar_perfil_fiscal",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -87542,6 +89390,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_cuentas_internas",
                         "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
@@ -87560,6 +89409,7 @@
                         "documentos.editar",
                         "documentos.predeterminar",
                         "documentos.ver",
+                        "egresos.adjuntar_comprobante",
                         "egresos.anular",
                         "egresos.registrar",
                         "egresos.registrar_sin_limite",
@@ -87574,6 +89424,7 @@
                         "empresas.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
+                        "facturas.cargo_no_facturable",
                         "facturas.cargo_sin_costo",
                         "facturas.configurar_conceptos",
                         "facturas.configurar_motivos",
@@ -87982,12 +89833,16 @@
                         "bodegas.crear",
                         "bodegas.desactivar",
                         "bodegas.editar",
+                        "caja_chica.contar",
+                        "caja_chica.registrar_gasto",
+                        "caja_chica.reponer",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.configurar",
                         "cajas.configurar_impresion",
                         "cajas.crear",
                         "cajas.depositar",
+                        "cajas.editar",
                         "cajas.entregar",
                         "cajas.rechazar_entrega",
                         "cajas.recibir_entrega",
@@ -88001,6 +89856,7 @@
                         "cartera.provisionar",
                         "cierres.revisar_check",
                         "cierres.verificar",
+                        "clientes.asignar_perfil_fiscal",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -88030,6 +89886,7 @@
                         "comprobantes.reconexion_temporal",
                         "comprobantes.registrar",
                         "comprobantes.ver",
+                        "contabilidad.ver_cuentas_internas",
                         "contabilidad.ver_inicio",
                         "contactos.buscar",
                         "contactos.gestionar",
@@ -88048,6 +89905,7 @@
                         "documentos.editar",
                         "documentos.predeterminar",
                         "documentos.ver",
+                        "egresos.adjuntar_comprobante",
                         "egresos.anular",
                         "egresos.registrar",
                         "egresos.registrar_sin_limite",
@@ -88062,6 +89920,7 @@
                         "empresas.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
+                        "facturas.cargo_no_facturable",
                         "facturas.cargo_sin_costo",
                         "facturas.configurar_conceptos",
                         "facturas.configurar_motivos",
@@ -104446,12 +106305,16 @@
                             "bodegas.crear",
                             "bodegas.desactivar",
                             "bodegas.editar",
+                            "caja_chica.contar",
+                            "caja_chica.registrar_gasto",
+                            "caja_chica.reponer",
                             "cajas.abrir",
                             "cajas.cerrar",
                             "cajas.configurar",
                             "cajas.configurar_impresion",
                             "cajas.crear",
                             "cajas.depositar",
+                            "cajas.editar",
                             "cajas.entregar",
                             "cajas.rechazar_entrega",
                             "cajas.recibir_entrega",
@@ -104465,6 +106328,7 @@
                             "cartera.provisionar",
                             "cierres.revisar_check",
                             "cierres.verificar",
+                            "clientes.asignar_perfil_fiscal",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
@@ -104494,6 +106358,7 @@
                             "comprobantes.reconexion_temporal",
                             "comprobantes.registrar",
                             "comprobantes.ver",
+                            "contabilidad.ver_cuentas_internas",
                             "contabilidad.ver_inicio",
                             "contactos.buscar",
                             "contactos.gestionar",
@@ -104512,6 +106377,7 @@
                             "documentos.editar",
                             "documentos.predeterminar",
                             "documentos.ver",
+                            "egresos.adjuntar_comprobante",
                             "egresos.anular",
                             "egresos.registrar",
                             "egresos.registrar_sin_limite",
@@ -104526,6 +106392,7 @@
                             "empresas.ver",
                             "facturas.anular",
                             "facturas.anular_nota_credito",
+                            "facturas.cargo_no_facturable",
                             "facturas.cargo_sin_costo",
                             "facturas.configurar_conceptos",
                             "facturas.configurar_motivos",
@@ -107523,6 +109390,7 @@
           "custodia_plazo_dias",
           "custodia_tope",
           "autoentrega",
+          "fondo_caja_chica",
           "de_fabrica",
           "version",
           "updated_at"
@@ -107547,6 +109415,10 @@
           "autoentrega": {
             "type": "boolean",
             "description": "«Lo deposito yo» permitido (de fábrica sí)"
+          },
+          "fondo_caja_chica": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "B9: fondo fijo de cada caja chica (Q2,000 de fábrica; sin tope por gasto)"
           },
           "de_fabrica": {
             "type": "boolean",
@@ -108799,6 +110671,9 @@
               "egreso",
               "cierre_caja",
               "entrega_caja",
+              "reposicion_caja",
+              "conteo_caja",
+              "recibo_interno",
               "ajuste",
               "reclasificacion",
               "liquidacion_cobro",
@@ -113348,6 +115223,25 @@
             ],
             "description": "Fondo fijo propio; null = el de la empresa"
           },
+          "fiscal": {
+            "type": "boolean",
+            "description": "B11: false = caja sin factura (recibo no fiscal, cuentas internas)"
+          },
+          "usuarios": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "B11: quiénes ven y usan la caja (vacía = todos los que la alcanzan por el ACL)"
+          },
+          "aviso_sin_factura": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "B11: aviso de una caja sin factura en una empresa con FEL obligatoria"
+          },
           "fondo_fijo_efectivo": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Fondo con el que abre la caja (el propio o el fondo de cambio de la empresa)"
@@ -117068,6 +118962,10 @@
             "type": "boolean",
             "description": "Lleva IVA (incluido en el precio)"
           },
+          "facturable": {
+            "type": "boolean",
+            "description": "B11: false = cargo no facturable: cobro de control sin DTE ni IVA, a la cuenta interna 4.3.01; se cubre con un recibo no fiscal"
+          },
           "activo": {
             "type": "boolean",
             "description": "Uno inactivo no se usa en cargos nuevos (el de sistema no se desactiva)"
@@ -119712,6 +121610,112 @@
           }
         }
       },
+      "ConteoCaja": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "caja_id",
+          "esperado",
+          "contado",
+          "diferencia",
+          "comprobantes",
+          "fondo",
+          "motivo",
+          "responsable_id",
+          "responsable_nombre",
+          "contado_por",
+          "contado_por_nombre",
+          "fecha",
+          "asiento_id",
+          "repuesto",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "esperado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Efectivo en el libro al contar"
+          },
+          "contado": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "diferencia": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "contado − esperado, a cargo del encargado"
+          },
+          "comprobantes": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Gastos sin reponer al contar"
+          },
+          "fondo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Fondo vigente al contar"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "responsable_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "responsable_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "contado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "repuesto": {
+            "type": "boolean",
+            "description": "La diferencia ya se repuso"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ConteoInventario": {
         "type": "object",
         "required": [
@@ -120822,6 +122826,10 @@
             ],
             "description": "Clasificación del flujo de efectivo (método indirecto)"
           },
+          "interna": {
+            "type": "boolean",
+            "description": "B11: cuenta interna (caja sin factura): fuera de los libros fiscales; solo con contabilidad.ver_cuentas_internas"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -121132,6 +123140,7 @@
               "custodia_plazo_dias",
               "custodia_tope",
               "autoentrega",
+              "fondo_caja_chica",
               "de_fabrica",
               "version",
               "updated_at"
@@ -121156,6 +123165,10 @@
               "autoentrega": {
                 "type": "boolean",
                 "description": "«Lo deposito yo» permitido (de fábrica sí)"
+              },
+              "fondo_caja_chica": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "B9: fondo fijo de cada caja chica (Q2,000 de fábrica; sin tope por gasto)"
               },
               "de_fabrica": {
                 "type": "boolean",
@@ -121226,7 +123239,7 @@
                 },
                 "saldo": {
                   "$ref": "#/components/schemas/Dinero",
-                  "description": "Recibido − depositado"
+                  "description": "Recibido − depositado − repuesto a cajas chicas (B9)"
                 },
                 "desde": {
                   "type": [
@@ -124482,6 +126495,18 @@
             ],
             "minimum": 1
           },
+          "con_comprobante": {
+            "type": "boolean",
+            "description": "B9: tiene el archivo de su comprobante (GET /egresos/:id/comprobante)"
+          },
+          "reposicion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "B9: gasto de caja chica ya repuesto (sellado: no se anula)"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -126273,6 +128298,161 @@
           }
         }
       },
+      "EstadoCajaChica": {
+        "type": "object",
+        "required": [
+          "caja_id",
+          "empresa_id",
+          "nombre",
+          "encargado_id",
+          "encargado_nombre",
+          "fondo_fijo",
+          "fondo_vigente",
+          "efectivo",
+          "comprobantes",
+          "diferencias",
+          "cuadra",
+          "por_reponer",
+          "porcentaje",
+          "ultima_reposicion",
+          "ultimo_conteo"
+        ],
+        "properties": {
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "encargado_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Encargado (el cajero_id de la caja)"
+          },
+          "encargado_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fondo_fijo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Fondo fijo configurado (el que deja la próxima reposición)"
+          },
+          "fondo_vigente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Fondo de la última reposición (0 antes de la primera)"
+          },
+          "efectivo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Efectivo que debe haber (saldo de su cuenta en el libro)"
+          },
+          "comprobantes": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "sin_archivo"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "sin_archivo": {
+                "type": "integer"
+              }
+            },
+            "description": "Gastos vigentes sin reponer (sin_archivo: los que aún no tienen su comprobante)"
+          },
+          "diferencias": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "Diferencias de conteo sin reponer (contado − esperado)"
+          },
+          "cuadra": {
+            "type": "boolean",
+            "description": "efectivo + comprobantes − diferencias = fondo vigente"
+          },
+          "por_reponer": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo que repone la siguiente reposición (fondo fijo − efectivo)"
+          },
+          "porcentaje": {
+            "type": "integer",
+            "description": "Efectivo / fondo fijo en %; bajo 30 el panel avisa para reponer"
+          },
+          "ultima_reposicion": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "fecha",
+              "monto"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            }
+          },
+          "ultimo_conteo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "fecha",
+              "diferencia"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              },
+              "diferencia": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            }
+          }
+        }
+      },
       "EstadoConectorHorus": {
         "type": "object",
         "required": [
@@ -126436,6 +128616,10 @@
               "$ref": "#/components/schemas/SeccionEstadoCuenta"
             },
             "description": "Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo"
+          },
+          "perfil_fiscal": {
+            "$ref": "#/components/schemas/PerfilFiscalCliente",
+            "description": "Perfil fiscal del cliente hoy (tipo de impuesto y «me retiene ISR»)"
           }
         }
       },
@@ -128379,6 +130563,24 @@
             "type": "boolean",
             "description": "Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse"
           },
+          "no_fiscal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "caja_sin_factura",
+              "cargo_no_facturable"
+            ],
+            "description": "B11: fuera de la SAT (cobrada solo en cajas sin factura, o cargo no facturable): no se certifica; el panel la muestra «Pagada · Recibo #N»"
+          },
+          "recibo_numero": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "B11: número del recibo no fiscal vigente de un pago aplicado (o null)"
+          },
           "certificar_al": {
             "type": [
               "string",
@@ -128521,6 +130723,17 @@
             ],
             "format": "date",
             "description": "Desde este día la factura cuenta para limitar o cortar (emisión + dias_gracia_corte); null = desde que vence"
+          },
+          "perfil_fiscal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerfilFiscalFactura"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Perfil fiscal del cliente al emitir (tipo de impuesto, ISR, exención y retenciones esperadas); null en las facturas anteriores"
           },
           "version": {
             "type": "integer",
@@ -129555,6 +131768,26 @@
               "$ref": "#/components/schemas/FraseFiscal"
             },
             "description": "Todas las filas de frases manuales"
+          }
+        }
+      },
+      "GastoCajaChica": {
+        "type": "object",
+        "required": [
+          "egreso",
+          "caja_chica",
+          "pasar_a_compras"
+        ],
+        "properties": {
+          "egreso": {
+            "$ref": "#/components/schemas/Egreso"
+          },
+          "caja_chica": {
+            "$ref": "#/components/schemas/EstadoCajaChica"
+          },
+          "pasar_a_compras": {
+            "type": "boolean",
+            "description": "Con factura a nombre de la empresa: sigue POST /compras/desde-egreso/:egreso_id"
           }
         }
       },
@@ -135661,12 +137894,16 @@
           "bodegas.crear",
           "bodegas.desactivar",
           "bodegas.editar",
+          "caja_chica.contar",
+          "caja_chica.registrar_gasto",
+          "caja_chica.reponer",
           "cajas.abrir",
           "cajas.cerrar",
           "cajas.configurar",
           "cajas.configurar_impresion",
           "cajas.crear",
           "cajas.depositar",
+          "cajas.editar",
           "cajas.entregar",
           "cajas.rechazar_entrega",
           "cajas.recibir_entrega",
@@ -135680,6 +137917,7 @@
           "cartera.provisionar",
           "cierres.revisar_check",
           "cierres.verificar",
+          "clientes.asignar_perfil_fiscal",
           "clientes.asignar_responsable_pago",
           "clientes.crear",
           "clientes.desvincular_telegram",
@@ -135709,6 +137947,7 @@
           "comprobantes.reconexion_temporal",
           "comprobantes.registrar",
           "comprobantes.ver",
+          "contabilidad.ver_cuentas_internas",
           "contabilidad.ver_inicio",
           "contactos.buscar",
           "contactos.gestionar",
@@ -135727,6 +137966,7 @@
           "documentos.editar",
           "documentos.predeterminar",
           "documentos.ver",
+          "egresos.adjuntar_comprobante",
           "egresos.anular",
           "egresos.registrar",
           "egresos.registrar_sin_limite",
@@ -135741,6 +137981,7 @@
           "empresas.ver",
           "facturas.anular",
           "facturas.anular_nota_credito",
+          "facturas.cargo_no_facturable",
           "facturas.cargo_sin_costo",
           "facturas.configurar_conceptos",
           "facturas.configurar_motivos",
@@ -136041,12 +138282,16 @@
           "Crear bodegas y bodegas de técnico",
           "Desactivar bodegas (sin existencias)",
           "Editar bodegas",
+          "Contar la caja chica sin aviso; la diferencia queda a cargo de su encargado",
+          "Registrar un gasto de la caja chica con su comprobante (foto o PDF); sin tope por gasto, hasta su efectivo",
+          "Reponer la caja chica por lo gastado desde tu custodia o desde el banco (sella sus comprobantes)",
           "Abrir turno de caja",
           "Cerrar turno de caja",
           "Configurar el fondo de cambio, el plazo y el tope de custodia y «lo deposito yo» de la empresa",
           "Elegir el formato de impresión de recibos y facturas de una caja",
           "Crear cajas de una empresa (multiempresa: cada NIT tiene sus cajas)",
           "Depositar en el banco el efectivo de tu custodia o de un turno de caja (queda en fondos en tránsito)",
+          "Editar una caja: marcarla sin factura, quiénes la ven y usan, y su cajero o encargado",
           "Entregar otra vez el efectivo de un turno cerrado cuando quien debía recibirlo dijo «No lo recibí»",
           "Rechazar una entrega de efectivo dirigida a ti («No lo recibí»)",
           "Recibir efectivo de una caja de cobros («Recibí»): pasa a tu custodia",
@@ -136060,6 +138305,7 @@
           "Registrar la estimación para cuentas incobrables (hasta el tope legal)",
           "Supervisar con nota un check de cierre en anomalía, o retirar la supervisión",
           "Correr la lista de verificación de cierre (checks del mes o del año)",
+          "Asignar el tipo de impuesto del cliente (Normal, Agente retenedor de IVA, Exento) y «me retiene ISR»",
           "Asignar el cliente que paga por otro (responsable de pago)",
           "Crear clientes",
           "Quitar el chat de Telegram de un cliente",
@@ -136089,6 +138335,7 @@
           "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
           "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
+          "Ver las cuentas internas (caja sin factura), sus asientos, todas las cajas y el reporte «Cobros en cajas sin factura»",
           "Ver el inicio de contabilidad: qué toca hoy, los pasos del mes y los indicadores (cada dato pide además su permiso)",
           "Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)",
           "Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)",
@@ -136107,6 +138354,7 @@
           "Editar el nombre, el formato y el HTML de una plantilla de documento",
           "Elegir la plantilla predeterminada de un documento (la que usan el portal, el correo y los procesos)",
           "Ver las plantillas de documentos (aviso de cobro, nota de crédito, recibo de cobro) y elegir con cuál imprimir",
+          "Adjuntar el archivo del comprobante (foto o PDF) a un egreso que no lo tiene",
           "Anular egresos con asiento de reverso",
           "Registrar egresos (gastos pagados por caja, banco o cuenta bancaria)",
           "Registrar egresos de cualquier caja, banco o cuenta, sin el tope egreso_cajero_maximo ni motivo obligatorio",
@@ -136121,6 +138369,7 @@
           "Ver las empresas (NIT) de la instalación",
           "Anular facturas",
           "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)",
+          "Decidir al emitir un cargo único si se factura o es un cobro de control (recibo)",
           "Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)",
           "Administrar el catálogo de conceptos de cargo único por empresa (cuenta de ingreso e IVA)",
           "Administrar el catálogo de motivos de facturas en Q0 por empresa",
@@ -139127,6 +141376,198 @@
           "ultimo_intento": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PerfilFiscalCliente": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "tipo_impuesto",
+          "retiene_isr",
+          "resolucion_exencion",
+          "nota",
+          "version",
+          "actualizado_por",
+          "actualizado_en",
+          "exencion"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo_impuesto": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "agente_retenedor_iva",
+              "exento"
+            ],
+            "description": "normal = se le cobra IVA; agente_retenedor_iva = paga menos y entrega constancia por el 15 % del IVA; exento = por ley no paga IVA (apagado: la factura sale con IVA hasta tener la frase de exención)"
+          },
+          "retiene_isr": {
+            "type": "boolean",
+            "description": "Casilla «me retiene ISR»: al cobrar se espera su constancia"
+          },
+          "resolucion_exencion": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "numero",
+              "fecha"
+            ],
+            "properties": {
+              "numero": {
+                "type": "string"
+              },
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "description": "Resolución de la SAT que respalda la exención (obligatoria con exento)"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Control optimista: envíala al asignar (0 = nunca se guardó: Normal)"
+          },
+          "actualizado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "exencion": {
+            "type": "object",
+            "required": [
+              "disponible",
+              "motivo"
+            ],
+            "properties": {
+              "disponible": {
+                "type": "boolean"
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "exencion_sin_frase"
+                ]
+              }
+            },
+            "description": "Si la exención se aplica hoy en las facturas: apagada (exencion_sin_frase) hasta que la empresa tenga la frase de exención del contador"
+          }
+        }
+      },
+      "PerfilFiscalFactura": {
+        "type": "object",
+        "required": [
+          "tipo_impuesto",
+          "retiene_isr",
+          "exento_aplicado",
+          "motivo_exento",
+          "regimen",
+          "retenciones",
+          "sin_retencion",
+          "total_retenciones",
+          "a_recibir"
+        ],
+        "properties": {
+          "tipo_impuesto": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "agente_retenedor_iva",
+              "exento"
+            ],
+            "description": "normal = se le cobra IVA; agente_retenedor_iva = paga menos y entrega constancia por el 15 % del IVA; exento = por ley no paga IVA (apagado: la factura sale con IVA hasta tener la frase de exención)"
+          },
+          "retiene_isr": {
+            "type": "boolean"
+          },
+          "exento_aplicado": {
+            "type": "boolean",
+            "description": "La factura salió sin IVA por la exención (hoy siempre false: exención apagada)"
+          },
+          "motivo_exento": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "exencion_sin_frase"
+            ]
+          },
+          "regimen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Régimen de la empresa en la fecha de la factura"
+          },
+          "retenciones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetencionEsperada"
+            }
+          },
+          "sin_retencion": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "impuesto",
+                "motivo"
+              ],
+              "properties": {
+                "impuesto": {
+                  "type": "string",
+                  "enum": [
+                    "iva",
+                    "isr"
+                  ]
+                },
+                "motivo": {
+                  "type": "string",
+                  "enum": [
+                    "cliente_no_retiene",
+                    "regimen_pequeno_contribuyente",
+                    "regimen_utilidades",
+                    "sin_iva",
+                    "bajo_minimo",
+                    "sin_localizacion"
+                  ]
+                }
+              }
+            },
+            "description": "Por qué no se espera retención de cada impuesto"
+          },
+          "total_retenciones": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "a_recibir": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total − retenciones: lo que debe llegar en dinero"
           }
         }
       },
@@ -145837,6 +148278,120 @@
           }
         }
       },
+      "Recibo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "numero",
+          "pago_id",
+          "caja_id",
+          "caja_nombre",
+          "cliente_id",
+          "cliente_nombre",
+          "monto",
+          "motivo",
+          "anulado",
+          "metodo",
+          "facturas",
+          "facturas_no_fiscales",
+          "emitido_por",
+          "emitido_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "integer",
+            "description": "Correlativo propio por empresa, sin huecos (no es número de la SAT)"
+          },
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "caja_sin_factura",
+              "cargo_no_facturable"
+            ],
+            "description": "Cobro en una caja sin factura, o cobro de un cargo no facturable"
+          },
+          "anulado": {
+            "type": "boolean",
+            "description": "Su pago se anuló (el recibo queda como historia)"
+          },
+          "metodo": {
+            "type": "string"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Facturas a las que se aplicó el pago"
+          },
+          "facturas_no_fiscales": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Las que este cobro dejó fuera de la SAT (sin DTE; ingreso a 4.3.01)"
+          },
+          "emitido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "emitido_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ReconciliacionEncolada": {
         "type": "object",
         "required": [
@@ -151201,6 +153756,140 @@
           }
         }
       },
+      "ReposicionCaja": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "caja_id",
+          "caja_nombre",
+          "origen",
+          "custodio_id",
+          "custodio_nombre",
+          "banco_id",
+          "cuenta_bancaria_id",
+          "cuenta_codigo",
+          "referencia",
+          "monto",
+          "fondo",
+          "efectivo_antes",
+          "fecha",
+          "gastos",
+          "conteos",
+          "asiento_id",
+          "registrado_por",
+          "registrado_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": "string"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "custodia",
+              "banco"
+            ]
+          },
+          "custodio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "De cuya custodia salió (null desde el banco)"
+          },
+          "custodio_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_codigo": {
+            "type": "string",
+            "description": "Cuenta del libro de la que salió (1.1.15 o el banco)"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fondo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Fondo fijo con el que queda la caja"
+          },
+          "efectivo_antes": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "gastos": {
+            "type": "integer",
+            "description": "Gastos que sella"
+          },
+          "conteos": {
+            "type": "integer",
+            "description": "Diferencias de conteo que sella"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "RequisitoSorteo": {
         "type": "object",
         "required": [
@@ -153217,6 +155906,91 @@
           }
         }
       },
+      "RetencionEsperada": {
+        "type": "object",
+        "required": [
+          "impuesto",
+          "codigo",
+          "base",
+          "tasa",
+          "monto"
+        ],
+        "properties": {
+          "impuesto": {
+            "type": "string",
+            "enum": [
+              "iva",
+              "isr"
+            ]
+          },
+          "codigo": {
+            "type": "string",
+            "description": "Retención recibida del catálogo fiscal (RET_IVA_ESP, RET_ISR_OPC)"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "IVA de la factura (iva) o lo facturado sin IVA (isr)"
+          },
+          "tasa": {
+            "type": "string",
+            "description": "Porcentaje aplicado (en ISR, el del tramo)"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "RetencionFacturaPendiente": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "empresa_id",
+          "total",
+          "pendiente",
+          "fuente",
+          "retencion_iva",
+          "retencion_isr",
+          "total_retenciones",
+          "a_recibir"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fuente": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "perfil_actual"
+            ],
+            "description": "factura = instantánea guardada al emitir; perfil_actual = factura anterior al perfil fiscal, calculada con el perfil de hoy"
+          },
+          "retencion_iva": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "retencion_isr": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "total_retenciones": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "a_recibir": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Pendiente − retenciones (nunca negativo)"
+          }
+        }
+      },
       "RevisionTitularEmpresa": {
         "type": "object",
         "required": [
@@ -153667,12 +156441,16 @@
               "bodegas.crear",
               "bodegas.desactivar",
               "bodegas.editar",
+              "caja_chica.contar",
+              "caja_chica.registrar_gasto",
+              "caja_chica.reponer",
               "cajas.abrir",
               "cajas.cerrar",
               "cajas.configurar",
               "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
+              "cajas.editar",
               "cajas.entregar",
               "cajas.rechazar_entrega",
               "cajas.recibir_entrega",
@@ -153686,6 +156464,7 @@
               "cartera.provisionar",
               "cierres.revisar_check",
               "cierres.verificar",
+              "clientes.asignar_perfil_fiscal",
               "clientes.asignar_responsable_pago",
               "clientes.crear",
               "clientes.desvincular_telegram",
@@ -153715,6 +156494,7 @@
               "comprobantes.reconexion_temporal",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_cuentas_internas",
               "contabilidad.ver_inicio",
               "contactos.buscar",
               "contactos.gestionar",
@@ -153733,6 +156513,7 @@
               "documentos.editar",
               "documentos.predeterminar",
               "documentos.ver",
+              "egresos.adjuntar_comprobante",
               "egresos.anular",
               "egresos.registrar",
               "egresos.registrar_sin_limite",
@@ -153747,6 +156528,7 @@
               "empresas.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
+              "facturas.cargo_no_facturable",
               "facturas.cargo_sin_costo",
               "facturas.configurar_conceptos",
               "facturas.configurar_motivos",
@@ -154011,6 +156793,7 @@
             "descripcion": "Cobro en caja: pagos, turnos y promesas",
             "permisos": [
               "adicionales.ver",
+              "caja_chica.registrar_gasto",
               "cajas.abrir",
               "cajas.cerrar",
               "cajas.depositar",
@@ -154028,6 +156811,7 @@
               "contactos.buscar",
               "cuentas_bancarias.ver",
               "documentos.ver",
+              "egresos.adjuntar_comprobante",
               "egresos.registrar",
               "facturas.emitir_cargo_unico",
               "facturas.emitir_periodos",
@@ -154237,10 +157021,14 @@
               "bodegas.crear",
               "bodegas.desactivar",
               "bodegas.editar",
+              "caja_chica.contar",
+              "caja_chica.registrar_gasto",
+              "caja_chica.reponer",
               "cajas.configurar",
               "cajas.configurar_impresion",
               "cajas.crear",
               "cajas.depositar",
+              "cajas.editar",
               "cajas.entregar",
               "cajas.rechazar_entrega",
               "cajas.recibir_entrega",
@@ -154250,6 +157038,7 @@
               "cartera.provisionar",
               "cierres.revisar_check",
               "cierres.verificar",
+              "clientes.asignar_perfil_fiscal",
               "clientes.estado_cuenta",
               "clientes.ver",
               "cobros.configurar",
@@ -154267,6 +157056,7 @@
               "comprobantes.reconectar",
               "comprobantes.registrar",
               "comprobantes.ver",
+              "contabilidad.ver_cuentas_internas",
               "contabilidad.ver_inicio",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
@@ -154278,12 +157068,14 @@
               "declaraciones.revisar",
               "declaraciones.ver",
               "documentos.ver",
+              "egresos.adjuntar_comprobante",
               "egresos.anular",
               "egresos.registrar",
               "egresos.registrar_sin_limite",
               "egresos.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
+              "facturas.cargo_no_facturable",
               "facturas.cargo_sin_costo",
               "facturas.configurar_conceptos",
               "facturas.configurar_motivos",
@@ -154797,6 +157589,13 @@
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
             },
             "description": "Saldo acumulado dentro de la empresa"
+          },
+          "retenciones_esperadas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetencionFacturaPendiente"
+            },
+            "description": "Una por factura pendiente: retención de IVA e ISR que se espera del cliente y lo que debe llegar en dinero (perfil fiscal, B4). Siempre viene; opcional en el esquema para no romper fixtures"
           }
         }
       },

@@ -81,6 +81,13 @@ export const ORIGENES_ASIENTO = [
     // B1 del plan de contabilidad (§5.7): «Recibí» de una entrega de caja (1.1.15 / Caja);
     // origen_id = `ledger.entregas.id`
     'entrega_caja',
+    // B9 (caja chica, §5.7): reposición (Caja chica / 1.1.15 o Banco; origen_id = `ledger.reposiciones.id`)
+    // y conteo con diferencia (Faltantes / Caja chica o Caja chica / Sobrantes; origen_id = `ledger.conteos_caja.id`)
+    'reposicion_caja',
+    'conteo_caja',
+    // B11 (caja sin factura): la factura cobrada solo en cajas sin factura pasa su ingreso y su IVA por
+    // certificar a 4.3.01; origen_id = `billing.facturas_no_fiscales.id`
+    'recibo_interno',
     // plan de contabilidad B3 (§5.8): diferencia aceptada al conciliar el banco;
     // origen_id = `billing.diferencias_conciliacion.id`
     'diferencia_conciliacion',

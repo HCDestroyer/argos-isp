@@ -20,8 +20,30 @@ interface FilaSaldo {
     nombre: string
     tipo: 'activo' | 'pasivo' | 'patrimonio' | 'ingreso' | 'gasto'
     naturaleza: 'deudora' | 'acreedora'
+    interna: boolean
     debe: string
     haber: string
+}
+
+/** B11: nombre de la línea que agrupa las cuentas internas para quien no puede verlas. */
+export const LINEA_INTERNA = 'Interno (restringido)'
+
+/**
+ * B11 (visibilidad): sin `contabilidad.ver_cuentas_internas`, las cuentas internas se juntan en una
+ * línea por tipo («Interno (restringido)», `cuenta_id` 0, código del grupo): los totales no cambian.
+ */
+function agruparInternas(filas: FilaSaldo[], verInternas: boolean): FilaSaldo[] {
+    if (verInternas) return filas
+    return filas.map((f) =>
+        f.interna
+            ? {
+                  ...f,
+                  cuenta_id: f.tipo === 'ingreso' ? -1 : f.tipo === 'gasto' ? -2 : -3,
+                  codigo: f.tipo === 'ingreso' ? '4.3' : f.tipo === 'gasto' ? '5.7' : '9',
+                  nombre: LINEA_INTERNA,
+              }
+            : f,
+    )
 }
 
 export interface LineaEstado {
@@ -102,7 +124,7 @@ async function saldosPorCuenta(
             )
             .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
             .if(tipos, (q) => q.whereIn('c.tipo', tipos!))
-            .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza')
+            .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza', 'c.interna')
             .orderBy([
                 { column: 'a.empresa_id', order: 'asc' },
                 { column: 'c.codigo', order: 'asc' },
@@ -114,6 +136,7 @@ async function saldosPorCuenta(
                 'c.nombre',
                 'c.tipo',
                 'c.naturaleza',
+                'c.interna',
                 db.raw('sum(m.debe)::text as debe'),
                 db.raw('sum(m.haber)::text as haber'),
             )) as FilaSaldo[]
@@ -213,9 +236,13 @@ async function secciones<T>(
  * Balance de saldos al `hasta` (por defecto hoy): saldo de cada cuenta con movimiento. Los totales
  * separan el resultado de años anteriores sin cierre anual (§10.8) del resultado del año.
  */
-export async function balanceSaldos(filtros: { hasta?: string }, empresas: number[] | null) {
+export async function balanceSaldos(
+    filtros: { hasta?: string },
+    empresas: number[] | null,
+    verInternas = true,
+) {
     const hasta = filtros.hasta ?? hoyGuatemala()
-    const filas = await saldosPorCuenta(empresas, { hasta })
+    const filas = agruparInternas(await saldosPorCuenta(empresas, { hasta }), verInternas)
     const inicioAnio = `${hasta.slice(0, 4)}-01-01`
     const previas =
         filas.length > 0
@@ -256,10 +283,14 @@ function diaAnterior(fecha: string): string {
 export async function estadoResultados(
     filtros: { desde?: string; hasta?: string },
     empresas: number[] | null,
+    verInternas = true,
 ) {
     const hasta = filtros.hasta ?? hoyGuatemala()
     const desde = filtros.desde ?? `${hasta.slice(0, 7)}-01`
-    const filas = await saldosPorCuenta(empresas, { desde, hasta }, ['ingreso', 'gasto'], true)
+    const filas = agruparInternas(
+        await saldosPorCuenta(empresas, { desde, hasta }, ['ingreso', 'gasto'], true),
+        verInternas,
+    )
     return {
         desde,
         hasta,

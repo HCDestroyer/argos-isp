@@ -16,6 +16,7 @@ import {
 } from '#billing/cobros'
 import { verPago, type PagoVista } from '#billing/pagos'
 import { revertirDiferencias } from '#billing/diferencias'
+import { devolverALaSat } from '#billing/recibos'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 
@@ -134,6 +135,13 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             t,
             facturas.map((f) => f.id),
             `anulación del pago ${pago.id}: ${input.motivo}`,
+        )
+        // B11: las cobradas en una caja sin factura vuelven a ser avisos (se revierte su paso a 4.3.01)
+        await devolverALaSat(
+            t,
+            pago.id,
+            facturas.map((f) => f.id),
+            input.motivo,
         )
         for (const factura of facturas) {
             const aplicado = aplicaciones.find((a) => a.factura_id === factura.id)!

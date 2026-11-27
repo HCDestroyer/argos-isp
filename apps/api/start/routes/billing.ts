@@ -23,11 +23,14 @@ import AnularFactura from '#billing/actions/anular_factura'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import { listarNotasCredito, verNotaCredito } from '#billing/notas_credito'
 import { dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { listarRecibos, reciboDePago, verRecibo } from '#billing/recibos'
 import { existeCaja } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
+import AsignarPerfilFiscal from '#billing/actions/asignar_perfil_fiscal'
+import { simularRetenciones, vistaPerfilFiscal } from '#billing/perfil_fiscal'
 import { exigirContactoIris } from '#billing/contacto_iris'
 import cobranza from '#start/routes/cobranza'
 import { ComprobanteAprobado } from '#billing/esquemas_cobro'
@@ -158,6 +161,8 @@ import {
     PaginaComprobantes,
     ReconexionTemporal,
     EstadoCuenta,
+    PerfilFiscalCliente,
+    PerfilFiscalFactura,
     Banco,
     CuentaBancaria,
     ConceptoCargo,
@@ -181,6 +186,7 @@ import {
     CorridasFacturacion,
     ResultadoCorte,
     ResultadoVencimiento,
+    Recibo,
 } from '#billing/esquemas'
 
 /** Empresas de un reporte: la activa o el consolidado (`?empresas=todas`, columna de empresa). */
@@ -378,6 +384,19 @@ const facturas: Ruta[] = [
                 exigirAlcance(ctx.alcance, dimensiones)
             }
             if (reglasIris) await exigirCobroEquipo(cuerpo.lineas.map((l) => l.concepto_id))
+            // B11: cambiar lo facturable de los conceptos de un cargo exige su permiso
+            if (cuerpo.facturable !== undefined && cuerpo.facturable !== null && ctx.auth.user) {
+                const alcance = await alcanceDePermiso(
+                    ctx.auth.user.id,
+                    'facturas.cargo_no_facturable',
+                    alcancesDelToken(ctx),
+                )
+                if (!alcance) {
+                    throw new Prohibido(
+                        'Decidir si un cargo se factura requiere el permiso facturas.cargo_no_facturable',
+                    )
+                }
+            }
             if (cuerpo.motivo_sin_costo_id && ctx.auth.user) {
                 const alcance = await alcanceDePermiso(
                     ctx.auth.user.id,
@@ -684,6 +703,51 @@ const pagos: Ruta[] = [
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDePago(id))
             return verPago(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pagos/:id/recibo',
+        operacion: 'pagosRecibo',
+        resumen: 'Recibo no fiscal del pago (caja sin factura o cargo no facturable)',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        descripcion:
+            'B11: lo que se entrega al cobrar en una caja sin factura o al cubrir un cargo no facturable. No es factura (sin DTE, serie ni número de la SAT); numeración propia por empresa. 404 si el pago no tiene recibo.',
+        respuesta: { status: 200, descripcion: 'Recibo', esquema: Recibo },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDePago(id))
+            const recibo = await reciboDePago(id)
+            if (!recibo) throw new NoEncontrado(`El pago ${id} no tiene recibo no fiscal`)
+            return recibo
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/recibos',
+        operacion: 'recibosListar',
+        resumen: 'Cobros en cajas sin factura (recibos no fiscales)',
+        etiqueta: 'pagos',
+        permiso: 'contabilidad.ver_cuentas_internas',
+        query: v.listarRecibosValidator,
+        descripcion:
+            'B11: el reporte «Cobros en cajas sin factura» (con los cargos no facturables): número, caja, cliente, monto, si el pago se anuló y las facturas que quedaron fuera de la SAT. Filtros desde/hasta (fecha de Guatemala), caja_id, cliente_id, motivo; por empresa activa o `empresas=todas`.',
+        respuesta: { status: 200, descripcion: 'Página de recibos', esquema: pagina(Recibo) },
+        handler: (ctx, { query }) => listarRecibos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/recibos/:id',
+        operacion: 'recibosVer',
+        resumen: 'Ver un recibo no fiscal',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        respuesta: { status: 200, descripcion: 'Recibo', esquema: Recibo },
+        handler: async (ctx, { params }) => {
+            const recibo = await verRecibo(Number(params.id))
+            exigirAcceso(ctx, await dimensionesDePago(recibo.pago_id))
+            return recibo
         },
     }),
     definirRuta({
@@ -1977,6 +2041,69 @@ const estadoCuenta: Ruta[] = [
                 empresasEstadoCuenta(ctx, query.empresa_id),
                 query.servicio_id ?? null,
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/perfil-fiscal',
+        operacion: 'clientesPerfilFiscal',
+        resumen: 'Perfil fiscal del cliente: tipo de impuesto y «me retiene ISR»',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        descripcion:
+            'Lote B4 del plan de contabilidad. Un cliente que nunca se configuró es normal, sin ISR, con version 0. exencion dice si la exención se aplica hoy en las facturas (apagada: exencion_sin_frase).',
+        respuesta: { status: 200, descripcion: 'Perfil fiscal', esquema: PerfilFiscalCliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return vistaPerfilFiscal(id, ctx.empresa?.activa ?? null)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/perfil-fiscal/retenciones',
+        operacion: 'clientesSimularRetenciones',
+        resumen: 'Qué se espera retener de una factura de este total al cliente (antes de emitirla)',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        query: v.simularRetencionesValidator,
+        descripcion:
+            'Lote B4: la cuenta de «Nueva factura» y de Cobrar (te retendrá, recibirás) con el perfil fiscal de hoy y el régimen de la empresa. Sin empresa_id usa la activa; 422 empresa_requerida si no hay. Mismas reglas que la instantánea que guarda la factura al emitirse.',
+        respuesta: { status: 200, descripcion: 'Retenciones esperadas', esquema: PerfilFiscalFactura },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            const empresaId = query.empresa_id ?? ctx.empresa?.activa ?? null
+            if (!empresaId) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'empresa_id',
+                        message: 'Indica la empresa que factura',
+                        rule: 'empresa_requerida',
+                    },
+                ])
+            }
+            exigirEmpresaPeticion(ctx.empresa, empresaId)
+            return simularRetenciones(id, empresaId, query.total)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/perfil-fiscal',
+        operacion: 'clientesAsignarPerfilFiscal',
+        resumen: 'Asignar el tipo de impuesto del cliente y «me retiene ISR»',
+        etiqueta: 'clientes',
+        permiso: 'clientes.asignar_perfil_fiscal',
+        cuerpo: v.asignarPerfilFiscalValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Define cómo salen sus facturas y qué retención se espera al cobrarle; no toca las facturas ya emitidas (cada una guarda su instantánea). exento exige resolucion_exencion y se guarda, pero la factura sale con IVA hasta tener la frase de exención. 409 por version, 422 por resolución. audit.cambios (cliente_perfil_fiscal) y cliente.actualizado con campos tipo_impuesto y retiene_isr.',
+        respuesta: { status: 200, descripcion: 'Perfil fiscal guardado', esquema: PerfilFiscalCliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return new AsignarPerfilFiscal().execute({ ...cuerpo, cliente_id: id }, ctx.contextoAccion())
         },
     }),
 ]

@@ -240,7 +240,10 @@ export function esCostoDeVentas(codigo: string): boolean {
     return codigo === c || codigo.startsWith(`${c}.`)
 }
 
-/** Ingresos y gastos del rango sin el cierre anual; los no deducibles por `categoria_fiscal`. */
+/**
+ * Ingresos y gastos del rango sin el cierre anual; los no deducibles por `categoria_fiscal`. B11: sin
+ * las cuentas internas (`interna`, caja sin factura): quedan fuera de las declaraciones.
+ */
 export async function resultadosDelRango(
     c: QueryClientContract,
     empresaId: number,
@@ -252,7 +255,7 @@ export async function resultadosDelRango(
            FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
            JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
           WHERE a.empresa_id = ? AND a.fecha BETWEEN ? AND ? AND a.origen_tipo <> 'cierre_anual'
-            AND cu.tipo IN ('ingreso', 'gasto')
+            AND cu.tipo IN ('ingreso', 'gasto') AND NOT cu.interna
           GROUP BY 1, 2, 3, 4
          HAVING sum(m.debe - m.haber) <> 0
           ORDER BY 1`,

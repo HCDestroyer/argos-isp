@@ -24,6 +24,8 @@ export interface EntradaConceptoCargo {
     tipo?: TipoConceptoCargo
     cuenta_codigo: string
     gravable?: boolean
+    /** B11: false = cargo no facturable (cobro de control, sin DTE; a la cuenta interna) */
+    facturable?: boolean
     activo?: boolean
     /** Solo lectura: un valor distinto de null responde `422 concepto_de_sistema`. */
     codigo_sistema?: string | null
@@ -72,6 +74,7 @@ export default class CrearConceptoCargo extends DomainAction<EntradaConceptoCarg
                 tipo: input.tipo ?? 'otro',
                 cuenta_codigo: input.cuenta_codigo,
                 gravable: input.gravable ?? true,
+                facturable: input.facturable ?? true,
                 activo: input.activo ?? true,
             })
             .returning('id')) as Array<{ id: number }>
@@ -83,6 +86,7 @@ export default class CrearConceptoCargo extends DomainAction<EntradaConceptoCarg
             tipo: creado.tipo,
             cuenta_codigo: creado.cuenta_codigo,
             gravable: creado.gravable,
+            facturable: creado.facturable,
             activo: creado.activo,
         })
         return creado

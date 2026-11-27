@@ -4,6 +4,7 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { verEgreso, type EgresoVista } from '#ledger/egresos'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
+import { exigirGastoNoRepuesto } from '#ledger/caja_chica'
 
 /**
  * `egresos.anular` (`POST /egresos/:id/anular`, con motivo): revierte el asiento del egreso con
@@ -11,7 +12,8 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
  * abierto) y deja la anulación en `ledger.egresos_anulaciones`. El egreso nunca se edita ni se
  * borra. Un egreso en efectivo anulado deja de restar en el esperado de su turno si sigue abierto.
  * 409 `egreso_anulado` si ya estaba anulado. 422 `egreso_de_premio_sorteo` si es el egreso de un premio
- * de sorteo entregado (H22: se anula con `sorteos.anular_entrega`).
+ * de sorteo entregado (H22: se anula con `sorteos.anular_entrega`). 409 `gasto_repuesto` si es un gasto
+ * de caja chica ya repuesto (B9: la reposición lo selló). Uno sin reponer devuelve su efectivo a la caja chica.
  */
 
 export interface EntradaAnularEgreso {
@@ -54,6 +56,9 @@ export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, Egre
                 'egreso_de_premio_sorteo',
             )
         }
+
+        // B9: un gasto de caja chica ya repuesto está sellado
+        await exigirGastoNoRepuesto(t.trx, egreso.id)
 
         // fase 5 (§3.4): el egreso de una compra al contado se anula con la compra; y un egreso que
         // ya es una compra (desde egreso) se anula después de anular esa compra

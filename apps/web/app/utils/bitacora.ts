@@ -127,6 +127,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'billing.resumenes': 'Resúmenes de facturación calculados',
     'clientes.asignar_responsable_pago': 'Responsable de pago asignado',
     'clientes.quitar_responsable_pago': 'Responsable de pago quitado',
+    'clientes.asignar_perfil_fiscal': 'Tipo de impuesto del cliente cambiado',
     'clientes.vincular_telegram': 'Telegram vinculado',
     'clientes.desvincular_telegram': 'Telegram desvinculado',
     'comprobantes.registrar': 'Comprobante de depósito recibido',
@@ -166,6 +167,13 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'cajas.recibir_entrega': 'Efectivo recibido de una caja («Recibí»)',
     'cajas.rechazar_entrega': 'Entrega de efectivo rechazada («No lo recibí»)',
     'cajas.configurar': 'Ajustes de cajas y custodia cambiados',
+    // B9 del plan de contabilidad (A3): caja chica con fondo fijo
+    'caja_chica.registrar_gasto': 'Gasto de caja chica registrado',
+    'caja_chica.reponer': 'Caja chica repuesta',
+    'caja_chica.contar': 'Caja chica contada',
+    'egresos.adjuntar_comprobante': 'Comprobante adjuntado a un egreso',
+    // B11 del plan de contabilidad (A3): caja sin factura
+    'cajas.editar': 'Caja editada (sin factura, quiénes la ven o su cajero)',
     'bancos.trasladar': 'Traslado entre cuentas bancarias',
     'bancos.importar_extracto': 'Extracto bancario importado',
     'bancos.importar_extracto_archivo': 'Estado de cuenta del banco importado desde archivo',
@@ -612,6 +620,8 @@ export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker',
 export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: number) => string }> = {
     campo_personalizado: { etiqueta: 'Campo personalizado', ruta: id => `/campos-personalizados?campo=${id}` },
     cliente: { etiqueta: 'Cliente', ruta: id => `/clientes/${id}` },
+    // B4 (A3): perfil fiscal del cliente; id = el cliente
+    cliente_perfil_fiscal: { etiqueta: 'Perfil fiscal del cliente', ruta: id => `/clientes/${id}` },
     servicio: { etiqueta: 'Servicio', ruta: id => `/servicios/${id}` },
     factura: { etiqueta: 'Factura', ruta: id => `/facturas/${id}` },
     pago: { etiqueta: 'Pago', ruta: id => `/pagos/${id}` },

@@ -22,6 +22,8 @@ import { configuracionFel, modoEmision, type CertificarAl } from '#fiscal/fel/co
 import type { TipoConceptoCargo } from '#billing/cargos_unicos'
 import { prepararVentas, registrarVentas } from '#inventario/ventas'
 import { origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
+import { marcarCargoNoFacturable } from '#billing/recibos'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
  * `facturas.emitir_cargo_unico` (`POST /facturas/cargo-unico`): factura manual de un cargo que no es
@@ -50,6 +52,10 @@ import { origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_exte
  *   (y `unidad_id` si es de serie) vende del kardex: sale al costo promedio (o al de la unidad) con su
  *   asiento de costo de ventas `5.6.01 / 1.1.14` en esta transacción (`#inventario/ventas`). 409
  *   `existencia_insuficiente`, `unidad_en_comodato`; un cargo en Q0 con producto: 422 `producto_sin_costo`.
+ * - **B11, no facturable**: si sus conceptos son `facturable = false` (o el cargo trae `facturable:
+ *   false`), es un cobro de control: sin IVA, sus líneas a `4.3.01 Ingresos por recibos internos`, sin
+ *   DTE ni libros fiscales (`billing.facturas_no_fiscales`, motivo `cargo_no_facturable`); al cobrarlo
+ *   sale un recibo no fiscal. No se mezclan conceptos facturables y no facturables (422 `cargo_mixto`).
  * - FEL activa con un concepto exento (`gravable: false`) → 422 `concepto_exento_con_fel`: el DTE aún no
  *   lleva la frase de exención (pendiente del contador).
  * - **Origen** (pedido A4 de Iris, `contratos/iris.md` §5.1): `origen_tipo = iris_orden` + `origen_id`
@@ -90,6 +96,12 @@ export interface EntradaEmitirCargoUnico {
      * Queda en `reglas_snapshot.cobro_por_modalidad`.
      */
     por_modalidad?: boolean
+    /**
+     * B11: por defecto lo de sus conceptos (`facturable`); false = cobro de control: sin IVA ni DTE, sus
+     * líneas a `4.3.01` y se cubre con un recibo no fiscal. La ruta exige `facturas.cargo_no_facturable`
+     * para cambiar lo del concepto.
+     */
+    facturable?: boolean | null
 }
 
 interface ConceptoFila {
@@ -99,6 +111,7 @@ interface ConceptoFila {
     tipo: TipoConceptoCargo
     cuenta_codigo: string
     gravable: boolean
+    facturable: boolean
     activo: boolean
 }
 
@@ -186,9 +199,23 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 'tipo',
                 'cuenta_codigo',
                 'gravable',
+                'facturable',
                 'activo',
             )) as ConceptoFila[]
         const porId = new Map(conceptos.map((c) => [Number(c.id), c]))
+        // B11: un cargo es facturable o no entero (los conceptos de sus líneas no se mezclan)
+        const marcas = new Set(
+            input.lineas
+                .map((l) => porId.get(Number(l.concepto_id))?.facturable)
+                .filter((m) => m !== undefined),
+        )
+        if (marcas.size > 1 && (input.facturable === undefined || input.facturable === null)) {
+            throw new ReglaNegocio(
+                'El cargo mezcla conceptos facturables y no facturables: emite un cargo para cada uno',
+                'cargo_mixto',
+            )
+        }
+        const facturable = input.facturable ?? (marcas.size === 0 ? true : [...marcas][0]!)
         const errores: ErrorCampo[] = []
         const lineas: LineaCalculada[] = []
         const descuentos: DescuentoPedido[] = []
@@ -256,11 +283,12 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                     concepto: l.descripcion?.trim() || concepto.nombre,
                     tipo: concepto.tipo,
                     cantidad: cantidad.toString(),
-                    gravable: concepto.gravable,
+                    // B11: un cobro de control no lleva IVA
+                    gravable: facturable && concepto.gravable,
                     total: bruto,
                 }),
                 precio_unitario: precio.toFixed(2),
-                cuenta_codigo: concepto.cuenta_codigo,
+                cuenta_codigo: facturable ? concepto.cuenta_codigo : CUENTAS_GT.INGRESOS_INTERNOS,
                 concepto_cargo_id: Number(l.concepto_id),
                 ...(l.producto_id
                     ? {
@@ -368,7 +396,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
 
         // sin plantilla: «pagar» (decisión del PM, 25-nov-2026: primero se cobra y después se certifica)
         const certificarAl: CertificarAl = config?.certificar_al ?? 'pagar'
-        if (!sinCosto && conDescuentos.some((l) => l.tipo !== 'descuento' && !l.gravable)) {
+        if (facturable && !sinCosto && conDescuentos.some((l) => l.tipo !== 'descuento' && !l.gravable)) {
             const fel = await configuracionFel(empresaId, t.trx)
             if (modoEmision(fel, certificarAl) !== 'sin_fel') {
                 throw new ReglaNegocio(
@@ -422,12 +450,15 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 certificar_al: certificarAl,
                 cargo_unico: true,
                 ...(input.por_modalidad ? { cobro_por_modalidad: true } : {}),
+                ...(facturable ? {} : { facturable: false }),
             },
             certificar_al: certificarAl,
             descripcion: `cargo único ${servicio ? `servicio ${servicio.id}` : `cliente ${clienteId}`}`,
             origen_externo: origenExterno,
         })
         const facturaId = emision.factura_id!
+        // B11: el cargo no facturable nace fuera de la SAT (sin DTE; recibo al cobrarlo)
+        if (!facturable) await marcarCargoNoFacturable(t, empresaId, facturaId)
         await registrarVentas(t, ventas, {
             id: facturaId,
             empresa_id: empresaId,

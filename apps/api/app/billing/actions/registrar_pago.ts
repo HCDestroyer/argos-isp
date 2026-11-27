@@ -23,6 +23,7 @@ import {
 import { pendienteDe } from '#billing/facturas'
 import { cajaPrincipalId, verPago, type PagoVista } from '#billing/pagos'
 import { cajaDelCajero } from '#ledger/cajas'
+import { emitirRecibo, exigirSinPagoMixto, sacarDeLaSat, sqlNoFiscalVigente } from '#billing/recibos'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
@@ -447,13 +448,13 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         const cajas = new Map<number, { cajaId: number; cuentaId: number; turnoId: number | null }>()
         if (input.metodo !== 'caja') return cajas
         const usuario = usuarioDelActor(t.ctx.actor)
-        type CajaPedida = { id: number; empresa_id: number; cuenta_id: number; activa: boolean }
+        type CajaPedida = { id: number; empresa_id: number; cuenta_id: number; activa: boolean; tipo: string }
         let pedida: CajaPedida | null = null
         if (input.caja_id) {
             pedida = (await t.trx
                 .from('ledger.cajas')
                 .where('id', input.caja_id)
-                .select('id', 'empresa_id', 'cuenta_id', 'activa')
+                .select('id', 'empresa_id', 'cuenta_id', 'activa', 'tipo')
                 .first()) as CajaPedida | null
             if (!pedida || !pedida.activa) {
                 throw new ValidacionFallida([
@@ -461,6 +462,16 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                         field: 'caja_id',
                         message: `La caja ${input.caja_id} no existe o está inactiva`,
                         rule: 'caja',
+                    },
+                ])
+            }
+            // B9: en la caja chica no se cobra (solo gastos con fondo fijo)
+            if (pedida.tipo === 'gastos') {
+                throw new ValidacionFallida([
+                    {
+                        field: 'caja_id',
+                        message: `La caja ${input.caja_id} es una caja chica: no recibe cobros`,
+                        rule: 'caja_chica_no_cobra',
                     },
                 ])
             }
@@ -523,6 +534,73 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             })
         }
         return cajas
+    }
+
+    /**
+     * B11: recibo no fiscal del pago si se cobró en una caja sin factura (y las facturas que quedan
+     * cubiertas solo con dinero sin factura salen de la SAT) o si cubre un cargo no facturable.
+     */
+    private async reciboNoFiscal(
+        t: Transaccion,
+        datos: {
+            empresaId: number
+            pagoId: number
+            cajaId: number | null
+            clienteId: number
+            monto: Dec
+            facturas: number[]
+        },
+    ) {
+        const caja =
+            datos.cajaId === null
+                ? null
+                : ((await t.trx
+                      .from('ledger.cajas')
+                      .where('id', datos.cajaId)
+                      .select('fiscal')
+                      .firstOrFail()) as {
+                      fiscal: boolean
+                  })
+        const sinFactura = caja !== null && !caja.fiscal
+        const cargoControl =
+            datos.facturas.length > 0 &&
+            Boolean(
+                await t.trx
+                    .from('billing.facturas as f')
+                    .whereIn('f.id', datos.facturas)
+                    .whereRaw(sqlNoFiscalVigente('f'))
+                    .select('f.id')
+                    .first(),
+            )
+        if (!sinFactura && !cargoControl) return
+        const motivo = sinFactura ? 'caja_sin_factura' : 'cargo_no_facturable'
+        const recibo = await emitirRecibo(t, {
+            empresa_id: datos.empresaId,
+            pago_id: datos.pagoId,
+            caja_id: datos.cajaId,
+            cliente_id: datos.clienteId,
+            monto: datos.monto,
+            motivo,
+        })
+        const fuera = sinFactura
+            ? await sacarDeLaSat(t, {
+                  empresa_id: datos.empresaId,
+                  pago_id: datos.pagoId,
+                  recibo_id: recibo.id,
+                  facturas: datos.facturas,
+              })
+            : []
+        await t.emit('recibo.emitido', {
+            recibo_id: recibo.id,
+            empresa_id: datos.empresaId,
+            numero: recibo.numero,
+            pago_id: datos.pagoId,
+            caja_id: datos.cajaId,
+            cliente_id: datos.clienteId,
+            monto: aTexto(datos.monto),
+            motivo,
+            facturas_no_fiscales: fuera,
+        })
     }
 
     private async registrarCobro(t: Transaccion, input: EntradaRegistrarPago, monto: Dec): Promise<number> {
@@ -601,6 +679,18 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         await insertarConstanciasRecibidas(t, pagoId, parte.empresaId, input.cliente_id, constancias)
 
         const { aplicaciones, restante } = await aplicarAFacturas(t.trx, pagoId, parte.monto, parte.facturas)
+        // B11: pago mixto prohibido (una factura no se reparte entre cajas con y sin factura)
+        const cajaDelPago =
+            caja?.cajaId === undefined
+                ? null
+                : ((await t.trx.from('ledger.cajas').where('id', caja.cajaId).select('fiscal').first()) as {
+                      fiscal: boolean
+                  } | null)
+        await exigirSinPagoMixto(t.trx, {
+            pago_id: pagoId,
+            caja_fiscal: cajaDelPago?.fiscal ?? true,
+            facturas: aplicaciones.map((a) => a.factura_id),
+        })
 
         // un solo asiento: el débito por el total y el crédito en el auxiliar CxC de cada dueño
         // pasarela: el banco recibe el neto y la comisión es gasto (Bancos + Comisiones / CxC)
@@ -671,6 +761,14 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             { trx: t.trx },
         )
         await guardarRecuperacion(t.trx, parte.empresaId, pagoId, recuperacion)
+        await this.reciboNoFiscal(t, {
+            empresaId: parte.empresaId,
+            pagoId,
+            cajaId: caja?.cajaId ?? null,
+            clienteId: input.cliente_id,
+            monto: parte.monto,
+            facturas: aplicaciones.map((a) => a.factura_id),
+        })
 
         await t.emit('pago.registrado', {
             pago_id: pagoId,
