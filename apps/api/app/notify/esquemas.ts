@@ -296,6 +296,86 @@ export const WhatsappCliente = definirEsquema(
     }),
 )
 
+/*
+| Plantillas de recordatorio (R1, `contratos/recordatorios.md`)
+*/
+
+export const PasoRecordatorio = definirEsquema(
+    'PasoRecordatorio',
+    objeto({
+        orden: { type: 'integer', minimum: 1, maximum: 8 },
+        disparador: enumerado(['vencimiento', 'corte_proximo', 'promesa_por_vencer']),
+        dias: { type: 'integer', minimum: -60, maximum: 60, description: 'Negativo antes, positivo después' },
+        hora: { type: 'string', description: 'HH:MM, hora de Guatemala' },
+        aviso: enumerado(['factura_por_vencer', 'factura_vencida', 'corte_proximo', 'promesa_por_vencer']),
+        evento_plantilla: enumerado([
+            'recordatorio.1',
+            'recordatorio.2',
+            'recordatorio.3',
+            'recordatorio.corte_proximo',
+            'recordatorio.promesa_por_vencer',
+        ]),
+        canales: { type: 'array', items: canal, description: 'Vacío = el que elija Iris' },
+        activo: booleano,
+    }),
+)
+
+export const PlantillaRecordatorio = definirEsquema(
+    'PlantillaRecordatorio',
+    objeto({
+        id,
+        empresa_id: id,
+        nombre: texto,
+        descripcion: nulable(texto),
+        por_defecto: booleano,
+        servicio_id: { ...nulable(id), description: 'Con valor: la personalizada de ese servicio' },
+        retirada_en: nulable(instante),
+        retirada_por: nulable(id),
+        motivo_retiro: nulable(texto),
+        pasos: { type: 'array', items: PasoRecordatorio },
+        ...auditable,
+    }),
+)
+
+const origenRecordatorio = enumerado([
+    'personalizada',
+    'asignada_servicio',
+    'asignada_suscripcion',
+    'por_defecto',
+])
+
+export const RecordatoriosDestino = definirEsquema(
+    'RecordatoriosDestino',
+    objeto({
+        empresa_id: id,
+        servicio_id: nulable(id),
+        suscripcion_id: nulable(id),
+        origen: { ...nulable(origenRecordatorio), description: 'De dónde sale la plantilla que rige' },
+        plantilla: { anyOf: [PlantillaRecordatorio, { type: 'null' }], description: 'La que rige' },
+        asignada: {
+            anyOf: [objeto({ plantilla_id: id, nombre: texto, retirada: booleano }), { type: 'null' }],
+            description: 'La asignada (aunque la personalizada la tape); null = la por defecto',
+        },
+        personalizada: booleano,
+    }),
+)
+
+export const AsignacionRecordatorio = definirEsquema(
+    'AsignacionRecordatorio',
+    objeto({
+        empresa_id: id,
+        servicio_id: nulable(id),
+        suscripcion_id: nulable(id),
+        plantilla_id: { ...nulable(id), description: 'null = la por defecto de la empresa' },
+        cambio: booleano,
+    }),
+)
+
+export const AsignacionRecordatorioMasiva = definirEsquema(
+    'AsignacionRecordatorioMasiva',
+    objeto({ plantilla_id: id, asignados: entero, sin_cambios: entero }),
+)
+
 export const AvisoPagoWhatsapp = definirEsquema(
     'AvisoPagoWhatsapp',
     objeto({

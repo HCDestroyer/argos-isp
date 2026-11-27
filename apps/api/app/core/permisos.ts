@@ -325,6 +325,17 @@ export const PERMISOS = {
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
     'notificaciones.registrar_consentimiento':
         'Marcar o quitar «Acepta avisos por WhatsApp» de un cliente (el permiso de contacto vive en Iris)',
+    'recordatorios.ver':
+        'Ver las plantillas de recordatorio de pago y cuál rige para un servicio o suscripción',
+    'recordatorios.crear': 'Crear plantillas de recordatorio de pago (con nombre, por empresa)',
+    'recordatorios.editar':
+        'Editar una plantilla de recordatorio (nombre, pasos) o fijarla como la por defecto de su empresa',
+    'recordatorios.retirar':
+        'Retirar una plantilla de recordatorio (no se asigna más; quien la tiene la conserva)',
+    'recordatorios.asignar':
+        'Asignar una plantilla de recordatorio a servicios o suscripciones (también en lote)',
+    'recordatorios.personalizar':
+        'Poner o quitar recordatorios personalizados a un servicio (excepción del cliente)',
 
     'horus.ver':
         'Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)',
@@ -729,6 +740,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'ip.resolver',
             'bitacora.ver',
             'notificaciones.ver',
+            // recordatorios por plantilla (contratos/recordatorios.md §8; P-N15, recomendado)
+            'recordatorios.ver',
+            'recordatorios.asignar',
+            'recordatorios.personalizar',
             'servicios.programar_plan_temporal',
             'servicios.cancelar_plan_temporal',
             'servicios.generar_codigo_identificacion',
