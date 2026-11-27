@@ -13,6 +13,7 @@ import { MOTIVOS_RECONEXION, reglasPromesaSchema } from '#billing/reglas_promesa
 import { TIPOS_CUENTA_BANCARIA } from '#billing/cuentas_bancarias'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
+import { TIPOS_IMPUESTO } from '#billing/perfil_fiscal'
 import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import { reglasOrigenExterno } from '#inventario/origen_externo'
 
@@ -972,6 +973,41 @@ export const emitirFacturasPeriodoValidator = vine.compile(
             description:
                 'Por qué se emiten a mano (queda en reglas_snapshot.emision_manual y en la bitácora); obligatorio para un periodo anterior al inicio del servicio o a facturar_desde, y al editar un monto',
         }),
+    }),
+)
+
+/** `POST /clientes/:id/perfil-fiscal` (B4): tipo de impuesto y «me retiene ISR». */
+export const asignarPerfilFiscalValidator = vine.compile(
+    vine.object({
+        tipo_impuesto: vine.enum(TIPOS_IMPUESTO).meta({
+            description:
+                'normal, agente_retenedor_iva o exento (exento se guarda, pero la factura sale con IVA hasta tener la frase de exención)',
+        }),
+        retiene_isr: vine.boolean().meta({ description: 'Casilla «me retiene ISR»' }),
+        resolucion_exencion: vine
+            .object({
+                numero: vine.string().trim().minLength(1).maxLength(60),
+                fecha: fechaIso(),
+            })
+            .nullable()
+            .optional()
+            .meta({ description: 'Resolución de la SAT: obligatoria con exento; solo va con exento' }),
+        nota: vine.string().trim().maxLength(500).nullable().optional(),
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se guardó); si cambió responde 409' }),
+    }),
+)
+
+/** `GET /clientes/:id/perfil-fiscal/retenciones` (B4): simula lo que se espera retener. */
+export const simularRetencionesValidator = vine.compile(
+    vine.object({
+        total: dinero(),
+        empresa_id: idEntidad()
+            .optional()
+            .meta({ description: 'Empresa que factura; sin ella, la activa (X-Empresa-Id)' }),
     }),
 )
 

@@ -254,6 +254,14 @@ export const CAMPOS_CLIENTE_ACTUALIZADO = [
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
+/**
+ * Campos del perfil fiscal del cliente (lote B4 del plan de contabilidad, `#billing/perfil_fiscal`)
+ * que también viajan en `cliente.actualizado` cuando `clientes.asignar_perfil_fiscal` los cambia.
+ * No son de `core.clientes`: Horus no los recibe (solo identidad) e Iris relee al cliente.
+ */
+export const CAMPOS_CLIENTE_FISCAL = ['tipo_impuesto', 'retiene_isr'] as const
+export type CampoClienteFiscal = (typeof CAMPOS_CLIENTE_FISCAL)[number]
+
 export const MODALIDADES_ADICIONAL = ['incluido', 'cortesia', 'cobrado'] as const
 export type ModalidadAdicional = (typeof MODALIDADES_ADICIONAL)[number]
 export const CAMPOS_ADICIONAL_CAMBIADO = [
@@ -767,7 +775,8 @@ export interface CatalogoEventos {
      */
     'cliente.actualizado': {
         cliente_id: number
-        campos: CampoClienteActualizado[]
+        /** también `tipo_impuesto` y `retiene_isr` (perfil fiscal, B4) */
+        campos: Array<CampoClienteActualizado | CampoClienteFiscal>
     }
     /**
      * Contrato Iris 0.9.0 §6.6 (A30): un ticket del cliente cambió de estado en Iris (webhook

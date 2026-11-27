@@ -19,6 +19,7 @@ import { ESTADOS_SERVICIO, METODOS_PAGO } from '#shared/eventos'
 import { NOMBRES_REGLA, REGLAS_CUMPLIMIENTO } from '#billing/promesas'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 import { ESTADOS_PERIODO, MOTIVOS_NO_EMITIBLE } from '#billing/periodos_facturables'
+import { TIPOS_IMPUESTO } from '#billing/perfil_fiscal'
 
 /** Enumerado que también admite null (null dentro de `enum`, como `regla` de EvaluacionPromesa). */
 function enumeradoNulable(valores: readonly string[]) {
@@ -246,6 +247,115 @@ export const FacturaLinea = definirEsquema(
     ),
 )
 
+/*
+|--------------------------------------------------------------------------
+| Perfil fiscal del cliente (lote B4 del plan de contabilidad)
+|--------------------------------------------------------------------------
+*/
+
+const MOTIVOS_SIN_RETENCION = [
+    'cliente_no_retiene',
+    'regimen_pequeno_contribuyente',
+    'regimen_utilidades',
+    'sin_iva',
+    'bajo_minimo',
+    'sin_localizacion',
+] as const
+
+const TipoImpuesto = {
+    ...enumerado(TIPOS_IMPUESTO),
+    description:
+        'normal = se le cobra IVA; agente_retenedor_iva = paga menos y entrega constancia por el 15 % del IVA; exento = por ley no paga IVA (apagado: la factura sale con IVA hasta tener la frase de exención)',
+}
+
+export const PerfilFiscalCliente = definirEsquema(
+    'PerfilFiscalCliente',
+    objeto({
+        cliente_id: id,
+        tipo_impuesto: TipoImpuesto,
+        retiene_isr: {
+            ...booleano,
+            description: 'Casilla «me retiene ISR»: al cobrar se espera su constancia',
+        },
+        resolucion_exencion: {
+            ...nulable(objeto({ numero: texto, fecha })),
+            description: 'Resolución de la SAT que respalda la exención (obligatoria con exento)',
+        },
+        nota: nulable(texto),
+        version: {
+            ...entero,
+            minimum: 0,
+            description: 'Control optimista: envíala al asignar (0 = nunca se guardó: Normal)',
+        },
+        actualizado_por: nulable(id),
+        actualizado_en: nulable(instante),
+        exencion: {
+            ...objeto({
+                disponible: booleano,
+                motivo: nulable(enumerado(['exencion_sin_frase'])),
+            }),
+            description:
+                'Si la exención se aplica hoy en las facturas: apagada (exencion_sin_frase) hasta que la empresa tenga la frase de exención del contador',
+        },
+    }),
+)
+
+export const RetencionEsperada = definirEsquema(
+    'RetencionEsperada',
+    objeto({
+        impuesto: enumerado(['iva', 'isr']),
+        codigo: {
+            ...texto,
+            description: 'Retención recibida del catálogo fiscal (RET_IVA_ESP, RET_ISR_OPC)',
+        },
+        base: { ...Dinero, description: 'IVA de la factura (iva) o lo facturado sin IVA (isr)' },
+        tasa: { ...texto, description: 'Porcentaje aplicado (en ISR, el del tramo)' },
+        monto: Dinero,
+    }),
+)
+
+export const PerfilFiscalFactura = definirEsquema(
+    'PerfilFiscalFactura',
+    objeto({
+        tipo_impuesto: TipoImpuesto,
+        retiene_isr: booleano,
+        exento_aplicado: {
+            ...booleano,
+            description: 'La factura salió sin IVA por la exención (hoy siempre false: exención apagada)',
+        },
+        motivo_exento: nulable(enumerado(['exencion_sin_frase'])),
+        regimen: { ...nulable(texto), description: 'Régimen de la empresa en la fecha de la factura' },
+        retenciones: lista(RetencionEsperada),
+        sin_retencion: {
+            ...lista(
+                objeto({ impuesto: enumerado(['iva', 'isr']), motivo: enumerado(MOTIVOS_SIN_RETENCION) }),
+            ),
+            description: 'Por qué no se espera retención de cada impuesto',
+        },
+        total_retenciones: Dinero,
+        a_recibir: { ...Dinero, description: 'Total − retenciones: lo que debe llegar en dinero' },
+    }),
+)
+
+export const RetencionFacturaPendiente = definirEsquema(
+    'RetencionFacturaPendiente',
+    objeto({
+        factura_id: id,
+        empresa_id: id,
+        total: Dinero,
+        pendiente: Dinero,
+        fuente: {
+            ...enumerado(['factura', 'perfil_actual']),
+            description:
+                'factura = instantánea guardada al emitir; perfil_actual = factura anterior al perfil fiscal, calculada con el perfil de hoy',
+        },
+        retencion_iva: Dinero,
+        retencion_isr: Dinero,
+        total_retenciones: Dinero,
+        a_recibir: { ...Dinero, description: 'Pendiente − retenciones (nunca negativo)' },
+    }),
+)
+
 export const Factura = definirEsquema(
     'Factura',
     objeto(
@@ -364,9 +474,15 @@ export const Factura = definirEsquema(
                 description:
                     'Desde este día la factura cuenta para limitar o cortar (emisión + dias_gracia_corte); null = desde que vence',
             },
+            perfil_fiscal: {
+                ...nulable(PerfilFiscalFactura),
+                description:
+                    'Perfil fiscal del cliente al emitir (tipo de impuesto, ISR, exención y retenciones esperadas); null en las facturas anteriores',
+            },
             ...auditable,
         },
         [
+            'perfil_fiscal',
             'dias_gracia_corte',
             'corte_desde',
             'sustituida_por',
@@ -1144,20 +1260,28 @@ export const MovimientoEstadoCuenta = definirEsquema(
 
 export const SeccionEstadoCuenta = definirEsquema(
     'SeccionEstadoCuenta',
-    objeto({
-        empresa_id: id,
-        nombre_comercial: texto,
-        razon_social: nulable(texto),
-        nit: nulable(texto),
-        logo_url: nulable(texto),
-        saldo: { ...Dinero, description: 'Auxiliar CxC del cliente en esta empresa (positivo = debe)' },
-        saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en esta empresa' },
-        facturas_pendientes: lista(Factura),
-        movimientos: {
-            ...lista(MovimientoEstadoCuenta),
-            description: 'Saldo acumulado dentro de la empresa',
+    objeto(
+        {
+            empresa_id: id,
+            nombre_comercial: texto,
+            razon_social: nulable(texto),
+            nit: nulable(texto),
+            logo_url: nulable(texto),
+            saldo: { ...Dinero, description: 'Auxiliar CxC del cliente en esta empresa (positivo = debe)' },
+            saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en esta empresa' },
+            facturas_pendientes: lista(Factura),
+            movimientos: {
+                ...lista(MovimientoEstadoCuenta),
+                description: 'Saldo acumulado dentro de la empresa',
+            },
+            retenciones_esperadas: {
+                ...lista(RetencionFacturaPendiente),
+                description:
+                    'Una por factura pendiente: retención de IVA e ISR que se espera del cliente y lo que debe llegar en dinero (perfil fiscal, B4). Siempre viene; opcional en el esquema para no romper fixtures',
+            },
         },
-    }),
+        ['retenciones_esperadas'],
+    ),
 )
 
 export const EstadoCuenta = definirEsquema(
@@ -1185,8 +1309,12 @@ export const EstadoCuenta = definirEsquema(
                 description:
                     'Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo',
             },
+            perfil_fiscal: {
+                ...PerfilFiscalCliente,
+                description: 'Perfil fiscal del cliente hoy (tipo de impuesto y «me retiene ISR»)',
+            },
         },
-        ['saldo_a_favor', 'empresas', 'servicio_id'],
+        ['saldo_a_favor', 'empresas', 'servicio_id', 'perfil_fiscal'],
     ),
 )
 
