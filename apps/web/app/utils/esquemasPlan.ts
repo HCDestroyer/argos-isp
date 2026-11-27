@@ -64,7 +64,8 @@ export type EntradaPlan = z.input<typeof esquemaPlan>
 export type SalidaPlan = z.output<typeof esquemaPlan>
 
 type CamposVelocidad = 'bajada_kbps' | 'subida_kbps' | 'bajada_limitada_kbps' | 'subida_limitada_kbps' | 'reuso' | 'garantia_automatica' | 'garantizado_pct' | 'con_rafaga' | 'rafaga_bajada_kbps' | 'rafaga_subida_kbps' | 'rafaga_umbral_pct' | 'rafaga_segundos' | 'prioridad'
-type VelocidadFormulario = Pick<DatosPlan, 'bajada_kbps' | 'subida_kbps' | 'bajada_limitada_kbps' | 'subida_limitada_kbps' | 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | 'rafaga_subida_kbps' | 'rafaga_umbral_pct' | 'rafaga_segundos' | 'prioridad'>
+/** `Required`: en el cuerpo de `POST /planes` la velocidad es opcional solo por los planes de cable (T1); el formulario siempre la manda */
+type VelocidadFormulario = Required<Pick<DatosPlan, 'bajada_kbps' | 'subida_kbps' | 'bajada_limitada_kbps' | 'subida_limitada_kbps' | 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | 'rafaga_subida_kbps' | 'rafaga_umbral_pct' | 'rafaga_segundos' | 'prioridad'>>
 
 /** Modelo de velocidad que resulta del formulario (lo que la API guardaría). */
 export function velocidadDeFormulario(datos: Pick<EntradaPlan, CamposVelocidad>): VelocidadFormulario {

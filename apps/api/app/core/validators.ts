@@ -24,6 +24,7 @@ import { CONECTORES_SSO, FORMATO_ID_EXTERNO_IRIS, TIPOS_DESTINO_SSO } from '#cor
 import { ESTADOS_SERVICIO, MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } from '#shared/eventos'
 import { ESTADOS_INICIALES_SERVICIO } from '#core/instalacion'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { TIPOS_SERVICIO } from '#core/tipos_servicio'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
 import { FORMATO_TELEFONO } from '#core/telefonos'
 import { telefonosAdicionales } from '#core/validators_contactos'
@@ -393,6 +394,26 @@ const tipoConexion = () =>
 const amarreIpMac = () =>
     vine.boolean().meta({ description: 'ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)' })
 
+const tipoServicioDelPlan = () =>
+    vine
+        .enum(TIPOS_SERVICIO)
+        .optional()
+        .meta({
+            description:
+                'Opcional: es el tipo de su plan (internet, cable, iptv o mixto). Si llega distinto: 422 ' +
+                'tipo_servicio_distinto. Cambiar de tipo solo se admite con un plan del tipo nuevo en la misma edición',
+        })
+
+const puntosServicio = () =>
+    vine
+        .number()
+        .withoutDecimals()
+        .min(0)
+        .max(999)
+        .nullable()
+        .optional()
+        .meta({ description: 'Televisores o decodificadores del servicio (informativo)' })
+
 export const crearServicioValidator = vine.compile(
     vine.object({
         cliente_id: idEntidad(),
@@ -402,6 +423,8 @@ export const crearServicioValidator = vine.compile(
         }),
         router_id: idEntidad(),
         plan_id: idEntidad(),
+        tipo_servicio: tipoServicioDelPlan(),
+        puntos: puntosServicio(),
         tipo_conexion: tipoConexion()
             .optional()
             .meta({
@@ -480,6 +503,8 @@ export const editarServicioValidator = vine.compile(
         version: versionEsperada(),
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),
+        tipo_servicio: tipoServicioDelPlan(),
+        puntos: puntosServicio(),
         plantilla_facturacion_id: idEntidad().nullable().optional(),
         tipo_conexion: tipoConexion()
             .optional()
@@ -586,6 +611,9 @@ export const listarServiciosValidator = vine.compile(
             .enum(TIPOS_PLAN)
             .optional()
             .meta({ description: 'Tipo del plan del servicio: residencial, empresarial o dedicado' }),
+        tipo_servicio: vine.enum(TIPOS_SERVICIO).optional().meta({
+            description: 'Tipo de servicio: internet, cable, iptv o mixto',
+        }),
     }),
 )
 

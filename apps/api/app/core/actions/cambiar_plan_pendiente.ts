@@ -4,6 +4,7 @@ import { verificarVersion } from '#shared/version'
 import type { ServicioVista } from '#core/consultas/servicios'
 import { verServicio } from '#core/consultas/servicios'
 import EditarServicio from '#core/actions/editar_servicio'
+import { exigirServicioConRouter } from '#core/tipo_servicio_servicio'
 import {
     PlanNoPermitido,
     ServicioNoPendiente,
@@ -49,6 +50,7 @@ export default class CambiarPlanPendiente extends DomainAction<EntradaCambiarPla
         const servicio = await bloquearServicio(t.trx, input.id)
         if (!servicio) throw new NoEncontrado(`El servicio ${input.id} no existe`)
         t.fijarEmpresa(servicio.empresa_id)
+        await exigirServicioConRouter(t.trx, input.id)
         if (servicio.estado !== 'pendiente_instalacion') throw new ServicioNoPendiente(servicio.estado)
         const origen = { origen_tipo: input.origen_tipo, origen_id: input.origen_id }
         if (input.desdeIris) await exigirServicioDeIris(t, input.id, origen)

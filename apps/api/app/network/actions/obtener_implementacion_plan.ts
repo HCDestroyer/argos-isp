@@ -20,7 +20,8 @@ import { rateLimitServicio, velocidadEfectiva, type VelocidadPlan } from '#netwo
  */
 
 export interface PlanEfectivo extends PlanVista {
-    router_id: number
+    /** null solo en un servicio de cable (no usa router) */
+    router_id: number | null
     /** fila de `planes_routers` (null si el plan es global y no tiene excepciones en el router) */
     implementacion: PlanRouterVista | null
     /**
@@ -42,8 +43,9 @@ export interface PlanEfectivo extends PlanVista {
 export function velocidadDePlan(plan: PlanVista, implementacion: PlanRouterVista | null): VelocidadPlan {
     return velocidadEfectiva(
         {
-            bajada_kbps: plan.bajada_kbps,
-            subida_kbps: plan.subida_kbps,
+            // un plan de cable no tiene velocidad (null): nada la usa (`requiereVelocidad`)
+            bajada_kbps: plan.bajada_kbps ?? 0,
+            subida_kbps: plan.subida_kbps ?? 0,
             bajada_limitada_kbps: plan.bajada_limitada_kbps,
             subida_limitada_kbps: plan.subida_limitada_kbps,
             reuso: plan.reuso,
@@ -65,19 +67,23 @@ export function velocidadDePlan(plan: PlanVista, implementacion: PlanRouterVista
  */
 export function componerPlanEfectivo(
     plan: PlanVista,
-    routerId: number,
+    routerId: number | null,
     implementacion: PlanRouterVista | null,
 ): PlanEfectivo {
     const efectiva = velocidadDePlan(plan, implementacion)
     const { rate_limit_override: override, ...velocidad } = efectiva
     void override
+    // sin velocidad (cable) no hay cadena de rate-limit
+    const sinVelocidad = plan.bajada_kbps === null || plan.subida_kbps === null
     return {
         ...plan,
         ...velocidad,
+        bajada_kbps: plan.bajada_kbps,
+        subida_kbps: plan.subida_kbps,
         router_id: routerId,
         implementacion,
-        rate_limit: rateLimitServicio(efectiva, 'activo'),
-        rate_limit_limitado: rateLimitServicio(efectiva, 'limitado'),
+        rate_limit: sinVelocidad ? '' : rateLimitServicio(efectiva, 'activo'),
+        rate_limit_limitado: sinVelocidad ? '' : rateLimitServicio(efectiva, 'limitado'),
         profile_ppp: implementacion?.profile_ppp ?? null,
         pool_ipv4: implementacion?.pool_ipv4 ?? null,
         pool_ipv6_enlace: implementacion?.pool_ipv6_enlace ?? null,
@@ -116,6 +122,8 @@ export async function planesDisponiblesEnRouter(routerId: number): Promise<PlanE
     const planes = (await db
         .from('network.planes as p')
         .where('p.activo', true)
+        // el cable no usa router: ningún router lo ofrece (`contratos/tipos-servicio.md` §2)
+        .whereNot('p.tipo_servicio', 'cable')
         .where((q) =>
             q
                 .where('p.global', true)

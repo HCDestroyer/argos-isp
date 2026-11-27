@@ -1,3 +1,4 @@
+import { exigirServicioConRouter } from '#core/tipo_servicio_servicio'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, NoEncontrado } from '#shared/errores'
@@ -240,6 +241,8 @@ export default class AprovisionarServicio extends DomainAction<EntradaAprovision
             router_id: number
         } | null
         if (!servicio) throw new NoEncontrado(`El servicio ${input.servicio_id} no existe`)
+        // el cable no usa router (plan v3, T1): 422 `tipo_sin_router` sin efectos
+        await exigirServicioConRouter(t.trx, input.servicio_id)
         const empresaId = Number(servicio.empresa_id)
         t.fijarEmpresa(empresaId)
         const deIris = await esActorIris(t)

@@ -19,6 +19,7 @@ import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
 import { ReglasPromesa } from '#billing/esquemas'
 import { Advertencia, PlanEfectivo } from '#network/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { COMPONENTES_SERVICIO, TIPOS_SERVICIO } from '#core/tipos_servicio'
 import { TIPOS_ACTOR } from '#shared/contexto'
 import { ESTADOS_SERVICIO } from '#shared/eventos'
 import { REGIMENES_ISR } from '#core/empresas'
@@ -479,8 +480,27 @@ export const Servicio = definirEsquema(
             },
             cliente_id: id,
             empresa_id: { ...id, description: 'Empresa (NIT) que factura el servicio' },
-            router_id: id,
+            // Un servicio de cable no tiene router (llega `null` desde T2): el esquema sigue en `id` mientras las
+            // fixtures del panel (`fixtures/servicios`) no lo admitan; se vuelve `nulable(id)` en T5
+            router_id: {
+                ...id,
+                description: 'Router del servicio; null solo en un servicio de cable (sin router)',
+            },
             plan_id: id,
+            tipo_servicio: {
+                ...enumerado(TIPOS_SERVICIO),
+                description:
+                    'Tipo de servicio: internet, cable, iptv o mixto. Siempre es el de su plan; cambia al pasar a un plan de otro tipo',
+            },
+            componentes: {
+                ...lista(enumerado(COMPONENTES_SERVICIO)),
+                description:
+                    'Componentes del plan del servicio (el propio tipo en los simples); no se duplican en el servicio',
+            },
+            puntos: {
+                ...nulable(entero),
+                description: 'Televisores o decodificadores del servicio (informativo)',
+            },
             plantilla_facturacion_id: nulable(id),
             estado: EstadoServicio,
             promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
@@ -625,6 +645,9 @@ export const Servicio = definirEsquema(
             'codigo',
             'nombre',
             'precision_m',
+            'tipo_servicio',
+            'componentes',
+            'puntos',
             'referencia',
             'contacto_nombre',
             'contacto_telefono',

@@ -16,6 +16,7 @@ import {
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
 import { APLICACIONES, PADRES, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { COMPONENTES_SERVICIO, TIPOS_SERVICIO } from '#core/tipos_servicio'
 import { PROTOCOLOS_QOS, QOS_MAX_CLASES, QOS_MAX_REGLAS } from '#network/qos'
 import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
@@ -573,14 +574,40 @@ const camposVelocidadExcepcion = () => ({
     prioridad: reglasVelocidad.prioridad().nullable().optional(),
 })
 
+/** Tipo de servicio del plan (`contratos/tipos-servicio.md` §2); lo que cruza campos lo valida la acción. */
+const camposTipoServicioPlan = () => ({
+    tipo_servicio: vine
+        .enum(TIPOS_SERVICIO)
+        .optional()
+        .meta({
+            description:
+                'internet (por defecto), cable (CATV por fibra con ONU, sin router ni velocidad), iptv ' +
+                '(servicio de datos con su router y plan; nunca se limita) o mixto. Un plan con servicios no cambia de tipo',
+        }),
+    componentes: vine.array(vine.enum(COMPONENTES_SERVICIO)).maxLength(3).optional().meta({
+        description:
+            'Solo en mixto: dos o tres de internet, cable e iptv. En los tipos simples se deja vacío (es el propio tipo)',
+    }),
+    precio_cable: dinero().nullable().optional().meta({
+        description:
+            'Solo mixto: línea de cable de la factura. precio_cable + precio_iptv < precio habiendo internet',
+    }),
+    precio_iptv: dinero().nullable().optional().meta({
+        description: 'Solo mixto: línea de IPTV de la factura (sin internet, es el resto del precio)',
+    }),
+})
+
 const camposPlan = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     precio: dinero(),
-    bajada_kbps: kbps(),
-    subida_kbps: kbps(),
+    // obligatorios salvo en un plan de cable (no tiene velocidad): la acción responde 422 por campo
+    bajada_kbps: kbps().optional(),
+    subida_kbps: kbps().optional(),
     // > 0: con 0 el servicio limitado navegaría a velocidad completa (aaa lo usa al limitar)
-    bajada_limitada_kbps: kbps().min(1),
-    subida_limitada_kbps: kbps().min(1),
+    // > 0 salvo en un plan de cable: la acción lo exige y responde 422 por campo (también con 0 o ausente)
+    bajada_limitada_kbps: vine.number().withoutDecimals().min(0).max(100_000_000).optional(),
+    subida_limitada_kbps: vine.number().withoutDecimals().min(0).max(100_000_000).optional(),
+    ...camposTipoServicioPlan(),
     ...camposVelocidadPlan(),
     dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
     tamano_prefijo_delegado: vine
@@ -644,10 +671,11 @@ export const editarPlanValidator = conMensajes(
             version: versionEsperada(),
             nombre: camposPlan.nombre.optional(),
             precio: dinero().optional(),
-            bajada_kbps: kbps().optional(),
-            subida_kbps: kbps().optional(),
+            bajada_kbps: kbps().nullable().optional(),
+            subida_kbps: kbps().nullable().optional(),
             bajada_limitada_kbps: kbps().min(1).optional(),
             subida_limitada_kbps: kbps().min(1).optional(),
+            ...camposTipoServicioPlan(),
             ...camposVelocidadPlan(),
             dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
             tamano_prefijo_delegado: vine
@@ -669,6 +697,9 @@ export const listarPlanesValidator = vine.compile(
         activo: vine.boolean().optional(),
         router_id: idEntidad().optional(),
         tipo: vine.enum(TIPOS_PLAN).optional(),
+        tipo_servicio: vine.enum(TIPOS_SERVICIO).optional().meta({
+            description: 'Solo planes de ese tipo de servicio: internet, cable, iptv o mixto',
+        }),
         modo: vine
             .enum(['residencial', 'empresarial'] as const)
             .optional()

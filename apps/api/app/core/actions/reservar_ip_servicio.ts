@@ -1,3 +1,4 @@
+import { exigirServicioConRouter } from '#core/tipo_servicio_servicio'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { asignacionesVigentes } from '#core/asignaciones_servicio'
@@ -52,6 +53,7 @@ export default class ReservarIpServicio extends DomainAction<EntradaReservarIp, 
         let servicio = await bloquearServicio(t.trx, input.id)
         if (!servicio) throw new NoEncontrado(`El servicio ${input.id} no existe`)
         t.fijarEmpresa(servicio.empresa_id)
+        await exigirServicioConRouter(t.trx, input.id)
         if (servicio.estado !== 'pendiente_instalacion') throw new ServicioNoPendiente(servicio.estado)
         if (input.desdeIris) {
             await exigirServicioDeIris(t, input.id, {

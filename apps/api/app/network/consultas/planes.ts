@@ -1,9 +1,10 @@
 import db from '@adonisjs/lucid/services/db'
 import type { ExcepcionEstrategia } from '#network/estrategia_velocidad'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { TipoPlan } from '#network/tipos_plan'
+import type { ComponenteServicio, TipoServicio } from '#core/tipos_servicio'
 
 /**
  * Lecturas de planes y de su implementación por router (`network.planes_routers`).
@@ -14,8 +15,9 @@ export interface PlanVista {
     nombre: string
     /** numeric(14,2) como string: "150.00" */
     precio: string
-    bajada_kbps: number
-    subida_kbps: number
+    /** null solo en un plan de `cable` (no tiene velocidad) */
+    bajada_kbps: number | null
+    subida_kbps: number | null
     bajada_limitada_kbps: number
     subida_limitada_kbps: number
     /** N de 1:N (1 = dedicado) */
@@ -31,6 +33,14 @@ export interface PlanVista {
     tamano_prefijo_delegado: 64 | 56 | 48
     /** `residencial` (por defecto), `empresarial` o `dedicado`; solo informa y advierte */
     tipo: TipoPlan
+    /** `internet` (por defecto), `cable`, `iptv` o `mixto` (`contratos/tipos-servicio.md`) */
+    tipo_servicio: TipoServicio
+    /** el mismo tipo en los simples; dos o tres de `internet`, `cable`, `iptv` en `mixto` */
+    componentes: ComponenteServicio[]
+    /** solo `mixto`: línea de cable de la factura (numeric como string) o null */
+    precio_cable: string | null
+    /** solo `mixto`: línea de IPTV de la factura o null (sin internet, el resto del precio) */
+    precio_iptv: string | null
     /**
      * Contrato Iris 0.10.0 §3.4.5 (A40): `residencial` o `empresarial` (los `empresarial` y `dedicado`).
      * Un cambio de plan de un pendiente solo va a otro plan del mismo modo.
@@ -94,6 +104,8 @@ const COLUMNAS_PLAN_SIMPLES = [
     'dual_stack',
     'tamano_prefijo_delegado',
     'tipo',
+    'tipo_servicio',
+    'componentes',
     'incluye_ip_publica',
     'global',
     'activo',
@@ -107,6 +119,8 @@ export function columnasPlan(alias?: string) {
     const prefijo = alias ? `${alias}.` : ''
     return [
         ...COLUMNAS_PLAN_SIMPLES.map((c) => `${prefijo}${c}`),
+        db.raw(`${prefijo}precio_cable::text AS precio_cable`),
+        db.raw(`${prefijo}precio_iptv::text AS precio_iptv`),
         db.raw(`${prefijo}garantizado_pct::float8 AS garantizado_pct`),
         db.raw(
             `(CASE WHEN ${prefijo}tipo = 'residencial' THEN 'residencial' ELSE 'empresarial' END) AS modo`,
@@ -150,6 +164,8 @@ export interface FiltrosPlanes extends OpcionesPaginacion {
     /** solo planes disponibles en ese router (globales o con implementación) */
     router_id?: number
     tipo?: TipoPlan
+    /** solo planes de ese tipo de servicio (`internet`, `cable`, `iptv` o `mixto`) */
+    tipo_servicio?: TipoServicio
     /**
      * Contrato Iris 0.10.0 §3.4.5 (A40): solo los planes aplicables a ese modo, **activos** y (con
      * `router_id`) asignados a todos los routers o a ese router
@@ -161,6 +177,7 @@ export async function listarPlanes(filtros: FiltrosPlanes): Promise<Pagina<PlanV
     const consulta = db.from('network.planes as p').select(columnasPlan('p'))
     if (filtros.activo !== undefined) consulta.where('p.activo', filtros.activo)
     if (filtros.tipo) consulta.where('p.tipo', filtros.tipo)
+    if (filtros.tipo_servicio) consulta.where('p.tipo_servicio', filtros.tipo_servicio)
     if (filtros.modo) {
         consulta.where('p.activo', true)
         if (filtros.modo === 'residencial') consulta.where('p.tipo', 'residencial')
@@ -168,6 +185,14 @@ export async function listarPlanes(filtros: FiltrosPlanes): Promise<Pagina<PlanV
     }
     if (filtros.router_id) {
         const routerId = filtros.router_id
+        // el cable no usa router: ningún router lo ofrece (422 `tipo_sin_router`, sin consultar nada)
+        if (filtros.tipo_servicio === 'cable') {
+            throw new ReglaNegocio(
+                'Un plan de cable no usa router: no se lista por router',
+                'tipo_sin_router',
+            )
+        }
+        consulta.whereNot('p.tipo_servicio', 'cable')
         consulta.where((q) =>
             q
                 .where('p.global', true)

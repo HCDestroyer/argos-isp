@@ -31,6 +31,8 @@ import { planTemporalActivo } from '#core/planes_temporales'
 import { reconciliarIncluidos } from '#core/adicionales'
 import { advertenciasServicio } from '#network/tipos_plan'
 import type { ServicioConAdvertencias } from '#core/actions/crear_servicio'
+import { capacidadesDe, type TipoServicio } from '#core/tipos_servicio'
+import { exigirServicioConRouter } from '#core/tipo_servicio_servicio'
 import { telefonoParaGuardar } from '#core/telefonos'
 import { leerServidorServicio, resolverServidorServicio } from '#network/red_acceso/servicio'
 import { exigirTipoDelRouter, tipoConexionRouter } from '#network/tipo_conexion_router'
@@ -40,6 +42,14 @@ export interface EntradaEditarServicio {
     version: number
     router_id?: number
     plan_id?: number
+    /**
+     * Opcional: el tipo es el del plan. Pasar a un plan de otro tipo exige mandarlo igual al del plan
+     * nuevo (422 `tipo_servicio_distinto` si falta o no coincide); emite `servicio.config_cambiada` con
+     * `tipo_servicio`.
+     */
+    tipo_servicio?: TipoServicio
+    /** televisores o decodificadores (informativo) */
+    puntos?: number | null
     plantilla_facturacion_id?: number | null
     tipo_conexion?: TipoConexion
     amarre_ip_mac?: boolean
@@ -180,6 +190,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             mismo_equipo: mismoEquipo,
             origen,
             servidor_pppoe_id: servidorEntrada,
+            tipo_servicio: tipoPedido,
             ...datos
         } = input
         t.fijarEntidad('servicio', id)
@@ -188,6 +199,9 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (antes.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado: no se edita', 'servicio_retirado')
         }
+        // el cable no usa router: sin router no hay IP, velocidad ni plan que reconciliar
+        await exigirServicioConRouter(t.trx, id)
+        if (antes.router_id === null) throw new ReglaNegocio('El servicio no usa router', 'tipo_sin_router')
         // 409 antes de validar: el teléfono de contacto se valida contra lo guardado en esa versión
         verificarVersion('core.servicios', id, antes.version, version)
 
@@ -234,6 +248,29 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         })
         if (planId !== antes.plan_id && !plan.activo) {
             throw new ReglaNegocio(`El plan ${plan.nombre} está inactivo`, 'plan_inactivo')
+        }
+        // el tipo del servicio sigue al de su plan, pero cambiarlo es explícito (`contratos/tipos-servicio.md`)
+        const cambiaTipoServicio = plan.tipo_servicio !== antes.tipo_servicio
+        if (
+            (cambiaTipoServicio && tipoPedido !== plan.tipo_servicio) ||
+            (!cambiaTipoServicio && tipoPedido !== undefined && tipoPedido !== plan.tipo_servicio)
+        ) {
+            throw new ValidacionFallida([
+                {
+                    field: 'tipo_servicio',
+                    message: cambiaTipoServicio
+                        ? `El plan ${plan.nombre} es de tipo ${plan.tipo_servicio}: manda tipo_servicio=${plan.tipo_servicio} para confirmar el cambio de ${antes.tipo_servicio}`
+                        : `El plan ${plan.nombre} es de tipo ${plan.tipo_servicio}, no ${tipoPedido}`,
+                    rule: 'tipo_servicio_distinto',
+                },
+            ])
+        }
+        // pasar a un tipo sin router (cable) llega en el lote T2
+        if (!capacidadesDe(plan.tipo_servicio, plan.componentes).requiereRouter) {
+            throw new ReglaNegocio(
+                'Pasar un servicio a cable (sin router) llega en el lote T2 del plan v3',
+                'alta_cable_pendiente',
+            )
         }
 
         const excepciones = excepcionesEntrada ? await validarExcepciones(excepcionesEntrada) : {}
@@ -304,6 +341,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             t.ctx,
         )
         if (contactoTelefono !== undefined) columnas.contacto_telefono = contactoTelefono
+        if (cambiaTipoServicio) columnas.tipo_servicio = plan.tipo_servicio
         columnas.ipv6_modo = modo
         columnas.amarre_ip_mac = amarre
         columnas.tipo_conexion = tipo
@@ -402,6 +440,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (despues.plan_id !== antes.plan_id) campos.push('plan')
         if (despues.router_id !== antes.router_id) campos.push('router')
         if (despues.tipo_conexion !== antes.tipo_conexion) campos.push('tipo_conexion')
+        if (despues.tipo_servicio !== antes.tipo_servicio) campos.push('tipo_servicio')
         if (despues.mac !== antes.mac) campos.push('mac')
         if (despues.amarre_ip_mac !== antes.amarre_ip_mac) campos.push('amarre_ip_mac')
         // usuario o contraseña PPPoE nuevos (sin valores): A2 desconecta la sesión RADIUS o reescribe el secret

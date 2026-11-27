@@ -2,6 +2,7 @@ import { sqlLocalAddress, sqlLocalAddressDerivado } from '#network/red_acceso/lo
 import { isIP } from 'node:net'
 import { sqlExterno, type IdExterno } from '#core/ids_externos'
 import type { TipoPlan } from '#network/tipos_plan'
+import type { ComponenteServicio, TipoServicio } from '#core/tipos_servicio'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
@@ -36,8 +37,15 @@ export interface ServicioVista {
     cliente_id: number
     /** empresa (NIT) que factura el servicio (`core.empresas`) */
     empresa_id: number
-    router_id: number
+    /** null solo en un servicio de `cable` (no usa router) */
+    router_id: number | null
     plan_id: number
+    /** `internet` (por defecto), `cable`, `iptv` o `mixto`; siempre el del plan (`contratos/tipos-servicio.md`) */
+    tipo_servicio: TipoServicio
+    /** componentes del plan del servicio (el propio tipo en los simples); no se duplican en el servicio */
+    componentes: ComponenteServicio[]
+    /** televisores o decodificadores (informativo) o null */
+    puntos: number | null
     plantilla_facturacion_id: number | null
     estado: EstadoServicioConPendiente
     promesa_activa: boolean
@@ -139,6 +147,11 @@ function columnas(cliente: QueryClientContract) {
         's.empresa_id',
         's.router_id',
         's.plan_id',
+        's.tipo_servicio',
+        cliente.raw(
+            `(SELECT p_c.componentes FROM network.planes p_c WHERE p_c.id = s.plan_id) AS componentes`,
+        ),
+        's.puntos',
         's.plantilla_facturacion_id',
         's.estado',
         's.suspension_manual',
@@ -237,6 +250,8 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     con_deuda_vencida?: boolean
     /** tipo del plan del servicio */
     tipo?: TipoPlan
+    /** tipo de servicio: `internet`, `cable`, `iptv` o `mixto` */
+    tipo_servicio?: TipoServicio
     /** sin los servicios `retirado` (contrato Iris 0.8.0) */
     excluir_retirados?: boolean
     /**
@@ -262,6 +277,7 @@ export async function listarServicios(
     if (filtros.estado) consulta.where('s.estado', filtros.estado)
     if (filtros.excluir_retirados) consulta.whereNot('s.estado', 'retirado')
     if (filtros.tipo_conexion) consulta.where('s.tipo_conexion', filtros.tipo_conexion)
+    if (filtros.tipo_servicio) consulta.where('s.tipo_servicio', filtros.tipo_servicio)
     if (filtros.tipo) {
         consulta.whereExists((c) =>
             c
@@ -336,9 +352,10 @@ export async function dimensionesDeServicio(
         .join('core.clientes as c', 'c.id', 's.cliente_id')
         .where('s.id', id)
         .select('s.router_id', 'c.zona_id')
-        .first()) as { router_id: number; zona_id: number | null } | null
+        .first()) as { router_id: number | null; zona_id: number | null } | null
     if (!fila) throw new NoEncontrado(`El servicio ${id} no existe`)
-    return { router: [fila.router_id], zona: [fila.zona_id] }
+    // un servicio de cable no tiene router: el alcance por router no lo ve (por zona y empresa sí)
+    return { router: fila.router_id === null ? [] : [fila.router_id], zona: [fila.zona_id] }
 }
 
 /** `core.servicios as s` en alguna de esas empresas. */

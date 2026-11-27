@@ -25,6 +25,7 @@ import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
 import { telefonoParaGuardar } from '#core/telefonos'
 import { resolverServidorServicio } from '#network/red_acceso/servicio'
 import { exigirTipoDelRouter } from '#network/tipo_conexion_router'
+import { capacidadesDe, type TipoServicio } from '#core/tipos_servicio'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
 export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
@@ -38,6 +39,13 @@ export interface EntradaCrearServicio {
     empresa_id?: number | null
     router_id: number
     plan_id: number
+    /**
+     * Opcional: el tipo de servicio es el de su plan (`contratos/tipos-servicio.md`); si llega distinto,
+     * 422 `tipo_servicio_distinto`.
+     */
+    tipo_servicio?: TipoServicio
+    /** televisores o decodificadores (informativo) */
+    puntos?: number | null
     plantilla_facturacion_id?: number | null
     /**
      * Sin `plantilla_facturacion_id` (undefined), usar la plantilla por defecto
@@ -215,6 +223,23 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         await exigirReferencia(t, 'network.planes', input.plan_id, 'plan_id')
         const plan = await obtenerImplementacionPlan(input.plan_id, input.router_id, t.trx)
         if (!plan.activo) throw new ReglaNegocio(`El plan ${plan.nombre} está inactivo`, 'plan_inactivo')
+        // el tipo del servicio es el de su plan (`contratos/tipos-servicio.md` §2)
+        if (input.tipo_servicio !== undefined && input.tipo_servicio !== plan.tipo_servicio) {
+            throw new ValidacionFallida([
+                {
+                    field: 'tipo_servicio',
+                    message: `El plan ${plan.nombre} es de tipo ${plan.tipo_servicio}, no ${input.tipo_servicio}`,
+                    rule: 'tipo_servicio_distinto',
+                },
+            ])
+        }
+        // el alta de un servicio sin router (cable) llega en el lote T2
+        if (!capacidadesDe(plan.tipo_servicio, plan.componentes).requiereRouter) {
+            throw new ReglaNegocio(
+                'El alta de servicios de cable (sin router) llega en el lote T2 del plan v3',
+                'alta_cable_pendiente',
+            )
+        }
 
         const excepciones = input.excepciones ? await validarExcepciones(input.excepciones) : {}
 
@@ -264,6 +289,8 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 empresa_id: empresaId,
                 router_id: input.router_id,
                 plan_id: input.plan_id,
+                tipo_servicio: plan.tipo_servicio,
+                puntos: input.puntos ?? null,
                 plantilla_facturacion_id: plantillaId,
                 tipo_conexion: tipo,
                 amarre_ip_mac: input.amarre_ip_mac ?? false,
@@ -339,6 +366,8 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             cliente_id: input.cliente_id,
             router_id: input.router_id,
             plan_id: input.plan_id,
+            tipo_servicio: plan.tipo_servicio,
+            componentes: plan.componentes,
         })
         if (!pendiente || ipPedida) {
             await t.emit('asignacion.cambiada', {
