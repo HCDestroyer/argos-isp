@@ -108,7 +108,13 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
             subida_limitada_kbps: 1000,
         })
         clienteId = await crearClienteFila()
-        return () => falso.cerrar()
+        return async () => {
+            // El puerto del RouterOS falso se reutiliza: si el router de esta prueba siguiera
+            // apuntando a él, el sondeo de la prueba siguiente leería las sesiones dos veces
+            // (dos `sesion.iniciada` para el mismo usuario). Se le quita el host al terminar.
+            await db.from('network.routers').where('id', routerId).update({ host: 'http://127.0.0.1:1' })
+            await falso.cerrar()
+        }
     })
 
     async function crear(client: any, cuerpo: Record<string, unknown> = {}) {
