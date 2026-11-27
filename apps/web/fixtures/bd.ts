@@ -21,6 +21,7 @@ import type { PlanAdicionalFixture } from './adicionales/datos'
 import { adicionales, adicionalesServicio, bloqueosAdicionales, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto } from './bonificaciones/datos'
 import { cierres, egresos } from './egresos/datos'
+import { sembrarEfectivo, type EfectivoFixtures } from './cajas/efectivo'
 import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type PendientePorBloqueo } from './libro/bloqueos'
 import { acciones } from './bitacora/datos'
 import { emisionesLibros, habilitacionesLibros } from './libros/datos'
@@ -124,7 +125,7 @@ export interface ReconciliacionFixture {
     terminado_en: string | null
 }
 
-interface BaseFixtures {
+export interface BaseFixtures {
     clientes: Schema<'Cliente'>[]
     servicios: Schema<'Servicio'>[]
     zonas: Schema<'Zona'>[]
@@ -186,6 +187,8 @@ interface BaseFixtures {
     /** Gestiones de cobro registradas desde el panel (`POST /clientes/:id/gestiones-cobro`, A3). */
     gestionesCobro: Schema<'GestionCobro'>[]
     egresos: Schema<'Egreso'>[]
+    /** Cajas y efectivo (B1 y B9): entregas, reposiciones y conteos de caja chica, ajustes de cajas. */
+    efectivo: EfectivoFixtures
     cierres: Schema<'CierrePeriodo'>[]
     /* Fase 6 (A3): bloqueos del libro, excepciones y lo que una corrida dejó pendiente por un bloqueo. */
     bloqueosLibro: Schema<'BloqueoLibro'>[]
@@ -414,6 +417,7 @@ function inicial(): BaseFixtures {
         borradoresAsiento: borradoresIniciales(),
         gestionesCobro: [],
         egresos,
+        efectivo: { entregas: [], reposiciones: [], conteos: [], ajustes: [] },
         cierres,
         bloqueosLibro,
         excepcionesBloqueo,
@@ -539,6 +543,7 @@ function inicial(): BaseFixtures {
     datos.asientos.push(...asientosFase4())
     datos.cuentas.push(...structuredClone(cuentasFase4))
     datos.asientos.push(...asientosBonificaciones())
+    sembrarEfectivo(datos)
     return datos
 }
 

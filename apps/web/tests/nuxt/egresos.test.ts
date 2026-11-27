@@ -88,8 +88,9 @@ describe('semana 2 · egresos y cierre de periodo', () => {
     it('la lista suma solo los egresos vigentes y ofrece anular solo esos', async () => {
         const vista = await mountSuspended(PaginaEgresos, { route: '/egresos' })
         await esperar(() => expect(vista.find('[data-prueba="total-egresos"]').exists()).toBe(true))
-        expect(vista.find('[data-prueba="total-egresos"]').text()).toBe('Q 14,350.40')
-        expect(vista.findAll('[data-prueba="anular-egreso"]')).toHaveLength(2)
+        expect(vista.find('[data-prueba="total-egresos"]').text()).toBe('Q 15,170.40')
+        // Más los 5 gastos de la caja chica de la semilla (B9), vigentes y sin reponer.
+        expect(vista.findAll('[data-prueba="anular-egreso"]')).toHaveLength(7)
         expect(vista.find('[data-prueba="abrir-registrar-egreso"]').exists()).toBe(true)
         expect(vista.text()).toContain('Anulado: Se registró dos veces')
     })

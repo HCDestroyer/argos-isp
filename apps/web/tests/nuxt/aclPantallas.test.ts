@@ -392,6 +392,12 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'PromocionQuitarModal.vue': { permisos: ['promociones_velocidad.quitar'], desde: ['components/PromocionDetalle.vue', 'components/ServicioPromociones.vue'] },
     'ServicioPromociones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'ServicioAgregarPromocionModal.vue': { permisos: ['promociones_velocidad.asignar', 'promociones_velocidad.ver'], desde: ['components/ServicioPromociones.vue'] },
+    // Cajas y efectivo (tablero PlanCajas, B1 y B9): cada ventana se monta solo con el permiso de su acción.
+    'CajaRecibirModal.vue': { permisos: ['cajas.recibir_entrega', 'cajas.rechazar_entrega'], desde: ['pages/caja/efectivo.vue'] },
+    'CajaDepositoCustodiaModal.vue': { permisos: ['cajas.depositar'], desde: ['pages/caja/efectivo.vue'] },
+    'CajaChicaGastoModal.vue': { permisos: ['caja_chica.registrar_gasto'], desde: ['pages/caja/efectivo.vue'] },
+    'CajaChicaReponerModal.vue': { permisos: ['caja_chica.reponer'], desde: ['pages/caja/efectivo.vue'] },
+    'CajaChicaContarModal.vue': { permisos: ['caja_chica.contar'], desde: ['pages/caja/efectivo.vue'] },
     'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 

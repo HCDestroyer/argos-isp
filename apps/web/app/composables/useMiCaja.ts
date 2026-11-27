@@ -13,7 +13,7 @@ export function useMiCaja() {
     const cargando = useState('mi-caja:cargando', () => false)
 
     /** Las cajas activas que el usuario tiene asignadas o en las que abrió el turno. */
-    const propias = computed(() => (cajas.value ?? []).filter(c => c.activa && (c.cajero_id === usuario.value?.id || c.turno_abierto_por === usuario.value?.id)))
+    const propias = computed(() => (cajas.value ?? []).filter(c => c.activa && !esCajaChica(c) && (c.cajero_id === usuario.value?.id || c.turno_abierto_por === usuario.value?.id)))
     /** Su caja con turno abierto (la que recibe el efectivo que cobra), si tiene. */
     const abierta = computed(() => propias.value.find(c => c.turno_abierto_id !== null) ?? null)
     async function refrescar() {

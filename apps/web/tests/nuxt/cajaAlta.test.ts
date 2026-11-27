@@ -66,7 +66,7 @@ describe('alta de caja', () => {
         document.querySelector('#form-crear-caja')?.dispatchEvent(new Event('submit'))
         // Sin empresa elegida (Todas), la API responde 422 empresa_requerida y se ve.
         await esperar(() => expect(document.querySelector('#form-crear-caja')?.textContent).toContain('Elige la empresa de la caja'))
-        expect(bd.cajas).toHaveLength(4)
+        expect(bd.cajas).toHaveLength(5)
         vista.unmount()
 
         sesionFixture('fixture-cajero')

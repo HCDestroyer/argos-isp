@@ -251,7 +251,8 @@ async function cargar() {
         return
     }
     problema.value = null
-    cajas.value = resultado.data
+    // Las cajas chicas (B9) no tienen turnos ni cobros: viven en Cajas y efectivo.
+    cajas.value = resultado.data.filter(c => !esCajaChica(c))
     await Promise.all([cargarResumenes(), cargarCierres(), cargarDepositos(), cargarRetiros(), cargarCobradoHoy()])
 }
 

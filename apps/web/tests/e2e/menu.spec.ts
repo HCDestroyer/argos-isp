@@ -18,7 +18,8 @@ test('buscador de secciones con Ctrl+K, solo con las permitidas', async ({ page 
     await page.keyboard.type('Rout')
     await expect(buscador.getByRole('option', { name: /Routers/ })).toHaveCount(0)
     await buscador.getByPlaceholder('Ir a una sección…').fill('Caja')
-    await buscador.getByRole('option', { name: /^Caja/ }).click()
+    // «Cajas y efectivo» (Finanzas) también empieza con «Caja»: se elige la del turno.
+    await buscador.getByRole('option', { name: /^Caja(?!s)/ }).click()
     await expect(page).toHaveURL(/\/caja/)
     // Caja y Cobrar van en «Día a día», el grupo abierto en la caja.
     const lateral = await menu(page)

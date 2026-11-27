@@ -188,6 +188,35 @@ export const AYUDA_INDICADORES = {
         queHacer: 'Revisa los cierres con diferencia y pide a quien cerró que la explique.',
         nombreContable: 'Sobrantes y faltantes de caja',
     },
+    'efectivo-cobros': {
+        titulo: 'En cajas de cobros',
+        queEs: 'El efectivo que tienen ahora los cajeros en sus turnos abiertos.',
+        comoSeCalcula: 'Fondo de cambio con que abrió cada turno, más lo cobrado en efectivo, menos lo que ya salió del turno.',
+        queHacer: 'Al cerrar el turno, el cajero deja el fondo de cambio y entrega el resto a quien lo recibe.',
+        nombreContable: 'Efectivo en caja (1.1.01)',
+    },
+    'efectivo-custodia': {
+        titulo: 'En custodia',
+        queEs: 'El efectivo que ya salió de una caja y todavía no llega al banco. Siempre está a nombre de una persona.',
+        comoSeCalcula: 'Lo que cada persona recibió con «Recibí», menos lo que depositó y lo que usó para reponer la caja chica.',
+        queHacer: 'Deposítalo dentro del plazo. Si alguien pasa del plazo o del tope, se avisa aquí y en el inicio de contabilidad.',
+        nombreContable: 'Efectivo en custodia (1.1.15)',
+    },
+    'efectivo-caja-chica': {
+        titulo: 'En caja chica',
+        queEs: 'El efectivo que hay en las cajas chicas para gastos pequeños.',
+        comoSeCalcula: 'Fondo fijo menos los gastos con comprobante que aún no se reponen. Efectivo más comprobantes debe dar el fondo fijo.',
+        queHacer: 'Repónla por lo gastado cuando baje del 30 % del fondo. Si no cuadra, cuéntala.',
+        nombreContable: 'Caja chica (1.1.01)',
+    },
+    'efectivo-camino-banco': {
+        titulo: 'En camino al banco',
+        queEs: 'Lo que ya se depositó con boleta y el banco aún no muestra en su estado de cuenta.',
+        comoSeCalcula: 'Suma de los depósitos de cajas y de custodia que todavía no se concilian con el extracto.',
+        queHacer: 'Importa el estado de cuenta y concilia cada depósito con su línea.',
+        nombreContable: 'Fondos en tránsito (1.1.11)',
+        accion: { etiqueta: 'Ver fondos en tránsito', to: '/bancos/transito' },
+    },
 } as const satisfies Record<string, AyudaIndicador>
 
 export type ClaveIndicador = keyof typeof AYUDA_INDICADORES

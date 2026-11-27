@@ -213,6 +213,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                 etiqueta: 'Bancos',
                 icono: 'i-lucide-building-2',
                 secciones: [
+                    { id: 'cajas-efectivo', etiqueta: 'Cajas y efectivo', descripcion: 'Dónde está cada quetzal en efectivo y quién lo tiene: cajas de cobros, custodia, caja chica y depósitos.', icono: 'i-lucide-wallet-cards', ruta: '/caja/efectivo', permiso: 'cajas.ver' },
                     { id: 'cobros-por-liquidar', etiqueta: 'Cobros por liquidar', descripcion: 'Pagos por pasarela, agente o débito que esperan la liquidación del proveedor.', icono: 'i-lucide-hand-coins', ruta: '/cobros/por-liquidar', permiso: 'bancos.ver' },
                     { id: 'fondos-transito', etiqueta: 'Fondos en tránsito', descripcion: 'Depósitos de caja y traslados entre bancos por acreditar.', icono: 'i-lucide-truck', ruta: '/bancos/transito', permiso: 'bancos.ver' },
                     { id: 'conciliacion', etiqueta: 'Conciliación bancaria', descripcion: 'Extractos del banco, conciliación con el libro y reglas.', icono: 'i-lucide-file-spreadsheet', ruta: '/bancos/extractos', permiso: 'bancos.ver' },

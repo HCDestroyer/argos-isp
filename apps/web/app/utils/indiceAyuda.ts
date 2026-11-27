@@ -209,6 +209,17 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/caja/efectivo': {
+        titulo: 'Cajas y efectivo',
+        resumen: 'Aquí ves dónde está cada quetzal en efectivo y quién lo tiene: en las cajas de cobros, en custodia, en la caja chica o en camino al banco. También recibes el efectivo que te entrega un cajero, depositas lo que tienes en custodia y llevas la caja chica (gastos con comprobante, reposición y conteo).',
+        pagina: 'cobros/cajas-y-efectivo',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+        ],
+    },
     '/campos-personalizados': {
         titulo: 'Campos personalizados',
         resumen: 'Los datos extra que tu ISP quiere pedir de cada cliente, además de los de siempre: por ejemplo, «Número de contrato», «Fecha de nacimiento» o «Tipo de vivienda». Cada campo que definas aparece en el formulario y en la ficha del cliente, en la sección «Datos adicionales».',
