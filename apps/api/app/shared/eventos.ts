@@ -256,6 +256,14 @@ export const CAMPOS_CLIENTE_ACTUALIZADO = [
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
+/**
+ * Campos del perfil fiscal del cliente (lote B4 del plan de contabilidad, `#billing/perfil_fiscal`)
+ * que también viajan en `cliente.actualizado` cuando `clientes.asignar_perfil_fiscal` los cambia.
+ * No son de `core.clientes`: Horus no los recibe (solo identidad) e Iris relee al cliente.
+ */
+export const CAMPOS_CLIENTE_FISCAL = ['tipo_impuesto', 'retiene_isr'] as const
+export type CampoClienteFiscal = (typeof CAMPOS_CLIENTE_FISCAL)[number]
+
 export const MODALIDADES_ADICIONAL = ['incluido', 'cortesia', 'cobrado'] as const
 export type ModalidadAdicional = (typeof MODALIDADES_ADICIONAL)[number]
 export const CAMPOS_ADICIONAL_CAMBIADO = [
@@ -787,7 +795,8 @@ export interface CatalogoEventos {
      */
     'cliente.actualizado': {
         cliente_id: number
-        campos: CampoClienteActualizado[]
+        /** también `tipo_impuesto` y `retiene_isr` (perfil fiscal, B4) */
+        campos: Array<CampoClienteActualizado | CampoClienteFiscal>
     }
     /**
      * Contrato Iris 0.9.0 §6.6 (A30): un ticket del cliente cambió de estado en Iris (webhook
@@ -960,6 +969,17 @@ export interface CatalogoEventos {
     'comprobante.aprobado': PayloadComprobante
     /** se rechazó con `motivo`; la referencia queda libre para subirlo de nuevo */
     'comprobante.rechazado': PayloadComprobante
+
+    /**
+     * billing (A3, D0): cambió una cuenta de pasarela (alta, edición, prueba, activación). `campos`
+     * son columnas, nunca valores: las credenciales y el secreto del webhook no viajan.
+     */
+    'pasarela.config_cambiada': {
+        pasarela_cuenta_id: number
+        empresa_id: number
+        proveedor: string
+        campos: string[]
+    }
 
     // ledger (A3)
     'caja.cerrada': {
@@ -1140,6 +1160,29 @@ export interface CatalogoEventos {
         configuracion_id: number
         empresa_id: number | null
         campos: string[]
+    }
+    /**
+     * notify (R1, `contratos/recordatorios.md`): se creó, editó, retiró, se fijó por defecto (o dejó de
+     * serlo) una plantilla de recordatorio, o se personalizaron o quitaron los recordatorios de un
+     * servicio. `campos` son nombres, nunca valores; `pasos` = cambiaron los pasos.
+     */
+    'recordatorios.plantilla_cambiada': {
+        plantilla_id: number
+        empresa_id: number
+        campos: string[]
+        pasos: boolean
+    }
+    /**
+     * notify (R1): cambió la plantilla de recordatorio de un servicio o de una suscripción (uno de los
+     * dos, el otro null). `plantilla_id` null = vuelve a la por defecto de la empresa; `personalizada`
+     * = la que rige es la personalizada del servicio.
+     */
+    'recordatorios.asignacion_cambiada': {
+        empresa_id: number
+        servicio_id: number | null
+        suscripcion_id: number | null
+        plantilla_id: number | null
+        personalizada: boolean
     }
 
     /**
@@ -1508,7 +1551,88 @@ export interface CatalogoEventos {
     /** Ajustes de cajas y custodia de la empresa (fondo de cambio, plazo, tope, «lo deposito yo»). */
     'cajas.ajustes_cambiados': {
         empresa_id: number
-        campos: Array<'fondo_cobros' | 'custodia_plazo_dias' | 'custodia_tope' | 'autoentrega'>
+        campos: Array<
+            'fondo_cobros' | 'custodia_plazo_dias' | 'custodia_tope' | 'autoentrega' | 'fondo_caja_chica'
+        >
+    }
+    /**
+     * B9 (caja chica, §5.7): un gasto pagado con el efectivo de la caja chica, con su comprobante.
+     * `bajo_minimo`: el efectivo quedó bajo el 30 % del fondo (avisa para reponer).
+     */
+    'caja_chica.gasto_registrado': {
+        egreso_id: number
+        empresa_id: number
+        caja_id: number
+        categoria: string
+        monto: Dinero
+        /** trae factura a nombre de la empresa: pasa a Compras */
+        con_factura: boolean
+        /** efectivo de la caja chica después del gasto */
+        efectivo: Dinero
+        bajo_minimo: boolean
+    }
+    /** B9: la caja chica se repuso por lo gastado desde la custodia o el banco (sella sus gastos). */
+    'caja_chica.repuesta': {
+        reposicion_id: number
+        empresa_id: number
+        caja_id: number
+        origen: 'custodia' | 'banco'
+        /** persona de cuya custodia salió (null desde el banco) */
+        custodio_id: number | null
+        /** cuenta del libro de la que salió (1.1.15 o el banco) */
+        cuenta_id: number
+        monto: Dinero
+        /** fondo fijo con el que queda */
+        fondo: Dinero
+        gastos: number
+        gastos_monto: Dinero
+        conteos: number
+    }
+    /** B9: conteo sorpresa de una caja chica; la diferencia queda a cargo de su encargado. */
+    'caja.contada': {
+        conteo_id: number
+        empresa_id: number
+        caja_id: number
+        responsable_id: number | null
+        esperado: Dinero
+        contado: Dinero
+        /** contado − esperado */
+        diferencia: Dinero
+    }
+    /**
+     * B11: cambió una caja (caja sin factura, lista de usuarios que la ven, cajero o encargado). Solo
+     * nombres de campos.
+     */
+    'caja.cambiada': {
+        caja_id: number
+        empresa_id: number
+        campos: Array<'fiscal' | 'cajero_id' | 'usuarios'>
+        /** después del cambio */
+        fiscal: boolean
+        tipo: 'cobros' | 'gastos'
+    }
+    /**
+     * B11: recibo no fiscal de un pago (caja sin factura o cargo no facturable), con numeración propia
+     * por empresa; `facturas_no_fiscales`: las que este cobro dejó fuera de la SAT.
+     */
+    'recibo.emitido': {
+        recibo_id: number
+        empresa_id: number
+        numero: number
+        pago_id: number
+        caja_id: number | null
+        cliente_id: number
+        monto: Dinero
+        motivo: 'caja_sin_factura' | 'cargo_no_facturable'
+        facturas_no_fiscales: number[]
+    }
+    /** B9: el archivo del comprobante de un egreso (una vez por egreso). */
+    'egreso.comprobante_adjuntado': {
+        egreso_id: number
+        empresa_id: number
+        caja_id: number | null
+        tipo_archivo: string
+        tamano: number
     }
     /** Decisión del PM 20: la caja cambió su formato de impresión (`pos_80` o `carta`). */
     'caja.impresion_cambiada': {
@@ -2181,6 +2305,9 @@ export const EVENTOS = [
     'instalacion.fallida',
     'equipo.wifi_resuelto',
     'notificaciones.config_cambiada',
+    'recordatorios.plantilla_cambiada',
+    'recordatorios.asignacion_cambiada',
+    'pasarela.config_cambiada',
     'portal.config_cambiada',
     'portal.codigo_corte_emitido',
     'fiscal.localizacion_instalada',
@@ -2220,6 +2347,12 @@ export const EVENTOS = [
     'caja.entrega_recibida',
     'caja.entrega_rechazada',
     'cajas.ajustes_cambiados',
+    'caja_chica.gasto_registrado',
+    'caja_chica.repuesta',
+    'caja.contada',
+    'egreso.comprobante_adjuntado',
+    'caja.cambiada',
+    'recibo.emitido',
     'banco_origen.cambiado',
     'cartera.castigada',
     'compra.registrada',

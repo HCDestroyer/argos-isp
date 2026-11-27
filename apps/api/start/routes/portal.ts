@@ -1363,8 +1363,8 @@ const empresa: Ruta[] = [
                 // tiene nombre legal: `null`, nunca el nombre por defecto del entorno.
                 razon_social: Number(fila.version) > 0 ? fila.razon_social?.trim() || null : null,
                 cuentas_deposito: await fuenteCuentasDeposito().activas(empresaId),
-                // La pasarela es una sola para la instalación; cada cobro lleva facturas de una empresa.
-                pago_en_linea: pagoEnLineaDisponible(),
+                // Cada empresa tiene su cuenta de pasarela (D0); cada cobro lleva facturas de una empresa.
+                pago_en_linea: await pagoEnLineaDisponible(empresaId),
             }
         },
     }),

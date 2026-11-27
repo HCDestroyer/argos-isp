@@ -23,11 +23,14 @@ import AnularFactura from '#billing/actions/anular_factura'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import { listarNotasCredito, verNotaCredito } from '#billing/notas_credito'
 import { dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { listarRecibos, reciboDePago, verRecibo } from '#billing/recibos'
 import { existeCaja } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
+import AsignarPerfilFiscal from '#billing/actions/asignar_perfil_fiscal'
+import { simularRetenciones, vistaPerfilFiscal } from '#billing/perfil_fiscal'
 import { exigirContactoIris } from '#billing/contacto_iris'
 import cobranza from '#start/routes/cobranza'
 import { ComprobanteAprobado } from '#billing/esquemas_cobro'
@@ -98,7 +101,19 @@ import { readFile } from 'node:fs/promises'
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
-import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import { descriptorPasarela, nombresProveedores, proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import {
+    configDeCuenta,
+    empresaDeCuentaPasarela,
+    listarCuentasPasarela,
+    verCuentaPasarela,
+    type FilaCuentaPasarela,
+} from '#billing/pasarelas/cuentas'
+import CrearCuentaPasarela from '#billing/actions/crear_cuenta_pasarela'
+import EditarCuentaPasarela from '#billing/actions/editar_cuenta_pasarela'
+import ProbarCuentaPasarela from '#billing/actions/probar_cuenta_pasarela'
+import ActivarCuentaPasarela from '#billing/actions/activar_cuenta_pasarela'
+import DesactivarCuentaPasarela from '#billing/actions/desactivar_cuenta_pasarela'
 import {
     dimensionesDeCobroPasarela,
     listarCobrosPasarela,
@@ -136,6 +151,9 @@ import {
 import {
     SimulacionPromesa,
     CobroPasarela,
+    CuentaPasarela,
+    ProveedorPasarela,
+    ResultadoProbarCuentaPasarela,
     ConciliacionPasarela,
     ResultadoWebhookPasarela,
     ArchivoComprobante,
@@ -143,6 +161,8 @@ import {
     PaginaComprobantes,
     ReconexionTemporal,
     EstadoCuenta,
+    PerfilFiscalCliente,
+    PerfilFiscalFactura,
     Banco,
     CuentaBancaria,
     ConceptoCargo,
@@ -166,6 +186,7 @@ import {
     CorridasFacturacion,
     ResultadoCorte,
     ResultadoVencimiento,
+    Recibo,
 } from '#billing/esquemas'
 
 /** Empresas de un reporte: la activa o el consolidado (`?empresas=todas`, columna de empresa). */
@@ -363,6 +384,19 @@ const facturas: Ruta[] = [
                 exigirAlcance(ctx.alcance, dimensiones)
             }
             if (reglasIris) await exigirCobroEquipo(cuerpo.lineas.map((l) => l.concepto_id))
+            // B11: cambiar lo facturable de los conceptos de un cargo exige su permiso
+            if (cuerpo.facturable !== undefined && cuerpo.facturable !== null && ctx.auth.user) {
+                const alcance = await alcanceDePermiso(
+                    ctx.auth.user.id,
+                    'facturas.cargo_no_facturable',
+                    alcancesDelToken(ctx),
+                )
+                if (!alcance) {
+                    throw new Prohibido(
+                        'Decidir si un cargo se factura requiere el permiso facturas.cargo_no_facturable',
+                    )
+                }
+            }
             if (cuerpo.motivo_sin_costo_id && ctx.auth.user) {
                 const alcance = await alcanceDePermiso(
                     ctx.auth.user.id,
@@ -669,6 +703,51 @@ const pagos: Ruta[] = [
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDePago(id))
             return verPago(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pagos/:id/recibo',
+        operacion: 'pagosRecibo',
+        resumen: 'Recibo no fiscal del pago (caja sin factura o cargo no facturable)',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        descripcion:
+            'B11: lo que se entrega al cobrar en una caja sin factura o al cubrir un cargo no facturable. No es factura (sin DTE, serie ni número de la SAT); numeración propia por empresa. 404 si el pago no tiene recibo.',
+        respuesta: { status: 200, descripcion: 'Recibo', esquema: Recibo },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDePago(id))
+            const recibo = await reciboDePago(id)
+            if (!recibo) throw new NoEncontrado(`El pago ${id} no tiene recibo no fiscal`)
+            return recibo
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/recibos',
+        operacion: 'recibosListar',
+        resumen: 'Cobros en cajas sin factura (recibos no fiscales)',
+        etiqueta: 'pagos',
+        permiso: 'contabilidad.ver_cuentas_internas',
+        query: v.listarRecibosValidator,
+        descripcion:
+            'B11: el reporte «Cobros en cajas sin factura» (con los cargos no facturables): número, caja, cliente, monto, si el pago se anuló y las facturas que quedaron fuera de la SAT. Filtros desde/hasta (fecha de Guatemala), caja_id, cliente_id, motivo; por empresa activa o `empresas=todas`.',
+        respuesta: { status: 200, descripcion: 'Página de recibos', esquema: pagina(Recibo) },
+        handler: (ctx, { query }) => listarRecibos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/recibos/:id',
+        operacion: 'recibosVer',
+        resumen: 'Ver un recibo no fiscal',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        respuesta: { status: 200, descripcion: 'Recibo', esquema: Recibo },
+        handler: async (ctx, { params }) => {
+            const recibo = await verRecibo(Number(params.id))
+            exigirAcceso(ctx, await dimensionesDePago(recibo.pago_id))
+            return recibo
         },
     }),
     definirRuta({
@@ -1386,11 +1465,27 @@ function cabecerasPlanas(ctx: HttpContext): Record<string, string | undefined> {
     )
 }
 
-/** La pasarela falsa solo existe si es la configurada (nunca en producción sin pedirla). */
-async function pasarelaFalsa() {
+/**
+ * La pasarela falsa (laboratorio): vale si es la del entorno (`PASARELA_PROVEEDOR=falsa`) o si el
+ * cobro es de una cuenta `falsa` (D0). Con cuenta, firma con el secreto de ESA cuenta y entrega el
+ * webhook por la ruta de su `clave_publica`. Nunca en producción sin pedirla.
+ */
+async function pasarelaFalsa(idProveedor?: string) {
+    const { PasarelaFalsa, secretoFalsa } = await import('#billing/pasarelas/falsa')
+    if (idProveedor) {
+        const cuenta = (await db
+            .from('billing.pasarela_cobros as pc')
+            .join('billing.pasarela_cuentas as c', 'c.id', 'pc.pasarela_cuenta_id')
+            .where({ 'pc.proveedor': 'falsa', 'pc.id_proveedor': idProveedor })
+            .select('c.*')
+            .first()) as FilaCuentaPasarela | null
+        if (cuenta) {
+            const secreto = configDeCuenta(cuenta).webhookSecreto ?? secretoFalsa()
+            return { falsa: new PasarelaFalsa(secreto), clave: cuenta.clave_publica as string | null }
+        }
+    }
     if (proveedorConfigurado() !== 'falsa') throw new NoEncontrado('La pasarela falsa no está activa')
-    const { PasarelaFalsa } = await import('#billing/pasarelas/falsa')
-    return new PasarelaFalsa()
+    return { falsa: new PasarelaFalsa(), clave: null as string | null }
 }
 
 /** Lado del proveedor + webhook firmado por el mismo camino que uno real. */
@@ -1399,7 +1494,7 @@ async function simularEnFalsa(
     idProveedor: string,
     cuerpo: { estado?: 'pagado' | 'fallido'; monto?: string; notificar?: boolean },
 ) {
-    const falsa = await pasarelaFalsa()
+    const { falsa, clave } = await pasarelaFalsa(idProveedor)
     const webhook = await falsa.simularPago(idProveedor, { estado: cuerpo.estado, monto: cuerpo.monto })
     if (cuerpo.notificar === false) {
         return {
@@ -1412,7 +1507,7 @@ async function simularEnFalsa(
         }
     }
     return new ProcesarWebhookPasarela().execute(
-        { proveedor: 'falsa', cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
+        { proveedor: 'falsa', clave_publica: clave, cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
         ctx.contextoAccion('webhook'),
     )
 }
@@ -1475,12 +1570,35 @@ const pasarelaRutas: Ruta[] = [
         permiso: null,
         parametros: { proveedor: { type: 'string' } },
         descripcion:
-            'Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
+            'Ruta anterior a las cuentas de pasarela: vale para la cuenta sembrada del entorno (o el entorno, sin cuentas). Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
         respuesta: { status: 200, descripcion: 'Webhook procesado', esquema: ResultadoWebhookPasarela },
         handler: (ctx, { params }) =>
             new ProcesarWebhookPasarela().execute(
                 {
                     proveedor: String(params.proveedor),
+                    cuerpo: ctx.request.raw() ?? '',
+                    cabeceras: cabecerasPlanas(ctx),
+                },
+                ctx.contextoAccion('webhook'),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/webhook/:proveedor/:clave_publica',
+        operacion: 'pasarelaWebhookCuenta',
+        resumen: 'Webhook de una cuenta de pasarela (firmado con el secreto de esa cuenta)',
+        etiqueta: 'pagos',
+        seguridad: 'publico',
+        permiso: null,
+        parametros: { proveedor: { type: 'string' }, clave_publica: { type: 'string' } },
+        descripcion:
+            'La URL lleva la clave_publica de la cuenta: se verifica con el secreto de ESA cuenta (el de otra da 401). Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
+        respuesta: { status: 200, descripcion: 'Webhook procesado', esquema: ResultadoWebhookPasarela },
+        handler: (ctx, { params }) =>
+            new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: String(params.proveedor),
+                    clave_publica: String(params.clave_publica),
                     cuerpo: ctx.request.raw() ?? '',
                     cabeceras: cabecerasPlanas(ctx),
                 },
@@ -1497,7 +1615,7 @@ const pasarelaRutas: Ruta[] = [
         cuerpo: v.conciliarPasarelaValidator,
         idempotente: true,
         descripcion:
-            'Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.',
+            'Lo mismo que el cron diario (06:30 Guatemala, día anterior), que recorre todas las cuentas de pasarela activas; aquí una cuenta (cuenta_id, obligatoria si hay varias activas: 422 cuenta_requerida). Solo reporta diferencias: no registra ni anula pagos.',
         respuesta: { status: 200, descripcion: 'Conciliación', esquema: ConciliacionPasarela },
         handler: (ctx, { cuerpo }) => new ConciliarPasarela().execute(cuerpo, ctx.contextoAccion()),
     }),
@@ -1528,7 +1646,7 @@ const pasarelaRutas: Ruta[] = [
         descripcion: 'Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón "Pagar (simulado)".',
         respuesta: { status: 200, descripcion: 'Página HTML', esquema: { type: 'string' } },
         handler: async (ctx, { params }) => {
-            const falsa = await pasarelaFalsa()
+            const { falsa } = await pasarelaFalsa(String(params.cobro))
             const cobro = await falsa.consultar(String(params.cobro))
             const id = escaparHtml(cobro.id_proveedor)
             ctx.response.header('Content-Type', 'text/html; charset=utf-8')
@@ -1574,11 +1692,149 @@ const pasarelaRutas: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             const idProveedor = String(params.cobro)
             await simularEnFalsa(ctx, idProveedor, cuerpo)
-            const falsa = await pasarelaFalsa()
+            const { falsa } = await pasarelaFalsa(idProveedor)
             const retorno =
                 (await falsa.urlDeRetorno(idProveedor)) ??
                 `/api/v1/pasarela/falsa/${encodeURIComponent(idProveedor)}`
             return redirigir(retorno)
+        },
+    }),
+    // --- cuentas de pasarela por empresa y proveedor (D0; contratos/debito-automatico.md §2) ---
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarelas/proveedores',
+        operacion: 'pasarelasProveedores',
+        resumen: 'Adaptadores de pasarela disponibles, con sus capacidades y lo que piden',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.ver',
+        descripcion:
+            'Por cada adaptador: capacidades (el resto del sistema mira esto, nunca el nombre), las credenciales que pide (se guardan cifradas) y sus opciones. La pasarela falsa es solo de laboratorio.',
+        respuesta: { status: 200, descripcion: 'Adaptadores', esquema: lista(ProveedorPasarela) },
+        handler: async () => {
+            const salida = []
+            for (const nombre of nombresProveedores()) {
+                const d = await descriptorPasarela(nombre)
+                salida.push({
+                    nombre: d.nombre,
+                    titulo: d.titulo,
+                    laboratorio: d.laboratorio,
+                    capacidades: d.capacidades,
+                    credenciales: d.credenciales,
+                    requiere_webhook_secreto: d.requiere_webhook_secreto,
+                    opciones: d.opciones,
+                })
+            }
+            return salida
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarelas/cuentas',
+        operacion: 'pasarelasCuentas',
+        resumen: 'Cuentas de pasarela por empresa y proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.ver',
+        query: v.listarCuentasPasarelaValidator,
+        descripcion:
+            'Nunca devuelve credenciales ni el secreto del webhook: solo los nombres de las credenciales guardadas y `tiene_webhook_secreto`.',
+        respuesta: { status: 200, descripcion: 'Cuentas', esquema: lista(CuentaPasarela) },
+        handler: (ctx, { query }) => listarCuentasPasarela(empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas',
+        operacion: 'pasarelasCrearCuenta',
+        resumen: 'Crear la cuenta de pasarela de una empresa para un proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        cuerpo: v.crearCuentaPasarelaValidator,
+        idempotente: true,
+        descripcion:
+            'Una por (empresa, proveedor): 409 cuenta_pasarela_duplicada. Nace inactiva y sin probar. Las credenciales y el secreto del webhook se guardan cifrados y no vuelven. 422 debito_no_soportado si el adaptador no permite cargos con token. Emite pasarela.config_cambiada (solo nombres de campos).',
+        respuesta: { status: 201, descripcion: 'Cuenta creada', esquema: CuentaPasarela },
+        handler: (ctx, { cuerpo }) => new CrearCuentaPasarela().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/pasarelas/cuentas/:id',
+        operacion: 'pasarelasEditarCuenta',
+        resumen: 'Editar una cuenta de pasarela',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        cuerpo: v.editarCuentaPasarelaValidator,
+        idempotente: true,
+        descripcion:
+            'Con version (409 si cambió). Las credenciales enviadas reemplazan a las guardadas; las omitidas se conservan. Cambiar credenciales, secreto, modo u opciones deja prueba_ok = false.',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new EditarCuentaPasarela().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarelas/cuentas/:id',
+        operacion: 'pasarelasVerCuenta',
+        resumen: 'Ver una cuenta de pasarela',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.ver',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return verCuentaPasarela(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas/:id/probar',
+        operacion: 'pasarelasProbarCuenta',
+        resumen: 'Probar las credenciales de una cuenta con el proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.probar',
+        idempotente: true,
+        descripcion:
+            'Una llave mala no es un error HTTP: responde 200 con ok = false, deja prueba_ok = false y no activa. Una prueba buena tampoco activa (usa /activar).',
+        respuesta: { status: 200, descripcion: 'Resultado', esquema: ResultadoProbarCuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new ProbarCuentaPasarela().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas/:id/activar',
+        operacion: 'pasarelasActivarCuenta',
+        resumen: 'Activar una cuenta de pasarela (exige una prueba buena)',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        idempotente: true,
+        descripcion:
+            '422 cuenta_sin_prueba si la última prueba no salió bien. Si la empresa no tenía cuenta predeterminada para un uso, esta pasa a serlo.',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new ActivarCuentaPasarela().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarelas/cuentas/:id/desactivar',
+        operacion: 'pasarelasDesactivarCuenta',
+        resumen: 'Desactivar una cuenta de pasarela',
+        etiqueta: 'pagos',
+        permiso: 'pasarelas.configurar',
+        idempotente: true,
+        descripcion:
+            'Deja de crear cobros; sus webhooks siguen valiendo para los cobros ya hechos. Si era la única de la empresa, la empresa queda sin pago en línea (no vuelve al entorno).',
+        respuesta: { status: 200, descripcion: 'Cuenta', esquema: CuentaPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCuentaPasarela(id))
+            return new DesactivarCuentaPasarela().execute({ id }, ctx.contextoAccion())
         },
     }),
 ]
@@ -1785,6 +2041,69 @@ const estadoCuenta: Ruta[] = [
                 empresasEstadoCuenta(ctx, query.empresa_id),
                 query.servicio_id ?? null,
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/perfil-fiscal',
+        operacion: 'clientesPerfilFiscal',
+        resumen: 'Perfil fiscal del cliente: tipo de impuesto y «me retiene ISR»',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        descripcion:
+            'Lote B4 del plan de contabilidad. Un cliente que nunca se configuró es normal, sin ISR, con version 0. exencion dice si la exención se aplica hoy en las facturas (apagada: exencion_sin_frase).',
+        respuesta: { status: 200, descripcion: 'Perfil fiscal', esquema: PerfilFiscalCliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return vistaPerfilFiscal(id, ctx.empresa?.activa ?? null)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/perfil-fiscal/retenciones',
+        operacion: 'clientesSimularRetenciones',
+        resumen: 'Qué se espera retener de una factura de este total al cliente (antes de emitirla)',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        query: v.simularRetencionesValidator,
+        descripcion:
+            'Lote B4: la cuenta de «Nueva factura» y de Cobrar (te retendrá, recibirás) con el perfil fiscal de hoy y el régimen de la empresa. Sin empresa_id usa la activa; 422 empresa_requerida si no hay. Mismas reglas que la instantánea que guarda la factura al emitirse.',
+        respuesta: { status: 200, descripcion: 'Retenciones esperadas', esquema: PerfilFiscalFactura },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            const empresaId = query.empresa_id ?? ctx.empresa?.activa ?? null
+            if (!empresaId) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'empresa_id',
+                        message: 'Indica la empresa que factura',
+                        rule: 'empresa_requerida',
+                    },
+                ])
+            }
+            exigirEmpresaPeticion(ctx.empresa, empresaId)
+            return simularRetenciones(id, empresaId, query.total)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/perfil-fiscal',
+        operacion: 'clientesAsignarPerfilFiscal',
+        resumen: 'Asignar el tipo de impuesto del cliente y «me retiene ISR»',
+        etiqueta: 'clientes',
+        permiso: 'clientes.asignar_perfil_fiscal',
+        cuerpo: v.asignarPerfilFiscalValidator,
+        idempotente: true,
+        versionada: true,
+        descripcion:
+            'Define cómo salen sus facturas y qué retención se espera al cobrarle; no toca las facturas ya emitidas (cada una guarda su instantánea). exento exige resolucion_exencion y se guarda, pero la factura sale con IVA hasta tener la frase de exención. 409 por version, 422 por resolución. audit.cambios (cliente_perfil_fiscal) y cliente.actualizado con campos tipo_impuesto y retiene_isr.',
+        respuesta: { status: 200, descripcion: 'Perfil fiscal guardado', esquema: PerfilFiscalCliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirCliente(ctx, id)
+            return new AsignarPerfilFiscal().execute({ ...cuerpo, cliente_id: id }, ctx.contextoAccion())
         },
     }),
 ]

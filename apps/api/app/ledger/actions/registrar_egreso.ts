@@ -6,7 +6,8 @@ import { permisosDeUsuario } from '#core/acl'
 import { valorParametro } from '#fiscal/parametros'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
-import type { ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import { PAIS_PLAN, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import {
     egresosDelTurno,
     resolverOrigenEgreso,
@@ -17,6 +18,7 @@ import {
 import { depositosDelTurno } from '#ledger/transitos'
 import { pagosProveedoresDelTurno } from '#ledger/pagos_proveedores'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
+import { exigirSalidaDeCaja } from '#ledger/caja_chica'
 
 /**
  * `egresos.registrar` (`POST /egresos`): un gasto pagado por la empresa.
@@ -38,6 +40,16 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
  * efectivo del turno, H53), 422 en `descripcion` (`required`), 403 `egreso_sobre_limite` (sobre el tope: lo
  * registra contabilidad) y 403 `egreso_sin_limite_configurado` (la empresa no tiene el parámetro).
  * Contabilidad los revisa en el cierre de caja: bajan el esperado del turno.
+ *
+ * B9 (caja chica, §5.7): el gasto de una caja chica entra por `caja_chica.registrar_gasto`
+ * (`POST /cajas/:id/gastos`, con el comprobante obligatorio); aquí, con una caja chica, 422
+ * `gasto_caja_chica_con_comprobante`. N2: si la empresa ya tiene una caja chica activa, ningún gasto
+ * sale de una caja de cobros (422 `gasto_desde_caja_chica`); mientras no la tenga, la vía de arriba
+ * sigue igual.
+ *
+ * B11 (caja sin factura): el gasto de una caja `fiscal = false` va a `5.7.01 Gastos internos sin
+ * factura` (cuenta interna, no deducible, fuera de los libros fiscales), con su categoría como dato;
+ * `egresos.cuenta_id` guarda esa cuenta.
  */
 
 export interface EntradaRegistrarEgreso {
@@ -51,6 +63,8 @@ export interface EntradaRegistrarEgreso {
     proveedor?: string | null
     descripcion?: string | null
     comprobante?: string | null
+    /** interno: solo desde `caja_chica.registrar_gasto`, que ya validó al encargado y el comprobante */
+    desde_caja_chica?: boolean
 }
 
 const ORIGEN_POR_METODO: Record<MetodoEgreso, 'caja_id' | 'banco_id' | 'cuenta_bancaria_id'> = {
@@ -118,7 +132,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
 
         const usuarioId = usuarioDelActor(t.ctx.actor)
         const permisos = usuarioId === null ? null : await permisosDeUsuario(usuarioId)
-        const conLimite = permisos !== null && !permisos.includes('egresos.registrar_sin_limite')
+        let conLimite = permisos !== null && !permisos.includes('egresos.registrar_sin_limite')
         if (conLimite && input.metodo !== 'caja') {
             throw new Problema(
                 403,
@@ -132,6 +146,35 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         // el egreso es de la empresa de su caja, banco o cuenta bancaria
         exigirAccesoEmpresa(t.ctx, origen.empresa_id)
         t.fijarEmpresa(origen.empresa_id)
+        // B11: el gasto de una caja sin factura va a la cuenta interna 5.7.01, no a la de su categoría
+        let cuentaGasto = categoria!.cuenta_id
+        let cuentaPropia: number | null = null
+        if (origen.caja_id !== null) {
+            const salida = await exigirSalidaDeCaja(t.trx, origen.caja_id, monto, 'egreso')
+            const esCajaChica = salida.caja_chica
+            if (!salida.fiscal) {
+                const interna = (await t.trx
+                    .from('ledger.cuentas')
+                    .where('pais', PAIS_PLAN)
+                    .where('codigo', CUENTAS_GT.GASTOS_INTERNOS)
+                    .select('id')
+                    .firstOrFail()) as { id: number }
+                cuentaPropia = Number(interna.id)
+                cuentaGasto = cuentaPropia
+            }
+            if (esCajaChica && !input.desde_caja_chica) {
+                throw new Problema(
+                    422,
+                    'gasto_caja_chica_con_comprobante',
+                    'El gasto de caja chica lleva su comprobante',
+                    `Registra el gasto de la caja chica ${origen.nombre} con su comprobante (POST /cajas/${origen.caja_id}/gastos)`,
+                    [{ field: 'caja_id', message: 'Usa el gasto de caja chica', rule: 'gasto_caja_chica' }],
+                )
+            }
+            // la caja chica no tiene turnos: las reglas del cajero (turno abierto y tope) no aplican;
+            // `caja_chica.registrar_gasto` ya exigió al encargado
+            if (esCajaChica) conLimite = false
+        }
         if (conLimite) await this.exigirLimiteCajero(t, input, monto, fecha, origen, usuarioId!)
 
         const [fila] = (await t.trx
@@ -151,6 +194,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
                 banco_id: origen.banco_id,
                 cuenta_bancaria_id: origen.cuenta_bancaria_id,
                 registrado_por: usuarioDelActor(t.ctx.actor),
+                cuenta_id: cuentaPropia,
             })
             .returning('id')) as Array<{ id: number }>
         const egresoId = fila!.id
@@ -167,7 +211,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
                 origen_tipo: 'egreso',
                 origen_id: egresoId,
                 movimientos: [
-                    { cuenta: categoria!.cuenta_id, debe: aTexto(monto) },
+                    { cuenta: cuentaGasto, debe: aTexto(monto) },
                     { cuenta: origen.cuenta_id, haber: aTexto(monto) },
                 ],
             },

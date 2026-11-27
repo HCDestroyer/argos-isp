@@ -87,6 +87,11 @@ export interface DefinicionCuentaPaquete extends Omit<DefinicionCuenta, 'tipo'> 
     libro_inventario?: boolean
     /** flujo de efectivo (método indirecto); si falta, la regla por prefijo del paquete */
     categoria_flujo?: CategoriaFlujo
+    /**
+     * B11: cuenta interna (caja sin factura): fuera de los libros fiscales y de las declaraciones;
+     * solo la ve quien tiene `contabilidad.ver_cuentas_internas`
+     */
+    interna?: boolean
 }
 
 /** Clasificación del flujo de efectivo por cuenta (estudio de Odoo, tabla final #1). */

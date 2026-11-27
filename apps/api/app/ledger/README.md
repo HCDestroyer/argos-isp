@@ -136,6 +136,36 @@ El efectivo de cobros siempre está a nombre de una persona y solo se mueve por 
 - Historial: los cierres de antes de B1 con `entregado_monto` quedaron como entregas `migracion` «por recibir» a nombre de su receptor.
 - Eventos: `caja.entregada`, `caja.entrega_recibida`, `caja.entrega_rechazada`, `cajas.ajustes_cambiados`; `caja.depositada` suma `origen` y `custodio_id`.
 
+### Caja chica (B9 del plan de contabilidad, §5.7; decisiones del PM del 26 nov 2026)
+
+Una caja de `tipo = gastos` con **fondo fijo** (`cajas.fondo_fijo` o `cajas_ajustes.fondo_caja_chica`, Q2,000 de fábrica). No abre turnos (422 `caja_chica_sin_turno`) ni cobra (422 `caja_chica_no_cobra`); su `cajero_id` es su encargado. `caja_chica.ts`:
+
+| Paso | Acción (permiso) | Documento | Asiento |
+| --- | --- | --- | --- |
+| Reponer (también la primera vez: pone el fondo) | `caja_chica.reponer` (`POST /cajas/:id/reponer`) | `ledger.reposiciones` + `ledger.reposiciones_documentos` (sella los gastos y conteos pendientes) | `reposicion_caja`: Caja chica / `1.1.15` (custodia de quien repone) o Banco. Monto = fondo − efectivo |
+| Gasto | `caja_chica.registrar_gasto` (`POST /cajas/:id/gastos`, multipart) | `ledger.egresos` (sin turno) + `ledger.egresos_comprobantes` (archivo obligatorio) | `egreso`: Gasto / Caja chica |
+| Conteo sorpresa | `caja_chica.contar` (`POST /cajas/:id/contar`) | `ledger.conteos_caja` (a cargo del encargado) | `conteo_caja` solo con diferencia: Faltantes / Caja chica o Caja chica / Sobrantes |
+
+- **Sin tope por gasto** (el PM: «el tope de gastos no se puede definir»): el único límite es el efectivo (422 `efectivo_insuficiente`, con la caja bloqueada para que dos gastos no saquen el mismo efectivo).
+- **Comprobante obligatorio**: foto o PDF en el almacenamiento compartido (`COMPROBANTES_DIR/egresos/…`). Un gasto que nace sin él (la compra al contado pagada con la caja chica) lo recibe con `POST /egresos/:id/comprobante` (`egresos.adjuntar_comprobante`); la reposición no sella gastos sin archivo (422 `gastos_sin_comprobante`).
+- **Con factura** a nombre de la empresa (`con_factura`): el gasto se registra y la respuesta dice `pasar_a_compras`; `POST /compras/desde-egreso/:egreso_id` lo reclasifica para el IVA sin tocar el efectivo. Una compra al contado también puede salir de la caja chica.
+- **Invariante**: efectivo en el libro + gastos sin reponer − diferencias de conteo sin reponer = fondo de la última reposición (`GET /cajas/:id/caja-chica`, `cuadra`). Un gasto sellado ya no se anula (409 `gasto_repuesto`, también al anular su compra); uno sin reponer sí, y su efectivo vuelve a la caja.
+- **Reposición solo por lo gastado** y nunca desde una caja de cobros: desde la custodia (no más que la de quien repone: 422 `custodia_insuficiente`; la custodia por persona resta las reposiciones) o desde un banco de la misma empresa. `monto` opcional como confirmación (422 `monto_distinto`); 422 `nada_que_reponer`.
+- **La caja chica solo paga gastos**: egresos y compras al contado; pagos a proveedores al crédito y de impuestos no (422 `caja_chica_solo_gastos`).
+- **N2**: cuando la empresa tiene una caja chica activa, ningún egreso, compra al contado, pago a proveedor o de impuesto sale de una caja de cobros (422 `gasto_desde_caja_chica`, `exigirSalidaDeCaja`). Mientras no la tenga, el gasto del cajero desde su turno sigue como antes (así lo usan el panel de hoy y la suite del auditor).
+- Lecturas: `GET /cajas/:id/caja-chica` (estado), `GET /cajas/:id/reposiciones`, `GET /cajas/:id/conteos`, `GET /egresos/:id/comprobante` (el archivo).
+- Eventos: `caja_chica.gasto_registrado` (`bajo_minimo` bajo el 30 % del fondo), `caja_chica.repuesta`, `caja.contada`, `egreso.comprobante_adjuntado`; `cajas.ajustes_cambiados` suma `fondo_caja_chica`.
+
+### Caja sin factura (B11; decisiones del PM del 25 y 26 nov 2026)
+
+Para operaciones reales que no llevan factura (paso por un camino, permiso de un poste). No es para esconder nada a la SAT ni a una auditoría: todo queda en el libro inmutable y en la bitácora; solo no se mezcla con la declaración.
+
+- `ledger.cajas.fiscal = false` (`POST /cajas { fiscal }` o `PUT /cajas/:id`, `cajas.editar`, con `version`; evento `caja.cambiada`): **caja de cobros sin factura** o **caja chica sin factura** (N1). Se permite con FEL obligatoria y la caja trae `aviso_sin_factura`. El efectivo sigue el mismo camino de B1 y B9 (entrega → custodia → banco; reposición).
+- **Cuentas internas** (gt-2026.7, `ledger.cuentas.interna`): `4.3.01 Ingresos por recibos internos (caja sin factura)` y `5.7.01 Gastos internos sin factura` (no deducible). Quedan fuera de las declaraciones (ISR: `resultadosDelRango` excluye `interna`) y de los libros fiscales (libro de ventas sin `billing.facturas_no_fiscales`). Códigos por confirmar con el contador.
+- **Salidas**: el egreso de una caja sin factura va a `5.7.01` (`egresos.cuenta_id`), con su categoría como dato; no paga compras, proveedores ni impuestos (422 `caja_sin_factura_solo_internos`) y su egreso no pasa a Compras (409 `egreso_sin_factura`).
+- **Entradas**: ver `billing/README.md` («Caja sin factura y recibo no fiscal»).
+- **Visibilidad** (por usuario): `ledger.cajas.usuarios` = quiénes ven y usan una caja (vacía = todos los del ACL; `GET /cajas` y las rutas de la caja responden 404 a los demás). Las cuentas internas las ve quien tiene `contabilidad.ver_cuentas_internas`: sin él, `GET /libro/cuentas` no las lista, `GET /libro/diario` no trae los asientos que las tocan, `GET /libro/mayor` de una interna responde 403 `cuenta_interna_restringida`, y el balance y el estado de resultados las juntan en una línea «Interno (restringido)» por tipo (los totales no cambian: el estado sigue cuadrando). Se eligió agregar y no quitar para que nadie vea un balance que no cuadra.
+
 ## Cierre mensual (`cierres.ts`)
 
 | Acción                  | Archivo                      | Permiso                 | Qué hace                                                                                                                                                                                  |
@@ -230,6 +260,12 @@ Sin `egresos.registrar_sin_limite` (el rol `cajero`), `egresos.registrar` solo a
 | GET    | `/api/v1/cajas/turno-actual/resumen?caja_id=` (fondo, cobros por método, otros medios, ingresos, retiros y esperado; 404 `sin_turno_abierto`) | `cajas.ver` |
 | POST   | `/api/v1/cajas/:id/cerrar`                                            | `cajas.cerrar` |
 | GET    | `/api/v1/cajas/:id/turnos?cursor&limit`                               | `cajas.ver`    |
+| GET    | `/api/v1/cajas/:id/caja-chica`, `/cajas/:id/reposiciones`, `/cajas/:id/conteos` (B9) | `cajas.ver` |
+| POST   | `/api/v1/cajas/:id/gastos` (multipart, B9)                            | `caja_chica.registrar_gasto` |
+| POST   | `/api/v1/cajas/:id/reponer` (B9)                                      | `caja_chica.reponer` |
+| POST   | `/api/v1/cajas/:id/contar` (B9)                                       | `caja_chica.contar` |
+| POST   | `/api/v1/egresos/:id/comprobante` (multipart, B9)                     | `egresos.adjuntar_comprobante` |
+| GET    | `/api/v1/egresos/:id/comprobante` (B9)                                | `egresos.ver`  |
 
 ## Cobros y bancos (fase 4, contrato de localización fiscal §10.3 y §10.9)
 

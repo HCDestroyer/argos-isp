@@ -12,6 +12,7 @@ import { notasDeFactura } from '#billing/notas_credito'
 import { emisorDeFactura } from '#billing/empresa'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import type { OrigenExternoTipo } from '#inventario/origen_externo'
+import type { PerfilFiscalFactura } from '#billing/perfil_fiscal'
 
 /**
  * Facturas: montos (IVA incluido), estado según lo pagado y consultas de lectura.
@@ -213,12 +214,18 @@ export interface FacturaFila {
     /** modo FEL de la empresa y qué le toca a la factura (`#fiscal/fel/accion`) */
     fel_modo?: (typeof MODOS_FEL)[number]
     fel_accion?: AccionFel
+    /** B11: fuera de la SAT (`caja_sin_factura` o `cargo_no_facturable`), o null */
+    no_fiscal?: 'caja_sin_factura' | 'cargo_no_facturable' | null
+    /** B11: número del último recibo no fiscal vigente de un pago aplicado (o null) */
+    recibo_numero?: number | null
     /** aviso de cobro: su IVA está en 2.1.11 hasta certificarse (§10.1) */
     aviso_cobro?: boolean
     certificar_al?: 'emitir' | 'pagar' | 'nunca' | null
     tipo_dte?: string | null
     anulada_en?: Date | null
     motivo_anulacion?: string | null
+    /** instantánea del perfil fiscal del cliente al emitir (B4); null en las anteriores */
+    perfil_fiscal?: PerfilFiscalFactura | null
     /** factura importada: sistema de origen e id allí */
     origen?: string | null
     id_externo?: string | null
@@ -266,6 +273,17 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         ),
         ...columnasDte(cliente, alias),
         ...columnasAccionFel(cliente, alias),
+        // B11: fuera de la SAT (cargo no facturable o cobrada en caja sin factura) y su recibo
+        cliente.raw(
+            `(select nf.motivo from billing.facturas_no_fiscales nf where nf.factura_id = ${alias}.id
+               and not exists (select 1 from billing.facturas_no_fiscales_anulaciones nx where nx.no_fiscal_id = nf.id)
+             order by nf.id desc limit 1) as no_fiscal`,
+        ),
+        cliente.raw(
+            `(select r.numero from billing.recibos r join billing.pagos_aplicaciones pa on pa.pago_id = r.pago_id
+               join billing.pagos p on p.id = r.pago_id
+              where pa.factura_id = ${alias}.id and p.estado <> 'anulado' order by r.id desc limit 1) as recibo_numero`,
+        ),
         c('aviso_cobro'),
         c('certificar_al'),
         c('tipo_dte'),
@@ -281,6 +299,8 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
             `(select ms.nombre from billing.motivos_sin_costo ms where ms.id = ${alias}.motivo_sin_costo_id) as motivo_sin_costo_nombre`,
         ),
         c('motivo_sin_costo_texto'),
+        // perfil fiscal del cliente al emitir (B4; null en las anteriores)
+        c('perfil_fiscal'),
         c('origen'),
         cliente.raw(`${alias}.clave_externa as id_externo`),
         // orden de Iris del cargo único (`#inventario/origen_externo`)

@@ -1,6 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { filtrarPorAlcance, permite, type Alcance } from '#core/acl'
+import { filtrarPorAlcance, permite, permisosDeUsuario, type Alcance } from '#core/acl'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
@@ -29,12 +29,21 @@ export interface CajaVista {
     /** decisión del PM 20: formato del recibo (`pos_80` de fábrica) y de la factura (`carta`) */
     formato_recibo: FormatoImpresion
     formato_factura: FormatoImpresion
-    /** B1 (§5.7): `cobros` (turno, cierre y entrega) o `gastos` (caja chica, B9) */
+    /**
+     * B1 (§5.7): `cobros` (turno, cierre y entrega) o `gastos` (caja chica, B9: fondo fijo, sin turnos;
+     * su `cajero_id` es su encargado)
+     */
     tipo: 'cobros' | 'gastos'
     /** fondo fijo propio; null = el fondo de cambio de la empresa */
     fondo_fijo: string | null
-    /** fondo con el que abre: el propio o el de la empresa */
+    /** fondo con el que abre (cobros) o su fondo fijo (caja chica): el propio o el de la empresa */
     fondo_fijo_efectivo: string
+    /** B11: false = caja sin factura (recibo no fiscal, cuentas internas) */
+    fiscal: boolean
+    /** B11: quiénes ven y usan la caja; vacío = todos los que la alcanzan por el ACL */
+    usuarios: number[]
+    /** B11: aviso de una caja sin factura en una empresa con FEL obligatoria (o null) */
+    aviso_sin_factura: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -105,6 +114,7 @@ export async function listarCajas(
     alcance?: Alcance,
     empresas: number[] | null = null,
     cliente: QueryClientContract = db.connection(),
+    usuarioId: number | null = null,
 ): Promise<CajaVista[]> {
     const consulta = cliente
         .from('ledger.cajas as c')
@@ -127,7 +137,16 @@ export async function listarCajas(
             'c.tipo',
             'c.fondo_fijo',
             db.raw(
-                `coalesce(c.fondo_fijo, (SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_cobros})::text AS fondo_fijo_efectivo`,
+                `coalesce(c.fondo_fijo, CASE WHEN c.tipo = 'gastos'
+                    THEN coalesce((SELECT a.fondo_caja_chica FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_caja_chica})
+                    ELSE coalesce((SELECT a.fondo_cobros FROM ledger.cajas_ajustes a WHERE a.empresa_id = c.empresa_id), ${AJUSTES_FABRICA.fondo_cobros}) END)::text AS fondo_fijo_efectivo`,
+            ),
+            'c.fiscal',
+            'c.usuarios',
+            db.raw(
+                `CASE WHEN NOT c.fiscal AND (SELECT fc.modo FROM fiscal.fel_configuracion fc WHERE fc.empresa_id = c.empresa_id) = 'obligatoria'
+                      THEN ? END AS aviso_sin_factura`,
+                [AVISO_SIN_FACTURA],
             ),
             'c.version',
             'c.created_at',
@@ -139,7 +158,50 @@ export async function listarCajas(
         ])
     filtrarPorAlcance(consulta, alcance, { caja: (q, ids) => q.whereIn('c.id', ids) })
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('c.empresa_id', ids))
-    return (await consulta) as CajaVista[]
+    if (usuarioId !== null && !(await veTodasLasCajas(usuarioId))) {
+        consulta.whereRaw(SQL_VISIBLE, [usuarioId, usuarioId])
+    }
+    const filas = (await consulta) as CajaVista[]
+    return filas.map((f) => ({ ...f, usuarios: (f.usuarios ?? []).map(Number) }))
+}
+
+/** B11: texto del aviso de una caja sin factura con FEL obligatoria (decisión del PM del 25 nov). */
+export const AVISO_SIN_FACTURA =
+    'La empresa tiene FEL obligatoria y esta caja es sin factura: sus cobros emiten un recibo no fiscal, no van a la SAT y su ingreso va a la cuenta interna'
+
+/**
+ * B11 (visibilidad por usuario): con `contabilidad.ver_cuentas_internas` se ven todas las cajas; sin
+ * él, una caja con lista de usuarios solo la ven y usan los de la lista (y su cajero). Sin lista,
+ * como siempre (alcance ACL). No esconde nada a una auditoría: todo sigue en el libro y la bitácora.
+ */
+export async function veTodasLasCajas(usuarioId: number): Promise<boolean> {
+    const permisos = await permisosDeUsuario(usuarioId)
+    return permisos.includes('contabilidad.ver_cuentas_internas')
+}
+
+const SQL_VISIBLE = `(cardinality(c.usuarios) = 0 OR c.cajero_id = ? OR ?::bigint = ANY (c.usuarios))`
+
+/** 404 si la caja tiene lista de usuarios y el usuario no está (ni puede ver todas). */
+export async function exigirCajaVisible(cajaId: number, usuarioId: number | null) {
+    if (usuarioId === null || (await veTodasLasCajas(usuarioId))) return
+    const { rows } = (await db.rawQuery(`SELECT 1 FROM ledger.cajas c WHERE c.id = ? AND ${SQL_VISIBLE}`, [
+        cajaId,
+        usuarioId,
+        usuarioId,
+    ])) as { rows: unknown[] }
+    if (rows.length === 0) throw new NoEncontrado(`La caja ${cajaId} no existe`)
+}
+
+/** Usuarios de la lista de visibilidad de la caja (vacía = todos los del ACL). */
+export async function usuariosDeCaja(cliente: QueryClientContract, cajaId: number): Promise<number[]> {
+    const fila = (await cliente
+        .from('ledger.cajas')
+        .where('id', cajaId)
+        .select('usuarios')
+        .firstOrFail()) as {
+        usuarios: Array<number | string> | null
+    }
+    return (fila.usuarios ?? []).map(Number).sort((a, b) => a - b)
 }
 
 /** 404 si la caja no existe; devuelve sus dimensiones (alcance por caja y empresa). */

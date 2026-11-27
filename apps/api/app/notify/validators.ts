@@ -277,3 +277,120 @@ export const registrarConsentimientoValidator = vine.compile(
             }),
     }),
 )
+
+/*
+| Plantillas de recordatorio (R1, `contratos/recordatorios.md`)
+*/
+
+const pasoRecordatorio = vine.object({
+    orden: vine.number().withoutDecimals().range([1, 8]).meta({
+        description: 'Posición del paso (1 a 8, sin repetir); va en el origen del envío',
+    }),
+    disparador: vine.enum(['vencimiento', 'corte_proximo', 'promesa_por_vencer'] as const).meta({
+        description:
+            '`vencimiento`: días respecto a `vence_en`; `corte_proximo`: días antes del corte previsto; ' +
+            '`promesa_por_vencer`: días antes de que venza la promesa',
+    }),
+    dias: vine.number().withoutDecimals().range([-60, 60]).meta({
+        description: 'Negativo antes, 0 el día, positivo después (solo `vencimiento` admite después)',
+    }),
+    hora: vine
+        .string()
+        .trim()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+        .optional()
+        .meta({ description: 'HH:MM, hora de Guatemala (por defecto 09:00)' }),
+    aviso: vine
+        .enum(['factura_por_vencer', 'factura_vencida', 'corte_proximo', 'promesa_por_vencer'] as const)
+        .optional()
+        .meta({ description: 'Código que se pide a Iris; por defecto según disparador y días' }),
+    evento_plantilla: vine
+        .enum([
+            'recordatorio.1',
+            'recordatorio.2',
+            'recordatorio.3',
+            'recordatorio.corte_proximo',
+            'recordatorio.promesa_por_vencer',
+        ] as const)
+        .optional()
+        .meta({
+            description:
+                'Texto local de respaldo en `notify.plantillas`; por defecto según disparador y días',
+        }),
+    canales: vine
+        .array(vine.enum(['whatsapp', 'correo', 'telegram'] as const))
+        .maxLength(3)
+        .optional()
+        .meta({ description: 'Canales permitidos; vacío = el que elija Iris (o los locales sin Iris)' }),
+    activo: vine.boolean().optional(),
+})
+
+const pasosRecordatorio = () => vine.array(pasoRecordatorio).maxLength(8).distinct('orden')
+
+const nombrePlantillaRecordatorio = () => vine.string().trim().minLength(1).maxLength(120)
+
+export const listarPlantillasRecordatorioValidator = vine.compile(
+    vine.object({
+        incluir_retiradas: vine.boolean().optional(),
+        empresas: vine.enum(['todas'] as const).optional(),
+    }),
+)
+
+export const crearPlantillaRecordatorioValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().optional().meta({ description: 'Sin ella, la empresa activa' }),
+        nombre: nombrePlantillaRecordatorio(),
+        descripcion: vine.string().trim().maxLength(500).nullable().optional(),
+        por_defecto: vine.boolean().optional(),
+        pasos: pasosRecordatorio(),
+    }),
+)
+
+export const editarPlantillaRecordatorioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: nombrePlantillaRecordatorio().optional(),
+        descripcion: vine.string().trim().maxLength(500).nullable().optional(),
+        pasos: pasosRecordatorio().optional(),
+    }),
+)
+
+export const retirarPlantillaRecordatorioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        motivo: vine.string().trim().minLength(3).maxLength(500),
+    }),
+)
+
+export const fijarPlantillaRecordatorioPorDefectoValidator = vine.compile(
+    vine.object({ version: versionEsperada() }),
+)
+
+export const asignarPlantillaRecordatorioValidator = vine.compile(
+    vine.object({
+        plantilla_id: idEntidad()
+            .nullable()
+            .meta({ description: 'null = vuelve a la por defecto de la empresa' }),
+    }),
+)
+
+export const asignarPlantillaRecordatorioMasivoValidator = vine.compile(
+    vine.object({
+        servicio_ids: vine.array(idEntidad()).minLength(1).maxLength(500).distinct(),
+    }),
+)
+
+export const personalizarRecordatoriosValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(0).meta({
+            description:
+                '0 si el servicio aún no tiene personalizados; si no, la `version` de su personalizada',
+        }),
+        descripcion: vine.string().trim().maxLength(500).nullable().optional(),
+        pasos: pasosRecordatorio(),
+    }),
+)
+
+export const quitarRecordatoriosPersonalizadosValidator = vine.compile(
+    vine.object({ version: versionEsperada() }),
+)

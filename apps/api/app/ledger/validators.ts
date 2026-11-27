@@ -70,11 +70,36 @@ export const crearCajaValidator = vine.compile(
             description: 'Empresa de la caja; por defecto la activa (X-Empresa-Id)',
         }),
         tipo: vine.enum(TIPOS_CAJA).optional().meta({
-            description: 'cobros (de fábrica) o gastos (caja chica: llega en B9, hoy 422 tipo_no_disponible)',
+            description: 'cobros (de fábrica) o gastos (caja chica, B9: fondo fijo, sin turnos ni cobros)',
         }),
         fondo_fijo: dinero().nullable().optional().meta({
-            description: 'Fondo fijo propio; sin él, el fondo de cambio de la empresa (GET /cajas/ajustes)',
+            description:
+                'Fondo fijo propio; sin él, el de la empresa (GET /cajas/ajustes): fondo_cobros o fondo_caja_chica',
         }),
+        fiscal: vine.boolean().optional().meta({
+            description:
+                'B11: false = caja sin factura (recibo no fiscal, cuentas internas; aviso con FEL obligatoria)',
+        }),
+        usuarios: vine.array(idEntidad()).maxLength(200).optional().meta({
+            description: 'B11: quiénes ven y usan la caja (vacío = todos los que la alcanzan por el ACL)',
+        }),
+    }),
+)
+
+/** B11: `PUT /cajas/:id` (caja sin factura, visibilidad y cajero o encargado). */
+export const editarCajaValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1).meta({ description: 'La de GET /cajas' }),
+        fiscal: vine.boolean().optional().meta({ description: 'false = caja sin factura' }),
+        usuarios: vine
+            .array(idEntidad())
+            .maxLength(200)
+            .optional()
+            .meta({ description: 'Quiénes ven y usan la caja; [] = todos los del ACL' }),
+        cajero_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Cajero (en una caja chica, su encargado)' }),
     }),
 )
 
@@ -138,6 +163,9 @@ export const configurarCajasValidator = vine.compile(
             .meta({ description: 'Días hábiles para depositar lo que se tiene en custodia' }),
         custodia_tope: dinero().optional().meta({ description: 'Efectivo máximo en custodia por persona' }),
         autoentrega: vine.boolean().optional().meta({ description: '«Lo deposito yo» permitido' }),
+        fondo_caja_chica: dinero()
+            .optional()
+            .meta({ description: 'B9: fondo fijo de cada caja chica (sin tope por gasto)' }),
     }),
 )
 
@@ -196,6 +224,9 @@ export const diarioValidator = vine.compile(
                 'egreso',
                 'cierre_caja',
                 'entrega_caja',
+                'reposicion_caja',
+                'conteo_caja',
+                'recibo_interno',
                 'ajuste',
                 'reclasificacion',
                 'liquidacion_cobro',
@@ -343,5 +374,82 @@ export const inicioContabilidadValidator = vine.compile(
                 description:
                     'Mes YYYY-MM de los pasos del mes (por defecto el mes en curso de Guatemala; uno futuro = el actual)',
             }),
+    }),
+)
+
+/*
+| B9 del plan de contabilidad (§5.7): caja chica
+*/
+
+/** Multipart sin campos (solo el archivo): `POST /egresos/:id/comprobante`. */
+export const sinCampos = vine.compile(vine.object({}))
+
+/** Campos del multipart de `POST /cajas/:id/gastos` (el archivo va aparte, en `archivo`). */
+export const gastoCajaChicaValidator = vine.compile(
+    vine.object({
+        categoria: vine
+            .enum(CLAVES_CATEGORIA_EGRESO)
+            .meta({ description: 'Tipo de gasto (GET /egresos/categorias)' }),
+        monto: dinero(),
+        descripcion: vine
+            .string()
+            .trim()
+            .minLength(2)
+            .maxLength(500)
+            .meta({ description: 'En qué se gastó' }),
+        fecha: fechaIso().optional().meta({ description: 'Por defecto hoy; no futura' }),
+        proveedor: vine.string().trim().maxLength(150).nullable().optional(),
+        comprobante: vine
+            .string()
+            .trim()
+            .maxLength(100)
+            .nullable()
+            .optional()
+            .meta({ description: 'Número o serie del ticket, recibo o factura (opcional)' }),
+        con_factura: vine.boolean().optional().meta({
+            description:
+                'Trae factura a nombre de la empresa: la respuesta pide seguir con POST /compras/desde-egreso/:egreso_id (IVA)',
+        }),
+    }),
+)
+
+export const reponerCajaChicaValidator = vine.compile(
+    vine.object({
+        desde: vine.enum(['custodia', 'banco'] as const).meta({
+            description: 'custodia (la tuya, 1.1.15) o banco (banco_id, cuenta_bancaria_id o el principal)',
+        }),
+        banco_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Banco del libro (GET /bancos-libro)' }),
+        cuenta_bancaria_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Cuenta bancaria propia (GET /cuentas-bancarias)' }),
+        referencia: vine
+            .string()
+            .trim()
+            .maxLength(120)
+            .nullable()
+            .optional()
+            .meta({ description: 'Cheque o retiro' }),
+        monto: dinero().nullable().optional().meta({
+            description:
+                'Confirmación: lo que muestra GET /cajas/:id/caja-chica en por_reponer (422 monto_distinto)',
+        }),
+        fecha: fechaIso().optional().meta({ description: 'Por defecto hoy; no futura' }),
+    }),
+)
+
+export const contarCajaValidator = vine.compile(
+    vine.object({
+        contado: dinero(),
+        motivo: vine
+            .string()
+            .trim()
+            .maxLength(500)
+            .nullable()
+            .optional()
+            .meta({ description: 'Obligatorio si no cuadra (mínimo 3 letras)' }),
     }),
 )

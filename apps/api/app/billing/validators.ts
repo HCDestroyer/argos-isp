@@ -13,6 +13,7 @@ import { MOTIVOS_RECONEXION, reglasPromesaSchema } from '#billing/reglas_promesa
 import { TIPOS_CUENTA_BANCARIA } from '#billing/cuentas_bancarias'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
+import { TIPOS_IMPUESTO } from '#billing/perfil_fiscal'
 import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import { reglasOrigenExterno } from '#inventario/origen_externo'
 
@@ -713,6 +714,78 @@ export const listarCobrosPasarelaValidator = vine.compile(
 export const conciliarPasarelaValidator = vine.compile(
     vine.object({
         fecha: fechaIso().optional().meta({ description: 'Día (Guatemala) a conciliar; por defecto ayer' }),
+        cuenta_id: idEntidad().nullable().optional().meta({
+            description:
+                'Cuenta de pasarela a conciliar. Obligatoria si hay varias cuentas activas (422 cuenta_requerida); el cron las recorre todas',
+        }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Cuentas de pasarela por empresa y proveedor (D0)
+|--------------------------------------------------------------------------
+*/
+
+const usosPasarela = () => vine.array(vine.enum(['pago_en_linea', 'debito'] as const)).minLength(1)
+
+const camposConfiguracionPasarela = {
+    credenciales: vine.record(vine.string().trim().minLength(1).maxLength(500)).nullable().optional().meta({
+        description:
+            'Claves que declara el adaptador (`GET /pasarelas/proveedores`), p. ej. secret_key. Se guardan cifradas y nunca vuelven en una respuesta',
+    }),
+    webhook_secreto: vine.string().trim().minLength(1).maxLength(500).nullable().optional().meta({
+        description: 'Secreto con el que el proveedor firma sus webhooks (cifrado; nunca vuelve)',
+    }),
+    opciones: vine
+        .record(vine.any())
+        .nullable()
+        .optional()
+        .meta({ description: 'Opciones no secretas que declara el adaptador (api_url, expira_horas…)' }),
+}
+
+export const listarCuentasPasarelaValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const crearCuentaPasarelaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        proveedor: vine.string().trim().minLength(2).maxLength(40).meta({
+            description: 'Nombre del adaptador (`GET /pasarelas/proveedores`): recurrente, falsa…',
+        }),
+        alias: vine.string().trim().minLength(2).maxLength(80),
+        proveedor_cobro_id: idEntidad().nullable().optional().meta({
+            description: 'Proveedor de cobro (cuenta puente 1.1.10.NN) de la misma empresa',
+        }),
+        modo: vine
+            .enum(['pruebas', 'produccion'] as const)
+            .nullable()
+            .optional(),
+        usos: usosPasarela().nullable().optional().meta({
+            description:
+                'pago_en_linea (por defecto) y debito (solo si el adaptador lo permite; 422 debito_no_soportado)',
+        }),
+        ...camposConfiguracionPasarela,
+    }),
+)
+
+export const editarCuentaPasarelaValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        alias: vine.string().trim().minLength(2).maxLength(80).nullable().optional(),
+        proveedor_cobro_id: idEntidad().nullable().optional(),
+        modo: vine
+            .enum(['pruebas', 'produccion'] as const)
+            .nullable()
+            .optional(),
+        usos: usosPasarela().nullable().optional(),
+        predeterminada_para: vine
+            .array(vine.enum(['pago_en_linea', 'debito'] as const))
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Usos para los que esta cuenta (activa) es la predeterminada de la empresa',
+            }),
+        ...camposConfiguracionPasarela,
     }),
 )
 
@@ -786,6 +859,10 @@ export const cargoUnicoValidator = vine.compile(
         }),
         vence_en: fechaIso().nullable().optional().meta({
             description: 'Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)',
+        }),
+        facturable: vine.boolean().nullable().optional().meta({
+            description:
+                'B11: por defecto lo de sus conceptos; false = cargo no facturable (sin DTE ni IVA, a la cuenta interna 4.3.01; recibo al cobrarlo). Cambiar lo del concepto exige facturas.cargo_no_facturable',
         }),
         lineas: vine
             .array(
@@ -872,6 +949,10 @@ export const crearConceptoCargoValidator = vine.compile(
             description: 'Cuenta de ingreso imputable del plan (p. ej. 4.1.03)',
         }),
         gravable: vine.boolean().optional().meta({ description: 'Lleva IVA (por defecto sí)' }),
+        facturable: vine.boolean().optional().meta({
+            description:
+                'B11: false = cargo no facturable (sin DTE ni IVA, a la cuenta interna); por defecto sí',
+        }),
         activo: vine.boolean().optional(),
         codigo_sistema: codigoSistemaConcepto(),
     }),
@@ -884,6 +965,7 @@ export const editarConceptoCargoValidator = vine.compile(
         tipo: vine.enum(['producto', 'otro'] as const).optional(),
         cuenta_codigo: vine.string().trim().maxLength(20).optional(),
         gravable: vine.boolean().optional(),
+        facturable: vine.boolean().optional(),
         activo: vine.boolean().optional().meta({
             description:
                 'false desactiva el concepto; el de sistema no se desactiva (422 concepto_de_sistema)',
@@ -963,5 +1045,53 @@ export const emitirFacturasPeriodoValidator = vine.compile(
             description:
                 'Por qué se emiten a mano (queda en reglas_snapshot.emision_manual y en la bitácora); obligatorio para un periodo anterior al inicio del servicio o a facturar_desde, y al editar un monto',
         }),
+    }),
+)
+
+/** `POST /clientes/:id/perfil-fiscal` (B4): tipo de impuesto y «me retiene ISR». */
+export const asignarPerfilFiscalValidator = vine.compile(
+    vine.object({
+        tipo_impuesto: vine.enum(TIPOS_IMPUESTO).meta({
+            description:
+                'normal, agente_retenedor_iva o exento (exento se guarda, pero la factura sale con IVA hasta tener la frase de exención)',
+        }),
+        retiene_isr: vine.boolean().meta({ description: 'Casilla «me retiene ISR»' }),
+        resolucion_exencion: vine
+            .object({
+                numero: vine.string().trim().minLength(1).maxLength(60),
+                fecha: fechaIso(),
+            })
+            .nullable()
+            .optional()
+            .meta({ description: 'Resolución de la SAT: obligatoria con exento; solo va con exento' }),
+        nota: vine.string().trim().maxLength(500).nullable().optional(),
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se guardó); si cambió responde 409' }),
+    }),
+)
+
+/** `GET /clientes/:id/perfil-fiscal/retenciones` (B4): simula lo que se espera retener. */
+export const simularRetencionesValidator = vine.compile(
+    vine.object({
+        total: dinero(),
+        empresa_id: idEntidad()
+            .optional()
+            .meta({ description: 'Empresa que factura; sin ella, la activa (X-Empresa-Id)' }),
+    }),
+)
+
+/** B11: `GET /recibos` (reporte «Cobros en cajas sin factura»). */
+export const listarRecibosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        desde: fechaIso().optional(),
+        hasta: fechaIso().optional(),
+        caja_id: idEntidad().optional(),
+        cliente_id: idEntidad().optional(),
+        motivo: vine.enum(['caja_sin_factura', 'cargo_no_facturable'] as const).optional(),
     }),
 )

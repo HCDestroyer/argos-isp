@@ -4,6 +4,7 @@ import {
     CUENTAS_PAQUETE_GT_2026_2,
     CUENTAS_PAQUETE_GT_2026_4,
     CUENTAS_PAQUETE_GT_2026_6,
+    CUENTAS_PAQUETE_GT_2026_7,
 } from '#fiscal/l10n/gt/cuentas'
 import {
     PARAMETROS_GT,
@@ -190,4 +191,16 @@ export const PAQUETE_GT_2026_6: PaqueteLocalizacion = {
     version: '2026.6.0',
     publicada_en: '2026-11-26',
     cuentas: CUENTAS_PAQUETE_GT_2026_6,
+}
+
+/**
+ * `gt-2026.7` (B11 del plan de contabilidad, caja sin factura): igual que 2026.6 más las cuentas
+ * internas `4.3 / 4.3.01` y `5.7 / 5.7.01`. Instalarla sobre 2026.6 solo agrega esas cuatro.
+ */
+export const PAQUETE_GT_2026_7: PaqueteLocalizacion = {
+    ...PAQUETE_GT_2026_6,
+    codigo: 'gt-2026.7',
+    version: '2026.7.0',
+    publicada_en: '2026-11-26',
+    cuentas: CUENTAS_PAQUETE_GT_2026_7,
 }
