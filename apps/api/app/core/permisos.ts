@@ -257,6 +257,20 @@ export const PERMISOS = {
     'cajas.ver_custodia': 'Ver la custodia y las entregas de todas las personas (sin él, solo las tuyas)',
     'cajas.configurar':
         'Configurar el fondo de cambio, el plazo y el tope de custodia y «lo deposito yo» de la empresa',
+    // B9 del plan de contabilidad (§5.7): caja chica con fondo fijo
+    'caja_chica.registrar_gasto':
+        'Registrar un gasto de la caja chica con su comprobante (foto o PDF); sin tope por gasto, hasta su efectivo',
+    'caja_chica.reponer':
+        'Reponer la caja chica por lo gastado desde tu custodia o desde el banco (sella sus comprobantes)',
+    'caja_chica.contar': 'Contar la caja chica sin aviso; la diferencia queda a cargo de su encargado',
+    'egresos.adjuntar_comprobante':
+        'Adjuntar el archivo del comprobante (foto o PDF) a un egreso que no lo tiene',
+    // B11 del plan de contabilidad: caja sin factura (decisiones del PM del 25 y 26 nov 2026)
+    'cajas.editar': 'Editar una caja: marcarla sin factura, quiénes la ven y usan, y su cajero o encargado',
+    'contabilidad.ver_cuentas_internas':
+        'Ver las cuentas internas (caja sin factura), sus asientos, todas las cajas y el reporte «Cobros en cajas sin factura»',
+    'facturas.cargo_no_facturable':
+        'Decidir al emitir un cargo único si se factura o es un cobro de control (recibo)',
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
@@ -626,6 +640,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'cajas.depositar',
             // B1: entregar otra vez un turno cuya entrega no se recibió
             'cajas.entregar',
+            // B9: el encargado de la caja chica registra sus gastos (en un ISP pequeño es el cajero)
+            'caja_chica.registrar_gasto',
+            'egresos.adjuntar_comprobante',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
             // egresos.ver: lee solo los de su caja con cajas.ver, como antes)
             'egresos.registrar',
@@ -885,6 +902,15 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'cajas.rechazar_entrega',
             'cajas.ver_custodia',
             'cajas.configurar',
+            // B9: caja chica
+            'caja_chica.registrar_gasto',
+            'caja_chica.reponer',
+            'caja_chica.contar',
+            'egresos.adjuntar_comprobante',
+            // B11: caja sin factura (la visibilidad de las cuentas internas se da por usuario o rol)
+            'cajas.editar',
+            'contabilidad.ver_cuentas_internas',
+            'facturas.cargo_no_facturable',
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',

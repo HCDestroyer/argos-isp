@@ -105,6 +105,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/promociones-velocidad',
     '/api/v1/promociones-velocidad/{id}/servicios',
     '/api/v1/proveedores',
+    '/api/v1/recibos',
     '/api/v1/red/caidas-repetidas',
     '/api/v1/reportes/altas-bajas',
     '/api/v1/reportes/bajas',

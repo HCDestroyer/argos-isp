@@ -214,6 +214,10 @@ export interface FacturaFila {
     /** modo FEL de la empresa y qué le toca a la factura (`#fiscal/fel/accion`) */
     fel_modo?: (typeof MODOS_FEL)[number]
     fel_accion?: AccionFel
+    /** B11: fuera de la SAT (`caja_sin_factura` o `cargo_no_facturable`), o null */
+    no_fiscal?: 'caja_sin_factura' | 'cargo_no_facturable' | null
+    /** B11: número del último recibo no fiscal vigente de un pago aplicado (o null) */
+    recibo_numero?: number | null
     /** aviso de cobro: su IVA está en 2.1.11 hasta certificarse (§10.1) */
     aviso_cobro?: boolean
     certificar_al?: 'emitir' | 'pagar' | 'nunca' | null
@@ -269,6 +273,17 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         ),
         ...columnasDte(cliente, alias),
         ...columnasAccionFel(cliente, alias),
+        // B11: fuera de la SAT (cargo no facturable o cobrada en caja sin factura) y su recibo
+        cliente.raw(
+            `(select nf.motivo from billing.facturas_no_fiscales nf where nf.factura_id = ${alias}.id
+               and not exists (select 1 from billing.facturas_no_fiscales_anulaciones nx where nx.no_fiscal_id = nf.id)
+             order by nf.id desc limit 1) as no_fiscal`,
+        ),
+        cliente.raw(
+            `(select r.numero from billing.recibos r join billing.pagos_aplicaciones pa on pa.pago_id = r.pago_id
+               join billing.pagos p on p.id = r.pago_id
+              where pa.factura_id = ${alias}.id and p.estado <> 'anulado' order by r.id desc limit 1) as recibo_numero`,
+        ),
         c('aviso_cobro'),
         c('certificar_al'),
         c('tipo_dte'),

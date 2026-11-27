@@ -788,6 +788,10 @@ export const cargoUnicoValidator = vine.compile(
         vence_en: fechaIso().nullable().optional().meta({
             description: 'Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)',
         }),
+        facturable: vine.boolean().nullable().optional().meta({
+            description:
+                'B11: por defecto lo de sus conceptos; false = cargo no facturable (sin DTE ni IVA, a la cuenta interna 4.3.01; recibo al cobrarlo). Cambiar lo del concepto exige facturas.cargo_no_facturable',
+        }),
         lineas: vine
             .array(
                 vine.object({
@@ -873,6 +877,10 @@ export const crearConceptoCargoValidator = vine.compile(
             description: 'Cuenta de ingreso imputable del plan (p. ej. 4.1.03)',
         }),
         gravable: vine.boolean().optional().meta({ description: 'Lleva IVA (por defecto sí)' }),
+        facturable: vine.boolean().optional().meta({
+            description:
+                'B11: false = cargo no facturable (sin DTE ni IVA, a la cuenta interna); por defecto sí',
+        }),
         activo: vine.boolean().optional(),
         codigo_sistema: codigoSistemaConcepto(),
     }),
@@ -885,6 +893,7 @@ export const editarConceptoCargoValidator = vine.compile(
         tipo: vine.enum(['producto', 'otro'] as const).optional(),
         cuenta_codigo: vine.string().trim().maxLength(20).optional(),
         gravable: vine.boolean().optional(),
+        facturable: vine.boolean().optional(),
         activo: vine.boolean().optional().meta({
             description:
                 'false desactiva el concepto; el de sistema no se desactiva (422 concepto_de_sistema)',
@@ -999,5 +1008,18 @@ export const simularRetencionesValidator = vine.compile(
         empresa_id: idEntidad()
             .optional()
             .meta({ description: 'Empresa que factura; sin ella, la activa (X-Empresa-Id)' }),
+    }),
+)
+
+/** B11: `GET /recibos` (reporte «Cobros en cajas sin factura»). */
+export const listarRecibosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        desde: fechaIso().optional(),
+        hasta: fechaIso().optional(),
+        caja_id: idEntidad().optional(),
+        cliente_id: idEntidad().optional(),
+        motivo: vine.enum(['caja_sin_factura', 'cargo_no_facturable'] as const).optional(),
     }),
 )

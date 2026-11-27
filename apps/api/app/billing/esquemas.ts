@@ -411,6 +411,15 @@ export const Factura = definirEsquema(
                 description:
                     'Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse',
             },
+            no_fiscal: {
+                ...nulable(enumerado(['caja_sin_factura', 'cargo_no_facturable'])),
+                description:
+                    'B11: fuera de la SAT (cobrada solo en cajas sin factura, o cargo no facturable): no se certifica; el panel la muestra «Pagada · Recibo #N»',
+            },
+            recibo_numero: {
+                ...nulable(entero),
+                description: 'B11: número del recibo no fiscal vigente de un pago aplicado (o null)',
+            },
             certificar_al: nulable(enumerado(['emitir', 'pagar', 'nunca'])),
             tipo_dte: { ...nulable(texto), description: 'FACT, FPEQ… (null sin FEL)' },
             tipo: {
@@ -499,31 +508,45 @@ export const Factura = definirEsquema(
             'aviso_cobro',
             'certificar_al',
             'tipo_dte',
+            'no_fiscal',
+            'recibo_numero',
         ],
     ),
 )
 
 export const ConceptoCargo = definirEsquema(
     'ConceptoCargo',
-    objeto({
-        id,
-        empresa_id: id,
-        nombre: texto,
-        tipo: { ...enumerado(['producto', 'otro']), description: 'producto = bien, otro = servicio (DTE)' },
-        cuenta_codigo: { ...texto, description: 'Cuenta de ingreso del plan de cuentas' },
-        cuenta_nombre: nulable(texto),
-        gravable: { ...booleano, description: 'Lleva IVA (incluido en el precio)' },
-        activo: {
-            ...booleano,
-            description: 'Uno inactivo no se usa en cargos nuevos (el de sistema no se desactiva)',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            nombre: texto,
+            tipo: {
+                ...enumerado(['producto', 'otro']),
+                description: 'producto = bien, otro = servicio (DTE)',
+            },
+            cuenta_codigo: { ...texto, description: 'Cuenta de ingreso del plan de cuentas' },
+            cuenta_nombre: nulable(texto),
+            gravable: { ...booleano, description: 'Lleva IVA (incluido en el precio)' },
+            facturable: {
+                ...booleano,
+                description:
+                    'B11: false = cargo no facturable: cobro de control sin DTE ni IVA, a la cuenta interna 4.3.01; se cubre con un recibo no fiscal',
+            },
+            activo: {
+                ...booleano,
+                description: 'Uno inactivo no se usa en cargos nuevos (el de sistema no se desactiva)',
+            },
+            codigo_sistema: {
+                ...nulable(enumerado(['instalacion'])),
+                description:
+                    'Código fijo de un concepto que el sistema reconoce (instalacion = el sembrado de instalación de la empresa, uno por empresa); null en los demás. No se cambia, no se quita ni se asigna a otro concepto',
+            },
+            ...auditable,
         },
-        codigo_sistema: {
-            ...nulable(enumerado(['instalacion'])),
-            description:
-                'Código fijo de un concepto que el sistema reconoce (instalacion = el sembrado de instalación de la empresa, uno por empresa); null en los demás. No se cambia, no se quita ni se asigna a otro concepto',
-        },
-        ...auditable,
-    }),
+        // B11: siempre viene; opcional para no romper clientes tipados
+        ['facturable'],
+    ),
 )
 
 export const MotivoSinCosto = definirEsquema(
@@ -1837,5 +1860,38 @@ export const FacturasPeriodoEmitidas = definirEsquema(
             }),
         ),
         saldo_a_favor: { ...Dinero, description: 'Saldo a favor que queda después de emitir' },
+    }),
+)
+
+/** B11: recibo no fiscal de pago (caja sin factura o cargo no facturable). */
+export const Recibo = definirEsquema(
+    'Recibo',
+    objeto({
+        id,
+        empresa_id: id,
+        numero: {
+            ...entero,
+            description: 'Correlativo propio por empresa, sin huecos (no es número de la SAT)',
+        },
+        pago_id: id,
+        caja_id: nulable(id),
+        caja_nombre: nulable(texto),
+        cliente_id: id,
+        cliente_nombre: nulable(texto),
+        monto: Dinero,
+        motivo: {
+            ...enumerado(['caja_sin_factura', 'cargo_no_facturable']),
+            description: 'Cobro en una caja sin factura, o cobro de un cargo no facturable',
+        },
+        anulado: { ...booleano, description: 'Su pago se anuló (el recibo queda como historia)' },
+        metodo: texto,
+        facturas: { ...lista(id), description: 'Facturas a las que se aplicó el pago' },
+        facturas_no_fiscales: {
+            ...lista(id),
+            description: 'Las que este cobro dejó fuera de la SAT (sin DTE; ingreso a 4.3.01)',
+        },
+        emitido_por: nulable(id),
+        emitido_por_nombre: nulable(texto),
+        created_at: instante,
     }),
 )

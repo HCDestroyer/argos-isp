@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import type { TipoCaja } from '#ledger/custodia'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -15,9 +15,13 @@ import { listarCajas, type CajaVista } from '#ledger/cajas'
  * - Crea su subcuenta de `1.1.01 Cajas` en el libro (`1.1.01.NN`, el siguiente número libre),
  *   marcada como de esa empresa: un asiento de otra empresa no puede usarla.
  * - Nombre único por empresa (409 `caja_duplicada`). `cajero_id` opcional (cajero asignado).
- * - B1 del plan de contabilidad (§5.7): `tipo` = `cobros` (de fábrica; la caja chica, `gastos`, llega
- *   en B9: 422 `tipo_no_disponible`) y `fondo_fijo` opcional (sin él, el fondo de cambio de la
- *   empresa, `GET /cajas/ajustes`).
+ * - B1 del plan de contabilidad (§5.7): `tipo` = `cobros` (de fábrica) o `gastos` (caja chica, B9) y
+ *   `fondo_fijo` opcional (sin él, el de la empresa en `GET /cajas/ajustes`: `fondo_cobros` o
+ *   `fondo_caja_chica`).
+ * - B9: una caja chica no tiene turnos ni cobra; su `cajero_id` es su encargado. Nace vacía: la
+ *   primera reposición (`POST /cajas/:id/reponer`) le pone su fondo fijo desde la custodia o el banco.
+ * - B11: `fiscal = false` = caja sin factura (de cobros o caja chica; aviso si la empresa tiene FEL
+ *   obligatoria) y `usuarios` = quiénes la ven y usan (vacío = todos los del ACL).
  */
 
 export interface EntradaCrearCaja {
@@ -26,6 +30,8 @@ export interface EntradaCrearCaja {
     empresa_id?: number | null
     tipo?: TipoCaja
     fondo_fijo?: string | null
+    fiscal?: boolean
+    usuarios?: number[]
 }
 
 /** Mismo lock que las subcuentas de bancos (`crear_cuenta_bancaria`): numeración sin carreras. */
@@ -42,13 +48,6 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
             ])
         }
         const tipo = input.tipo ?? 'cobros'
-        if (tipo !== 'cobros') {
-            throw new ReglaNegocio(
-                'La caja chica (tipo gastos) todavía no está disponible: llega con B9',
-                'tipo_no_disponible',
-                [{ field: 'tipo', message: 'Solo cajas de cobros por ahora', rule: 'enum' }],
-            )
-        }
         let fondoFijo: string | null = null
         if (input.fondo_fijo !== undefined && input.fondo_fijo !== null && input.fondo_fijo !== '') {
             const monto = dec(input.fondo_fijo)
@@ -69,20 +68,27 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
 
-        if (input.cajero_id) {
-            const usuario = await t.trx
+        const usuarios = [...new Set(input.usuarios ?? [])].sort((a, b) => a - b)
+        for (const [campo, ids] of [
+            ['cajero_id', input.cajero_id ? [input.cajero_id] : []],
+            ['usuarios', usuarios],
+        ] as const) {
+            if (ids.length === 0) continue
+            const existen = (await t.trx
                 .from('core.usuarios')
-                .where('id', input.cajero_id)
-                .select('id')
-                .first()
-            if (!usuario) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'cajero_id',
-                        message: `El usuario ${input.cajero_id} no existe`,
+                .whereIn('id', [...ids])
+                .select('id')) as Array<{
+                id: number
+            }>
+            const faltan = ids.filter((id) => !existen.some((e) => Number(e.id) === id))
+            if (faltan.length > 0) {
+                throw new ValidacionFallida(
+                    faltan.map((id) => ({
+                        field: campo,
+                        message: `El usuario ${id} no existe`,
                         rule: 'exists',
-                    },
-                ])
+                    })),
+                )
             }
         }
         const repetida = await t.trx
@@ -135,6 +141,8 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
                 cuenta_id: cuenta!.id,
                 tipo,
                 fondo_fijo: fondoFijo,
+                fiscal: input.fiscal ?? true,
+                usuarios,
             })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('caja', fila!.id)
@@ -145,6 +153,8 @@ export default class CrearCaja extends DomainAction<EntradaCrearCaja, CajaVista>
             cuenta_id: cuenta!.id,
             tipo,
             fondo_fijo: fondoFijo,
+            fiscal: input.fiscal ?? true,
+            usuarios,
         })
         const cajas = await listarCajas(undefined, [empresaId], t.trx)
         return cajas.find((c) => c.id === fila!.id)!

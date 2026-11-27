@@ -167,6 +167,13 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'cajas.recibir_entrega': 'Efectivo recibido de una caja («Recibí»)',
     'cajas.rechazar_entrega': 'Entrega de efectivo rechazada («No lo recibí»)',
     'cajas.configurar': 'Ajustes de cajas y custodia cambiados',
+    // B9 del plan de contabilidad (A3): caja chica con fondo fijo
+    'caja_chica.registrar_gasto': 'Gasto de caja chica registrado',
+    'caja_chica.reponer': 'Caja chica repuesta',
+    'caja_chica.contar': 'Caja chica contada',
+    'egresos.adjuntar_comprobante': 'Comprobante adjuntado a un egreso',
+    // B11 del plan de contabilidad (A3): caja sin factura
+    'cajas.editar': 'Caja editada (sin factura, quiénes la ven o su cajero)',
     'bancos.trasladar': 'Traslado entre cuentas bancarias',
     'bancos.importar_extracto': 'Extracto bancario importado',
     'bancos.importar_extracto_archivo': 'Estado de cuenta del banco importado desde archivo',

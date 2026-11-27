@@ -23,6 +23,7 @@ import AnularFactura from '#billing/actions/anular_factura'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import { listarNotasCredito, verNotaCredito } from '#billing/notas_credito'
 import { dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { listarRecibos, reciboDePago, verRecibo } from '#billing/recibos'
 import { existeCaja } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
@@ -170,6 +171,7 @@ import {
     CorridasFacturacion,
     ResultadoCorte,
     ResultadoVencimiento,
+    Recibo,
 } from '#billing/esquemas'
 
 /** Empresas de un reporte: la activa o el consolidado (`?empresas=todas`, columna de empresa). */
@@ -367,6 +369,19 @@ const facturas: Ruta[] = [
                 exigirAlcance(ctx.alcance, dimensiones)
             }
             if (reglasIris) await exigirCobroEquipo(cuerpo.lineas.map((l) => l.concepto_id))
+            // B11: cambiar lo facturable de los conceptos de un cargo exige su permiso
+            if (cuerpo.facturable !== undefined && cuerpo.facturable !== null && ctx.auth.user) {
+                const alcance = await alcanceDePermiso(
+                    ctx.auth.user.id,
+                    'facturas.cargo_no_facturable',
+                    alcancesDelToken(ctx),
+                )
+                if (!alcance) {
+                    throw new Prohibido(
+                        'Decidir si un cargo se factura requiere el permiso facturas.cargo_no_facturable',
+                    )
+                }
+            }
             if (cuerpo.motivo_sin_costo_id && ctx.auth.user) {
                 const alcance = await alcanceDePermiso(
                     ctx.auth.user.id,
@@ -673,6 +688,51 @@ const pagos: Ruta[] = [
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDePago(id))
             return verPago(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pagos/:id/recibo',
+        operacion: 'pagosRecibo',
+        resumen: 'Recibo no fiscal del pago (caja sin factura o cargo no facturable)',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        descripcion:
+            'B11: lo que se entrega al cobrar en una caja sin factura o al cubrir un cargo no facturable. No es factura (sin DTE, serie ni número de la SAT); numeración propia por empresa. 404 si el pago no tiene recibo.',
+        respuesta: { status: 200, descripcion: 'Recibo', esquema: Recibo },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDePago(id))
+            const recibo = await reciboDePago(id)
+            if (!recibo) throw new NoEncontrado(`El pago ${id} no tiene recibo no fiscal`)
+            return recibo
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/recibos',
+        operacion: 'recibosListar',
+        resumen: 'Cobros en cajas sin factura (recibos no fiscales)',
+        etiqueta: 'pagos',
+        permiso: 'contabilidad.ver_cuentas_internas',
+        query: v.listarRecibosValidator,
+        descripcion:
+            'B11: el reporte «Cobros en cajas sin factura» (con los cargos no facturables): número, caja, cliente, monto, si el pago se anuló y las facturas que quedaron fuera de la SAT. Filtros desde/hasta (fecha de Guatemala), caja_id, cliente_id, motivo; por empresa activa o `empresas=todas`.',
+        respuesta: { status: 200, descripcion: 'Página de recibos', esquema: pagina(Recibo) },
+        handler: (ctx, { query }) => listarRecibos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/recibos/:id',
+        operacion: 'recibosVer',
+        resumen: 'Ver un recibo no fiscal',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        respuesta: { status: 200, descripcion: 'Recibo', esquema: Recibo },
+        handler: async (ctx, { params }) => {
+            const recibo = await verRecibo(Number(params.id))
+            exigirAcceso(ctx, await dimensionesDePago(recibo.pago_id))
+            return recibo
         },
     }),
     definirRuta({

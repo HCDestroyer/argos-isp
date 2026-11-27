@@ -44,6 +44,17 @@ import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
 import CastigarCartera from '#ledger/actions/castigar_cartera'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import RegistrarCompraDesdeEgreso from '#ledger/actions/registrar_compra_desde_egreso'
+import CrearCaja from '#ledger/actions/crear_caja'
+import RegistrarGastoCajaChica from '#ledger/actions/registrar_gasto_caja_chica'
+import ReponerCajaChica from '#ledger/actions/reponer_caja_chica'
+import ContarCaja from '#ledger/actions/contar_caja'
+import CrearConceptoCargo from '#billing/actions/crear_concepto_cargo'
+import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
+import { estadoCajaChica } from '#ledger/caja_chica'
+import { sqlNoFiscalVigente } from '#billing/recibos'
+import { saldoCustodia } from '#ledger/custodia'
+import { contextoPrueba, usuarioConRoles } from '#tests/ayudas'
+import { CUENTAS } from '#ledger/plan_cuentas'
 import AnularCompra from '#ledger/actions/anular_compra'
 import RegistrarPagoProveedor from '#ledger/actions/registrar_pago_proveedor'
 import AnularPagoProveedor from '#ledger/actions/anular_pago_proveedor'
@@ -204,11 +215,33 @@ const PESOS_FASE5 = {
     pagar_con_retencion: 4,
 } as const
 
+/**
+ * Operaciones de las cajas II y III (B9 caja chica y B11 caja sin factura; plan de contabilidad §5.7),
+ * solo con `{ cajas: true }`: la empresa C trabaja con una **caja chica** (sus egresos en efectivo salen
+ * de ella: N2) y la B conserva el egreso desde el turno de su caja de cobros; la B además tiene una
+ * caja de cobros **sin factura** (recibo no fiscal, facturas fuera de la SAT, gasto a 5.7.01) y cada
+ * cierre de caja entrega el efectivo a la persona (custodia 1.1.15), de donde también se repone la caja chica.
+ */
+const PESOS_CAJAS = {
+    gasto_chica: 8,
+    reponer_chica: 4,
+    contar_chica: 3,
+    cobro_sin_factura: 10,
+    cargo_no_facturable: 5,
+    egreso_sin_factura: 3,
+    // más cierres: cada uno entrega el efectivo a la custodia
+    cerrar_caja: 8,
+} as const
+
 /** Fechas de documento de las compras (fijas: la semilla reproduce lo mismo; las viejas pueden quedar fuera de la ventana). */
 const FECHAS_COMPRA = ['2026-08-10', '2026-09-15', '2026-10-05'] as const
 
 type Accion =
-    keyof typeof PESOS | keyof typeof PESOS_FEL | keyof typeof PESOS_FASE4 | keyof typeof PESOS_FASE5
+    | keyof typeof PESOS
+    | keyof typeof PESOS_FEL
+    | keyof typeof PESOS_FASE4
+    | keyof typeof PESOS_FASE5
+    | keyof typeof PESOS_CAJAS
 
 interface PorExtracto {
     tipo: 'deposito' | 'traslado' | 'liquidacion'
@@ -249,6 +282,13 @@ export class EscenarioGenerativo {
     private lineasDoc = new Map<number, { tipo: string; id: number }>()
     private saldosExtracto = new Map<number, bigint>()
     private readonly fase5: boolean
+    private readonly conCajas: boolean
+    /** B9: caja chica por empresa (solo la C) */
+    private cajasChicas = new Map<number, number>()
+    /** B11: caja de cobros sin factura (solo la B) y un concepto no facturable por empresa */
+    private cajaSinFactura: number | null = null
+    private conceptoNoFacturable: number | null = null
+    private cajeroSinFactura!: ReturnType<typeof contextoPrueba>
     private readonly alVerificar: ((empresas: number[]) => Promise<Violacion[]>) | null
     private proveedoresCompra = new Map<number, { general: number; pequeno: number }>()
 
@@ -258,6 +298,8 @@ export class EscenarioGenerativo {
             fel?: boolean
             fase4?: boolean
             fase5?: boolean
+            /** B9 y B11: caja chica en la empresa C, caja sin factura y cargos no facturables en la B */
+            cajas?: boolean
             incluirHallazgosAbiertos?: boolean
             /** revisión extra que corre después de cada paso, junto con los invariantes del verificador */
             alVerificar?: (empresas: number[]) => Promise<Violacion[]>
@@ -266,18 +308,20 @@ export class EscenarioGenerativo {
         this.alVerificar = opciones.alVerificar ?? null
         this.azar = new Azar(semilla)
         this.fase5 = opciones.fase5 ?? false
+        this.conCajas = opciones.cajas ?? false
         this.fase4 = (opciones.fase4 ?? false) || this.fase5
         this.fel = (opciones.fel ?? false) || this.fase4
         this.incluirHallazgosAbiertos = opciones.incluirHallazgosAbiertos ?? false
-        this.pesos = (
-            this.fase5
+        this.pesos = {
+            ...(this.fase5
                 ? { ...PESOS, ...PESOS_FEL, ...PESOS_FASE4, ...PESOS_FASE5 }
                 : this.fase4
                   ? { ...PESOS, ...PESOS_FEL, ...PESOS_FASE4 }
                   : this.fel
                     ? { ...PESOS, ...PESOS_FEL }
-                    : PESOS
-        ) as Record<Accion, number>
+                    : PESOS),
+            ...(this.conCajas ? PESOS_CAJAS : {}),
+        } as Record<Accion, number>
     }
 
     async preparar() {
@@ -345,6 +389,7 @@ export class EscenarioGenerativo {
         }
         if (this.fase4) await this.prepararFase4()
         if (this.fase5) await this.prepararFase5()
+        if (this.conCajas) await this.prepararCajas()
         this.foto = await fotoLibro(this.empresas, this.marcas.acciones, this.marcas.outbox)
         if (this.fel) this.dtes = await this.estadosDte()
     }
@@ -451,6 +496,8 @@ export class EscenarioGenerativo {
                     AND c.modo <> 'desactivada' AND NOT c.contingencia_activa
                     -- desvío (g) de la fase 4: cubierta por un castigo, no por un cobro; no se certifica
                     AND NOT EXISTS (SELECT 1 FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id)
+                    -- B11: fuera de la SAT (cobrada solo en cajas sin factura o cargo no facturable): no se certifica
+                    AND NOT ${sqlNoFiscalVigente('f')}
                     AND NOT EXISTS (
                             SELECT 1 FROM fiscal.dte d
                              WHERE d.documento_id = f.id
@@ -579,8 +626,8 @@ export class EscenarioGenerativo {
     |--------------------------------------------------------------------------
     */
 
-    private async facturar() {
-        const servicio = this.azar.elegir(this.servicios)
+    private async facturar(elegido?: Servicio) {
+        const servicio = elegido ?? this.azar.elegir(this.servicios)
         const siguiente = DateTime.fromISO(servicio.hasta)
             .plus({ months: this.azar.entero(1, 2) })
             .startOf('month')
@@ -835,6 +882,8 @@ export class EscenarioGenerativo {
     private async egreso() {
         const empresaId = this.azar.elegir(this.empresas)
         const monto = this.azar.centavos(100, 5000)
+        // N2: con caja chica en la empresa, el gasto en efectivo sale de ella
+        if (this.cajasChicas.has(empresaId)) return this.gastoDeCajaChica(empresaId, monto)
         const r = await new RegistrarEgreso().execute(
             {
                 categoria: 'otros',
@@ -909,6 +958,8 @@ export class EscenarioGenerativo {
                 caja_id: cajaId,
                 contado: texto(contado),
                 motivo: contado === esperado ? null : 'auditoría: diferencia de caja',
+                // «lo deposito yo»: el efectivo pasa a la custodia (1.1.15) de quien cierra
+                ...(this.conCajas ? { entregado_a: this.e.usuarioId } : {}),
             },
             this.ctx,
         )
@@ -1633,7 +1684,13 @@ export class EscenarioGenerativo {
     /** Medio de pago al contado de la empresa: su caja, su cuenta bancaria o la segunda. */
     private medio(empresaId: number) {
         const cual = this.azar.entero(0, 2)
-        if (cual === 0) return { metodo: 'caja' as const, caja_id: this.e.cajas.get(empresaId)! }
+        // N2: la caja de cobros de una empresa con caja chica no paga compras ni pagos a proveedores
+        if (cual === 0 && !this.cajasChicas.has(empresaId)) {
+            return { metodo: 'caja' as const, caja_id: this.e.cajas.get(empresaId)! }
+        }
+        if (cual === 0) {
+            return { metodo: 'cuenta_bancaria' as const, cuenta_bancaria_id: this.e.cuentas.get(empresaId)! }
+        }
         return {
             metodo: 'cuenta_bancaria' as const,
             cuenta_bancaria_id: cual === 1 ? this.e.cuentas.get(empresaId)! : this.segundas.get(empresaId)!,
@@ -1788,6 +1845,224 @@ export class EscenarioGenerativo {
             this.ctx,
         )
         return `anula la compra ${c.id} (${c.tipo_documento})`
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cajas II y III (B9, B11)
+    |--------------------------------------------------------------------------
+    */
+
+    private async prepararCajas() {
+        const chica = await new CrearCaja().execute(
+            { nombre: `Chica ${this.corrida}`, tipo: 'gastos', empresa_id: this.e.C, fondo_fijo: '800.00' },
+            this.ctx,
+        )
+        this.cajasChicas.set(this.e.C, chica.id)
+        await new ReponerCajaChica().execute(
+            { caja_id: chica.id, desde: 'banco', cuenta_bancaria_id: this.e.cuentas.get(this.e.C)! },
+            this.ctx,
+        )
+        // el turno de la caja sin factura lo abre otra persona: los pagos «a la caja del cajero» siguen
+        // yendo a la caja con factura del usuario del escenario
+        const otro = await usuarioConRoles(['admin'])
+        this.cajeroSinFactura = contextoPrueba(otro.usuario.id)
+        const sf = await new CrearCaja().execute(
+            {
+                nombre: `Sin factura ${this.corrida}`,
+                empresa_id: this.e.B,
+                fiscal: false,
+                cajero_id: otro.usuario.id,
+            },
+            this.ctx,
+        )
+        await new AbrirCaja().execute({ caja_id: sf.id }, this.cajeroSinFactura)
+        this.cajaSinFactura = sf.id
+        const concepto = await new CrearConceptoCargo().execute(
+            {
+                empresa_id: this.e.B,
+                nombre: `Permiso ${this.corrida}`,
+                tipo: 'otro',
+                cuenta_codigo: CUENTAS.OTROS_INGRESOS,
+                facturable: false,
+            },
+            this.ctx,
+        )
+        this.conceptoNoFacturable = concepto.id
+    }
+
+    private async gastoDeCajaChica(empresaId: number, montoPedido: bigint) {
+        let monto = montoPedido
+        const cajaId = this.cajasChicas.get(empresaId)!
+        let estado = await estadoCajaChica(cajaId)
+        let repuso = ''
+        if (centavosDe(estado.efectivo) < monto) {
+            repuso = await this.reponerCajaChica(empresaId)
+            estado = await estadoCajaChica(cajaId)
+            // lo que hay es lo que se puede gastar (el límite de la caja chica es su efectivo)
+            if (centavosDe(estado.efectivo) < monto) monto = centavosDe(estado.efectivo)
+            if (monto < 100n) {
+                return `${repuso}; la caja chica de la empresa ${empresaId} sin efectivo para un gasto`
+            }
+        }
+        const conFactura = this.azar.moneda(0.4)
+        const g = await new RegistrarGastoCajaChica().execute(
+            {
+                caja_id: cajaId,
+                categoria: 'otros',
+                monto: texto(monto),
+                descripcion: 'auditoría: gasto de caja chica',
+                con_factura: conFactura,
+                archivo: {
+                    contenido: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+                    nombre: 'auditoria.jpg',
+                },
+            },
+            this.ctx,
+        )
+        return `${repuso ? `${repuso}; ` : ''}gasto ${g.egreso.id} de ${texto(monto)} de la caja chica de la empresa ${empresaId} (efectivo ${estado.efectivo}${conFactura ? ', con factura' : ''})`
+    }
+
+    private async gasto_chica() {
+        const empresaId = this.e.C
+        return this.gastoDeCajaChica(empresaId, this.azar.centavos(100, 9000))
+    }
+
+    private async custodiaTexto(empresaId: number): Promise<string> {
+        const saldo = await saldoCustodia(db.connection(), empresaId, this.e.usuarioId)
+        return saldo.toFixed(2)
+    }
+
+    /** Repone la caja chica: desde la custodia de quien repone si alcanza y a veces; si no, desde el banco. */
+    private async reponerCajaChica(empresaId: number): Promise<string> {
+        const cajaId = this.cajasChicas.get(empresaId)!
+        const estado = await estadoCajaChica(cajaId)
+        const falta = centavosDe(estado.por_reponer)
+        if (falta === 0n) return 'nada que reponer'
+        const custodia = centavosDe(await this.custodiaTexto(empresaId))
+        const desdeCustodia = custodia >= falta && this.azar.moneda(0.9)
+        const r = await new ReponerCajaChica().execute(
+            desdeCustodia
+                ? { caja_id: cajaId, desde: 'custodia' }
+                : { caja_id: cajaId, desde: 'banco', cuenta_bancaria_id: this.e.cuentas.get(empresaId)! },
+            this.ctx,
+        )
+        return `repone ${r.monto} a la caja chica de la empresa ${empresaId} desde ${r.origen}`
+    }
+
+    private async reponer_chica() {
+        return this.reponerCajaChica(this.e.C)
+    }
+
+    /** Conteo sorpresa de la caja chica: cuadrado o con faltante o sobrante. */
+    private async contar_chica() {
+        const cajaId = this.cajasChicas.get(this.e.C)!
+        const estado = await estadoCajaChica(cajaId)
+        const esperado = centavosDe(estado.efectivo)
+        const diferencia = this.azar.moneda(0.5) ? 0n : this.azar.centavos(-3000, 3000)
+        const contado = esperado + diferencia < 0n ? 0n : esperado + diferencia
+        const c = await new ContarCaja().execute(
+            {
+                caja_id: cajaId,
+                contado: texto(contado),
+                motivo: contado === esperado ? null : 'auditoría: diferencia del conteo',
+            },
+            this.ctx,
+        )
+        return `conteo ${c.id}: esperado ${c.esperado}, contado ${c.contado}, diferencia ${c.diferencia}`
+    }
+
+    /** Un cobro en la caja sin factura (parcial, total o de más): recibo y, si la cubre, la factura sale de la SAT. */
+    private async cobro_sin_factura() {
+        let clienteId = await this.clienteConDeuda([this.e.B])
+        let facturado = ''
+        if (clienteId === null) {
+            // sin deuda en la B: se factura un servicio suyo para tener qué cobrar
+            facturado = `${await this.facturar(this.azar.elegir(this.servicios.filter((x) => x.empresaId === this.e.B)))}; `
+            clienteId = await this.clienteConDeuda([this.e.B])
+            if (clienteId === null) return `${facturado}sin deuda en la empresa B`
+        }
+        // pago mixto prohibido (PM, 26 nov): la caja sin factura solo cobra facturas sin cobros en caja fiscal,
+        // sin DTE y sin notas de crédito; el resto de la deuda se deja para los pagos con factura
+        const abiertas = await pendientes([this.e.B], clienteId)
+        const { rows: mixtas } = (await db.rawQuery(
+            `SELECT f.id FROM billing.facturas f
+              WHERE f.id = ANY(?::bigint[])
+                AND (EXISTS (SELECT 1 FROM billing.pagos_aplicaciones pa JOIN billing.pagos p ON p.id = pa.pago_id
+                               LEFT JOIN ledger.cajas c ON c.id = p.caja_id
+                              WHERE pa.factura_id = f.id AND p.estado <> 'anulado' AND coalesce(c.fiscal, true))
+                     OR EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura' AND d.documento_id = f.id
+                                  AND d.estado <> 'rechazado')
+                     OR EXISTS (SELECT 1 FROM billing.notas_credito n WHERE n.factura_id = f.id)
+                     OR EXISTS (SELECT 1 FROM billing.notas_credito_aplicaciones na WHERE na.factura_id = f.id))`,
+            [abiertas.map((f) => f.id)],
+        )) as { rows: Array<{ id: number }> }
+        const prohibidas = new Set(mixtas.map((f) => Number(f.id)))
+        const cobrables = abiertas.filter((f) => !prohibidas.has(Number(f.id)))
+        const deuda = cobrables.reduce((a, f) => a + centavosDe(f.total) - centavosDe(f.pagado), 0n)
+        if (deuda <= 0n) {
+            return `${facturado}el cliente ${clienteId} solo debe facturas con cobros en caja fiscal (pago mixto prohibido)`
+        }
+        const monto = this.azar.moneda(0.5) ? deuda : this.parcial(deuda)
+        const r = await this.pagar({
+            cliente_id: clienteId,
+            metodo: 'caja',
+            monto: texto(monto),
+            facturas: cobrables.map((f) => f.id),
+            caja_id: this.cajaSinFactura!,
+            empresa_id: this.e.B,
+        })
+        return `${facturado}cliente ${clienteId} paga ${texto(monto)} en la caja sin factura (debía ${texto(deuda)}): pagos ${r.pagos.map((p) => p.id).join(', ')}`
+    }
+
+    /** Un cargo no facturable de la empresa B y, a veces, su cobro (en una caja con o sin factura). */
+    private async cargo_no_facturable() {
+        const cliente = this.azar.elegir(this.clientes.filter((c) => c.empresas.includes(this.e.B)))
+        const monto = this.azar.centavos(500, 8000)
+        const cargo = await new EmitirCargoUnico().execute(
+            {
+                cliente_id: cliente.id,
+                empresa_id: this.e.B,
+                lineas: [{ concepto_id: this.conceptoNoFacturable!, precio_unitario: texto(monto) }],
+            },
+            this.ctx,
+        )
+        if (this.azar.moneda(0.4)) {
+            return `cargo no facturable ${cargo.id} de ${texto(monto)} al cliente ${cliente.id}`
+        }
+        const enSinFactura = this.azar.moneda()
+        // los anticipos del cliente pueden haberlo cubierto al emitirse: entonces no hay nada que cobrar
+        const pendiente = await this.pendienteDe(cliente.id, [this.e.B])
+        const abiertas = await pendientes([this.e.B], cliente.id)
+        const deLaFactura = abiertas.some((f) => f.id === cargo.id)
+        if (!deLaFactura || pendiente === 0n) {
+            return `cargo no facturable ${cargo.id} de ${texto(monto)} al cliente ${cliente.id}, cubierto con sus anticipos`
+        }
+        await this.pagar({
+            cliente_id: cliente.id,
+            metodo: 'caja',
+            monto: texto(monto),
+            facturas: [cargo.id],
+            empresa_id: this.e.B,
+            ...(enSinFactura ? { caja_id: this.cajaSinFactura! } : {}),
+        })
+        return `cargo no facturable ${cargo.id} de ${texto(monto)} al cliente ${cliente.id}, cobrado en la caja ${enSinFactura ? 'sin factura' : 'con factura'}`
+    }
+
+    /** Egreso desde el turno de la caja sin factura: va a 5.7.01 (la empresa B no tiene caja chica). */
+    private async egreso_sin_factura() {
+        const monto = this.azar.centavos(100, 3000)
+        const r = await new RegistrarEgreso().execute(
+            {
+                categoria: 'otros',
+                monto: texto(monto),
+                metodo: 'caja',
+                caja_id: this.cajaSinFactura!,
+                descripcion: 'auditoría: egreso sin factura',
+            },
+            this.ctx,
+        )
+        return `egreso ${r.id} de ${texto(monto)} de la caja sin factura (${r.cuenta_codigo})`
     }
 
     /** Un egreso de la caja (sin compra) pasa a compra con su factura (reclasificación del IVA). */
