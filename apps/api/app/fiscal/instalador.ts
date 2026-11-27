@@ -10,6 +10,7 @@ import {
     PAQUETE_GT_2026_4,
     PAQUETE_GT_2026_5,
     PAQUETE_GT_2026_6,
+    PAQUETE_GT_2026_7,
 } from '#fiscal/l10n/gt/index'
 import type {
     DatosEmpresaInstalacion,
@@ -44,11 +45,12 @@ export const PAQUETES: Readonly<Record<string, PaqueteLocalizacion>> = {
     [PAQUETE_GT_2026_4.codigo]: PAQUETE_GT_2026_4,
     [PAQUETE_GT_2026_5.codigo]: PAQUETE_GT_2026_5,
     [PAQUETE_GT_2026_6.codigo]: PAQUETE_GT_2026_6,
+    [PAQUETE_GT_2026_7.codigo]: PAQUETE_GT_2026_7,
 }
 
 /** Versión más reciente del paquete de cada país (la que instala el núcleo al crear la empresa). */
 export const ULTIMO_PAQUETE: Readonly<Record<string, PaqueteLocalizacion>> = {
-    GT: PAQUETE_GT_2026_6,
+    GT: PAQUETE_GT_2026_7,
 }
 
 /** Países con paquete, en el orden del selector. */
@@ -143,6 +145,19 @@ async function agregarCuentas(trx: QueryClientContract, paquete: PaqueteLocaliza
         .select('id', 'codigo')) as Array<{ id: number; codigo: string }>
     for (const fila of filas) ids.set(fila.codigo, Number(fila.id))
 
+    // B11: `ledger.cuentas.interna` llega con la migración de la caja sin factura; una migración
+    // anterior que instala el paquete más reciente (base nueva) aún no la tiene: la marca la pone
+    // esa migración después
+    const conInterna = paquete.cuentas.some((c) => c.interna)
+        ? Boolean(
+              (
+                  (await trx.rawQuery(
+                      `SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'ledger' AND table_name = 'cuentas' AND column_name = 'interna'`,
+                  )) as { rows: unknown[] }
+              ).rows.length,
+          )
+        : false
     const agregadas: string[] = []
     for (const cuenta of paquete.cuentas) {
         if (ids.has(cuenta.codigo)) continue
@@ -168,6 +183,7 @@ async function agregarCuentas(trx: QueryClientContract, paquete: PaqueteLocaliza
                 categoria_fiscal: cuenta.categoria_fiscal ?? null,
                 libro_inventario: cuenta.libro_inventario ?? false,
                 categoria_flujo: cuenta.categoria_flujo ?? null,
+                ...(conInterna ? { interna: cuenta.interna ?? false } : {}),
             })
             .returning('id')) as Array<{ id: number }>
         ids.set(cuenta.codigo, Number(fila!.id))

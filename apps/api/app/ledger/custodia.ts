@@ -34,6 +34,8 @@ export const AJUSTES_FABRICA = {
     custodia_plazo_dias: 1,
     custodia_tope: '5000.00',
     autoentrega: true,
+    /** B9: fondo fijo de cada caja chica (sin tope por gasto) */
+    fondo_caja_chica: '2000.00',
 } as const
 
 export interface AjustesCajas {
@@ -46,6 +48,8 @@ export interface AjustesCajas {
     custodia_tope: string
     /** «lo deposito yo»: el cajero se entrega a sí mismo */
     autoentrega: boolean
+    /** B9: fondo fijo de cada caja chica (salvo la que tenga su `fondo_fijo`) */
+    fondo_caja_chica: string
     /** true si la empresa usa los valores de fábrica (no tiene fila) */
     de_fabrica: boolean
     version: number
@@ -64,6 +68,7 @@ export async function ajustesCajas(
             'custodia_plazo_dias',
             'custodia_tope',
             'autoentrega',
+            'fondo_caja_chica',
             'version',
             'updated_at',
         )
@@ -72,6 +77,7 @@ export async function ajustesCajas(
         custodia_plazo_dias: number
         custodia_tope: string
         autoentrega: boolean
+        fondo_caja_chica: string
         version: number
         updated_at: Date
     } | null
@@ -84,6 +90,7 @@ export async function ajustesCajas(
         custodia_plazo_dias: Number(fila.custodia_plazo_dias),
         custodia_tope: aTexto(fila.custodia_tope),
         autoentrega: Boolean(fila.autoentrega),
+        fondo_caja_chica: aTexto(fila.fondo_caja_chica),
         de_fabrica: false,
         version: Number(fila.version),
         updated_at: fila.updated_at,
@@ -124,7 +131,10 @@ export async function bloquearCustodia(cliente: QueryClientContract, empresaId: 
     await cliente.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3101, empresaId * 100000 + usuarioId])
 }
 
-/** Efectivo en custodia de una persona en la empresa (lo recibido menos lo depositado). */
+/**
+ * Efectivo en custodia de una persona en la empresa: lo recibido menos lo depositado y, desde B9, lo
+ * que salió de su custodia para reponer una caja chica.
+ */
 export async function saldoCustodia(
     cliente: QueryClientContract,
     empresaId: number,
@@ -134,8 +144,10 @@ export async function saldoCustodia(
         `SELECT (SELECT coalesce(sum(r.contado), 0) FROM ledger.entregas_recepciones r
                   WHERE r.empresa_id = ? AND r.recibido_por = ? AND r.resultado = 'recibida')
               - (SELECT coalesce(sum(d.monto), 0) FROM ledger.depositos d
-                  WHERE d.empresa_id = ? AND d.custodio_id = ? AND d.origen = 'custodia') AS saldo`,
-        [empresaId, usuarioId, empresaId, usuarioId],
+                  WHERE d.empresa_id = ? AND d.custodio_id = ? AND d.origen = 'custodia')
+              - (SELECT coalesce(sum(p.monto), 0) FROM ledger.reposiciones p
+                  WHERE p.empresa_id = ? AND p.custodio_id = ? AND p.origen = 'custodia') AS saldo`,
+        [empresaId, usuarioId, empresaId, usuarioId, empresaId, usuarioId],
     )) as { rows: Array<{ saldo: string }> }
     return dec(rows[0]?.saldo ?? '0')
 }
@@ -326,16 +338,18 @@ export async function resumenCustodia(
         contado: string
         fecha: string
     }>
-    const depositos = (await cliente
-        .from('ledger.depositos as d')
-        .where('d.empresa_id', empresaId)
-        .where('d.origen', 'custodia')
-        .if(persona !== null, (q) => q.where('d.custodio_id', persona!))
-        .groupBy('d.custodio_id')
-        .select('d.custodio_id', cliente.raw('sum(d.monto)::text as total'))) as Array<{
-        custodio_id: number
-        total: string
-    }>
+    // salidas de la custodia: depósitos al banco y, desde B9, reposiciones de una caja chica
+    const { rows: depositos } = (await cliente.rawQuery(
+        `SELECT s.custodio_id, sum(s.monto)::text AS total FROM (
+             SELECT d.custodio_id, d.monto FROM ledger.depositos d
+              WHERE d.empresa_id = ? AND d.origen = 'custodia'
+             UNION ALL
+             SELECT p.custodio_id, p.monto FROM ledger.reposiciones p
+              WHERE p.empresa_id = ? AND p.origen = 'custodia') s
+          WHERE (?::bigint = 0 OR s.custodio_id = ?::bigint)
+          GROUP BY s.custodio_id`,
+        [empresaId, empresaId, persona ?? 0, persona ?? 0],
+    )) as { rows: Array<{ custodio_id: number; total: string }> }
     const pendientes = (await cliente
         .from('ledger.entregas as e')
         .where('e.empresa_id', empresaId)

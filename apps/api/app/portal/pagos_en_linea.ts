@@ -4,7 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import { NoEncontrado, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { ESTADOS_PENDIENTES } from '#billing/facturas'
-import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import { pagoEnLineaDeEmpresa } from '#billing/pasarelas/cuentas'
 import { verCobroPasarela, type CobroPasarelaVista } from '#billing/pasarelas/cobros'
 import type { EstadoCobroProveedor } from '#billing/pasarelas/pasarela'
 import { exigirSesionPortal, SesionPortalRequerida, tokenDeLaPeticion } from '#portal/acceso/sesion'
@@ -70,9 +70,12 @@ export function urlRetornoPortal(entorno: NodeJS.ProcessEnv = process.env): stri
     return `${base.origin}${base.pathname.replace(/\/+$/, '')}/corte?pago={cobro_id}`
 }
 
-/** Hay pasarela configurada (`PASARELA_PROVEEDOR`, o la falsa fuera de producción). */
-export function pagoEnLineaDisponible(): boolean {
-    return proveedorConfigurado() !== null
+/**
+ * La empresa puede cobrar en línea (D0): tiene una cuenta de pasarela activa para `pago_en_linea` o,
+ * sin cuentas en la base, hay pasarela en el entorno (`PASARELA_PROVEEDOR`, o la falsa fuera de producción).
+ */
+export async function pagoEnLineaDisponible(empresaId: number): Promise<boolean> {
+    return pagoEnLineaDeEmpresa(empresaId)
 }
 
 export interface EntradaIniciarPago {

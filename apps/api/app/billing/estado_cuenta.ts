@@ -6,6 +6,12 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoAnticipos } from '#billing/cobros'
 import { ESTADOS_PENDIENTES, columnasFactura, type FacturaFila } from '#billing/facturas'
+import {
+    retencionesDeFacturas,
+    vistaPerfilFiscal,
+    type PerfilFiscalVista,
+    type RetencionFacturaPendiente,
+} from '#billing/perfil_fiscal'
 
 /**
  * Estado de cuenta del cliente (`GET /clientes/:id/estado-cuenta`): el **auxiliar CxC** del libro.
@@ -16,6 +22,10 @@ import { ESTADOS_PENDIENTES, columnasFactura, type FacturaFila } from '#billing/
  * - `movimientos`: un renglón por asiento que toca su CxC, en orden contable (fecha, asiento),
  *   con `cargo` (debe), `abono` (haber) y el saldo acumulado; el último saldo es `saldo`.
  *   Los reversos aparecen con el tipo de su origen (p. ej. un pago anulado como cargo `pago`).
+ * - Perfil fiscal (B4): `perfil_fiscal` del cliente en la raíz y, por empresa,
+ *   `retenciones_esperadas`: una por factura pendiente con la retención de IVA e ISR que se espera y
+ *   lo que debe llegar en dinero (la instantánea de la factura; las anteriores a B4, con el perfil de
+ *   hoy). Lo usan el cobro y la conciliación con retenciones (B10).
  */
 
 type TipoMovimiento = 'factura' | 'pago' | 'mora' | 'nota_credito' | 'diferencia_cobro' | 'ajuste'
@@ -44,6 +54,8 @@ export interface SeccionEstadoCuenta {
     facturas_pendientes: FacturaFila[]
     /** saldo acumulado dentro de la empresa */
     movimientos: MovimientoEstadoCuenta[]
+    /** perfil fiscal (B4): retenciones esperadas de cada factura pendiente */
+    retenciones_esperadas: RetencionFacturaPendiente[]
 }
 
 export interface EstadoCuenta {
@@ -57,6 +69,8 @@ export interface EstadoCuenta {
     movimientos: MovimientoEstadoCuenta[]
     /** una sección por empresa con facturas o movimientos del cliente (dentro del alcance) */
     empresas: SeccionEstadoCuenta[]
+    /** perfil fiscal del cliente hoy (B4) */
+    perfil_fiscal: PerfilFiscalVista
 }
 
 const TIPOS: Record<string, TipoMovimiento> = {
@@ -197,6 +211,7 @@ export async function estadoCuenta(
         ]),
     ].sort((a, b) => a - b)
     const datos = await listarEmpresas({ ids })
+    const retenciones = await retencionesDeFacturas(facturas, conexion)
     const secciones: SeccionEstadoCuenta[] = []
     let saldoTotal = CERO
     let aFavorTotal = CERO
@@ -224,6 +239,7 @@ export async function estadoCuenta(
             saldo: aTexto(saldo),
             saldo_a_favor: aTexto(aFavor),
             facturas_pendientes: facturas.filter((f) => Number(f.empresa_id) === empresaId),
+            retenciones_esperadas: retenciones.filter((r) => r.empresa_id === empresaId),
             movimientos: movimientos
                 .filter((m) => m.empresa_id === empresaId)
                 .map((m) => {
@@ -241,6 +257,11 @@ export async function estadoCuenta(
         facturas_pendientes: facturas,
         movimientos,
         empresas: secciones,
+        perfil_fiscal: await vistaPerfilFiscal(
+            clienteId,
+            empresas?.length === 1 ? empresas[0]! : null,
+            conexion,
+        ),
     }
 }
 

@@ -5,6 +5,7 @@ import { Conflicto, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { verCompra, type CompraVista } from '#ledger/compras'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
+import { exigirGastoNoRepuesto } from '#ledger/caja_chica'
 import { anularAltasDeLaCompra } from '#ledger/altas_compra'
 import { revertirEntradasDeLaCompra } from '#inventario/compras'
 
@@ -120,6 +121,13 @@ export default class AnularCompra extends DomainAction<EntradaAnularCompra, Comp
                 'Compra con constancia emitida',
             )
         }
+        // B9: la compra al contado pagada desde una caja chica y ya repuesta está sellada
+        const egresoContado = await t.trx
+            .from('ledger.egresos')
+            .where('compra_id', compra.id)
+            .select('id')
+            .first()
+        if (egresoContado) await exigirGastoNoRepuesto(t.trx, Number(egresoContado.id))
         const motivo = input.motivo.trim()
         await anularAltasDeLaCompra(t, compra.id, motivo)
 

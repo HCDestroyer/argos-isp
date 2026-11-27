@@ -9,6 +9,7 @@ import { cuentaIngresoDeLinea, totalesDe, type LineaCalculada } from '#billing/f
 import { aplicarAnticipos } from '#billing/cobros'
 import { lineasSinIva, sinIvaPorRegimen } from '#billing/regimen'
 import { cuentaIva } from '#billing/fel_facturas'
+import { perfilFiscalDe, perfilParaDocumento } from '#billing/perfil_fiscal'
 import { configuracionFel, modoEmision, type CertificarAl, type ModoEmision } from '#fiscal/fel/configuracion'
 import {
     ERROR_RECEPTOR,
@@ -31,6 +32,10 @@ import {
  * | `contingencia` | `emitida` | al emitir, IVA a `2.1.02` | `contingencia` |
  *
  * Con FEL desactivada (todas las empresas al migrar) todo queda como antes.
+ *
+ * Perfil fiscal del cliente (B4, `#billing/perfil_fiscal`): la factura guarda en `perfil_fiscal` la
+ * instantánea del tipo de impuesto, «me retiene ISR», si la exención se aplicó (hoy nunca: la factura
+ * de un cliente exento sale con IVA hasta tener la frase) y las retenciones esperadas.
  */
 
 /**
@@ -127,6 +132,13 @@ export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Pr
     const avisoCobro = modo === 'aviso'
     const tipoDte = modo === 'sin_fel' ? null : await tipoFacturaDte(datos.empresa_id, hoyGuatemala(), t.trx)
 
+    // perfil fiscal del cliente al emitir (B4): exención aplicada y retenciones esperadas
+    const perfilFiscal = await perfilParaDocumento(
+        await perfilFiscalDe(datos.cliente_id, t.trx),
+        { empresa_id: datos.empresa_id, fecha: hoyGuatemala(), total: totales.total, iva: totales.iva },
+        t.trx,
+    )
+
     // receptor al emitir (H29): el libro de ventas no cambia si después se edita el cliente
     const receptorFactura = await receptorDe(t.trx, datos.cliente_id, datos.receptor, {
         ambiente: config.ambiente,
@@ -149,6 +161,7 @@ export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Pr
             iva: aTexto(totales.iva),
             total: aTexto(totales.total),
             reglas_snapshot: JSON.stringify(datos.reglas_snapshot),
+            perfil_fiscal: JSON.stringify(perfilFiscal),
             aviso_cobro: avisoCobro,
             certificar_al: datos.certificar_al,
             tipo_dte: tipoDte,

@@ -11,6 +11,8 @@ export interface CobroPasarelaVista {
     /** el pago en línea es de una sola empresa */
     empresa_id: number
     proveedor: string
+    /** cuenta de pasarela con la que se creó (null = variables de entorno, antes de D0) */
+    pasarela_cuenta_id: number | null
     id_proveedor: string | null
     cliente_id: number
     cliente_nombre: string
@@ -40,6 +42,7 @@ function consultaCobros(cliente: QueryClientContract) {
             'pc.id',
             'pc.empresa_id',
             'pc.proveedor',
+            'pc.pasarela_cuenta_id',
             'pc.id_proveedor',
             'pc.cliente_id',
             'c.nombre as cliente_nombre',
@@ -97,6 +100,7 @@ export async function listarConciliaciones(filtros: OpcionesPaginacion & { fecha
         .select(
             'pz.id',
             'pz.proveedor',
+            'pz.pasarela_cuenta_id',
             db.raw(`to_char(pz.fecha, 'YYYY-MM-DD') as fecha`),
             'pz.revisados',
             'pz.conciliados',

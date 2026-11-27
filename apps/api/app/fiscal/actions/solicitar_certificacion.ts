@@ -1,3 +1,4 @@
+import { facturaNoFiscal } from '#billing/recibos'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -138,6 +139,18 @@ export default class SolicitarCertificacion extends DomainAction<
                 `La factura ${factura.id} está acreditada por completo con notas de crédito: no es una venta`,
                 'factura_acreditada',
                 'Factura acreditada',
+            )
+        }
+        // B11: cargo no facturable o factura cobrada solo en cajas sin factura: recibo, nunca DTE
+        const noFiscal = await facturaNoFiscal(t.trx, factura.id)
+        if (noFiscal) {
+            if (input.automatico) return omitir('no_fiscal')
+            throw new Conflicto(
+                noFiscal.motivo === 'cargo_no_facturable'
+                    ? `La factura ${factura.id} es un cargo no facturable: se cubre con un recibo, no se certifica`
+                    : `La factura ${factura.id} se cobró en una caja sin factura: tiene recibo, no se certifica`,
+                'factura_no_fiscal',
+                'Factura sin factura',
             )
         }
         if (factura.estado === 'anulada') {

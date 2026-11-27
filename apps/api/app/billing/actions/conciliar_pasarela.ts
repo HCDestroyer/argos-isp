@@ -3,7 +3,16 @@ import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, fechaValida, hoyGuatemala } from '#ledger/fechas'
-import { pasarela, proveedorConfigurado, PasarelaNoConfigurada } from '#billing/pasarelas/pasarela'
+import { PasarelaNoConfigurada, pasarela, proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import {
+    fuenteDeCuenta,
+    filaCuentaPasarela,
+    hayCuentasPasarela,
+    idsCuentasAConciliar,
+    type FuentePasarela,
+} from '#billing/pasarelas/cuentas'
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { ReglaNegocio } from '#shared/errores'
 
 /**
  * `pasarela.conciliar` (cron `conciliar` del `billing-worker`, una vez al día con lock; y
@@ -20,12 +29,18 @@ import { pasarela, proveedorConfigurado, PasarelaNoConfigurada } from '#billing/
  * | `error_consulta` | el proveedor no respondió por ese cobro |
  * | `reembolso_sin_aplicar` | el proveedor reembolsó y el aviso se rechazó por una regla de negocio |
  *
+ * Una corrida es de UNA cuenta de pasarela (`cuenta_id`; D0): el cron `conciliar` recorre todas las
+ * cuentas activas, una acción por cuenta. Sin `cuenta_id` vale cuando hay una sola fuente (la cuenta
+ * activa única o, sin cuentas en la base, el entorno); con varias, 422 `cuenta_requerida`.
+ *
  * Solo reporta: no registra ni anula pagos (eso lo decide una persona). Los cobros que cuadran
  * quedan con `conciliado_en`.
  */
 
 export interface EntradaConciliar {
     fecha?: string
+    /** cuenta de pasarela a conciliar (null/ausente: la única fuente, o el entorno sin cuentas) */
+    cuenta_id?: number | null
 }
 
 export interface Diferencia {
@@ -41,6 +56,7 @@ export interface Diferencia {
 export interface ResultadoConciliacion {
     id: number
     proveedor: string
+    pasarela_cuenta_id: number | null
     fecha: string
     revisados: number
     conciliados: number
@@ -53,9 +69,9 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
     readonly nombre = 'pasarela.conciliar'
 
     protected async handle(input: EntradaConciliar, t: Transaccion): Promise<ResultadoConciliacion> {
-        const proveedor = proveedorConfigurado()
-        if (!proveedor) throw new PasarelaNoConfigurada()
-        const adaptador = await pasarela(proveedor)
+        const { cuenta, proveedor, adaptador } = await this.fuente(input, t)
+        // la cuenta sembrada del entorno adopta lo anterior a D0 (cobros sin cuenta)
+        const adopta = cuenta === null || cuenta.sembrada_desde_entorno
         const fecha = input.fecha
             ? fechaValida(input.fecha)
             : DateTime.fromISO(hoyGuatemala(), { zone: ZONA_NEGOCIO }).minus({ days: 1 }).toISODate()!
@@ -65,6 +81,13 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             .from('billing.pasarela_cobros as pc')
             .leftJoin('billing.pagos as p', 'p.id', 'pc.pago_id')
             .where('pc.proveedor', proveedor)
+            .if(cuenta !== null, (q) =>
+                adopta
+                    ? q.where((w) =>
+                          w.where('pc.pasarela_cuenta_id', cuenta!.id).orWhereNull('pc.pasarela_cuenta_id'),
+                      )
+                    : q.where('pc.pasarela_cuenta_id', cuenta!.id),
+            )
             .whereNotNull('pc.id_proveedor')
             .where((q) => q.whereRaw(dia('pc.created_at'), [fecha]).orWhereRaw(dia('pc.pagado_en'), [fecha]))
             .orderBy('pc.id', 'asc')
@@ -201,6 +224,7 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             .from('billing.pagos as p')
             .where('p.metodo', 'pasarela')
             .where('p.pasarela', proveedor)
+            .if(!adopta, (q) => q.where('p.empresa_id', cuenta!.empresa_id))
             .whereNot('p.estado', 'anulado')
             .whereRaw(dia('p.created_at'), [fecha])
             .whereNotExists((q) => q.from('billing.pasarela_cobros as pc').whereRaw('pc.pago_id = p.id'))
@@ -228,6 +252,13 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
                 j.on('pc.id_proveedor', 'e.id_proveedor').andOn('pc.proveedor', 'e.proveedor'),
             )
             .where('e.proveedor', proveedor)
+            .if(cuenta !== null, (q) =>
+                adopta
+                    ? q.where((w) =>
+                          w.where('e.pasarela_cuenta_id', cuenta!.id).orWhereNull('e.pasarela_cuenta_id'),
+                      )
+                    : q.where('e.pasarela_cuenta_id', cuenta!.id),
+            )
             .where('e.estado', 'disputa')
             .whereRaw(dia('e.created_at'), [fecha])
             .select('e.id_proveedor', 'pc.id as cobro_id', 'pc.pago_id')) as Array<{
@@ -260,6 +291,7 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             .table('billing.pasarela_conciliaciones')
             .insert({
                 proveedor,
+                pasarela_cuenta_id: cuenta?.id ?? null,
                 fecha,
                 revisados: cobros.length,
                 conciliados: conciliados.length,
@@ -272,11 +304,38 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
         return {
             id: fila!.id,
             proveedor,
+            pasarela_cuenta_id: cuenta?.id ?? null,
             fecha,
             revisados: cobros.length,
             conciliados: conciliados.length,
             cobros_conciliados: conciliados,
             diferencias,
         }
+    }
+
+    private async fuente(input: EntradaConciliar, t: Transaccion): Promise<FuentePasarela> {
+        if (input.cuenta_id) {
+            const cuenta = await filaCuentaPasarela(input.cuenta_id, t.trx)
+            exigirAccesoEmpresa(t.ctx, Number(cuenta.empresa_id))
+            t.fijarEmpresa(Number(cuenta.empresa_id))
+            return fuenteDeCuenta(cuenta)
+        }
+        const ids = await idsCuentasAConciliar(t.trx)
+        if (ids.length > 1) {
+            throw new ReglaNegocio(
+                `Hay ${ids.length} cuentas de pasarela activas: indica cuenta_id (el cron concilia todas)`,
+                'cuenta_requerida',
+            )
+        }
+        const unica = ids[0]
+        if (ids.length === 1 && unica !== null && unica !== undefined) {
+            return fuenteDeCuenta(await filaCuentaPasarela(unica, t.trx))
+        }
+        if (await hayCuentasPasarela(t.trx)) {
+            throw new PasarelaNoConfigurada('No hay cuentas de pasarela activas')
+        }
+        const proveedor = proveedorConfigurado()
+        if (!proveedor) throw new PasarelaNoConfigurada()
+        return { cuenta: null, proveedor, adaptador: await pasarela(proveedor) }
     }
 }

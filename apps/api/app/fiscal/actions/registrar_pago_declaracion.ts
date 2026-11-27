@@ -6,6 +6,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { CERO, aTexto, dec, redondear } from '#ledger/dinero'
 import { fechaValida } from '#ledger/fechas'
 import { resolverOrigenEgreso, type MetodoEgreso } from '#ledger/egresos'
+import { exigirSalidaDeCaja } from '#ledger/caja_chica'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import type { ImpuestoDeclarable } from '#fiscal/declaraciones'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
@@ -150,6 +151,8 @@ export default class RegistrarPagoDeclaracion extends DomainAction<EntradaPagoDe
                 },
             ])
         }
+        // B9: la caja chica no paga impuestos; N2: la caja de cobros tampoco, si la empresa tiene caja chica
+        if (origen.caja_id !== null) await exigirSalidaDeCaja(t.trx, origen.caja_id, total, 'pago_impuesto')
         const cuentaImpuesto = CUENTA_POR_PAGAR[d.impuesto as ImpuestoDeclarable]
         const asiento = await new RegistrarAsiento().execute(
             {

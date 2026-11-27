@@ -624,7 +624,7 @@ Pendiente (decisiones del PM del 25-nov que piden diseño y tocan la suite del a
 facturables por concepto, caja sin factura, recibo no fiscal con su numeración, cuentas internas de
 ingresos y gastos no deducibles, egresos sin comprobante, visibilidad por caja y
 `contabilidad.ver_cuentas_internas`, reporte «Cobros en cajas sin factura», y la regla del pago
-repartido entre caja fiscal y sin factura (se propone al PM antes de implementarla).
+mixto (prohibido por decisión del PM del 26 nov 2026: 422 `pago_mixto_fiscal`).
 
 ### Lote 4 · Establecimientos según la SAT
 
@@ -942,8 +942,10 @@ que propone el plan.
   entran en los libros fiscales. Se permite incluso con FEL «Obligatoria», con un aviso visible en la
   configuración de la caja y en el cobro. Esos cobros salen en un reporte aparte, «Cobros en cajas
   sin factura». Una caja sin factura no necesita establecimiento (P1). Las dos marcas se configuran
-  con su permiso, auditoría y evento. Un pago repartido entre caja fiscal y sin factura: regla
-  propuesta al PM antes de implementarla. Se aplica en el lote 3.
+  con su permiso, auditoría y evento. Un pago mixto (parte en caja fiscal y parte en
+  sin factura sobre la misma factura) **está prohibido** (PM, 26-nov-2026: «No debe pasar»): 422
+  `pago_mixto_fiscal`, en los dos sentidos, también si la factura ya se certificó o tiene notas de
+  crédito. Se aplica en el lote 3.
 - **Recibo no fiscal · decisión del PM (25-nov-2026).** Lo que se entrega al cobrar en una caja sin
   factura, o al cubrir un cargo no facturable, es un **recibo no fiscal de pago** (ni aviso de cobro
   ni factura): dice claramente que no es factura y no lleva DTE, serie ni número de la SAT. Numeración

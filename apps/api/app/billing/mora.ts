@@ -9,6 +9,7 @@ import { sinIvaPorRegimen } from '#billing/regimen'
 import { cuentaIva } from '#billing/fel_facturas'
 import { valorParametro } from '#fiscal/parametros'
 import { configuracionFel } from '#fiscal/fel/configuracion'
+import { perfilFiscalDe, perfilParaDocumento } from '#billing/perfil_fiscal'
 
 /**
  * Mora: recargo por vencimiento. Se documenta como una factura `tipo = 'mora'` ligada a la
@@ -120,6 +121,12 @@ export async function crearMora(
         total: monto,
     })
     const iva = dec(linea.iva)
+    // perfil fiscal del cliente (B4): instantánea y retenciones esperadas del recargo
+    const perfilFiscal = await perfilParaDocumento(
+        await perfilFiscalDe(factura.cliente_id, t.trx),
+        { empresa_id: factura.empresa_id, fecha: hoy, total: monto, iva },
+        t.trx,
+    )
     const insertadas = (await t.trx
         .knexQuery()
         .table('billing.facturas')
@@ -144,6 +151,7 @@ export async function crearMora(
                 numero: n,
                 mora_con_iva: conIva === true,
             }),
+            perfil_fiscal: JSON.stringify(perfilFiscal),
         })
         .onConflict('clave_unica')
         .ignore()

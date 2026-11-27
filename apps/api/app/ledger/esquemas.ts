@@ -57,9 +57,15 @@ export const Cuenta = definirEsquema(
                 ...nulable(enumerado(['efectivo', 'operacion', 'inversion', 'financiamiento'])),
                 description: 'Clasificación del flujo de efectivo (método indirecto)',
             },
+            interna: {
+                ...booleano,
+                description:
+                    'B11: cuenta interna (caja sin factura): fuera de los libros fiscales; solo con contabilidad.ver_cuentas_internas',
+            },
             ...auditable,
         },
         [
+            'interna',
             'empresa_id',
             'pais',
             'naturaleza',
@@ -116,6 +122,9 @@ export const Asiento = definirEsquema(
                 'egreso',
                 'cierre_caja',
                 'entrega_caja',
+                'reposicion_caja',
+                'conteo_caja',
+                'recibo_interno',
                 'ajuste',
                 'reclasificacion',
                 'liquidacion_cobro',
@@ -254,6 +263,18 @@ export const Caja = definirEsquema(
                 description: 'B1: cobros (turno, cierre y entrega) o gastos (caja chica, B9)',
             },
             fondo_fijo: { ...nulable(Dinero), description: 'Fondo fijo propio; null = el de la empresa' },
+            fiscal: {
+                ...booleano,
+                description: 'B11: false = caja sin factura (recibo no fiscal, cuentas internas)',
+            },
+            usuarios: {
+                ...lista(id),
+                description: 'B11: quiénes ven y usan la caja (vacía = todos los que la alcanzan por el ACL)',
+            },
+            aviso_sin_factura: {
+                ...nulable(texto),
+                description: 'B11: aviso de una caja sin factura en una empresa con FEL obligatoria',
+            },
             fondo_fijo_efectivo: {
                 ...Dinero,
                 description: 'Fondo con el que abre la caja (el propio o el fondo de cambio de la empresa)',
@@ -271,6 +292,9 @@ export const Caja = definirEsquema(
             'tipo',
             'fondo_fijo',
             'fondo_fijo_efectivo',
+            'fiscal',
+            'usuarios',
+            'aviso_sin_factura',
         ],
     ),
 )
@@ -424,6 +448,10 @@ const AjustesCajasPropiedades = {
     custodia_plazo_dias: { ...entero, description: 'Días hábiles para depositar (1 de fábrica)' },
     custodia_tope: { ...Dinero, description: 'Efectivo máximo en custodia por persona (Q5,000 de fábrica)' },
     autoentrega: { ...booleano, description: '«Lo deposito yo» permitido (de fábrica sí)' },
+    fondo_caja_chica: {
+        ...Dinero,
+        description: 'B9: fondo fijo de cada caja chica (Q2,000 de fábrica; sin tope por gasto)',
+    },
     de_fabrica: { ...booleano, description: 'La empresa usa los valores de fábrica' },
     version: { ...entero, description: '0 = de fábrica; se envía en PUT /cajas/ajustes' },
     updated_at: nulable(instante),
@@ -445,7 +473,7 @@ export const CustodiaEfectivo = definirEsquema(
                 empresa_id: id,
                 usuario_id: id,
                 usuario_nombre: nulable(texto),
-                saldo: { ...Dinero, description: 'Recibido − depositado' },
+                saldo: { ...Dinero, description: 'Recibido − depositado − repuesto a cajas chicas (B9)' },
                 desde: { ...nulable(fecha), description: 'Recepción más vieja aún sin depositar' },
                 vence: { ...nulable(fecha), description: 'Último día hábil para depositarla' },
                 fuera_de_plazo: { ...booleano, description: 'Avisa, no bloquea' },
@@ -556,10 +584,117 @@ export const Egreso = definirEsquema(
             anulado_por: nulable(id),
             motivo_anulacion: nulable(texto),
             asiento_reverso_id: nulable(id),
+            con_comprobante: {
+                ...booleano,
+                description: 'B9: tiene el archivo de su comprobante (GET /egresos/:id/comprobante)',
+            },
+            reposicion_id: {
+                ...nulable(id),
+                description: 'B9: gasto de caja chica ya repuesto (sellado: no se anula)',
+            },
             ...auditable,
         },
-        ['empresa_id', 'compra_id'],
+        ['empresa_id', 'compra_id', 'con_comprobante', 'reposicion_id'],
     ),
+)
+
+/*
+| B9 del plan de contabilidad (§5.7): caja chica
+*/
+
+export const EstadoCajaChica = definirEsquema(
+    'EstadoCajaChica',
+    objeto({
+        caja_id: id,
+        empresa_id: id,
+        nombre: texto,
+        encargado_id: { ...nulable(id), description: 'Encargado (el cajero_id de la caja)' },
+        encargado_nombre: nulable(texto),
+        fondo_fijo: { ...Dinero, description: 'Fondo fijo configurado (el que deja la próxima reposición)' },
+        fondo_vigente: { ...Dinero, description: 'Fondo de la última reposición (0 antes de la primera)' },
+        efectivo: { ...Dinero, description: 'Efectivo que debe haber (saldo de su cuenta en el libro)' },
+        comprobantes: {
+            ...objeto({ cantidad: entero, monto: Dinero, sin_archivo: entero }),
+            description: 'Gastos vigentes sin reponer (sin_archivo: los que aún no tienen su comprobante)',
+        },
+        diferencias: {
+            ...objeto({ cantidad: entero, monto: Dinero }),
+            description: 'Diferencias de conteo sin reponer (contado − esperado)',
+        },
+        cuadra: { ...booleano, description: 'efectivo + comprobantes − diferencias = fondo vigente' },
+        por_reponer: {
+            ...Dinero,
+            description: 'Lo que repone la siguiente reposición (fondo fijo − efectivo)',
+        },
+        porcentaje: {
+            ...entero,
+            description: 'Efectivo / fondo fijo en %; bajo 30 el panel avisa para reponer',
+        },
+        ultima_reposicion: nulable(objeto({ id, fecha, monto: Dinero })),
+        ultimo_conteo: nulable(objeto({ id, fecha, diferencia: Dinero })),
+    }),
+)
+
+export const GastoCajaChica = definirEsquema(
+    'GastoCajaChica',
+    objeto({
+        egreso: Egreso,
+        caja_chica: EstadoCajaChica,
+        pasar_a_compras: {
+            ...booleano,
+            description: 'Con factura a nombre de la empresa: sigue POST /compras/desde-egreso/:egreso_id',
+        },
+    }),
+)
+
+export const ReposicionCaja = definirEsquema(
+    'ReposicionCaja',
+    objeto({
+        id,
+        empresa_id: id,
+        caja_id: id,
+        caja_nombre: texto,
+        origen: enumerado(['custodia', 'banco']),
+        custodio_id: { ...nulable(id), description: 'De cuya custodia salió (null desde el banco)' },
+        custodio_nombre: nulable(texto),
+        banco_id: nulable(id),
+        cuenta_bancaria_id: nulable(id),
+        cuenta_codigo: { ...texto, description: 'Cuenta del libro de la que salió (1.1.15 o el banco)' },
+        referencia: nulable(texto),
+        monto: Dinero,
+        fondo: { ...Dinero, description: 'Fondo fijo con el que queda la caja' },
+        efectivo_antes: Dinero,
+        fecha,
+        gastos: { ...entero, description: 'Gastos que sella' },
+        conteos: { ...entero, description: 'Diferencias de conteo que sella' },
+        asiento_id: nulable(id),
+        registrado_por: nulable(id),
+        registrado_por_nombre: nulable(texto),
+        created_at: instante,
+    }),
+)
+
+export const ConteoCaja = definirEsquema(
+    'ConteoCaja',
+    objeto({
+        id,
+        empresa_id: id,
+        caja_id: id,
+        esperado: { ...Dinero, description: 'Efectivo en el libro al contar' },
+        contado: Dinero,
+        diferencia: { ...Dinero, description: 'contado − esperado, a cargo del encargado' },
+        comprobantes: { ...Dinero, description: 'Gastos sin reponer al contar' },
+        fondo: { ...Dinero, description: 'Fondo vigente al contar' },
+        motivo: nulable(texto),
+        responsable_id: nulable(id),
+        responsable_nombre: nulable(texto),
+        contado_por: nulable(id),
+        contado_por_nombre: nulable(texto),
+        fecha,
+        asiento_id: nulable(id),
+        repuesto: { ...booleano, description: 'La diferencia ya se repuso' },
+        created_at: instante,
+    }),
 )
 
 export const CierrePeriodo = definirEsquema(

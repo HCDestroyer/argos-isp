@@ -9,7 +9,7 @@ import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import IncumplirPromesas from '#billing/actions/incumplir_promesas'
 import TerminarPausas from '#billing/actions/terminar_pausas'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
-import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import { idsCuentasAConciliar } from '#billing/pasarelas/cuentas'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
 import VerificarIntegridad from '#ledger/actions/verificar_integridad'
 import { pendientesDeSellar } from '#ledger/sellos'
@@ -152,9 +152,22 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
         case 'pausas':
             return conLock(nombre, () => new TerminarPausas().execute({}, ctx))
         case 'conciliar':
-            // sin pasarela configurada (producción sin credenciales) no hay nada que conciliar
-            if (!proveedorConfigurado()) return { omitido: true }
-            return conLock(nombre, () => new ConciliarPasarela().execute({}, ctx))
+            // todas las cuentas de pasarela activas (o el entorno sin cuentas); sin ninguna no hay nada
+            // que conciliar. Una acción por cuenta: si una falla, las demás se concilian igual.
+            return conLock(nombre, async () => {
+                const ids = await idsCuentasAConciliar()
+                if (ids.length === 0) return { omitido: true }
+                const corridas = []
+                const errores: Array<{ cuenta_id: number | null; error: string }> = []
+                for (const id of ids) {
+                    try {
+                        corridas.push(await new ConciliarPasarela().execute({ cuenta_id: id }, ctx))
+                    } catch (error) {
+                        errores.push({ cuenta_id: id, error: (error as Error).message })
+                    }
+                }
+                return { corridas, errores }
+            })
         case 'sellar':
             return conLock(nombre, async () => {
                 let sellados = 0

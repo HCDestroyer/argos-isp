@@ -6,6 +6,8 @@ import { aTexto, dec, redondear } from '#ledger/dinero'
 import {
     FirmaInvalida,
     VENTANA_WEBHOOK_S,
+    type CapacidadesPasarela,
+    type DescriptorPasarela,
     type CobroCreado,
     type EntradaCrearCobro,
     type EntradaWebhook,
@@ -49,8 +51,25 @@ interface FilaFalsa {
     url_retorno: string | null
 }
 
+const CAPACIDADES_FALSA: CapacidadesPasarela = {
+    pago_en_linea: true,
+    tokenizacion: 'ninguna',
+    cargo_con_token: false,
+    revocar_metodo: false,
+    webhooks: { tokenizacion: false, cargo: false },
+    minimo: '0.01',
+}
+
 export class PasarelaFalsa implements Pasarela {
     readonly nombre = 'falsa'
+    readonly capacidades = CAPACIDADES_FALSA
+
+    /** `secreto`: el de la cuenta; sin él, el del laboratorio (`PASARELA_FALSA_SECRETO` o el fijo). */
+    constructor(private readonly secreto: string = secretoFalsa()) {}
+
+    async probar(): Promise<{ detalle: string }> {
+        return { detalle: 'Pasarela de laboratorio: no valida credenciales' }
+    }
 
     async crearCobro(entrada: EntradaCrearCobro): Promise<CobroCreado> {
         const idProveedor = `falsa_${randomUUID().replaceAll('-', '')}`
@@ -84,7 +103,7 @@ export class PasarelaFalsa implements Pasarela {
         if (Math.abs(ahora - marca) > VENTANA_WEBHOOK_S) {
             throw new FirmaInvalida(`La notificación está fuera de la ventana de ${VENTANA_WEBHOOK_S} s`)
         }
-        const esperada = firmar(entrada.cuerpo, marca).split('v1=')[1]!
+        const esperada = firmar(entrada.cuerpo, marca, this.secreto).split('v1=')[1]!
         const a = Buffer.from(esperada, 'hex')
         const b = Buffer.from(/^[0-9a-f]+$/i.test(recibida) ? recibida : '', 'hex')
         if (a.length !== b.length || !timingSafeEqual(a, b)) throw new FirmaInvalida('La firma no coincide')
@@ -174,6 +193,25 @@ export class PasarelaFalsa implements Pasarela {
             cobro: { id: idProveedor, referencia: fila.referencia, estado, monto, comision },
         })
         const marca = Math.floor((opciones.ahora ?? new Date()).getTime() / 1000)
-        return { cuerpo, cabeceras: { [CABECERA_FIRMA]: firmar(cuerpo, marca) } }
+        return { cuerpo, cabeceras: { [CABECERA_FIRMA]: firmar(cuerpo, marca, this.secreto) } }
     }
+}
+
+export const descriptorFalsa: DescriptorPasarela = {
+    nombre: 'falsa',
+    titulo: 'Pasarela de laboratorio',
+    capacidades: CAPACIDADES_FALSA,
+    credenciales: [],
+    requiere_webhook_secreto: false,
+    opciones: [],
+    laboratorio: true,
+    construir: (config) => new PasarelaFalsa(config.webhookSecreto ?? secretoFalsa()),
+    desdeEntorno: () => ({
+        cuentaId: null,
+        empresaId: null,
+        modo: 'pruebas',
+        credenciales: {},
+        webhookSecreto: null,
+        opciones: {},
+    }),
 }

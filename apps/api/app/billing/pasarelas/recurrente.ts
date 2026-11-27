@@ -3,8 +3,12 @@ import env from '#start/env'
 import { Problema, ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec } from '#ledger/dinero'
 import {
+    ErrorPruebaPasarela,
     FirmaInvalida,
     PasarelaNoConfigurada,
+    type CapacidadesPasarela,
+    type ConfigCuenta,
+    type DescriptorPasarela,
     VENTANA_WEBHOOK_S,
     type CobroCreado,
     type EntradaCrearCobro,
@@ -55,7 +59,10 @@ export interface ConfigRecurrente {
     expiraHoras: number
 }
 
-/** Configuración de las variables de entorno (`RECURRENTE_*`); nunca en el repo. */
+/**
+ * Configuración de las variables de entorno (`RECURRENTE_*`); nunca en el repo. Solo es el
+ * respaldo mientras no existan cuentas (`billing.pasarela_cuentas`) y la fuente de la siembra.
+ */
 export function configRecurrente(): ConfigRecurrente {
     return {
         secretKey: env.get('RECURRENTE_SECRET_KEY') ?? '',
@@ -122,9 +129,10 @@ export class ErrorRecurrente extends Problema {
 
 export class PasarelaRecurrente implements Pasarela {
     readonly nombre = 'recurrente'
+    readonly capacidades = CAPACIDADES_RECURRENTE
 
     constructor(
-        private readonly config: ConfigRecurrente = configRecurrente(),
+        private readonly config: ConfigRecurrente,
         private readonly http: FetchLike = (url, init) => fetch(url, init),
     ) {}
 
@@ -166,6 +174,24 @@ export class PasarelaRecurrente implements Pasarela {
             throw new ErrorRecurrente(`Recurrente respondió ${respuesta.status}: ${mensaje}`)
         }
         return datos
+    }
+
+    /**
+     * `GET /test` (https://docs.recurrente.com/referencia-api/api-reference/test/credentials.md):
+     * 200 con `environment` (`live` | `sandbox`); 401 si la llave no sirve.
+     */
+    async probar(): Promise<{ detalle: string; ambiente?: 'pruebas' | 'produccion' }> {
+        let datos: Record<string, any>
+        try {
+            datos = await this.llamar('GET', '/test')
+        } catch (error) {
+            throw new ErrorPruebaPasarela((error as Error).message)
+        }
+        const ambiente = String(datos.environment ?? '')
+        return {
+            detalle: ambiente ? `Recurrente respondió (ambiente ${ambiente})` : 'Recurrente respondió',
+            ambiente: ambiente === 'live' ? 'produccion' : ambiente === 'sandbox' ? 'pruebas' : undefined,
+        }
     }
 
     async crearCobro(entrada: EntradaCrearCobro): Promise<CobroCreado> {
@@ -303,4 +329,52 @@ export class PasarelaRecurrente implements Pasarela {
             pagado_en: pagadoEn,
         }
     }
+}
+
+/** D0: lo que hoy existe es el pago en línea; D1 enciende tokenización y cargo con token. */
+const CAPACIDADES_RECURRENTE: CapacidadesPasarela = {
+    pago_en_linea: true,
+    tokenizacion: 'ninguna',
+    cargo_con_token: false,
+    revocar_metodo: false,
+    webhooks: { tokenizacion: false, cargo: false },
+    minimo: '5.00',
+}
+
+export function configRecurrenteDeCuenta(c: ConfigCuenta): ConfigRecurrente {
+    const horas = Number(c.opciones.expira_horas ?? 24)
+    return {
+        secretKey: c.credenciales.secret_key ?? '',
+        webhookSecret: c.webhookSecreto ?? '',
+        urlBase: String(c.opciones.api_url || URL_BASE).replace(/\/$/, ''),
+        expiraHoras: Number.isFinite(horas) && horas > 0 ? horas : 24,
+    }
+}
+
+export const descriptorRecurrente: DescriptorPasarela = {
+    nombre: 'recurrente',
+    titulo: 'Recurrente',
+    capacidades: CAPACIDADES_RECURRENTE,
+    credenciales: [
+        { clave: 'secret_key', etiqueta: 'Llave secreta (sk_live_… o sk_test_…)', requerida: true },
+    ],
+    requiere_webhook_secreto: true,
+    opciones: [
+        { clave: 'api_url', etiqueta: 'URL base de la API (solo para pruebas)', tipo: 'texto' },
+        { clave: 'expira_horas', etiqueta: 'Horas de vigencia del cobro', tipo: 'numero' },
+    ],
+    laboratorio: false,
+    construir: (config) => new PasarelaRecurrente(configRecurrenteDeCuenta(config)),
+    desdeEntorno() {
+        const c = configRecurrente()
+        if (!c.secretKey) return null
+        return {
+            cuentaId: null,
+            empresaId: null,
+            modo: c.secretKey.startsWith('sk_live_') ? 'produccion' : 'pruebas',
+            credenciales: { secret_key: c.secretKey },
+            webhookSecreto: c.webhookSecret || null,
+            opciones: { api_url: c.urlBase, expira_horas: c.expiraHoras },
+        }
+    },
 }

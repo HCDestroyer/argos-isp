@@ -54,6 +54,10 @@ export default class BillingWorker extends BaseCommand {
             return
         }
 
+        // D0: la cuenta de pasarela de la empresa principal sale del entorno una sola vez
+        const { sembrarCuentaPasarelaDelEntorno } = await import('#billing/arranque_pasarelas')
+        await sembrarCuentaPasarelaDelEntorno()
+
         const cola = await programarCronsBilling()
         const worker = crearWorkerBilling()
         this.logger.info(`billing:worker escuchando la cola ${NOMBRE_COLA_BILLING}`)
