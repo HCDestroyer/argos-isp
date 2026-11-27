@@ -6,6 +6,7 @@ import { CERO, aTexto, dec, tieneCentavosExactos, type Dec } from '#ledger/diner
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { resolverOrigenEgreso, type MetodoEgreso } from '#ledger/egresos'
+import { exigirSalidaDeCaja } from '#ledger/caja_chica'
 import { verProveedor } from '#ledger/proveedores'
 import { comprasPendientes, verPagoProveedor, type PagoProveedorVista } from '#ledger/pagos_proveedores'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
@@ -82,6 +83,9 @@ export default class RegistrarPagoProveedor extends DomainAction<EntradaPagoProv
                 },
             ])
         }
+
+        // B9: la caja chica no paga a proveedores al crédito; N2: la caja de cobros tampoco, si hay caja chica
+        if (origen.caja_id !== null) await exigirSalidaDeCaja(t.trx, origen.caja_id, monto, 'pago_proveedor')
 
         const pendientes = await comprasPendientes(t.trx, proveedor.id)
         const pedidas = input.compras ?? []

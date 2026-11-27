@@ -54,7 +54,8 @@ export default class RegistrarCompraDesdeEgreso extends DomainAction<EntradaComp
                 t.trx.raw(`to_char(e.fecha, 'YYYY-MM-DD') as fecha`),
                 'e.monto',
                 'e.compra_id',
-                'ec.cuenta_id',
+                t.trx.raw('coalesce(e.cuenta_id, ec.cuenta_id) as cuenta_id'),
+                t.trx.raw('e.cuenta_id IS NOT NULL as interno'),
             )
             .first()) as {
             id: number
@@ -63,6 +64,7 @@ export default class RegistrarCompraDesdeEgreso extends DomainAction<EntradaComp
             monto: string
             compra_id: number | null
             cuenta_id: number
+            interno: boolean
         } | null
         if (!egreso) throw new NoEncontrado(`El egreso ${input.egreso_id} no existe`)
         exigirAccesoEmpresa(t.ctx, Number(egreso.empresa_id))
@@ -73,6 +75,14 @@ export default class RegistrarCompraDesdeEgreso extends DomainAction<EntradaComp
                 `El egreso ${egreso.id} es el pago de la compra ${egreso.compra_id}`,
                 'egreso_de_compra',
                 'Egreso de una compra',
+            )
+        }
+        // B11: el gasto de una caja sin factura es interno: no pasa a Compras (no tiene factura)
+        if (egreso.interno) {
+            throw new Conflicto(
+                `El egreso ${egreso.id} salió de una caja sin factura (gasto interno): no se registra como compra`,
+                'egreso_sin_factura',
+                'Egreso sin factura',
             )
         }
         const anulado = await t.trx.from('ledger.egresos_anulaciones').where('egreso_id', egreso.id).first()

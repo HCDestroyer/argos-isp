@@ -14,7 +14,7 @@ import { fondoParaAbrir } from '#ledger/custodia'
  * contado si se cerró sin entrega) o, en el primer turno, el fondo fijo de la caja. Un
  * `fondo_inicial` distinto todavía se acepta (clientes de antes de B1) y queda a la vista junto al
  * esperado en el turno. Un solo turno
- * abierto por caja (409 `turno_abierto`). Queda `abierto_por` = el cajero: sus cobros en
+ * abierto por caja (409 `turno_abierto`). Una caja chica (B9) no abre turnos: 422 `caja_chica_sin_turno`. Queda `abierto_por` = el cajero: sus cobros en
  * efectivo sin `caja_id` van a esta caja mientras el turno siga abierto.
  *
  * No escribe asiento: el fondo ya está en la cuenta de la caja (es lo que quedó del turno
@@ -35,13 +35,20 @@ export default class AbrirCaja extends DomainAction<EntradaAbrirCaja, TurnoVista
             .from('ledger.cajas')
             .where('id', input.caja_id)
             .forUpdate()
-            .select('id', 'activa', 'empresa_id', 'fondo_fijo')
+            .select('id', 'activa', 'empresa_id', 'fondo_fijo', 'tipo')
             .first()
         if (!caja) throw new NoEncontrado(`La caja ${input.caja_id} no existe`)
         // la caja es de una empresa: solo la abre quien tiene acceso a ella
         exigirAccesoEmpresa(t.ctx, Number(caja.empresa_id))
         t.fijarEmpresa(Number(caja.empresa_id))
         if (!caja.activa) throw new ReglaNegocio(`La caja ${input.caja_id} está inactiva`, 'caja_inactiva')
+        // B9: la caja chica no tiene turnos (su efectivo se controla con el fondo fijo y el conteo)
+        if (caja.tipo === 'gastos') {
+            throw new ReglaNegocio(
+                `La caja ${input.caja_id} es una caja chica: no abre turnos (registra gastos, repón y cuenta)`,
+                'caja_chica_sin_turno',
+            )
+        }
 
         const abierto = await t.trx
             .from('ledger.cajas_turnos')

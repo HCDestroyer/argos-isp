@@ -9,7 +9,8 @@ import { ajustesCajas, type AjustesCajas } from '#ledger/custodia'
 /**
  * `cajas.configurar` (`PUT /cajas/ajustes`): ajustes de las cajas de cobros y la custodia de una
  * empresa (decisiones del PM del 26 nov 2026): fondo de cambio (Q200), plazo para depositar lo que
- * se tiene en custodia (1 día hábil), tope por persona (Q5,000) y «lo deposito yo» (encendido).
+ * se tiene en custodia (1 día hábil), tope por persona (Q5,000), «lo deposito yo» (encendido) y,
+ * desde B9, el fondo fijo de cada caja chica (Q2,000; sin tope por gasto).
  *
  * Solo cambia lo que se envía. `version` (la de `GET /cajas/ajustes`; 0 = de fábrica) para el
  * control optimista: 409 `conflicto_version`. Diff en `audit.cambios` y evento
@@ -23,9 +24,16 @@ export interface EntradaConfigurarCajas {
     custodia_plazo_dias?: number
     custodia_tope?: string
     autoentrega?: boolean
+    fondo_caja_chica?: string
 }
 
-const CAMPOS = ['fondo_cobros', 'custodia_plazo_dias', 'custodia_tope', 'autoentrega'] as const
+const CAMPOS = [
+    'fondo_cobros',
+    'custodia_plazo_dias',
+    'custodia_tope',
+    'autoentrega',
+    'fondo_caja_chica',
+] as const
 
 export default class ConfigurarCajas extends DomainAction<EntradaConfigurarCajas, AjustesCajas> {
     readonly nombre = 'cajas.configurar'
@@ -43,7 +51,7 @@ export default class ConfigurarCajas extends DomainAction<EntradaConfigurarCajas
         t.fijarEntidad('empresa', empresaId)
 
         const errores: ErrorCampo[] = []
-        for (const campo of ['fondo_cobros', 'custodia_tope'] as const) {
+        for (const campo of ['fondo_cobros', 'custodia_tope', 'fondo_caja_chica'] as const) {
             const valor = input[campo]
             if (valor === undefined) continue
             const monto = dec(valor)
@@ -62,6 +70,10 @@ export default class ConfigurarCajas extends DomainAction<EntradaConfigurarCajas
             custodia_tope:
                 input.custodia_tope === undefined ? antes.custodia_tope : aTexto(input.custodia_tope),
             autoentrega: input.autoentrega ?? antes.autoentrega,
+            fondo_caja_chica:
+                input.fondo_caja_chica === undefined
+                    ? antes.fondo_caja_chica
+                    : aTexto(input.fondo_caja_chica),
         }
         const campos = CAMPOS.filter((c) => String(antes[c]) !== String(despues[c]))
         if (campos.length === 0) return antes

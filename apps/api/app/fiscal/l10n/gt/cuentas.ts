@@ -28,6 +28,13 @@ export const CUENTAS_GT = {
      * `ledger.entregas` y `ledger.depositos`). Código por confirmar con el contador.
      */
     EFECTIVO_EN_CUSTODIA: '1.1.15',
+    /**
+     * gt-2026.7 (B11, caja sin factura; decisión del PM del 25 nov 2026): cuentas **internas**
+     * (`interna = true`): fuera de los libros fiscales y de las declaraciones; las ve quien tiene
+     * `contabilidad.ver_cuentas_internas`. Códigos por confirmar con el contador.
+     */
+    INGRESOS_INTERNOS: '4.3.01',
+    GASTOS_INTERNOS: '5.7.01',
     PROPIEDAD_PLANTA_EQUIPO: '1.2.01',
     DEPRECIACION_ACUMULADA: '1.2.02',
     PROVEEDORES: '2.1.03',
@@ -295,3 +302,30 @@ export const CUENTAS_PAQUETE_GT_2026_6: readonly DefinicionCuentaPaquete[] = [
     ...CUENTAS_PAQUETE_GT_2026_4,
     ...CUENTAS_CUSTODIA_GT,
 ]
+
+/**
+ * gt-2026.7 (B11 del plan de contabilidad, caja sin factura; decisiones del PM del 25 y 26 nov 2026):
+ * `4.3 / 4.3.01 Ingresos por recibos internos (caja sin factura)` y `5.7 / 5.7.01 Gastos internos sin
+ * factura` (no deducible), las dos `interna`: cobros y pagos reales que no llevan factura (paso por un
+ * camino, permiso de un poste) y que no se mezclan con la declaración. Instalarla sobre 2026.6 solo
+ * agrega estas cuatro.
+ */
+export const CUENTAS_INTERNAS_GT: readonly DefinicionCuentaPaquete[] = [
+    grupo('4.3', 'Ingresos internos (sin factura)', 'ingreso', '4', { interna: true }),
+    hoja(C.INGRESOS_INTERNOS, 'Ingresos por recibos internos (caja sin factura)', 'ingreso', '4.3', {
+        interna: true,
+    }),
+    grupo('5.7', 'Gastos internos (sin factura)', 'gasto', '5', { interna: true }),
+    hoja(C.GASTOS_INTERNOS, 'Gastos internos sin factura', 'gasto', '5.7', {
+        interna: true,
+        categoria_fiscal: 'no_deducible',
+    }),
+]
+
+export const CUENTAS_PAQUETE_GT_2026_7: readonly DefinicionCuentaPaquete[] = [
+    ...CUENTAS_PAQUETE_GT_2026_6,
+    ...CUENTAS_INTERNAS_GT,
+]
+
+/** Códigos de las cuentas internas de Guatemala (las que marca `interna`). */
+export const CODIGOS_INTERNOS_GT: readonly string[] = CUENTAS_INTERNAS_GT.map((c) => c.codigo)

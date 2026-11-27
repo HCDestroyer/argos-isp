@@ -1,4 +1,5 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import { sqlNoFiscalVigente } from '#billing/recibos'
 
 /**
  * Qué le toca a una factura en la FEL (`contratos/fel-establecimientos.md` R2 y la decisión del PM del
@@ -6,7 +7,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
  * pinta el botón y el texto según `fel_accion`; la API rechaza con 409 `fel_desactivada`.
  *
  * - `ninguna`: FEL desactivada; factura anulada, castigada, acreditada o en cero; DTE ya certificado
- *   o anulado.
+ *   o anulado; B11: cargo no facturable o factura cobrada solo en cajas sin factura (recibo).
  * - `automatica`: el DTE está en curso (o la factura espera certificarse: `por_certificar`), o la
  *   FEL es obligatoria y el aviso ya está cubierto (el DTE entra solo a la cola).
  * - `al_cobrar`: aviso de cobro sin cubrir: «Se certifica al cobrarla». Reemplaza al
@@ -32,6 +33,7 @@ export function columnasAccionFel(cliente: QueryClientContract, alias = 'f') {
         cliente.raw(`CASE
             WHEN ${modo} = 'desactivada' THEN 'ninguna'
             WHEN ${alias}.estado IN ('anulada', 'castigada', 'acreditada') OR ${alias}.total <= 0 THEN 'ninguna'
+            WHEN ${sqlNoFiscalVigente(alias)} THEN 'ninguna'
             WHEN coalesce(${dte}, '') IN ${CERRADO} THEN 'ninguna'
             WHEN coalesce(${dte}, '') IN ${EN_CURSO} OR ${alias}.estado = 'por_certificar' THEN 'automatica'
             WHEN ${alias}.estado <> 'pagada' THEN 'al_cobrar'

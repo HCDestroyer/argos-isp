@@ -119,6 +119,16 @@ export const INMUTABLES: Record<string, string> = {
     // B1 (plan de contabilidad §5.7): entregas de efectivo de las cajas de cobros y su recepción
     'ledger.entregas': 'entrega de efectivo de una caja de cobros (B1, §5.7)',
     'ledger.entregas_recepciones': '«Recibí» o «No lo recibí» de una entrega (B1)',
+    // B9 (plan de contabilidad §5.7): caja chica
+    'ledger.egresos_comprobantes': 'archivo del comprobante de un egreso; uno por egreso (B9)',
+    'ledger.reposiciones': 'reposición de una caja chica desde la custodia o el banco (B9, §5.7)',
+    'ledger.reposiciones_documentos': 'gastos y conteos que sella una reposición (B9)',
+    'ledger.conteos_caja': 'conteo sorpresa de una caja chica (B9)',
+    // B11: caja sin factura (recibos no fiscales y facturas fuera de la SAT)
+    'billing.recibos': 'recibo no fiscal de un pago (caja sin factura o cargo no facturable, B11)',
+    'billing.facturas_no_fiscales':
+        'factura fuera de la SAT: cobrada solo en cajas sin factura o cargo no facturable (B11)',
+    'billing.facturas_no_fiscales_anulaciones': 'la factura vuelve a ser aviso al anular el pago (B11)',
     // servicios adicionales (`contratos/adicionales.md`, A1)
     'core.servicios_adicionales_bloqueos':
         'historial de bloqueos de adicionales por la suspensión del servicio',
@@ -133,8 +143,11 @@ export const CIERRE_UNICO: Record<string, string> = {
 /** La aplicación las actualiza: configuración o contadores, con `version` y `audit.cambios`. */
 export const MUTABLES: Record<string, string> = {
     'ledger.cuentas': 'plan de cuentas: renombrar o desactivar (con movimientos no se borra: FK)',
-    'ledger.cajas': 'catálogo de cajas (nombre, cajero, activa; B1: tipo y fondo_fijo)',
-    'ledger.cajas_ajustes': 'ajustes de cajas y custodia por empresa con version y audit.cambios (B1)',
+    'ledger.cajas':
+        'catálogo de cajas (nombre, cajero, activa; B1: tipo y fondo_fijo; B11: fiscal y usuarios, con version y audit.cambios)',
+    'ledger.cajas_ajustes':
+        'ajustes de cajas y custodia por empresa con version y audit.cambios (B1; B9: fondo_caja_chica)',
+    'billing.recibos_secuencias': 'último número de recibo por empresa, tomado con UPDATE … RETURNING (B11)',
     'ledger.bancos': 'catálogo de bancos del libro',
     'ledger.egresos_categorias': 'catálogo de categorías de egreso',
     'ledger.diarios': 'configuración de diarios por empresa (§10.7)',

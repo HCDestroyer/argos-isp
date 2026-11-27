@@ -44,6 +44,8 @@ export interface ConceptoCargoVista {
     cuenta_codigo: string
     cuenta_nombre: string | null
     gravable: boolean
+    /** B11: false = cobro de control (sin DTE, cuenta interna 4.3.01, recibo no fiscal) */
+    facturable: boolean
     activo: boolean
     /** Código fijo de un concepto que el sistema reconoce (`instalacion`); null en los demás. */
     codigo_sistema: CodigoSistemaConcepto | null
@@ -76,6 +78,7 @@ function consultaConceptos(cliente: QueryClientContract) {
             'k.cuenta_codigo',
             'c.nombre as cuenta_nombre',
             'k.gravable',
+            'k.facturable',
             'k.activo',
             'k.codigo_sistema',
             'k.version',
